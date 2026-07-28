@@ -1,0 +1,26 @@
+{
+  "devDependencies": {
+    "@wix/cli": "^1.0.0",
+    "@wix/eslint-plugin-cli": "^1.0.0",
+    "eslint": "^8.25.0",
+    "react": "16.14.0"
+  },
+  "dependencies": {
+    "react-dom": "19.2.4",
+    "@wix/ecom": "1.0.2072",
+    "@wix/faq": "1.0.50",
+    "react": "19.2.4",
+    "@wix/bookings": "1.0.1393",
+    "lucide-react": "1.6.0",
+    "@wix/embeds": "1.0.15",
+    "@wix/site-site": "1.29.0",
+    "framer-motion": "12.38.0",
+    "@wix/sdk": "1.21.5",
+    "@wix/essentials": "1.0.6"
+  },
+  "scripts": {
+    "postinstall": "wix sync-types",
+    "dev": "wix dev",
+    "lint": "eslint ."
+  }
+}

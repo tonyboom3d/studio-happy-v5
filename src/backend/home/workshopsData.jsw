@@ -1,0 +1,44 @@
+import wixData from 'wix-data';
+
+export async function getActiveWorkshops() {
+    try {
+        const results = await wixData.query("workshops").find({ omitTotalCount: true });
+
+        return results.items.map(item => {
+            // טיפול בגלריית תמונות - חילוץ התמונות והקטנת הרזולוציה לשיפור מהירות
+            let imagesArray = [];
+            if (item.homePageImages && Array.isArray(item.homePageImages)) {
+                imagesArray = item.homePageImages.map(media => {
+                    return getOptimizedImageUrl(media.src, 400, 300);
+                });
+            }
+
+            return {
+                title: item.workshopName,
+                desc: item.paragraphTop,
+                href: item["link-workshops-topTitle"],
+                duration: item.duration,
+                age: item.minAge,
+                maxParticipants: item.numOfParticipants,
+                images: imagesArray
+            };
+        });
+    } catch (error) {
+        console.error("Error fetching workshops", error);
+        return [];
+    }
+}
+
+// פונקציית עזר להמרת כתובת תמונה גולמית של וויקס לכתובת אינטרנטית מכווצת
+function getOptimizedImageUrl(wixUrl, width, height) {
+    if (!wixUrl || !wixUrl.startsWith('wix:image://v1/')) return wixUrl;
+
+    // חילוץ תעודת הזהות (ID) של התמונה מהמחרוזת של וויקס
+    const parts = wixUrl.split('/');
+    if (parts.length < 4) return wixUrl;
+
+    const imageId = parts[3].split('#')[0];
+
+    // מחזיר כתובת שעוברת דרך שרתי התמונות של וויקס, חותכת למידות ושומרת על איכות 80% לטעינה מהירה
+    return `https://static.wixstatic.com/media/${imageId}/v1/fill/w_${width},h_${height},al_c,q_80/image.jpg`;
+}

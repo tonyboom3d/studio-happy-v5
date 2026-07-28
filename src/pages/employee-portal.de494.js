@@ -1,0 +1,334 @@
+/**
+ * Employee Portal — page code (Modules A+B+C)
+ *
+ * Editor setup required:
+ *  - Create a members-only page ("פורטל עובדים") and add the `employee-portal`
+ *    custom element (source file: src/public/custom-elements/employee-portal.js).
+ *  - This file assumes the element's ID is `#employeePortal1` (Wix's default
+ *    ID for the first instance). If renamed in the editor, update
+ *    PORTAL_ELEMENT_ID below.
+ *  - IMPORTANT: once the element is added via the Wix Editor, Wix generates
+ *    the actual page code file (e.g. "Employee Portal.abc12.js"). Copy the
+ *    contents of this file into that generated file — this file is a
+ *    reference implementation, not a page Wix picks up automatically.
+ *
+ * Data flow (same pattern as workshop-dashboard.js):
+ *  - `portal-data` attribute ← getMyPortalData(); `admin-data` ← getStaffAdminData().
+ *  - `portal-action` CustomEvents route to backend web methods; results pushed
+ *    via `action-result`, then fresh data is re-pushed.
+ *  - Realtime: subscribes to the `scheduling-updates` channel and refreshes
+ *    all connected clients when scheduling data changes anywhere.
+ */
+import { subscribe } from 'wix-realtime';
+import {
+    getMyPortalData,
+    submitAvailability,
+    withdrawAvailability,
+} from 'backend/employeeService.web.js';
+import {
+    getStaffAdminData,
+    updateEmployeeProfile,
+    updateSchedulingRule,
+    updateDayFlags,
+    sendAvailabilityNudge,
+    manualAssign,
+    cancelAssignment,
+} from 'backend/staffAdminService.web.js';
+import {
+    runSchedulingNow,
+    respondToOffer,
+    claimOpenCall,
+} from 'backend/schedulingService.web.js';
+import {
+    getMyTimeEntries,
+    approveMyMonth,
+} from 'backend/timeClockService.web.js';
+
+const PORTAL_ELEMENT_ID = '#employeePortal1';
+const REALTIME_DEBOUNCE_MS = 1500;
+
+let __epLoadGeneration = 0;
+let __epAdminGeneration = 0;
+let __epLastAdminMonth = null;
+let __epRealtimeTimer = null;
+
+$w.onReady(function () {
+    console.log('[employee-portal] $w.onReady fired');
+
+    const portalEl = $w(PORTAL_ELEMENT_ID);
+    if (!portalEl) {
+        console.error(`[employee-portal] ELEMENT NOT FOUND: ${PORTAL_ELEMENT_ID}`);
+        console.error('[employee-portal] Check: Custom Element on page, tag=employee-portal, ID matches PORTAL_ELEMENT_ID');
+        return;
+    }
+
+    console.log('[employee-portal] element found', {
+        id: PORTAL_ELEMENT_ID,
+        hasOn: typeof portalEl.on === 'function',
+        hasSetAttribute: typeof portalEl.setAttribute === 'function',
+    });
+
+    portalEl.on('portal-action', (event) => {
+        console.log('[employee-portal] page ← portal-action', event.detail?.type, event.detail?.payload ?? '');
+        handlePortalAction(portalEl, event.detail).catch((err) => {
+            console.error('[employee-portal] Unhandled action error:', err?.message || err, err?.stack || '');
+            pushActionResult(portalEl, {
+                type: event.detail?.type || 'unknown',
+                error: true,
+                message: friendlyError(err),
+            });
+        });
+    });
+
+    subscribeToRealtime(portalEl);
+    loadAndPushData(portalEl).catch((err) => {
+        console.error('[employee-portal] loadAndPushData unhandled:', err?.message || err);
+    });
+});
+
+/** Debounced refresh whenever any client changes scheduling data. */
+function subscribeToRealtime(portalEl) {
+    subscribe({ name: 'scheduling-updates' }, () => {
+        console.log('[employee-portal] realtime scheduling-updates → refresh');
+        clearTimeout(__epRealtimeTimer);
+        __epRealtimeTimer = setTimeout(() => {
+            loadAndPushData(portalEl);
+            if (__epLastAdminMonth) loadAndPushAdminData(portalEl, __epLastAdminMonth);
+        }, REALTIME_DEBOUNCE_MS);
+    }).catch((err) => {
+        console.warn('[employee-portal] realtime subscribe failed:', err?.message || err);
+    });
+}
+
+function friendlyError(err) {
+    const message = err?.message || String(err);
+    // Backend errors carry a Hebrew explanation after the code prefix.
+    const parts = message.split(':');
+    if (parts.length > 1 && /[\u0590-\u05FF]/.test(parts.slice(1).join(':'))) {
+        return parts.slice(1).join(':').trim();
+    }
+    return 'אירעה שגיאה. נסו שוב.';
+}
+
+async function loadAndPushData(portalEl) {
+    const generation = ++__epLoadGeneration;
+    const t0 = Date.now();
+    console.log('[employee-portal] loadAndPushData start', { generation });
+
+    try {
+        console.log('[employee-portal] calling getMyPortalData()…');
+        const data = await getMyPortalData();
+        const elapsed = Date.now() - t0;
+
+        if (generation !== __epLoadGeneration) {
+            console.log('[employee-portal] loadAndPushData stale — skipped', { generation, current: __epLoadGeneration });
+            return;
+        }
+
+        console.log('[employee-portal] getMyPortalData OK', {
+            elapsedMs: elapsed,
+            user: data?.user?.name,
+            roleType: data?.user?.roleType,
+            submissions: data?.submissions?.length ?? 0,
+            months: data?.months?.length ?? 0,
+            hasUser: !!data?.user,
+        });
+
+        if (!data?.user) {
+            console.error('[employee-portal] getMyPortalData returned no user object — CE will stay on loading');
+        }
+
+        const json = JSON.stringify({ ...data, __fetchedAt: Date.now() });
+        console.log('[employee-portal] setAttribute portal-data', { bytes: json.length });
+        portalEl.setAttribute('portal-data', json);
+        console.log('[employee-portal] portal-data pushed successfully');
+    } catch (err) {
+        if (generation !== __epLoadGeneration) return;
+
+        const message = err?.message || String(err);
+        const elapsed = Date.now() - t0;
+        console.error('[employee-portal] loadAndPushData FAILED', {
+            elapsedMs: elapsed,
+            message,
+            stack: err?.stack || '(no stack)',
+        });
+
+        // Always push something to the CE — otherwise it stays on the loading spinner forever.
+        const payload = message.startsWith('ACCESS_DENIED') || message.startsWith('PERMISSION_DENIED')
+            ? { error: 'ACCESS_DENIED', message }
+            : { error: 'LOAD_FAILED', message };
+
+        console.log('[employee-portal] pushing error state to CE:', payload.error);
+        portalEl.setAttribute('portal-data', JSON.stringify({
+            ...payload,
+            __fetchedAt: Date.now(),
+        }));
+    }
+}
+
+async function loadAndPushAdminData(portalEl, monthKey) {
+    const generation = ++__epAdminGeneration;
+    __epLastAdminMonth = monthKey;
+    try {
+        const data = await getStaffAdminData(monthKey);
+        if (generation !== __epAdminGeneration) return;
+        console.log('[employee-portal] page → admin-data pushed', {
+            month: data.monthKey,
+            employees: data.employees?.length ?? 0,
+        });
+        portalEl.setAttribute('admin-data', JSON.stringify({
+            ...data,
+            __fetchedAt: Date.now(),
+        }));
+    } catch (err) {
+        if (generation !== __epAdminGeneration) return;
+        console.error('[employee-portal] Failed to load admin data:', err?.message || err);
+    }
+}
+
+async function loadAndPushHoursData(portalEl, monthKey) {
+    try {
+        const data = await getMyTimeEntries(monthKey);
+        console.log('[employee-portal] page → hours-data pushed', {
+            month: data.monthKey,
+            entries: data.entries?.length ?? 0,
+        });
+        portalEl.setAttribute('hours-data', JSON.stringify({
+            ...data,
+            __fetchedAt: Date.now(),
+        }));
+    } catch (err) {
+        console.error('[employee-portal] Failed to load hours data:', err?.message || err);
+        pushActionResult(portalEl, { type: 'loadMyHours', error: true, message: friendlyError(err) });
+    }
+}
+
+function pushActionResult(portalEl, result) {
+    portalEl.setAttribute('action-result', JSON.stringify({
+        ...result,
+        __ts: Date.now(),
+    }));
+}
+
+async function handlePortalAction(portalEl, detail) {
+    const { type, payload } = detail || {};
+    if (!type) return;
+
+    let refreshPortal = true;
+    let refreshAdmin = !!__epLastAdminMonth;
+
+    switch (type) {
+        case 'refresh':
+            break;
+
+        case 'submitAvailability': {
+            const result = await submitAvailability(payload?.shifts || []);
+            console.log('[employee-portal] submitAvailability result', result);
+            pushActionResult(portalEl, { type, ...result });
+            break;
+        }
+
+        case 'withdrawAvailability': {
+            await withdrawAvailability(payload?.id);
+            pushActionResult(portalEl, { type, ok: true });
+            break;
+        }
+
+        case 'respondToOffer': {
+            const result = await respondToOffer(payload?.offerId, !!payload?.accept);
+            pushActionResult(portalEl, { type, ...result });
+            break;
+        }
+
+        case 'claimOpenCall': {
+            const result = await claimOpenCall(payload?.callId);
+            pushActionResult(portalEl, { type, ...result });
+            break;
+        }
+
+        // --- Hours tab actions (timeClockService) ---
+
+        case 'loadMyHours':
+            refreshPortal = false;
+            refreshAdmin = false;
+            await loadAndPushHoursData(portalEl, payload?.monthKey);
+            return;
+
+        case 'approveMyMonth': {
+            const result = await approveMyMonth(payload?.monthKey);
+            pushActionResult(portalEl, { type, ...result });
+            refreshPortal = false;
+            refreshAdmin = false;
+            await loadAndPushHoursData(portalEl, payload?.monthKey);
+            break;
+        }
+
+        // --- Admin tab actions (staffAdminService / schedulingService) ---
+
+        case 'adminLoad':
+            refreshPortal = false;
+            refreshAdmin = false;
+            await loadAndPushAdminData(portalEl, payload?.monthKey);
+            return;
+
+        case 'adminUpdateEmployee': {
+            const result = await updateEmployeeProfile(payload?.roleId, payload?.patch);
+            pushActionResult(portalEl, { type, ...result });
+            refreshPortal = false;
+            refreshAdmin = true;
+            break;
+        }
+
+        case 'adminUpdateRule': {
+            const result = await updateSchedulingRule(payload?.workshopTypeId, payload?.patch);
+            pushActionResult(portalEl, { type, ...result });
+            refreshPortal = false;
+            refreshAdmin = true;
+            break;
+        }
+
+        case 'adminDayFlags': {
+            const result = await updateDayFlags(payload?.dateKey, payload?.flags);
+            pushActionResult(portalEl, { type, ...result });
+            refreshAdmin = true;
+            break;
+        }
+
+        case 'adminNudge': {
+            const result = await sendAvailabilityNudge(payload?.roleIds, payload?.monthKey);
+            pushActionResult(portalEl, { type, ...result });
+            refreshPortal = false;
+            refreshAdmin = false;
+            break;
+        }
+
+        case 'adminManualAssign': {
+            const result = await manualAssign(payload?.dateKey, payload?.workshopTypeId, payload?.employeeId);
+            pushActionResult(portalEl, { type, ...result });
+            refreshAdmin = true;
+            break;
+        }
+
+        case 'adminCancelAssignment': {
+            const result = await cancelAssignment(payload?.dateKey, payload?.workshopTypeId, payload?.employeeId);
+            pushActionResult(portalEl, { type, ...result });
+            refreshAdmin = true;
+            break;
+        }
+
+        case 'adminRunScheduling': {
+            const result = await runSchedulingNow(payload?.scope);
+            pushActionResult(portalEl, { type, ...result });
+            refreshAdmin = true;
+            break;
+        }
+
+        default:
+            console.warn('[employee-portal] Unknown portal-action type:', type);
+            return;
+    }
+
+    // Mutations re-fetch so both tabs reflect authoritative state.
+    if (refreshPortal) await loadAndPushData(portalEl);
+    if (refreshAdmin && __epLastAdminMonth) await loadAndPushAdminData(portalEl, __epLastAdminMonth);
+}

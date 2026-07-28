@@ -1,0 +1,833 @@
+/**
+ * Wix Custom Element: employee-portal
+ * -----------------------------------
+ * פורטל עובדים — הגשת זמינות חודשית + לוח אישי (Module A).
+ *
+ * הוראות התקנה בוויקס:
+ * 1. בעורך: הוסף רכיב "Custom Element" (Embed > Custom Element).
+ * 2. Tag Name: employee-portal (בדיוק).
+ * 3. Source: קובץ זה (src/public/custom-elements/employee-portal.js).
+ * 4. קוד העמוד: src/pages/employee-portal.js (מזין נתונים ומטפל בפעולות).
+ *
+ * תקשורת (כמו workshops-dashboard):
+ * - קלט:  attribute בשם `portal-data` — JSON מ-getMyPortalData().
+ * - קלט:  attribute בשם `action-result` — תוצאת פעולה (הצלחה/שגיאות ולידציה).
+ * - פלט:  CustomEvent בשם `portal-action` עם detail = { type, payload }:
+ *         refresh | submitAvailability { shifts } | withdrawAvailability { id }
+ *
+ * Light DOM (ללא Shadow DOM), מופע יחיד בעמוד. כל ה-CSS פנימי (ללא CDN).
+ *
+ * טאב ניהול (Module B): נטען מ-employee-portal-admin.js ומוצג רק לבעלי
+ * הרשאת viewTeamSchedule. קלט נוסף: attribute בשם `admin-data`.
+ */
+import { ADMIN_STYLE, renderAdminTab, handleAdminClick } from './employee-portal-admin.js';
+
+const EP_STYLE = `
+employee-portal { display: block; direction: rtl; font-family: 'Heebo', 'Segoe UI', Arial, sans-serif; background: #f4f4f6; color: #1f2937; min-height: 100%; }
+employee-portal * { box-sizing: border-box; }
+.ep-wrap { max-width: 1080px; margin: 0 auto; padding: 16px; }
+.ep-header { background: #fff; border: 1px solid #e5e7eb; border-radius: 14px; padding: 14px 18px; display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; box-shadow: 0 1px 2px rgba(0,0,0,.04); }
+.ep-user { display: flex; align-items: center; gap: 10px; }
+.ep-avatar { width: 42px; height: 42px; border-radius: 50%; color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 700; background: linear-gradient(135deg,#6d28d9,#a855f7); flex-shrink: 0; }
+.ep-user-name { font-weight: 700; font-size: 15px; }
+.ep-user-role { font-size: 12px; color: #6b7280; }
+.ep-tag { display: inline-block; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: #fef3c7; color: #92400e; margin-inline-start: 6px; }
+.ep-quota { display: flex; gap: 10px; flex-wrap: wrap; }
+.ep-quota-chip { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 10px; padding: 6px 12px; font-size: 12px; text-align: center; min-width: 110px; }
+.ep-quota-chip b { display: block; font-size: 15px; }
+.ep-quota-chip.met b { color: #059669; }
+.ep-quota-chip.pending b { color: #d97706; }
+.ep-banner { margin-top: 12px; border-radius: 12px; padding: 10px 14px; font-size: 13px; display: flex; gap: 8px; align-items: center; }
+.ep-banner.info { background: #eff6ff; border: 1px solid #bfdbfe; color: #1e40af; }
+.ep-banner.warn { background: #fffbeb; border: 1px solid #fde68a; color: #92400e; }
+.ep-banner.closed { background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; }
+.ep-grid { display: grid; grid-template-columns: 1fr 340px; gap: 16px; margin-top: 16px; align-items: start; }
+@media (max-width: 860px) { .ep-grid { grid-template-columns: 1fr; } }
+.ep-card { background: #fff; border: 1px solid #e5e7eb; border-radius: 14px; padding: 16px; box-shadow: 0 1px 2px rgba(0,0,0,.04); }
+.ep-card h2 { margin: 0 0 10px; font-size: 15px; font-weight: 700; }
+.ep-cal-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+.ep-cal-title { font-weight: 700; font-size: 15px; }
+.ep-cal-nav { display: flex; gap: 6px; }
+.ep-cal-nav button { border: 1px solid #e5e7eb; background: #fff; border-radius: 8px; width: 30px; height: 30px; cursor: pointer; font-size: 14px; line-height: 1; }
+.ep-cal-nav button:disabled { opacity: .35; cursor: default; }
+.ep-cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; }
+.ep-dow { text-align: center; font-size: 11px; color: #9ca3af; font-weight: 600; padding: 4px 0; }
+.ep-day { position: relative; border: 1px solid #e5e7eb; border-radius: 9px; min-height: 52px; padding: 5px; font-size: 12px; cursor: pointer; background: #fff; text-align: right; transition: border-color .1s, background .1s; }
+.ep-day:hover:not(.disabled):not(.submitted) { border-color: #a855f7; }
+.ep-day.other { visibility: hidden; }
+.ep-day.disabled { background: #f9fafb; color: #c4c7cc; cursor: default; }
+.ep-day.blocked { background: #fef2f2; color: #b91c1c; cursor: default; }
+.ep-day.full { background: #f3f4f6; color: #6b7280; }
+.ep-day.full.locked { cursor: default; }
+.ep-day.promoted { border-color: #f59e0b; background: #fffbeb; }
+.ep-day.selected { border-color: #7c3aed; background: #f5f3ff; box-shadow: inset 0 0 0 1px #7c3aed; }
+.ep-day.submitted { border-color: #d1d5db; background: #eef2ff; cursor: default; }
+.ep-day.scheduled { border-color: #6ee7b7; background: #ecfdf5; cursor: default; }
+.ep-day-num { font-weight: 700; }
+.ep-day-badge { position: absolute; bottom: 4px; inset-inline-start: 5px; font-size: 9.5px; font-weight: 600; padding: 1px 5px; border-radius: 999px; }
+.ep-badge-standby { background: #e0e7ff; color: #3730a3; }
+.ep-badge-scheduled { background: #d1fae5; color: #065f46; }
+.ep-badge-promoted { background: #fef3c7; color: #92400e; }
+.ep-badge-full { background: #e5e7eb; color: #4b5563; }
+.ep-badge-blocked { background: #fee2e2; color: #991b1b; }
+.ep-legend { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 10px; font-size: 11px; color: #6b7280; }
+.ep-legend span { display: inline-flex; align-items: center; gap: 5px; }
+.ep-dot { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+.ep-sel-list { display: flex; flex-direction: column; gap: 8px; max-height: 300px; overflow-y: auto; }
+.ep-sel-row { display: flex; align-items: center; gap: 6px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 10px; padding: 7px 9px; font-size: 12.5px; }
+.ep-sel-date { font-weight: 700; flex: 1; }
+.ep-sel-row input[type="time"] { border: 1px solid #d1d5db; border-radius: 7px; padding: 3px 5px; font-size: 12px; font-family: inherit; width: 78px; }
+.ep-sel-remove { border: none; background: none; color: #ef4444; cursor: pointer; font-size: 15px; padding: 2px 4px; }
+.ep-sel-hours { font-size: 11px; color: #6b7280; min-width: 54px; text-align: center; }
+.ep-sel-hours.bad { color: #dc2626; font-weight: 700; }
+.ep-submit-btn { width: 100%; margin-top: 12px; background: #7c3aed; color: #fff; border: none; border-radius: 10px; padding: 11px; font-size: 14px; font-weight: 700; cursor: pointer; font-family: inherit; }
+.ep-submit-btn:hover { background: #6d28d9; }
+.ep-submit-btn:disabled { background: #c4b5fd; cursor: default; }
+.ep-empty { color: #9ca3af; font-size: 12.5px; text-align: center; padding: 14px 0; }
+.ep-board-item { border: 1px solid #e5e7eb; border-radius: 10px; padding: 9px 11px; margin-bottom: 8px; font-size: 12.5px; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.ep-board-item .ep-b-date { font-weight: 700; }
+.ep-board-item .ep-b-time { color: #6b7280; }
+.ep-status { font-size: 11px; font-weight: 700; padding: 2px 9px; border-radius: 999px; white-space: nowrap; }
+.ep-status.SUBMITTED, .ep-status.STANDBY { background: #e0e7ff; color: #3730a3; }
+.ep-status.SCHEDULED { background: #d1fae5; color: #065f46; }
+.ep-withdraw { border: 1px solid #fecaca; background: #fff; color: #b91c1c; border-radius: 8px; font-size: 11px; padding: 3px 9px; cursor: pointer; font-family: inherit; }
+.ep-withdraw:hover { background: #fef2f2; }
+.ep-ws-card { border: 1px solid #d1fae5; background: #f0fdf9; border-radius: 12px; padding: 11px 13px; margin-bottom: 10px; font-size: 12.5px; }
+.ep-ws-head { display: flex; justify-content: space-between; font-weight: 700; margin-bottom: 4px; }
+.ep-ws-meta { color: #374151; margin-bottom: 4px; }
+.ep-ws-notes { background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px; padding: 6px 9px; margin-top: 6px; color: #92400e; }
+.ep-ws-participants { margin: 6px 0 0; padding: 0 18px 0 0; color: #374151; }
+.ep-toast { position: fixed; bottom: 22px; right: 50%; transform: translateX(50%); background: #111827; color: #fff; border-radius: 12px; padding: 11px 20px; font-size: 13.5px; z-index: 9999; box-shadow: 0 8px 24px rgba(0,0,0,.25); opacity: 0; pointer-events: none; transition: opacity .2s; max-width: 92vw; }
+.ep-toast.show { opacity: 1; }
+.ep-toast.error { background: #b91c1c; }
+.ep-toast.success { background: #047857; }
+.ep-loading, .ep-denied { text-align: center; padding: 60px 20px; color: #6b7280; font-size: 15px; }
+.ep-denied { color: #b91c1c; }
+.ep-spinner { width: 34px; height: 34px; border: 3px solid #e5e7eb; border-top-color: #7c3aed; border-radius: 50%; margin: 0 auto 14px; animation: ep-spin .8s linear infinite; }
+@keyframes ep-spin { to { transform: rotate(360deg); } }
+.ep-tabs { display: flex; gap: 8px; margin-top: 14px; }
+.ep-tabbtn { border: 1px solid #e5e7eb; background: #fff; border-radius: 10px 10px 0 0; padding: 9px 18px; font-size: 13.5px; font-weight: 700; cursor: pointer; font-family: inherit; color: #6b7280; }
+.ep-tabbtn.active { background: #7c3aed; border-color: #7c3aed; color: #fff; }
+.ep-busy { position: fixed; inset: 0; background: rgba(255,255,255,.65); z-index: 9998; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; font-size: 14px; color: #374151; font-weight: 600; backdrop-filter: blur(1px); }
+.ep-day.waitlist { border-color: #fbbf24; background: #fffbeb; }
+.ep-day.noskill { background: #f9fafb; color: #c4c7cc; cursor: default; }
+.ep-day-hol { display: block; font-size: 8.5px; color: #b45309; font-weight: 600; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.ep-badge-waitlist { background: #fef3c7; color: #92400e; }
+.ep-badge-noskill { background: #f3f4f6; color: #9ca3af; }
+.ep-offer { margin-top: 12px; border-radius: 12px; padding: 12px 14px; font-size: 13px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; border: 1px solid #fbbf24; background: #fffbeb; color: #92400e; }
+.ep-offer.call { border-color: #93c5fd; background: #eff6ff; color: #1e40af; }
+.ep-offer b { font-size: 13.5px; }
+.ep-offer-btns { display: flex; gap: 6px; margin-inline-start: auto; }
+.ep-offer-btns button { border-radius: 8px; padding: 6px 14px; font-size: 12.5px; font-weight: 700; cursor: pointer; font-family: inherit; border: 1px solid transparent; }
+.ep-offer-accept { background: #059669; color: #fff; }
+.ep-offer-decline { background: #fff; color: #b91c1c; border-color: #fecaca !important; }
+${ADMIN_STYLE}
+`;
+
+const HEBREW_DOW = ['א׳', 'ב׳', 'ג׳', 'ד׳', 'ה׳', 'ו׳', 'ש׳'];
+const STATUS_LABELS = { SUBMITTED: 'המתנה', STANDBY: 'המתנה', SCHEDULED: 'משובץ', REJECTED: 'נדחה' };
+
+function pad2(n) { return String(n).padStart(2, '0'); }
+function todayKey() {
+    const now = new Date();
+    return `${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(now.getDate())}`;
+}
+function monthTitle(monthKey) {
+    const [y, m] = monthKey.split('-').map(Number);
+    const name = new Intl.DateTimeFormat('he-IL', { month: 'long' }).format(new Date(y, m - 1, 1));
+    return `${name} ${y}`;
+}
+function formatDateHe(dateKey) {
+    if (!dateKey) return '';
+    const [y, m, d] = dateKey.split('-').map(Number);
+    const dow = new Intl.DateTimeFormat('he-IL', { weekday: 'long' }).format(new Date(y, m - 1, d));
+    return `${dow}, ${d}.${m}.${y}`;
+}
+function formatTimeHe(iso) {
+    if (!iso) return '';
+    return new Intl.DateTimeFormat('he-IL', { timeZone: 'Asia/Jerusalem', hour: '2-digit', minute: '2-digit' }).format(new Date(iso));
+}
+function hoursBetween(start, end) {
+    const p = t => { const m = /^(\d{1,2}):(\d{2})$/.exec(t || ''); return m ? Number(m[1]) * 60 + Number(m[2]) : null; };
+    const s = p(start), e = p(end);
+    if (s === null || e === null || e <= s) return null;
+    return Math.round(((e - s) / 60) * 100) / 100;
+}
+function escapeHtml(str) {
+    return String(str ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+class EmployeePortal extends HTMLElement {
+    static get observedAttributes() { return ['portal-data', 'action-result', 'admin-data', 'hours-data']; }
+
+    constructor() {
+        super();
+        this._data = null;
+        this._viewMonth = null;                 // 'YYYY-MM' currently displayed
+        this._selected = new Map();             // dateKey -> { startTime, endTime }
+        this._submitting = false;
+        this._lastResultTs = null;
+        // Admin tab state (employee-portal-admin.js)
+        this._tab = 'portal';
+        this._adminData = null;
+        this._adminMonth = todayKey().slice(0, 7);
+        this._adminView = 'heat';
+        this._adminSelectedDay = null;
+        this._adminEditEmployeeId = null;
+        this._busy = null;                      // busy-overlay message while a mutation is in flight
+        // Hours tab state (Module E)
+        this._hoursData = null;
+        this._hoursMonth = todayKey().slice(0, 7);
+    }
+
+    connectedCallback() {
+        console.log('[employee-portal] CE connected (tag: employee-portal)');
+        if (!document.getElementById('ep-style')) {
+            const style = document.createElement('style');
+            style.id = 'ep-style';
+            style.textContent = EP_STYLE;
+            document.head.appendChild(style);
+        }
+        this.renderLoading();
+        // Event delegation for all dynamic content.
+        this.addEventListener('click', (e) => this._onClick(e));
+        this.addEventListener('change', (e) => this._onChange(e));
+    }
+
+    attributeChangedCallback(name, _oldVal, newVal) {
+        if (!newVal) return;
+        if (name === 'portal-data') {
+            try {
+                this._data = JSON.parse(newVal);
+            } catch (err) {
+                console.error('[employee-portal] bad portal-data JSON:', err);
+                return;
+            }
+            this._submitting = false;
+            this._busy = null;
+            if (this._data?.error === 'ACCESS_DENIED') {
+                console.warn('[employee-portal] access denied');
+                this.renderDenied(); return;
+            }
+            if (this._data?.error === 'LOAD_FAILED') {
+                console.error('[employee-portal] load failed:', this._data.message);
+                this.renderLoadError(this._data.message);
+                return;
+            }
+            console.log('[employee-portal] portal-data received', {
+                user: this._data.user?.name,
+                submissions: this._data.submissions?.length ?? 0,
+                offers: this._data.myOffers?.length ?? 0,
+                openCalls: this._data.openCalls?.length ?? 0,
+                canAdmin: !!this._data.user?.permissions?.viewTeamSchedule,
+            });
+            if (!this._viewMonth && this._data?.months?.length) {
+                // Default view: first future month if open, else current month.
+                const future = this._data.months.find(m => !m.isCurrentMonth);
+                this._viewMonth = (future || this._data.months[0]).monthKey;
+            }
+            this.render();
+        }
+        if (name === 'admin-data') {
+            try {
+                this._adminData = JSON.parse(newVal);
+            } catch (err) {
+                console.error('[employee-portal] bad admin-data JSON:', err);
+                return;
+            }
+            this._busy = null;
+            if (this._adminData?.monthKey) this._adminMonth = this._adminData.monthKey;
+            console.log('[employee-portal] admin-data received', {
+                month: this._adminData.monthKey,
+                employees: this._adminData.employees?.length ?? 0,
+                days: Object.keys(this._adminData.days || {}).length,
+            });
+            this.render();
+        }
+        if (name === 'hours-data') {
+            try {
+                this._hoursData = JSON.parse(newVal);
+            } catch (err) {
+                console.error('[employee-portal] bad hours-data JSON:', err);
+                return;
+            }
+            this._busy = null;
+            if (this._hoursData?.monthKey) this._hoursMonth = this._hoursData.monthKey;
+            console.log('[employee-portal] hours-data received', {
+                month: this._hoursData.monthKey,
+                entries: this._hoursData.entries?.length ?? 0,
+            });
+            this.render();
+        }
+        if (name === 'action-result') {
+            try {
+                const result = JSON.parse(newVal);
+                if (result.__ts === this._lastResultTs) return;
+                this._lastResultTs = result.__ts;
+                this._handleActionResult(result);
+            } catch (_) { /* ignore */ }
+        }
+    }
+
+    _requestHoursData() {
+        this._hoursData = null;
+        this._dispatch('loadMyHours', { monthKey: this._hoursMonth });
+        this.render();
+    }
+
+    _dispatch(type, payload) {
+        console.log('[employee-portal] action →', type, payload ?? '');
+        this.dispatchEvent(new CustomEvent('portal-action', { detail: { type, payload }, bubbles: true }));
+    }
+
+    _requestAdminData() {
+        this._adminData = null;
+        this._dispatch('adminLoad', { monthKey: this._adminMonth });
+        this.render();
+    }
+
+    _startBusy(message) {
+        this._busy = message || 'מעדכן…';
+        this.render();
+    }
+
+    _handleActionResult(result) {
+        this._submitting = false;
+        this._busy = null;
+        console.log('[employee-portal] action-result ←', result.type, result.error ? result.message : result);
+        if (result.error) {
+            this._toast(result.message || 'אירעה שגיאה. נסו שוב.', 'error');
+            this.render();
+            return;
+        }
+        if (result.type === 'submitAvailability') {
+            if (result.ok) {
+                this._selected.clear();
+                const standbyNote = result.standby
+                    ? ` ${result.standby} מהן נכנסו לרשימת המתנה (הימים מאוישים).`
+                    : '';
+                this._toast(`הזמינות הוגשה בהצלחה (${result.inserted} משמרות).${standbyNote}`, 'success');
+            } else {
+                const msgs = (result.errors || []).map(e => e.message).filter(Boolean);
+                this._toast(msgs[0] || 'ההגשה נדחתה — בדקו את הכללים.', 'error');
+                this.render();
+            }
+        }
+        if (result.type === 'withdrawAvailability' && result.ok) {
+            this._toast('הזמינות בוטלה.', 'success');
+        }
+        if (result.type === 'respondToOffer' && result.ok) {
+            this._toast(result.accepted ? 'המשמרת שובצה לך! 🎉' : 'ההצעה נדחתה.', 'success');
+        }
+        if (result.type === 'claimOpenCall' && result.ok) {
+            this._toast('המשמרת נתפסה ושובצה לך! 🎉', 'success');
+        }
+        if (result.type === 'approveMyMonth' && result.ok) {
+            this._toast('השעות אושרו בהצלחה. תודה!', 'success');
+        }
+        if (result.type?.startsWith('admin') && result.ok) {
+            this._toast('הפעולה בוצעה בהצלחה.', 'success');
+        }
+    }
+
+    // -----------------------------------------------------------------
+    // Rendering
+    // -----------------------------------------------------------------
+
+    renderLoading() {
+        this.innerHTML = `<div class="ep-wrap"><div class="ep-loading"><div class="ep-spinner"></div>טוען את הפורטל האישי…</div></div>`;
+    }
+
+    renderDenied() {
+        this.innerHTML = `<div class="ep-wrap"><div class="ep-denied">אין לך הרשאה לפורטל העובדים.<br>יש לפנות למנהל/ת הסטודיו.</div></div>`;
+    }
+
+    renderLoadError(message) {
+        this.innerHTML = `<div class="ep-wrap"><div class="ep-denied">
+            שגיאה בטעינת הפורטל.<br>
+            <span style="font-size:12px;font-weight:400;color:#6b7280;margin-top:8px;display:block">${escapeHtml(message || 'לא ידוע')}</span>
+            <span style="font-size:11px;color:#9ca3af;margin-top:6px;display:block">פתח את הקונסול (F12) וחפש [employee-portal]</span>
+        </div></div>`;
+    }
+
+    render() {
+        const d = this._data;
+        if (!d?.user) { this.renderLoading(); return; }
+
+        const isAdmin = !!d.user.permissions?.viewTeamSchedule;
+        const tabs = `
+            <div class="ep-tabs">
+                <button class="ep-tabbtn ${this._tab === 'portal' ? 'active' : ''}" data-action="tab-portal">הפורטל שלי</button>
+                <button class="ep-tabbtn ${this._tab === 'hours' ? 'active' : ''}" data-action="tab-hours">השעות שלי</button>
+                ${isAdmin ? `<button class="ep-tabbtn ${this._tab === 'admin' ? 'active' : ''}" data-action="tab-admin">ניהול צוות</button>` : ''}
+            </div>`;
+
+        const portalTab = `
+            ${this._renderOffers()}
+            ${this._renderBanners()}
+            <div class="ep-grid">
+                <div>
+                    <div class="ep-card">${this._renderCalendar()}</div>
+                    <div class="ep-card" style="margin-top:16px">${this._renderScheduledWorkshops()}</div>
+                </div>
+                <div>
+                    <div class="ep-card">${this._renderSelectionPanel()}</div>
+                    <div class="ep-card" style="margin-top:16px">${this._renderBoard()}</div>
+                </div>
+            </div>`;
+
+        let tabContent;
+        if (this._tab === 'admin' && isAdmin) {
+            tabContent = `<div style="margin-top:12px">${renderAdminTab(this)}</div>`;
+        } else if (this._tab === 'hours') {
+            tabContent = `<div style="margin-top:12px">${this._renderHoursTab()}</div>`;
+        } else {
+            tabContent = portalTab;
+        }
+
+        this.innerHTML = `
+            <div class="ep-wrap">
+                ${this._renderHeader()}
+                ${tabs}
+                ${tabContent}
+            </div>
+            ${this._busy ? `<div class="ep-busy"><div class="ep-spinner"></div>${escapeHtml(this._busy)}</div>` : ''}
+            <div class="ep-toast" id="epToast"></div>
+        `;
+        this._restoreToast();
+    }
+
+    /** "השעות שלי" — monthly time-clock history + approval (Module E). */
+    _renderHoursTab() {
+        const h = this._hoursData;
+        if (!h) {
+            return `<div class="ep-card"><div class="ep-loading"><div class="ep-spinner"></div>טוען את השעות…</div></div>`;
+        }
+
+        const totals = h.totals || {};
+        const chips = [
+            { label: 'סה"כ', value: totals.total },
+            { label: 'סטודיו', value: totals.STUDIO },
+            { label: 'הדרכה', value: totals.INSTRUCTION },
+            { label: 'צמר', value: totals.WOOL },
+        ].map(c => `<div class="ep-quota-chip"><b>${c.value || 0}</b>${c.label}</div>`).join('');
+
+        const rows = (h.entries || []).map(e => `
+            <div class="ep-board-item">
+                <div>
+                    <div class="ep-b-date">${formatDateHe(e.dateKey)}</div>
+                    <div class="ep-b-time">${escapeHtml(e.taskLabel)} · ${formatTimeHe(e.startTime)}–${e.endTime ? formatTimeHe(e.endTime) : 'פתוח'}</div>
+                </div>
+                <span class="ep-status ${e.open ? 'SUBMITTED' : 'SCHEDULED'}">${e.open ? 'פתוח' : `${e.hours} ש׳`}</span>
+            </div>`).join('');
+
+        let approval = '';
+        if (h.approved) {
+            approval = `<div class="ep-banner info">✔ השעות לחודש זה אושרו${h.approvedAt ? ` (${formatDateHe(String(h.approvedAt).slice(0, 10))})` : ''}.</div>`;
+        } else if (h.approvalWindowOpen) {
+            approval = `
+                <div class="ep-banner warn">חלון אישור השעות החודשי פתוח — נא לעבור על הרישומים ולאשר.</div>
+                <button class="ep-submit-btn" data-action="hours-approve" data-month="${escapeHtml(h.monthKey)}">אישור השעות לחודש ${monthTitle(h.monthKey)}</button>`;
+        }
+
+        return `
+            <div class="ep-card">
+                <div class="ep-cal-head">
+                    <div class="ep-cal-title">שעות עבודה — ${monthTitle(h.monthKey)}</div>
+                    <div class="ep-cal-nav">
+                        <button data-action="hours-month-next" title="חודש הבא">&#8249;</button>
+                        <button data-action="hours-month-prev" title="חודש קודם">&#8250;</button>
+                    </div>
+                </div>
+                <div class="ep-quota" style="margin-bottom:12px">${chips}</div>
+                ${rows || '<div class="ep-empty">אין רישומי שעות לחודש זה</div>'}
+                ${approval}
+            </div>`;
+    }
+
+    /** Waiting-list offers addressed to me + open calls matching my skills. */
+    _renderOffers() {
+        const offers = this._data.myOffers || [];
+        const calls = this._data.openCalls || [];
+        let html = '';
+        for (const o of offers) {
+            html += `<div class="ep-offer">
+                <span>⏳ <b>הצעת משמרת מרשימת ההמתנה:</b> סדנת ${escapeHtml(o.workshopName)} · ${formatDateHe(o.date)}${o.expiresAt ? ` (בתוקף עד ${formatTimeHe(o.expiresAt)})` : ''}</span>
+                <span class="ep-offer-btns">
+                    <button class="ep-offer-accept" data-action="offer-accept" data-id="${escapeHtml(o.id)}">אישור המשמרת</button>
+                    <button class="ep-offer-decline" data-action="offer-decline" data-id="${escapeHtml(o.id)}">לא מתאים לי</button>
+                </span>
+            </div>`;
+        }
+        for (const c of calls) {
+            html += `<div class="ep-offer call">
+                <span>📣 <b>דרושה עובד/ת:</b> סדנת ${escapeHtml(c.workshopName)} · ${formatDateHe(c.date)} — כל הקודם/ת זוכה!</span>
+                <span class="ep-offer-btns">
+                    <button class="ep-offer-accept" data-action="call-claim" data-id="${escapeHtml(c.id)}">אני זמין/ה — שבצו אותי</button>
+                </span>
+            </div>`;
+        }
+        return html;
+    }
+
+    /** Re-shows an active toast after a full re-render (data refresh) wipes the DOM. */
+    _restoreToast() {
+        if (!this._pendingToast || Date.now() > this._pendingToast.expiry) return;
+        const toast = this.querySelector('#epToast');
+        if (!toast) return;
+        toast.textContent = this._pendingToast.message;
+        toast.className = `ep-toast show ${this._pendingToast.kind || ''}`;
+    }
+
+    _renderHeader() {
+        const u = this._data.user;
+        const initials = (u.name || '?').trim().split(/\s+/).map(w => w[0]).slice(0, 2).join('');
+        const avatarStyle = u.color ? `style="background:${escapeHtml(u.color)}"` : '';
+        const chips = (this._data.months || []).map(m => `
+            <div class="ep-quota-chip ${m.quota.met ? 'met' : 'pending'}">
+                ${monthTitle(m.monthKey)}
+                <b>${m.quota.submitted}/${m.quota.required}</b>
+                ${m.quota.met ? 'המכסה הושלמה ✓' : 'משמרות שהוגשו'}
+            </div>`).join('');
+        return `
+            <div class="ep-header">
+                <div class="ep-user">
+                    <div class="ep-avatar" ${avatarStyle}>${escapeHtml(initials)}</div>
+                    <div>
+                        <div class="ep-user-name">${escapeHtml(u.name || '')}${u.isTrainee ? '<span class="ep-tag">חניכה</span>' : ''}</div>
+                        <div class="ep-user-role">${escapeHtml(u.roleLabel || '')}</div>
+                    </div>
+                </div>
+                <div class="ep-quota">${chips}</div>
+            </div>`;
+    }
+
+    _renderBanners() {
+        const rules = this._data.rules || {};
+        const banners = [];
+        const viewInfo = this._monthInfo(this._viewMonth);
+
+        if (viewInfo && !viewInfo.isCurrentMonth) {
+            if (viewInfo.deadline) {
+                const dl = new Date(viewInfo.deadline);
+                const daysLeft = Math.ceil((dl.getTime() - Date.now()) / 86400000);
+                if (viewInfo.open) {
+                    banners.push(`<div class="ep-banner ${daysLeft <= 2 ? 'warn' : 'info'}">⏰ המועד האחרון להגשת זמינות ל${monthTitle(viewInfo.monthKey)}: ${formatDateHe(viewInfo.deadline.slice(0, 10))}${daysLeft >= 0 ? ` (עוד ${daysLeft} ימים)` : ''}</div>`);
+                } else {
+                    banners.push(`<div class="ep-banner closed">🔒 חלף המועד האחרון להגשת זמינות ל${monthTitle(viewInfo.monthKey)}. לחריגים יש לפנות למנהל/ת.</div>`);
+                }
+            }
+        }
+        if (viewInfo && viewInfo.isCurrentMonth) {
+            banners.push(viewInfo.quota.bonusUnlocked
+                ? `<div class="ep-banner info">🎉 השלמת את המכסה — ניתן להגיש משמרות נוספות לחודש הנוכחי.</div>`
+                : `<div class="ep-banner warn">הגשת משמרות לחודש הנוכחי נפתחת לאחר השלמת המכסה החודשית.</div>`);
+        }
+        banners.push(`<div class="ep-banner info">📋 מינימום ${rules.requiredShiftsPerMonth} משמרות בחודש, אורך משמרת מינימלי ${rules.minShiftHours} שעות.</div>`);
+        return banners.join('');
+    }
+
+    _monthInfo(monthKey) {
+        return (this._data.months || []).find(m => m.monthKey === monthKey) || null;
+    }
+
+    _submissionByDate() {
+        const map = {};
+        for (const s of (this._data.submissions || [])) map[s.date] = s;
+        return map;
+    }
+
+    _renderCalendar() {
+        const months = (this._data.months || []).map(m => m.monthKey);
+        const idx = months.indexOf(this._viewMonth);
+        const rules = this._data.rules || {};
+        const subByDate = this._submissionByDate();
+        const viewInfo = this._monthInfo(this._viewMonth);
+        const tKey = todayKey();
+
+        const [y, m] = this._viewMonth.split('-').map(Number);
+        const firstDow = new Date(y, m - 1, 1).getDay(); // 0=Sunday, matches RTL Hebrew week
+        const daysInMonth = new Date(y, m, 0).getDate();
+
+        let cells = HEBREW_DOW.map(d => `<div class="ep-dow">${d}</div>`).join('');
+        for (let i = 0; i < firstDow; i++) cells += `<div class="ep-day other"></div>`;
+
+        const holidayByDate = {};
+        for (const h of (this._data.holidays || [])) holidayByDate[h.date] = h.name || 'חג';
+
+        for (let day = 1; day <= daysInMonth; day++) {
+            const dateKey = `${this._viewMonth}-${pad2(day)}`;
+            const sub = subByDate[dateKey];
+            const isPast = dateKey <= tKey;
+            const blocked = (rules.blockedDates || []).includes(dateKey);
+            const full = (rules.fullDates || []).includes(dateKey);
+            const promoted = (rules.promotedDates || []).includes(dateKey);
+            const quotaMet = !!viewInfo?.quota?.bonusUnlocked;
+            const monthOpen = !!viewInfo?.open;
+            const fullLocked = full && !quotaMet;
+            const selected = this._selected.has(dateKey);
+            // Personalized per-skill state from the scheduling engine.
+            const skillState = this._data.dayStates?.[dateKey]?.state || null;
+
+            let cls = 'ep-day', badge = '', clickable = false;
+            if (isPast) cls += ' disabled';
+            else if (sub) {
+                cls += sub.status === 'SCHEDULED' ? ' scheduled' : ' submitted';
+                badge = sub.status === 'SCHEDULED'
+                    ? `<span class="ep-day-badge ep-badge-scheduled">משובץ</span>`
+                    : `<span class="ep-day-badge ep-badge-standby">המתנה</span>`;
+            } else if (blocked) {
+                cls += ' blocked';
+                badge = `<span class="ep-day-badge ep-badge-blocked">חסום</span>`;
+            } else if (!monthOpen) {
+                cls += ' disabled';
+            } else if (skillState === 'NO_SKILL') {
+                cls += ' noskill';
+                badge = `<span class="ep-day-badge ep-badge-noskill">לא בהכשרה</span>`;
+            } else if (fullLocked) {
+                cls += ' full locked';
+                badge = `<span class="ep-day-badge ep-badge-full">מאויש</span>`;
+            } else if (skillState === 'WAITLIST') {
+                clickable = true;
+                cls += ' waitlist';
+                badge = `<span class="ep-day-badge ep-badge-waitlist">רשימת המתנה</span>`;
+                if (selected) cls += ' selected';
+            } else {
+                clickable = true;
+                if (full) { cls += ' full'; badge = `<span class="ep-day-badge ep-badge-full">מאויש</span>`; }
+                if (promoted) { cls += ' promoted'; badge = `<span class="ep-day-badge ep-badge-promoted">דרושים ⭐</span>`; }
+                if (selected) cls += ' selected';
+            }
+
+            cells += `<div class="${cls}" ${clickable ? `data-action="toggle-day" data-date="${dateKey}"` : ''}>
+                <span class="ep-day-num">${day}</span>
+                ${holidayByDate[dateKey] ? `<span class="ep-day-hol">${escapeHtml(holidayByDate[dateKey])}</span>` : ''}
+                ${badge}
+            </div>`;
+        }
+
+        return `
+            <div class="ep-cal-head">
+                <div class="ep-cal-title">${monthTitle(this._viewMonth)}</div>
+                <div class="ep-cal-nav">
+                    <button data-action="month-next" ${idx >= months.length - 1 ? 'disabled' : ''} title="חודש הבא">&#8249;</button>
+                    <button data-action="month-prev" ${idx <= 0 ? 'disabled' : ''} title="חודש קודם">&#8250;</button>
+                </div>
+            </div>
+            <div class="ep-cal-grid">${cells}</div>
+            <div class="ep-legend">
+                <span><span class="ep-dot" style="background:#f5f3ff;border:1px solid #7c3aed"></span>נבחר</span>
+                <span><span class="ep-dot" style="background:#eef2ff"></span>המתנה</span>
+                <span><span class="ep-dot" style="background:#ecfdf5;border:1px solid #6ee7b7"></span>משובץ</span>
+                <span><span class="ep-dot" style="background:#fffbeb;border:1px solid #f59e0b"></span>דרושים עובדים</span>
+                <span><span class="ep-dot" style="background:#fffbeb;border:1px solid #fbbf24"></span>רשימת המתנה</span>
+                <span><span class="ep-dot" style="background:#f9fafb;border:1px solid #e5e7eb"></span>לא בהכשרה</span>
+                <span><span class="ep-dot" style="background:#fef2f2"></span>חסום</span>
+            </div>`;
+    }
+
+    _renderSelectionPanel() {
+        const rules = this._data.rules || {};
+        const entries = [...this._selected.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+        let rows;
+        if (!entries.length) {
+            rows = `<div class="ep-empty">בחרו ימים בלוח השנה להגשת זמינות</div>`;
+        } else {
+            rows = `<div class="ep-sel-list">` + entries.map(([dateKey, times]) => {
+                const hrs = hoursBetween(times.startTime, times.endTime);
+                const tooShort = hrs !== null && hrs < rules.minShiftHours;
+                const hoursLabel = hrs === null ? '—' : `${hrs} ש׳`;
+                return `<div class="ep-sel-row">
+                    <span class="ep-sel-date">${formatDateHe(dateKey)}</span>
+                    <input type="time" data-role="start" data-date="${dateKey}" value="${escapeHtml(times.startTime)}">
+                    <span>-</span>
+                    <input type="time" data-role="end" data-date="${dateKey}" value="${escapeHtml(times.endTime)}">
+                    <span class="ep-sel-hours ${tooShort || hrs === null ? 'bad' : ''}">${hoursLabel}</span>
+                    <button class="ep-sel-remove" data-action="remove-day" data-date="${dateKey}" title="הסרה">✕</button>
+                </div>`;
+            }).join('') + `</div>`;
+        }
+        const invalid = entries.some(([, t]) => {
+            const hrs = hoursBetween(t.startTime, t.endTime);
+            return hrs === null || hrs < rules.minShiftHours;
+        });
+        return `
+            <h2>הגשת זמינות (${entries.length})</h2>
+            ${rows}
+            <button class="ep-submit-btn" data-action="submit" ${(!entries.length || invalid || this._submitting) ? 'disabled' : ''}>
+                ${this._submitting ? 'שולח…' : 'הגשת זמינות'}
+            </button>
+            ${invalid ? `<div class="ep-banner warn" style="margin-top:8px">יש משמרות קצרות מהמינימום (${rules.minShiftHours} שעות) או עם שעות שגויות.</div>` : ''}`;
+    }
+
+    _renderBoard() {
+        const subs = (this._data.submissions || []).filter(s => s.status !== 'REJECTED');
+        const tKey = todayKey();
+        if (!subs.length) return `<h2>הלוח האישי שלי</h2><div class="ep-empty">טרם הוגשה זמינות</div>`;
+
+        const item = (s) => `
+            <div class="ep-board-item">
+                <div>
+                    <div class="ep-b-date">${formatDateHe(s.date)}</div>
+                    <div class="ep-b-time">${escapeHtml(s.startTime)}–${escapeHtml(s.endTime)}${s.hours ? ` · ${s.hours} ש׳` : ''}</div>
+                </div>
+                <div style="display:flex;align-items:center;gap:6px">
+                    <span class="ep-status ${escapeHtml(s.status)}">${STATUS_LABELS[s.status] || s.status}</span>
+                    ${s.status !== 'SCHEDULED' && s.date > tKey ? `<button class="ep-withdraw" data-action="withdraw" data-id="${escapeHtml(s.id)}">ביטול</button>` : ''}
+                </div>
+            </div>`;
+
+        const scheduled = subs.filter(s => s.status === 'SCHEDULED');
+        const waiting = subs.filter(s => s.status !== 'SCHEDULED');
+        let html = `<h2>הלוח האישי שלי</h2>`;
+        if (scheduled.length) html += `<div style="font-size:12px;font-weight:700;color:#065f46;margin:4px 0 6px">משובצות (${scheduled.length})</div>` + scheduled.map(item).join('');
+        if (waiting.length) html += `<div style="font-size:12px;font-weight:700;color:#3730a3;margin:10px 0 6px">בהמתנה לשיבוץ (${waiting.length})</div>` + waiting.map(item).join('');
+        return html;
+    }
+
+    _renderScheduledWorkshops() {
+        const list = this._data.scheduledWorkshops || [];
+        let html = `<h2>פרטי הסדנאות שלי</h2>`;
+        if (!list.length) return html + `<div class="ep-empty">אין סדנאות משובצות עם הזמנות פעילות</div>`;
+
+        html += list.map(w => {
+            const participants = (w.participants || []).map(p =>
+                `<li>${escapeHtml(p.name)}${p.childrenCount ? ` (+${p.childrenCount} ילדים)` : ''}</li>`).join('');
+            return `<div class="ep-ws-card">
+                <div class="ep-ws-head">
+                    <span>${escapeHtml(w.workshopType)}</span>
+                    <span>${formatDateHe(w.date)} · ${formatTimeHe(w.workshopStart)}</span>
+                </div>
+                <div class="ep-ws-meta">מזמין/ה: ${escapeHtml(w.organizerName || '—')} · ${w.quantity} משתתפים (${w.adults} מבוגרים, ${w.children} ילדים)</div>
+                ${participants ? `<ul class="ep-ws-participants">${participants}</ul>` : ''}
+                ${w.customerNotes ? `<div class="ep-ws-notes">📝 הערת לקוח: ${escapeHtml(w.customerNotes)}</div>` : ''}
+            </div>`;
+        }).join('');
+        return html;
+    }
+
+    // -----------------------------------------------------------------
+    // Interaction
+    // -----------------------------------------------------------------
+
+    _onClick(e) {
+        const target = e.target.closest('[data-action]');
+        if (!target) return;
+        const action = target.dataset.action;
+        const months = (this._data?.months || []).map(m => m.monthKey);
+        const idx = months.indexOf(this._viewMonth);
+        const rules = this._data?.rules || {};
+
+        if (action.startsWith('admin-')) {
+            if (handleAdminClick(this, action, target)) return;
+        }
+
+        switch (action) {
+            case 'tab-portal':
+                console.log('[employee-portal] tab → portal');
+                this._tab = 'portal';
+                this.render();
+                return;
+            case 'tab-admin':
+                console.log('[employee-portal] tab → admin');
+                this._tab = 'admin';
+                if (!this._adminData) this._requestAdminData();
+                else this.render();
+                return;
+            case 'tab-hours':
+                console.log('[employee-portal] tab → hours');
+                this._tab = 'hours';
+                if (!this._hoursData) this._requestHoursData();
+                else this.render();
+                return;
+            case 'hours-month-prev':
+            case 'hours-month-next': {
+                const [hy, hm] = this._hoursMonth.split('-').map(Number);
+                const delta = action === 'hours-month-next' ? 1 : -1;
+                const t = hy * 12 + (hm - 1) + delta;
+                this._hoursMonth = `${Math.floor(t / 12)}-${String((t % 12) + 1).padStart(2, '0')}`;
+                this._requestHoursData();
+                return;
+            }
+            case 'hours-approve':
+                this._startBusy('מאשר את השעות…');
+                this._dispatch('approveMyMonth', { monthKey: target.dataset.month });
+                return;
+            case 'offer-accept':
+                this._startBusy('מאשר את המשמרת…');
+                this._dispatch('respondToOffer', { offerId: target.dataset.id, accept: true });
+                return;
+            case 'offer-decline':
+                this._startBusy('מעדכן…');
+                this._dispatch('respondToOffer', { offerId: target.dataset.id, accept: false });
+                return;
+            case 'call-claim':
+                this._startBusy('תופס את המשמרת…');
+                this._dispatch('claimOpenCall', { callId: target.dataset.id });
+                return;
+        }
+
+        switch (action) {
+            case 'month-prev':
+                if (idx > 0) { this._viewMonth = months[idx - 1]; this.render(); }
+                break;
+            case 'month-next':
+                if (idx >= 0 && idx < months.length - 1) { this._viewMonth = months[idx + 1]; this.render(); }
+                break;
+            case 'toggle-day': {
+                const dateKey = target.dataset.date;
+                if (this._selected.has(dateKey)) this._selected.delete(dateKey);
+                else this._selected.set(dateKey, {
+                    startTime: rules.defaultShiftStart || '10:00',
+                    endTime: rules.defaultShiftEnd || '16:00',
+                });
+                this.render();
+                break;
+            }
+            case 'remove-day':
+                this._selected.delete(target.dataset.date);
+                this.render();
+                break;
+            case 'submit': {
+                if (this._submitting || !this._selected.size) return;
+                this._submitting = true;
+                this._busy = 'שולח את ההגשה ובודק זמינות מול המערכת…';
+                const shifts = [...this._selected.entries()].map(([date, t]) => ({
+                    date, startTime: t.startTime, endTime: t.endTime,
+                }));
+                this._dispatch('submitAvailability', { shifts });
+                this.render();
+                break;
+            }
+            case 'withdraw':
+                this._dispatch('withdrawAvailability', { id: target.dataset.id });
+                break;
+        }
+    }
+
+    _onChange(e) {
+        const input = e.target;
+        if (input.tagName !== 'INPUT' || input.type !== 'time') return;
+        const dateKey = input.dataset.date;
+        const entry = this._selected.get(dateKey);
+        if (!entry) return;
+        if (input.dataset.role === 'start') entry.startTime = input.value;
+        if (input.dataset.role === 'end') entry.endTime = input.value;
+        this.render();
+    }
+
+    _toast(message, kind) {
+        this._pendingToast = { message, kind, expiry: Date.now() + 4200 };
+        this.render();
+        clearTimeout(this._toastTimer);
+        this._toastTimer = setTimeout(() => {
+            this._pendingToast = null;
+            const toast = this.querySelector('#epToast');
+            if (toast) toast.className = 'ep-toast';
+        }, 4200);
+    }
+}
+
+if (!customElements.get('employee-portal')) {
+    customElements.define('employee-portal', EmployeePortal);
+}

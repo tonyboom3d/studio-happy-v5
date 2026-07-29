@@ -9,15 +9,15 @@ export const ADMIN_STYLE = `
 .epa-toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
 .epa-toolbar .epa-month { font-weight: 700; font-size: 15px; min-width: 120px; text-align: center; }
 .epa-btn { border: 1px solid #e5e7eb; background: #fff; border-radius: 9px; padding: 7px 13px; font-size: 12.5px; cursor: pointer; font-family: inherit; }
-.epa-btn:hover { border-color: #a855f7; }
-.epa-btn.primary { background: #7c3aed; border-color: #7c3aed; color: #fff; font-weight: 700; }
-.epa-btn.primary:hover { background: #6d28d9; }
+.epa-btn:hover { border-color: #60a5fa; }
+.epa-btn.primary { background: #2563eb; border-color: #2563eb; color: #fff; font-weight: 700; }
+.epa-btn.primary:hover { background: #1d4ed8; }
 .epa-btn.danger { color: #b91c1c; border-color: #fecaca; }
-.epa-btn.active { background: #f5f3ff; border-color: #7c3aed; color: #6d28d9; font-weight: 700; }
+.epa-btn.active { background: #eff6ff; border-color: #2563eb; color: #1d4ed8; font-weight: 700; }
 .epa-grid7 { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; }
 .epa-day { border: 1px solid #e5e7eb; border-radius: 9px; min-height: 64px; padding: 5px; font-size: 11px; cursor: pointer; background: #fff; position: relative; }
 .epa-day.other { visibility: hidden; }
-.epa-day.sel { box-shadow: inset 0 0 0 2px #7c3aed; }
+.epa-day.sel { box-shadow: inset 0 0 0 2px #2563eb; }
 .epa-day .num { font-weight: 700; font-size: 12px; }
 .epa-day.cov-none { background: #fef2f2; }
 .epa-day.cov-partial { background: #fffbeb; }
@@ -27,7 +27,7 @@ export const ADMIN_STYLE = `
 .epa-day .hol { display: block; font-size: 9px; color: #b45309; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .epa-day .cnt { display: block; font-size: 9.5px; color: #4b5563; }
 .epa-flag { position: absolute; top: 3px; inset-inline-start: 4px; font-size: 10px; }
-.epa-detail { border: 1px solid #ddd6fe; background: #faf5ff; border-radius: 12px; padding: 12px; margin-top: 12px; font-size: 12.5px; }
+.epa-detail { border: 1px solid #bfdbfe; background: #eff6ff; border-radius: 12px; padding: 12px; margin-top: 12px; font-size: 12.5px; }
 .epa-detail h3 { margin: 0 0 8px; font-size: 14px; }
 .epa-type-row { background: #fff; border: 1px solid #e5e7eb; border-radius: 9px; padding: 8px 10px; margin-bottom: 6px; }
 .epa-type-head { display: flex; justify-content: space-between; font-weight: 700; }
@@ -42,7 +42,7 @@ export const ADMIN_STYLE = `
 .epa-badge { font-size: 10.5px; font-weight: 700; padding: 2px 8px; border-radius: 999px; }
 .epa-badge.ok { background: #d1fae5; color: #065f46; }
 .epa-badge.miss { background: #fee2e2; color: #991b1b; }
-.epa-badge.kind { background: #ede9fe; color: #5b21b6; }
+.epa-badge.kind { background: #dbeafe; color: #1e40af; }
 .epa-form { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; margin-top: 8px; }
 .epa-form label { font-size: 11px; color: #6b7280; display: block; margin-bottom: 2px; }
 .epa-form input, .epa-form select { width: 100%; border: 1px solid #d1d5db; border-radius: 7px; padding: 5px 7px; font-size: 12px; font-family: inherit; }
@@ -55,6 +55,77 @@ export const ADMIN_STYLE = `
 .epa-list-day { border: 1px solid #e5e7eb; border-radius: 10px; padding: 9px 11px; margin-bottom: 8px; font-size: 12.5px; background: #fff; }
 .epa-list-day.no-ws { background: #f9fafb; color: #9ca3af; }
 .epa-list-head { display: flex; justify-content: space-between; font-weight: 700; }
+.epa-shell { display: grid; grid-template-columns: minmax(0,1fr) 238px; gap: 16px; min-height: 640px; align-items: start; direction: ltr; transition: grid-template-columns .22s ease; }
+.epa-shell.collapsed { grid-template-columns: minmax(0,1fr) 68px; }
+.epa-sidebar { direction: rtl; position: sticky; top: 12px; padding: 12px; border: 1px solid #dbeafe; border-radius: 18px; background: linear-gradient(180deg,#fff 0%,#f8fbff 100%); box-shadow: 0 10px 30px rgba(30,64,175,.09); transition: width .22s ease; overflow: hidden; }
+.epa-user-card { display: flex; align-items: center; gap: 9px; min-height: 48px; padding: 5px; border-bottom: 1px solid #e5e7eb; margin-bottom: 10px; }
+.epa-user-avatar { width: 38px; height: 38px; flex: 0 0 38px; border-radius: 12px; display: grid; place-items: center; color: #fff; font-weight: 800; box-shadow: 0 5px 14px rgba(37,99,235,.22); }
+.epa-user-meta { min-width: 0; white-space: nowrap; }
+.epa-user-name { font-size: 12.5px; font-weight: 800; overflow: hidden; text-overflow: ellipsis; }
+.epa-user-role { font-size: 10.5px; color: #64748b; }
+.epa-collapse { width: 100%; border: 0; background: #eff6ff; color: #1d4ed8; border-radius: 9px; padding: 7px; cursor: pointer; font-family: inherit; font-weight: 700; margin-bottom: 8px; transition: background .15s,transform .15s; }
+.epa-collapse:hover { background: #dbeafe; transform: translateY(-1px); }
+.epa-nav { display: flex; flex-direction: column; gap: 5px; }
+.epa-nav-btn { width: 100%; border: 0; background: transparent; color: #475569; border-radius: 10px; padding: 9px 10px; display: flex; align-items: center; gap: 10px; cursor: pointer; font-family: inherit; font-size: 12.5px; font-weight: 700; text-align: right; white-space: nowrap; transition: background .15s,color .15s,transform .15s,box-shadow .15s; }
+.epa-nav-btn:hover { background: #eff6ff; color: #1d4ed8; transform: translateX(-2px); }
+.epa-nav-btn.active { color: #fff; background: linear-gradient(135deg,#2563eb,#1d4ed8); box-shadow: 0 7px 18px rgba(37,99,235,.24); }
+.epa-icon { width: 18px; height: 18px; flex: 0 0 18px; display: inline-grid; place-items: center; }
+.epa-icon svg { width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+.epa-shell.collapsed .epa-user-meta,.epa-shell.collapsed .epa-nav-label { display: none; }
+.epa-shell.collapsed .epa-user-card { justify-content: center; }
+.epa-shell.collapsed .epa-nav-btn { justify-content: center; padding-inline: 0; }
+.epa-content { direction: rtl; min-width: 0; animation: epa-page-in .22s ease both; }
+.epa-page-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+.epa-page-head h2 { margin: 0; font-size: 19px; color: #0f172a; }
+.epa-page-head p { margin: 3px 0 0; font-size: 11.5px; color: #64748b; }
+.epa-panel { background: #fff; border: 1px solid #e2e8f0; border-radius: 16px; padding: 15px; box-shadow: 0 5px 18px rgba(15,23,42,.045); margin-bottom: 12px; }
+.epa-panel-title { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 10px; }
+.epa-panel-title h3 { margin: 0; font-size: 14px; }
+.epa-table-wrap { overflow-x: auto; border: 1px solid #e2e8f0; border-radius: 11px; }
+.epa-table-wrap .epa-table th { background: #f8fafc; }
+.epa-row-click { cursor: pointer; transition: background .14s; }
+.epa-row-click:hover { background: #eff6ff; }
+.epa-dot-lg { width: 12px; height: 12px; display: inline-block; border-radius: 50%; margin-inline-end: 7px; box-shadow: 0 0 0 3px rgba(148,163,184,.14); vertical-align: middle; }
+.epa-status-line { display: flex; align-items: center; gap: 7px; }
+.epa-stat-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(150px,1fr)); gap: 9px; margin-bottom: 12px; }
+.epa-stat { background: linear-gradient(145deg,#eff6ff,#fff); border: 1px solid #dbeafe; border-radius: 13px; padding: 12px; }
+.epa-stat b { display: block; color: #1d4ed8; font-size: 20px; }
+.epa-stat span { color: #64748b; font-size: 11px; }
+.epa-settings-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(180px,1fr)); gap: 10px; }
+.epa-field label { display: block; font-size: 11px; color: #64748b; margin-bottom: 4px; }
+.epa-field input,.epa-field select,.epa-field textarea { width: 100%; border: 1px solid #cbd5e1; border-radius: 9px; padding: 8px 9px; font: inherit; font-size: 12px; background: #fff; transition: border-color .15s,box-shadow .15s; }
+.epa-field textarea { min-height: 170px; resize: vertical; }
+.epa-field input:focus,.epa-field select:focus,.epa-field textarea:focus { outline: 0; border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,.12); }
+.epa-toggle { display: flex; align-items: center; gap: 8px; min-height: 36px; font-size: 12px; }
+.epa-toggle input { accent-color: #2563eb; width: 17px; height: 17px; }
+.epa-holiday-row { display: grid; grid-template-columns: 150px minmax(150px,1fr) 38px; gap: 7px; margin-bottom: 7px; }
+.epa-holiday-row input { border: 1px solid #cbd5e1; border-radius: 8px; padding: 7px; font: inherit; font-size: 12px; }
+.epa-template-grid { display: grid; grid-template-columns: repeat(auto-fill,minmax(230px,1fr)); gap: 10px; }
+.epa-template { border: 1px solid #dbeafe; background: linear-gradient(145deg,#fff,#f8fbff); border-radius: 14px; padding: 13px; cursor: pointer; min-height: 132px; transition: transform .16s,box-shadow .16s,border-color .16s; }
+.epa-template:hover { transform: translateY(-2px); box-shadow: 0 9px 22px rgba(30,64,175,.1); border-color: #93c5fd; }
+.epa-template h3 { margin: 0 0 7px; font-size: 13.5px; }
+.epa-template p { margin: 0; color: #64748b; font-size: 11.5px; white-space: pre-wrap; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; }
+.epa-modal-backdrop { position: fixed; inset: 0; z-index: 10001; background: rgba(15,23,42,.48); backdrop-filter: blur(3px); display: grid; place-items: center; padding: 16px; animation: epa-fade-in .16s ease; }
+.epa-modal { direction: rtl; width: min(700px,96vw); max-height: 90vh; overflow: auto; background: #fff; border-radius: 18px; box-shadow: 0 25px 70px rgba(15,23,42,.28); padding: 18px; animation: epa-modal-in .2s ease both; }
+.epa-modal-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; border-bottom: 1px solid #e2e8f0; padding-bottom: 10px; margin-bottom: 12px; }
+.epa-modal-head h2 { margin: 0; font-size: 17px; }
+.epa-modal-close { border: 0; background: #f1f5f9; color: #334155; width: 31px; height: 31px; border-radius: 9px; cursor: pointer; font-size: 17px; }
+.epa-detail-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; }
+.epa-detail-item { background: #f8fafc; border-radius: 9px; padding: 8px 10px; }
+.epa-detail-item span { display: block; font-size: 10.5px; color: #64748b; }
+.epa-detail-item b { font-size: 12.5px; }
+@keyframes epa-page-in { from { opacity:0; transform:translateY(5px) } to { opacity:1; transform:none } }
+@keyframes epa-fade-in { from { opacity:0 } to { opacity:1 } }
+@keyframes epa-modal-in { from { opacity:0; transform:scale(.97) translateY(7px) } to { opacity:1; transform:none } }
+@media (max-width:760px) {
+    .epa-shell,.epa-shell.collapsed { grid-template-columns: 1fr; }
+    .epa-sidebar { position: static; order: -1; }
+    .epa-nav { flex-direction: row; overflow-x: auto; }
+    .epa-nav-btn { width: auto; flex: 0 0 auto; }
+    .epa-collapse { display: none; }
+    .epa-shell.collapsed .epa-user-meta,.epa-shell.collapsed .epa-nav-label { display: block; }
+    .epa-detail-grid { grid-template-columns: 1fr; }
+}
 `;
 
 const HEBREW_DOW = ['א׳', 'ב׳', 'ג׳', 'ד׳', 'ה׳', 'ו׳', 'ש׳'];
@@ -96,17 +167,73 @@ export function renderAdminTab(ce) {
     if (!d) {
         return `<div class="ep-card"><div class="ep-loading"><div class="ep-spinner"></div>טוען נתוני ניהול…</div></div>`;
     }
+    const allowedPages = ['board', 'tracker', 'employees'];
+    if (d.permissions.manageRules) allowedPages.push('settings');
+    if (d.permissions.manageTemplates) allowedPages.push('templates');
+    if (!allowedPages.includes(ce._adminPage)) ce._adminPage = 'board';
+
     return `
-        <div class="ep-card">
+        <div class="epa-shell ${ce._adminSidebarCollapsed ? 'collapsed' : ''}">
+            <main class="epa-content">${renderAdminPage(ce, d)}</main>
+            ${renderSidebar(ce, d)}
+        </div>
+        ${renderModal(ce, d)}
+    `;
+}
+
+function icon(name) {
+    const paths = {
+        board: '<rect x="3" y="4" width="18" height="17" rx="2"/><path d="M8 2v4M16 2v4M3 9h18"/>',
+        tracker: '<path d="M4 19V5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v14"/><path d="M8 8h8M8 12h8M8 16h5"/>',
+        employees: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>',
+        settings: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.83 2.83-.06-.06a1.7 1.7 0 0 0-1.88-.34 1.7 1.7 0 0 0-1.03 1.56V21h-4v-.08A1.7 1.7 0 0 0 9 19.37a1.7 1.7 0 0 0-1.88.34l-.06.06-2.83-2.83.06-.06A1.7 1.7 0 0 0 4.63 15 1.7 1.7 0 0 0 3.08 14H3v-4h.08A1.7 1.7 0 0 0 4.63 9a1.7 1.7 0 0 0-.34-1.88l-.06-.06 2.83-2.83.06.06A1.7 1.7 0 0 0 9 4.63h.01A1.7 1.7 0 0 0 10 3.08V3h4v.08A1.7 1.7 0 0 0 15 4.63a1.7 1.7 0 0 0 1.88-.34l.06-.06 2.83 2.83-.06.06A1.7 1.7 0 0 0 19.37 9v.01A1.7 1.7 0 0 0 20.92 10H21v4h-.08A1.7 1.7 0 0 0 19.4 15z"/>',
+        templates: '<path d="M4 4h16v16H4z"/><path d="M8 8h8M8 12h8M8 16h5"/>',
+    };
+    return `<span class="epa-icon"><svg viewBox="0 0 24 24" aria-hidden="true">${paths[name] || ''}</svg></span>`;
+}
+
+function renderSidebar(ce, d) {
+    const u = ce._data?.user || {};
+    const initials = (u.name || '?').trim().split(/\s+/).map(w => w[0]).slice(0, 2).join('');
+    const items = [
+        { page: 'board', label: 'לוח שיבוץ', show: d.permissions.viewTeamSchedule !== false },
+        { page: 'tracker', label: 'מעקב הגשות', show: d.permissions.viewTeamSchedule !== false },
+        { page: 'employees', label: 'עובדים', show: d.permissions.viewTeamSchedule !== false },
+        { page: 'settings', label: 'הגדרות', show: d.permissions.manageRules },
+        { page: 'templates', label: 'תבניות', show: d.permissions.manageTemplates },
+    ].filter(x => x.show);
+    return `<aside class="epa-sidebar">
+        <div class="epa-user-card">
+            <div class="epa-user-avatar" style="background:${esc(u.color || '#2563eb')}">${esc(initials)}</div>
+            <div class="epa-user-meta"><div class="epa-user-name">${esc(u.name || '')}</div><div class="epa-user-role">${esc(u.roleLabel || '')}</div></div>
+        </div>
+        <button class="epa-collapse" data-action="admin-toggle-sidebar" title="${ce._adminSidebarCollapsed ? 'הרחבת תפריט' : 'צמצום תפריט'}">${ce._adminSidebarCollapsed ? '‹' : 'צמצום התפריט ›'}</button>
+        <nav class="epa-nav" aria-label="ניווט ניהול">
+            ${items.map(item => `<button class="epa-nav-btn ${ce._adminPage === item.page ? 'active' : ''}" data-action="admin-page" data-page="${item.page}" title="${item.label}">
+                ${icon(item.page)}<span class="epa-nav-label">${item.label}</span>
+            </button>`).join('')}
+        </nav>
+    </aside>`;
+}
+
+function renderAdminPage(ce, d) {
+    switch (ce._adminPage) {
+        case 'tracker': return renderTrackerPage(ce, d);
+        case 'employees': return renderEmployeesPage(ce, d);
+        case 'settings': return renderSettingsPage(ce, d);
+        case 'templates': return renderTemplatesPage(ce, d);
+        default: return renderBoardPage(ce, d);
+    }
+}
+
+function renderBoardPage(ce, d) {
+    return `<div class="epa-page-head"><div><h2>לוח שיבוץ</h2><p>תמונת מצב חודשית, כיסוי ושיבוצים</p></div></div>
+        <section class="epa-panel">
             ${renderToolbar(ce, d)}
             ${ce._adminView === 'list' ? renderListView(ce, d) : renderHeatmap(ce, d)}
             ${ce._adminSelectedDay ? renderDayDetail(ce, d) : ''}
-        </div>
-        ${d.openOffers?.length ? `<div class="ep-card epa-section">${renderOpenOffers(d)}</div>` : ''}
-        <div class="ep-card epa-section">${renderTracker(d)}</div>
-        <div class="ep-card epa-section">${renderEmployees(ce, d)}</div>
-        ${d.permissions.manageRules ? `<div class="ep-card epa-section">${renderRules(d)}</div>` : ''}
-    `;
+        </section>
+        ${d.openOffers?.length ? `<section class="epa-panel">${renderOpenOffers(d)}</section>` : ''}`;
 }
 
 function renderToolbar(ce, d) {
@@ -271,35 +398,72 @@ function renderOpenOffers(d) {
         <table class="epa-table"><thead><tr><th>סוג</th><th>תאריך</th><th>סדנה</th><th>עובד/ת</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 
-function renderTracker(d) {
-    const rows = (d.tracker || []).map(t => `
-        <tr>
-            <td>${esc(t.name)}</td>
+function renderMonthControls(d) {
+    return `<div class="epa-toolbar" style="margin:0">
+        <div class="ep-cal-nav">
+            <button data-action="admin-month-next" title="חודש הבא">&#8249;</button>
+            <button data-action="admin-month-prev" title="חודש קודם">&#8250;</button>
+        </div>
+        <div class="epa-month">${monthTitle(d.monthKey)}</div>
+    </div>`;
+}
+
+function renderTrackerPage(ce, d) {
+    const trackerRows = (d.tracker || []).map(t => {
+        const employee = (d.employees || []).find(e => e.id === t.employeeId);
+        return `<tr>
+            <td><span class="epa-dot-lg" style="background:${esc(employee?.color || '#2563eb')}"></span>${esc(t.name)}</td>
             <td>${t.submitted}/${t.required}</td>
             <td><span class="epa-badge ${t.met ? 'ok' : 'miss'}">${t.met ? 'הושלם' : 'חסר'}</span></td>
-            <td>${!t.met && d.permissions.manageScheduling ? `<button class="epa-btn" data-action="admin-nudge" data-emp="${t.employeeId}">📲 תזכורת</button>` : ''}</td>
-        </tr>`).join('');
-    return `<h2>מעקב הגשות זמינות — ${monthTitle(d.monthKey)}</h2>
-        <table class="epa-table"><thead><tr><th>עובד/ת</th><th>הוגשו</th><th>סטטוס</th><th></th></tr></thead><tbody>${rows}</tbody></table>`;
+            <td>${!t.met && d.permissions.manageScheduling ? `<button class="epa-btn" data-action="admin-nudge" data-emp="${t.employeeId}">שליחת תזכורת</button>` : ''}</td>
+        </tr>`;
+    }).join('');
+    const statusLabel = { SUBMITTED: 'הוגש', STANDBY: 'בהמתנה', SCHEDULED: 'משובץ' };
+    const submissionRows = (d.submissions || []).slice().sort((a, b) => a.date.localeCompare(b.date)).map(s => {
+        const employee = (d.employees || []).find(e => e.id === s.employeeId);
+        return `<tr class="epa-row-click" data-action="admin-open-submission" data-sub="${esc(s.id)}">
+            <td><span class="epa-dot-lg" style="background:${esc(employee?.color || '#2563eb')}"></span>${esc(s.employeeName)}</td>
+            <td>${fmtDate(s.date)}</td>
+            <td>${esc(s.startTime)}–${esc(s.endTime)}</td>
+            <td><span class="epa-badge kind">${statusLabel[s.status] || esc(s.status)}</span></td>
+        </tr>`;
+    }).join('');
+    const complete = (d.tracker || []).filter(t => t.met).length;
+    return `<div class="epa-page-head"><div><h2>מעקב הגשות</h2><p>כל ההגשות והמכסות לפי חודש</p></div>${renderMonthControls(d)}</div>
+        <div class="epa-stat-grid">
+            <div class="epa-stat"><b>${(d.submissions || []).length}</b><span>הגשות בחודש</span></div>
+            <div class="epa-stat"><b>${complete}/${(d.tracker || []).length}</b><span>עובדים שהשלימו מכסה</span></div>
+        </div>
+        <section class="epa-panel">
+            <div class="epa-panel-title"><h3>מצב מכסות</h3></div>
+            <div class="epa-table-wrap"><table class="epa-table"><thead><tr><th>עובד/ת</th><th>הוגשו</th><th>סטטוס</th><th></th></tr></thead><tbody>${trackerRows}</tbody></table></div>
+        </section>
+        <section class="epa-panel">
+            <div class="epa-panel-title"><h3>כל ההגשות — ${monthTitle(d.monthKey)}</h3></div>
+            <div class="epa-table-wrap"><table class="epa-table"><thead><tr><th>עובד/ת</th><th>תאריך</th><th>שעות</th><th>סטטוס</th></tr></thead>
+                <tbody>${submissionRows || '<tr><td colspan="4" class="ep-empty">אין הגשות בחודש זה</td></tr>'}</tbody>
+            </table></div>
+        </section>`;
 }
 
-function renderEmployees(ce, d) {
+function renderEmployeesPage(_ce, d) {
     const rows = (d.employees || []).map(e => `
-        <tr style="${e.active ? '' : 'opacity:.5'}">
-            <td><span class="ep-dot" style="background:${esc(e.color || '#a855f7')};margin-inline-end:6px"></span>${esc(e.displayName)}${e.isTrainee ? ' <span class="ep-tag">חניכה</span>' : ''}</td>
+        <tr class="${d.permissions.manageEmployees ? 'epa-row-click' : ''}" style="${e.active ? '' : 'opacity:.55'}" ${d.permissions.manageEmployees ? `data-action="admin-edit-employee" data-emp="${e.id}"` : ''}>
+            <td><span class="epa-dot-lg" style="background:${esc(e.color || '#2563eb')}"></span>${esc(e.displayName)}${e.isTrainee ? ' <span class="ep-tag">חניכה</span>' : ''}</td>
             <td>${esc(e.roleLabel)}</td>
             <td>${e.priorityRank ?? '—'}</td>
-            <td>${e.minShiftsPerMonth ?? '—'}</td>
+            <td>${e.minShiftsPerMonth ?? 'ברירת מחדל'}</td>
             <td>${(e.skillIds || []).map(id => esc((d.workshopTypes.find(w => w.id === id) || {}).name || '')).filter(Boolean).join(', ') || '—'}</td>
-            <td>${d.permissions.manageEmployees ? `<button class="epa-btn" data-action="admin-edit-employee" data-emp="${e.id}">עריכה</button>` : ''}</td>
+            <td><span class="epa-badge ${e.active ? 'ok' : 'miss'}">${e.active ? 'פעיל/ה' : 'לא פעיל/ה'}</span></td>
         </tr>`).join('');
-    return `<h2>עובדים (${(d.employees || []).length})</h2>
-        <table class="epa-table"><thead><tr><th>שם</th><th>תפקיד</th><th>דירוג</th><th>מכסה</th><th>הכשרות</th><th></th></tr></thead><tbody>${rows}</tbody></table>
-        ${ce._adminEditEmployeeId ? renderEmployeeForm(ce, d) : ''}`;
+    return `<div class="epa-page-head"><div><h2>עובדים</h2><p>פרופילים, הרשאות עבודה והכשרות</p></div></div>
+        <section class="epa-panel">
+            <div class="epa-panel-title"><h3>כל העובדים (${(d.employees || []).length})</h3></div>
+            <div class="epa-table-wrap"><table class="epa-table"><thead><tr><th>שם</th><th>תפקיד</th><th>דירוג</th><th>מכסה</th><th>הכשרות</th><th>מצב</th></tr></thead><tbody>${rows}</tbody></table></div>
+        </section>`;
 }
 
-function renderEmployeeForm(ce, d) {
-    const e = (d.employees || []).find(x => x.id === ce._adminEditEmployeeId);
+function renderEmployeeForm(e, d) {
     if (!e) return '';
     const skillBoxes = (d.workshopTypes || []).map(w => `
         <label><input type="checkbox" class="epa-skill" value="${w.id}" ${(e.skillIds || []).includes(w.id) ? 'checked' : ''}> ${esc(w.name)}</label>`).join('');
@@ -307,13 +471,11 @@ function renderEmployeeForm(ce, d) {
         <div><label>תעריף סטודיו</label><input id="epaF_rateStudio" type="number" value="${e.rateStudio ?? ''}"></div>
         <div><label>תעריף הדרכה</label><input id="epaF_rateInstruction" type="number" value="${e.rateInstruction ?? ''}"></div>
         <div><label>תעריף צמר</label><input id="epaF_rateWool" type="number" value="${e.rateWool ?? ''}"></div>` : '';
-    return `<div class="epa-detail">
-        <h3>עריכת ${esc(e.displayName)}</h3>
-        <div class="epa-form">
+    return `<div class="epa-form">
             <div><label>שם תצוגה</label><input id="epaF_displayName" value="${esc(e.displayName)}"></div>
             <div><label>תפקיד</label><select id="epaF_roleType">${(d.roleTypes || []).map(r => `<option value="${r.value}" ${e.roleType === r.value ? 'selected' : ''}>${esc(r.label)}</option>`).join('')}</select></div>
             <div><label>טלפון</label><input id="epaF_phone" value="${esc(e.phone)}"></div>
-            <div><label>צבע</label><input id="epaF_color" type="color" value="${esc(e.color || '#7c3aed')}"></div>
+            <div><label>צבע</label><input id="epaF_color" type="color" value="${esc(e.color || '#2563eb')}"></div>
             <div><label>ותק</label><input id="epaF_seniority" value="${esc(e.seniority)}"></div>
             <div><label>דירוג עדיפות (נסתר)</label><input id="epaF_priorityRank" type="number" value="${e.priorityRank ?? ''}"></div>
             <div><label>מכסת משמרות חודשית</label><input id="epaF_minShiftsPerMonth" type="number" value="${e.minShiftsPerMonth ?? ''}"></div>
@@ -325,9 +487,8 @@ function renderEmployeeForm(ce, d) {
         </div>
         <div class="epa-inline">
             <button class="epa-btn primary" data-action="admin-save-employee" data-emp="${e.id}">שמירה</button>
-            <button class="epa-btn" data-action="admin-cancel-edit">ביטול</button>
-        </div>
-    </div>`;
+            <button class="epa-btn" data-action="admin-close-modal">ביטול</button>
+        </div>`;
 }
 
 function renderRules(d) {
@@ -339,8 +500,102 @@ function renderRules(d) {
             <td><input type="number" class="epaR_min" value="${r.minInstructors}"></td>
             <td><button class="epa-btn" data-action="admin-save-rule" data-type="${r.workshopTypeId}">שמירה</button></td>
         </tr>`).join('');
-    return `<h2>כללי שיבוץ (יחס משתתפים למדריך)</h2>
-        <table class="epa-table"><thead><tr><th>סדנה</th><th>משתתפים למדריך</th><th>הורה-ילד למדריך</th><th>מינימום מדריכים</th><th></th></tr></thead><tbody>${rows}</tbody></table>`;
+    return `<div class="epa-table-wrap"><table class="epa-table"><thead><tr><th>סדנה</th><th>משתתפים למדריך</th><th>הורה-ילד למדריך</th><th>מינימום מדריכים</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`;
+}
+
+function renderSettingsPage(_ce, d) {
+    const s = d.settings || {};
+    const holidays = (s.holidays || []).map((h, index) => `<div class="epa-holiday-row" data-holiday-row>
+        <input type="date" class="epaH_date" value="${esc(h.date)}" aria-label="תאריך חג">
+        <input class="epaH_name" value="${esc(h.name)}" placeholder="שם החג" aria-label="שם החג">
+        <button class="epa-btn danger" data-action="admin-remove-holiday" title="הסרה" data-index="${index}">×</button>
+    </div>`).join('');
+    return `<div class="epa-page-head"><div><h2>הגדרות</h2><p>כל הגדרות המערכת, הזמינות והשיבוץ</p></div></div>
+        <section class="epa-panel">
+            <div class="epa-panel-title"><h3>הגדרות זמינות כלליות</h3></div>
+            <div class="epa-settings-grid">
+                <div class="epa-field"><label>ימים לפני סוף החודש לסגירת הגשות</label><input id="epaS_deadline" type="number" min="1" value="${s.deadlineDaysBeforeMonthEnd ?? 4}"></div>
+                <div class="epa-field"><label>מספר חודשים קדימה</label><input id="epaS_monthsAhead" type="number" min="1" value="${s.monthsAheadAllowed ?? 1}"></div>
+                <div class="epa-field"><label>מכסת משמרות חודשית</label><input id="epaS_minShifts" type="number" min="1" value="${s.defaultMinShiftsPerMonth ?? 3}"></div>
+                <div class="epa-field"><label>אורך משמרת מינימלי</label><input id="epaS_minHours" type="number" min="0.5" step="0.5" value="${s.defaultMinShiftHours ?? 4}"></div>
+                <div class="epa-field"><label>שעת התחלה ברירת מחדל</label><input id="epaS_start" type="time" value="${esc(s.defaultShiftStart || '10:00')}"></div>
+                <div class="epa-field"><label>שעת סיום ברירת מחדל</label><input id="epaS_end" type="time" value="${esc(s.defaultShiftEnd || '16:00')}"></div>
+                <label class="epa-toggle"><input id="epaS_bonus" type="checkbox" ${s.bonusUnlockEnabled !== false ? 'checked' : ''}> פתיחת משמרות נוספות לאחר השלמת מכסה</label>
+            </div>
+            <div class="epa-inline"><button class="epa-btn primary" data-action="admin-save-settings">שמירת הגדרות</button></div>
+        </section>
+        <section class="epa-panel">
+            <div class="epa-panel-title"><h3>כללי שיבוץ לפי סוג סדנה</h3></div>
+            ${renderRules(d)}
+        </section>
+        <section class="epa-panel">
+            <div class="epa-panel-title"><h3>חגים ומועדים</h3><button class="epa-btn" data-action="admin-add-holiday">הוספת מועד</button></div>
+            <div id="epaHolidayList">${holidays || '<div class="ep-empty" id="epaHolidayEmpty">לא הוגדרו מועדים</div>'}</div>
+            <div class="epa-inline"><button class="epa-btn primary" data-action="admin-save-holidays">שמירת מועדים</button></div>
+        </section>`;
+}
+
+function renderTemplatesPage(ce, _d) {
+    if (!ce._templatesData) {
+        return `<div class="epa-page-head"><div><h2>תבניות</h2><p>ניהול תבניות וואטסאפ</p></div></div>
+            <section class="epa-panel"><div class="ep-loading"><div class="ep-spinner"></div>טוען תבניות…</div></section>`;
+    }
+    const cards = ce._templatesData.map(t => `<article class="epa-template" data-action="admin-edit-template" data-template="${esc(t.id)}">
+        <div class="epa-panel-title"><h3>${esc(t.title)}</h3>${t.isSystem ? '<span class="epa-badge kind">מערכת</span>' : ''}</div>
+        <p>${esc(t.body)}</p>
+    </article>`).join('');
+    return `<div class="epa-page-head"><div><h2>תבניות</h2><p>ניהול הודעות וואטסאפ שמורות</p></div>
+        <button class="epa-btn primary" data-action="admin-new-template">תבנית חדשה</button></div>
+        <section class="epa-panel"><div class="epa-template-grid">${cards || '<div class="ep-empty">אין תבניות שמורות</div>'}</div></section>`;
+}
+
+function renderTemplateForm(template) {
+    return `<div class="epa-field"><label>שם התבנית</label><input id="epaT_title" value="${esc(template?.title || '')}" maxlength="120"></div>
+        <div class="epa-field" style="margin-top:10px"><label>תוכן ההודעה</label><textarea id="epaT_body">${esc(template?.body || '')}</textarea></div>
+        <div class="epa-inline">
+            <button class="epa-btn primary" data-action="admin-save-template" data-template="${esc(template?.id || '')}">שמירה</button>
+            ${template?.id && !template.isSystem ? `<button class="epa-btn danger" data-action="admin-delete-template" data-template="${esc(template.id)}">מחיקה</button>` : ''}
+            <button class="epa-btn" data-action="admin-close-modal">ביטול</button>
+        </div>`;
+}
+
+function renderModal(ce, d) {
+    const modal = ce._adminModal;
+    if (!modal) return '';
+    let title = '', body = '';
+    if (modal.type === 'employee') {
+        const employee = (d.employees || []).find(e => e.id === modal.id);
+        if (!employee) return '';
+        title = `הגדרות — ${employee.displayName}`;
+        body = renderEmployeeForm(employee, d);
+    } else if (modal.type === 'submission') {
+        const s = (d.submissions || []).find(x => x.id === modal.id);
+        if (!s) return '';
+        const statusLabel = { SUBMITTED: 'הוגש', STANDBY: 'בהמתנה', SCHEDULED: 'משובץ' };
+        title = 'פרטי הגשה';
+        body = `<div class="epa-detail-grid">
+            <div class="epa-detail-item"><span>עובד/ת</span><b>${esc(s.employeeName)}</b></div>
+            <div class="epa-detail-item"><span>תאריך</span><b>${fmtDate(s.date)}</b></div>
+            <div class="epa-detail-item"><span>שעות</span><b>${esc(s.startTime)}–${esc(s.endTime)}</b></div>
+            <div class="epa-detail-item"><span>סטטוס</span><b>${statusLabel[s.status] || esc(s.status)}</b></div>
+            <div class="epa-detail-item"><span>סוג סדנה</span><b>${esc(s.workshopName || '—')}</b></div>
+            <div class="epa-detail-item"><span>שיבוץ מנהל/ת</span><b>${s.managerOverride ? 'כן' : 'לא'}</b></div>
+        </div>
+        <div class="epa-inline">
+            ${d.permissions.manageScheduling ? `<button class="epa-btn" data-action="admin-nudge" data-emp="${esc(s.employeeId)}">שליחת תזכורת</button>` : ''}
+            ${s.status === 'SCHEDULED' && s.workshopTypeId && d.permissions.manageScheduling ? `<button class="epa-btn danger" data-action="admin-cancel-assign" data-date="${esc(s.date)}" data-type="${esc(s.workshopTypeId)}" data-emp="${esc(s.employeeId)}">ביטול שיבוץ</button>` : ''}
+        </div>`;
+    } else if (modal.type === 'template') {
+        const template = modal.id ? (ce._templatesData || []).find(t => t.id === modal.id) : null;
+        title = template ? `עריכת תבנית — ${template.title}` : 'תבנית חדשה';
+        body = renderTemplateForm(template);
+    }
+    return `<div class="epa-modal-backdrop">
+        <div class="epa-modal" role="dialog" aria-modal="true" aria-label="${esc(title)}">
+            <div class="epa-modal-head"><h2>${esc(title)}</h2><button class="epa-modal-close" data-action="admin-close-modal" aria-label="סגירה">×</button></div>
+            ${body}
+        </div>
+    </div>`;
 }
 
 // ---------------------------------------------------------------------------
@@ -350,6 +605,18 @@ function renderRules(d) {
 export function handleAdminClick(ce, action, target) {
     const d = ce._adminData;
     switch (action) {
+        case 'admin-toggle-sidebar':
+            ce._adminSidebarCollapsed = !ce._adminSidebarCollapsed;
+            ce.render();
+            return true;
+        case 'admin-page':
+            ce._adminPage = target.dataset.page;
+            ce._adminModal = null;
+            if (ce._adminPage === 'templates' && !ce._templatesData) {
+                ce._dispatch('adminTemplatesLoad');
+            }
+            ce.render();
+            return true;
         case 'admin-month-prev':
             ce._adminMonth = shiftMonth(ce._adminMonth, -1);
             ce._adminSelectedDay = null;
@@ -393,6 +660,7 @@ export function handleAdminClick(ce, action, target) {
             return true;
         }
         case 'admin-cancel-assign':
+            ce._adminModal = null;
             ce._startBusy('מבטל שיבוץ…');
             ce._dispatch('adminCancelAssignment', {
                 dateKey: target.dataset.date,
@@ -401,9 +669,20 @@ export function handleAdminClick(ce, action, target) {
             });
             return true;
         case 'admin-edit-employee':
-            ce._adminEditEmployeeId = target.dataset.emp; ce.render(); return true;
+            if (!d?.permissions?.manageEmployees) return true;
+            ce._adminModal = { type: 'employee', id: target.dataset.emp };
+            ce.render();
+            return true;
+        case 'admin-open-submission':
+            ce._adminModal = { type: 'submission', id: target.dataset.sub };
+            ce.render();
+            return true;
+        case 'admin-close-modal':
+            ce._adminModal = null;
+            ce.render();
+            return true;
         case 'admin-cancel-edit':
-            ce._adminEditEmployeeId = null; ce.render(); return true;
+            ce._adminModal = null; ce.render(); return true;
         case 'admin-save-employee': {
             const val = (id) => ce.querySelector(`#${id}`)?.value;
             const num = (id) => { const v = Number(val(id)); return Number.isFinite(v) && val(id) !== '' ? v : null; };
@@ -426,10 +705,77 @@ export function handleAdminClick(ce, action, target) {
                 patch.rateWool = num('epaF_rateWool');
             }
             ce._startBusy('שומר…');
-            ce._adminEditEmployeeId = null;
+            ce._adminModal = null;
             ce._dispatch('adminUpdateEmployee', { roleId: target.dataset.emp, patch });
             return true;
         }
+        case 'admin-save-settings': {
+            const value = id => ce.querySelector(`#${id}`)?.value;
+            ce._startBusy('שומר הגדרות…');
+            ce._dispatch('adminUpdateSettings', {
+                patch: {
+                    deadlineDaysBeforeMonthEnd: Number(value('epaS_deadline')),
+                    monthsAheadAllowed: Number(value('epaS_monthsAhead')),
+                    defaultMinShiftsPerMonth: Number(value('epaS_minShifts')),
+                    defaultMinShiftHours: Number(value('epaS_minHours')),
+                    defaultShiftStart: value('epaS_start'),
+                    defaultShiftEnd: value('epaS_end'),
+                    bonusUnlockEnabled: !!ce.querySelector('#epaS_bonus')?.checked,
+                },
+            });
+            return true;
+        }
+        case 'admin-add-holiday': {
+            const list = ce.querySelector('#epaHolidayList');
+            if (!list) return true;
+            ce.querySelector('#epaHolidayEmpty')?.remove();
+            const row = document.createElement('div');
+            row.className = 'epa-holiday-row';
+            row.dataset.holidayRow = '';
+            row.innerHTML = `<input type="date" class="epaH_date" aria-label="תאריך חג">
+                <input class="epaH_name" placeholder="שם החג" aria-label="שם החג">
+                <button class="epa-btn danger" data-action="admin-remove-holiday" title="הסרה">×</button>`;
+            list.appendChild(row);
+            row.querySelector('input')?.focus();
+            return true;
+        }
+        case 'admin-remove-holiday':
+            target.closest('[data-holiday-row]')?.remove();
+            return true;
+        case 'admin-save-holidays': {
+            const holidays = [...ce.querySelectorAll('[data-holiday-row]')].map(row => ({
+                date: row.querySelector('.epaH_date')?.value || '',
+                name: row.querySelector('.epaH_name')?.value || '',
+            })).filter(h => h.date && h.name.trim());
+            ce._startBusy('שומר מועדים…');
+            ce._dispatch('adminUpdateHolidays', { holidays });
+            return true;
+        }
+        case 'admin-new-template':
+            ce._adminModal = { type: 'template', id: null };
+            ce.render();
+            return true;
+        case 'admin-edit-template':
+            ce._adminModal = { type: 'template', id: target.dataset.template };
+            ce.render();
+            return true;
+        case 'admin-save-template': {
+            const title = ce.querySelector('#epaT_title')?.value || '';
+            const body = ce.querySelector('#epaT_body')?.value || '';
+            if (!title.trim() || !body.trim()) {
+                ce._toast('יש להזין שם ותוכן לתבנית.', 'error');
+                return true;
+            }
+            ce._adminModal = null;
+            ce._startBusy('שומר תבנית…');
+            ce._dispatch('adminTemplateSave', { template: { id: target.dataset.template || null, title, body } });
+            return true;
+        }
+        case 'admin-delete-template':
+            ce._adminModal = null;
+            ce._startBusy('מוחק תבנית…');
+            ce._dispatch('adminTemplateDelete', { templateId: target.dataset.template });
+            return true;
         case 'admin-save-rule': {
             const row = target.closest('tr');
             ce._startBusy('שומר כלל…');

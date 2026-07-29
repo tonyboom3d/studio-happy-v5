@@ -23,12 +23,12 @@
 import { ADMIN_STYLE, renderAdminTab, handleAdminClick } from './employee-portal-admin.js';
 
 const EP_STYLE = `
-employee-portal { display: block; direction: rtl; font-family: 'Heebo', 'Segoe UI', Arial, sans-serif; background: #f4f4f6; color: #1f2937; min-height: 100%; }
+employee-portal { display: block; direction: rtl; font-family: 'Heebo', 'Segoe UI', Arial, sans-serif; background: linear-gradient(145deg,#f8fafc,#eff6ff); color: #1f2937; min-height: 100%; }
 employee-portal * { box-sizing: border-box; }
-.ep-wrap { max-width: 1080px; margin: 0 auto; padding: 16px; }
-.ep-header { background: #fff; border: 1px solid #e5e7eb; border-radius: 14px; padding: 14px 18px; display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; box-shadow: 0 1px 2px rgba(0,0,0,.04); }
+.ep-wrap { width: 100%; max-width: none; margin: 0; padding: 18px 24px; }
+.ep-header { background: rgba(255,255,255,.96); border: 1px solid #dbeafe; border-radius: 18px; padding: 14px 18px; display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; box-shadow: 0 8px 28px rgba(30,64,175,.07); }
 .ep-user { display: flex; align-items: center; gap: 10px; }
-.ep-avatar { width: 42px; height: 42px; border-radius: 50%; color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 700; background: linear-gradient(135deg,#6d28d9,#a855f7); flex-shrink: 0; }
+.ep-avatar { width: 42px; height: 42px; border-radius: 13px; color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 700; background: linear-gradient(135deg,#2563eb,#60a5fa); flex-shrink: 0; box-shadow: 0 5px 16px rgba(37,99,235,.22); }
 .ep-user-name { font-weight: 700; font-size: 15px; }
 .ep-user-role { font-size: 12px; color: #6b7280; }
 .ep-tag { display: inline-block; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: #fef3c7; color: #92400e; margin-inline-start: 6px; }
@@ -43,24 +43,26 @@ employee-portal * { box-sizing: border-box; }
 .ep-banner.closed { background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; }
 .ep-grid { display: grid; grid-template-columns: 1fr 340px; gap: 16px; margin-top: 16px; align-items: start; }
 @media (max-width: 860px) { .ep-grid { grid-template-columns: 1fr; } }
-.ep-card { background: #fff; border: 1px solid #e5e7eb; border-radius: 14px; padding: 16px; box-shadow: 0 1px 2px rgba(0,0,0,.04); }
+.ep-card { background: rgba(255,255,255,.98); border: 1px solid #e2e8f0; border-radius: 17px; padding: 16px; box-shadow: 0 6px 22px rgba(15,23,42,.045); transition: box-shadow .18s ease,border-color .18s ease; }
+.ep-card:hover { border-color: #dbeafe; box-shadow: 0 9px 26px rgba(30,64,175,.065); }
 .ep-card h2 { margin: 0 0 10px; font-size: 15px; font-weight: 700; }
 .ep-cal-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
 .ep-cal-title { font-weight: 700; font-size: 15px; }
 .ep-cal-nav { display: flex; gap: 6px; }
-.ep-cal-nav button { border: 1px solid #e5e7eb; background: #fff; border-radius: 8px; width: 30px; height: 30px; cursor: pointer; font-size: 14px; line-height: 1; }
+.ep-cal-nav button { border: 1px solid #dbeafe; background: #fff; color: #1d4ed8; border-radius: 9px; width: 30px; height: 30px; cursor: pointer; font-size: 14px; line-height: 1; transition: transform .14s,background .14s; }
+.ep-cal-nav button:hover:not(:disabled) { transform: translateY(-1px); background: #eff6ff; }
 .ep-cal-nav button:disabled { opacity: .35; cursor: default; }
 .ep-cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; }
 .ep-dow { text-align: center; font-size: 11px; color: #9ca3af; font-weight: 600; padding: 4px 0; }
-.ep-day { position: relative; border: 1px solid #e5e7eb; border-radius: 9px; min-height: 52px; padding: 5px; font-size: 12px; cursor: pointer; background: #fff; text-align: right; transition: border-color .1s, background .1s; }
-.ep-day:hover:not(.disabled):not(.submitted) { border-color: #a855f7; }
+.ep-day { position: relative; border: 1px solid #e5e7eb; border-radius: 10px; min-height: 52px; padding: 5px; font-size: 12px; cursor: pointer; background: #fff; text-align: right; transition: border-color .15s,background .15s,transform .15s,box-shadow .15s; }
+.ep-day:hover:not(.disabled):not(.submitted) { border-color: #60a5fa; transform: translateY(-1px); box-shadow: 0 4px 10px rgba(37,99,235,.09); }
 .ep-day.other { visibility: hidden; }
 .ep-day.disabled { background: #f9fafb; color: #c4c7cc; cursor: default; }
 .ep-day.blocked { background: #fef2f2; color: #b91c1c; cursor: default; }
 .ep-day.full { background: #f3f4f6; color: #6b7280; }
 .ep-day.full.locked { cursor: default; }
 .ep-day.promoted { border-color: #f59e0b; background: #fffbeb; }
-.ep-day.selected { border-color: #7c3aed; background: #f5f3ff; box-shadow: inset 0 0 0 1px #7c3aed; }
+.ep-day.selected { border-color: #2563eb; background: #eff6ff; box-shadow: inset 0 0 0 1px #2563eb; }
 .ep-day.submitted { border-color: #d1d5db; background: #eef2ff; cursor: default; }
 .ep-day.scheduled { border-color: #6ee7b7; background: #ecfdf5; cursor: default; }
 .ep-day-num { font-weight: 700; }
@@ -80,9 +82,10 @@ employee-portal * { box-sizing: border-box; }
 .ep-sel-remove { border: none; background: none; color: #ef4444; cursor: pointer; font-size: 15px; padding: 2px 4px; }
 .ep-sel-hours { font-size: 11px; color: #6b7280; min-width: 54px; text-align: center; }
 .ep-sel-hours.bad { color: #dc2626; font-weight: 700; }
-.ep-submit-btn { width: 100%; margin-top: 12px; background: #7c3aed; color: #fff; border: none; border-radius: 10px; padding: 11px; font-size: 14px; font-weight: 700; cursor: pointer; font-family: inherit; }
-.ep-submit-btn:hover { background: #6d28d9; }
-.ep-submit-btn:disabled { background: #c4b5fd; cursor: default; }
+.ep-submit-btn { width: 100%; margin-top: 12px; background: linear-gradient(135deg,#2563eb,#1d4ed8); color: #fff; border: none; border-radius: 11px; padding: 11px; font-size: 14px; font-weight: 700; cursor: pointer; font-family: inherit; box-shadow: 0 7px 17px rgba(37,99,235,.2); transition: transform .15s,box-shadow .15s,filter .15s; }
+.ep-submit-btn:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 10px 22px rgba(37,99,235,.25); filter: brightness(.98); }
+.ep-submit-btn:active:not(:disabled) { transform: translateY(0); }
+.ep-submit-btn:disabled { background: #93c5fd; box-shadow: none; cursor: default; }
 .ep-empty { color: #9ca3af; font-size: 12.5px; text-align: center; padding: 14px 0; }
 .ep-board-item { border: 1px solid #e5e7eb; border-radius: 10px; padding: 9px 11px; margin-bottom: 8px; font-size: 12.5px; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 .ep-board-item .ep-b-date { font-weight: 700; }
@@ -103,11 +106,12 @@ employee-portal * { box-sizing: border-box; }
 .ep-toast.success { background: #047857; }
 .ep-loading, .ep-denied { text-align: center; padding: 60px 20px; color: #6b7280; font-size: 15px; }
 .ep-denied { color: #b91c1c; }
-.ep-spinner { width: 34px; height: 34px; border: 3px solid #e5e7eb; border-top-color: #7c3aed; border-radius: 50%; margin: 0 auto 14px; animation: ep-spin .8s linear infinite; }
+.ep-spinner { width: 34px; height: 34px; border: 3px solid #dbeafe; border-top-color: #2563eb; border-radius: 50%; margin: 0 auto 14px; animation: ep-spin .8s linear infinite; }
 @keyframes ep-spin { to { transform: rotate(360deg); } }
-.ep-tabs { display: flex; gap: 8px; margin-top: 14px; }
-.ep-tabbtn { border: 1px solid #e5e7eb; background: #fff; border-radius: 10px 10px 0 0; padding: 9px 18px; font-size: 13.5px; font-weight: 700; cursor: pointer; font-family: inherit; color: #6b7280; }
-.ep-tabbtn.active { background: #7c3aed; border-color: #7c3aed; color: #fff; }
+.ep-tabs { display: inline-flex; gap: 5px; margin-top: 14px; padding: 4px; border: 1px solid #dbeafe; border-radius: 13px; background: rgba(255,255,255,.85); }
+.ep-tabbtn { border: 0; background: transparent; border-radius: 9px; padding: 8px 18px; font-size: 13px; font-weight: 700; cursor: pointer; font-family: inherit; color: #64748b; transition: color .15s,background .15s,transform .15s,box-shadow .15s; }
+.ep-tabbtn:hover { color: #1d4ed8; background: #eff6ff; }
+.ep-tabbtn.active { background: linear-gradient(135deg,#2563eb,#1d4ed8); color: #fff; box-shadow: 0 5px 14px rgba(37,99,235,.2); }
 .ep-busy { position: fixed; inset: 0; background: rgba(255,255,255,.65); z-index: 9998; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; font-size: 14px; color: #374151; font-weight: 600; backdrop-filter: blur(1px); }
 .ep-day.waitlist { border-color: #fbbf24; background: #fffbeb; }
 .ep-day.noskill { background: #f9fafb; color: #c4c7cc; cursor: default; }
@@ -121,6 +125,7 @@ employee-portal * { box-sizing: border-box; }
 .ep-offer-btns button { border-radius: 8px; padding: 6px 14px; font-size: 12.5px; font-weight: 700; cursor: pointer; font-family: inherit; border: 1px solid transparent; }
 .ep-offer-accept { background: #059669; color: #fff; }
 .ep-offer-decline { background: #fff; color: #b91c1c; border-color: #fecaca !important; }
+@media (max-width:700px) { .ep-wrap { padding: 12px; } .ep-tabs { display:flex; overflow-x:auto; } .ep-tabbtn { flex:1; white-space:nowrap; padding-inline:11px; } }
 ${ADMIN_STYLE}
 `;
 
@@ -158,7 +163,7 @@ function escapeHtml(str) {
 }
 
 class EmployeePortal extends HTMLElement {
-    static get observedAttributes() { return ['portal-data', 'action-result', 'admin-data', 'hours-data']; }
+    static get observedAttributes() { return ['portal-data', 'action-result', 'admin-data', 'hours-data', 'templates-data']; }
 
     constructor() {
         super();
@@ -174,6 +179,10 @@ class EmployeePortal extends HTMLElement {
         this._adminView = 'heat';
         this._adminSelectedDay = null;
         this._adminEditEmployeeId = null;
+        this._adminPage = 'board';
+        this._adminSidebarCollapsed = false;
+        this._adminModal = null;
+        this._templatesData = null;
         this._busy = null;                      // busy-overlay message while a mutation is in flight
         // Hours tab state (Module E)
         this._hoursData = null;
@@ -259,6 +268,16 @@ class EmployeePortal extends HTMLElement {
             });
             this.render();
         }
+        if (name === 'templates-data') {
+            try {
+                this._templatesData = JSON.parse(newVal);
+            } catch (err) {
+                console.error('[employee-portal] bad templates-data JSON:', err);
+                return;
+            }
+            this._busy = null;
+            this.render();
+        }
         if (name === 'action-result') {
             try {
                 const result = JSON.parse(newVal);
@@ -296,6 +315,7 @@ class EmployeePortal extends HTMLElement {
         this._busy = null;
         console.log('[employee-portal] action-result ←', result.type, result.error ? result.message : result);
         if (result.error) {
+            if (result.type === 'adminTemplatesLoad') this._templatesData = [];
             this._toast(result.message || 'אירעה שגיאה. נסו שוב.', 'error');
             this.render();
             return;
@@ -616,7 +636,7 @@ class EmployeePortal extends HTMLElement {
             </div>
             <div class="ep-cal-grid">${cells}</div>
             <div class="ep-legend">
-                <span><span class="ep-dot" style="background:#f5f3ff;border:1px solid #7c3aed"></span>נבחר</span>
+                <span><span class="ep-dot" style="background:#eff6ff;border:1px solid #2563eb"></span>נבחר</span>
                 <span><span class="ep-dot" style="background:#eef2ff"></span>המתנה</span>
                 <span><span class="ep-dot" style="background:#ecfdf5;border:1px solid #6ee7b7"></span>משובץ</span>
                 <span><span class="ep-dot" style="background:#fffbeb;border:1px solid #f59e0b"></span>דרושים עובדים</span>

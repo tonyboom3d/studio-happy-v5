@@ -450,22 +450,26 @@ export const createAndCheckout = webMethod(Permissions.Anyone, async (orderData)
         throw new Error(`No pricing found for service: ${serviceId}. Make sure Wix Bookings variants are configured.`);
     }
 
-    // נרות: כל ילד = כרטיס הורה+ילד (נר אחד), מבוגר מלווה עד 4 ילדים.
+    // נרות: הילד הראשון תחת כל מבוגר מלווה = כרטיס הורה+ילד מלא, וכל ילד נוסף
+    // תחת אותו מבוגר (עד 4 ילדים) = "תוספת ילד" (מחיר מוזל). מבוגר מלווה עד 4 ילדים.
     // טאפטינג: הורה+ילד = זוג אחד (לוגיקה קיימת ללא שינוי).
-    let parentChildPairs, soloAdults, rugCount;
+    let parentChildPairs, extraChildren, soloAdults, rugCount;
     if (isCandles) {
         const accompanyingAdults = Math.min(numAdults, Math.ceil(numChildren / 4));
-        parentChildPairs = numChildren;
+        parentChildPairs = accompanyingAdults;
+        extraChildren = numChildren - accompanyingAdults;
         soloAdults = numAdults - accompanyingAdults;
         rugCount = soloAdults + numChildren; // מספר נרות
     } else {
         parentChildPairs = Math.min(numAdults, numChildren);
+        extraChildren = 0;
         soloAdults = numAdults - parentChildPairs;
         rugCount = numAdults;
     }
     const pricePerAdult = servicePricing.solo;
     const parentChildPrice = servicePricing.parentChild || pricePerAdult;
-    const basePrice = (soloAdults * pricePerAdult) + (parentChildPairs * parentChildPrice);
+    const extraChildPrice = servicePricing.extraChild || parentChildPrice;
+    const basePrice = (soloAdults * pricePerAdult) + (parentChildPairs * parentChildPrice) + (extraChildren * extraChildPrice);
 
     // --- נרמול פרטי משתמש ---
     const fullName = (userDetails?.name || userDetails?.full_name || '').trim();
@@ -1776,6 +1780,7 @@ export const getCourseSessions = webMethod(Permissions.Anyone, async (dateRangeS
  *   [serviceId]: {
  *     solo: number,          // מחיר כרטיס "יחיד"
  *     parentChild: number,   // מחיר כרטיס "הורה וילד"
+ *     extraChild: number,    // מחיר "תוספת ילד על הורה וילד" (נרות בלבד; נופל חזרה למחיר parentChild אם לא הוגדר)
  *     minPrice: number,
  *     maxPrice: number,
  *     currency: string
@@ -1795,6 +1800,10 @@ async function _fetchServicePricingInternal(serviceIds) {
     const list = response?.serviceOptionsAndVariantsList || [];
 
     const result = {};
+    // NOTE: EXTRA_CHILD_KEYWORDS must be checked before CHILD_KEYWORDS since
+    // "תוספת ילד" also contains "ילד" and would otherwise be misclassified
+    // as a regular parent+child variant.
+    const EXTRA_CHILD_KEYWORDS = ['תוספת ילד'];
     const CHILD_KEYWORDS = ['הורה וילד', 'וילד', 'ילד'];
     const SOLO_KEYWORDS = ['יחיד'];
 
@@ -1804,10 +1813,13 @@ async function _fetchServicePricingInternal(serviceIds) {
         const variants = item.variants?.values || [];
         let soloPrice = null;
         let parentChildPrice = null;
+        let extraChildPrice = null;
         let soloChoice = null;
         let soloOptionId = null;
         let parentChildChoice = null;
         let parentChildOptionId = null;
+        let extraChildChoice = null;
+        let extraChildOptionId = null;
 
         for (const variant of variants) {
             const choiceLabel = variant.choices?.[0]?.custom || '';
@@ -1815,9 +1827,15 @@ async function _fetchServicePricingInternal(serviceIds) {
             const price = parseFloat(variant.price?.value);
             if (isNaN(price)) continue;
 
-            const isChild = CHILD_KEYWORDS.some(kw => choiceLabel.includes(kw));
+            const isExtraChild = EXTRA_CHILD_KEYWORDS.some(kw => choiceLabel.includes(kw));
+            const isChild = !isExtraChild && CHILD_KEYWORDS.some(kw => choiceLabel.includes(kw));
             const isSolo = SOLO_KEYWORDS.some(kw => choiceLabel.includes(kw));
 
+            if (isExtraChild && (extraChildPrice === null || price < extraChildPrice)) {
+                extraChildPrice = price;
+                extraChildChoice = choiceLabel;
+                extraChildOptionId = optionId;
+            }
             if (isChild && (parentChildPrice === null || price < parentChildPrice)) {
                 parentChildPrice = price;
                 parentChildChoice = choiceLabel;
@@ -1844,14 +1862,23 @@ async function _fetchServicePricingInternal(serviceIds) {
             parentChildChoice = soloChoice;
             parentChildOptionId = soloOptionId;
         }
+        // No dedicated "extra child" variant configured for this service — fall back to the parent+child price.
+        if (extraChildPrice === null) {
+            extraChildPrice = parentChildPrice;
+            extraChildChoice = parentChildChoice;
+            extraChildOptionId = parentChildOptionId;
+        }
 
         result[item.serviceId] = {
             solo: soloPrice || 0,
             parentChild: parentChildPrice || 0,
+            extraChild: extraChildPrice || 0,
             soloChoice,
             soloOptionId,
             parentChildChoice,
             parentChildOptionId,
+            extraChildChoice,
+            extraChildOptionId,
             minPrice,
             maxPrice,
             currency: item.minPrice?.currency || 'ILS',

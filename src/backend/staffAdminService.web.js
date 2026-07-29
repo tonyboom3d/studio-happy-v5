@@ -85,16 +85,23 @@ export const getStaffAdminData = webMethod(Permissions.SiteMember, async (monthK
         .map(r => mapEmployeeForAdmin(r, canSeeRates))
         .sort((a, b) => (a.priorityRank ?? 999) - (b.priorityRank ?? 999));
 
-    const submissions = (submissionsRaw.items || []).map(s => ({
-        id: s._id,
-        employeeId: s.employeeId,
-        employeeName: board.rolesById[s.employeeId]?.displayName || '—',
-        date: toDateKey(s.date),
-        startTime: s.startTime || '',
-        endTime: s.endTime || '',
-        status: s.status,
-        managerOverride: !!s.managerOverride,
-    }));
+    const submissions = (submissionsRaw.items || []).map(s => {
+        const date = toDateKey(s.date);
+        const assignedType = Object.values(board.days[date]?.types || {})
+            .find(t => t.assignedEmployeeIds.includes(s.employeeId));
+        return {
+            id: s._id,
+            employeeId: s.employeeId,
+            employeeName: board.rolesById[s.employeeId]?.displayName || '—',
+            date,
+            startTime: s.startTime || '',
+            endTime: s.endTime || '',
+            status: s.status,
+            managerOverride: !!s.managerOverride,
+            workshopTypeId: assignedType?.typeId || null,
+            workshopName: assignedType?.name || null,
+        };
+    });
 
     // Day coverage for heatmap/list views.
     const days = {};
@@ -146,10 +153,12 @@ export const getStaffAdminData = webMethod(Permissions.SiteMember, async (monthK
     return {
         monthKey,
         permissions: {
+            viewTeamSchedule: getRolePermissionValue(role, 'viewTeamSchedule'),
             manageEmployees: getRolePermissionValue(role, 'manageEmployees'),
             manageRules: getRolePermissionValue(role, 'manageRules'),
             manageScheduling: getRolePermissionValue(role, 'manageScheduling'),
             manageRates: canSeeRates,
+            manageTemplates: getRolePermissionValue(role, 'manageTemplates'),
         },
         employees,
         workshopTypes: Object.values(board.typesById),
@@ -160,10 +169,16 @@ export const getStaffAdminData = webMethod(Permissions.SiteMember, async (monthK
         openOffers,
         rules,
         settings: {
+            deadlineDaysBeforeMonthEnd: settings.deadlineDaysBeforeMonthEnd,
+            monthsAheadAllowed: settings.monthsAheadAllowed,
+            defaultMinShiftsPerMonth: settings.defaultMinShiftsPerMonth,
+            defaultMinShiftHours: settings.defaultMinShiftHours,
+            defaultShiftStart: settings.defaultShiftStart,
+            defaultShiftEnd: settings.defaultShiftEnd,
+            bonusUnlockEnabled: settings.bonusUnlockEnabled,
             blockedDates: settings.blockedDates,
             promotedDates: settings.promotedDates,
             holidays: settings.holidays,
-            deadlineDaysBeforeMonthEnd: settings.deadlineDaysBeforeMonthEnd,
         },
         serverNow: new Date().toISOString(),
     };
@@ -288,6 +303,84 @@ export const updateHolidays = webMethod(Permissions.SiteMember, async (holidays)
     await wixData.update('AvailabilitySettings', { ...row, holidays: JSON.stringify(clean) }, SA);
     await publishSchedulingUpdate('holidays-updated', {});
     console.log(`[staffAdminService] updateHolidays: ${clean.length} entries by ${role._id}`);
+    return { ok: true };
+});
+
+export const updateAvailabilitySettings = webMethod(Permissions.SiteMember, async (patch) => {
+    const { role } = await assertEmployeeAccess('manageRules');
+    if (!patch || typeof patch !== 'object') throw new Error('BAD_REQUEST: חסרות הגדרות.');
+
+    const result = await wixData.query('AvailabilitySettings')
+        .eq('settingKey', 'default').limit(1).find(SA);
+    const row = result.items?.[0];
+    if (!row) throw new Error('NOT_FOUND: שורת AvailabilitySettings לא נמצאה.');
+
+    const updated = { ...row };
+    const positiveNumberFields = [
+        'deadlineDaysBeforeMonthEnd',
+        'monthsAheadAllowed',
+        'defaultMinShiftsPerMonth',
+        'defaultMinShiftHours',
+    ];
+    for (const field of positiveNumberFields) {
+        if (patch[field] === undefined) continue;
+        const value = Number(patch[field]);
+        if (!Number.isFinite(value) || value <= 0) throw new Error('BAD_REQUEST: ערך מספרי לא תקין.');
+        updated[field] = value;
+    }
+    for (const field of ['defaultShiftStart', 'defaultShiftEnd']) {
+        if (patch[field] === undefined) continue;
+        const value = String(patch[field] || '');
+        if (!/^\d{2}:\d{2}$/.test(value)) throw new Error('BAD_REQUEST: שעה לא תקינה.');
+        updated[field] = value;
+    }
+    if (patch.bonusUnlockEnabled !== undefined) updated.bonusUnlockEnabled = !!patch.bonusUnlockEnabled;
+
+    await wixData.update('AvailabilitySettings', updated, SA);
+    await publishSchedulingUpdate('settings-updated', {});
+    console.log(`[staffAdminService] updateAvailabilitySettings by ${role._id}`);
+    return { ok: true };
+});
+
+// ---------------------------------------------------------------------------
+// WhatsApp templates
+// ---------------------------------------------------------------------------
+
+export const getStaffTemplates = webMethod(Permissions.SiteMember, async () => {
+    await assertEmployeeAccess('manageTemplates');
+    const result = await wixData.query('WhatsApp_Templates').ascending('title').limit(1000).find(SA);
+    return (result.items || []).map(t => ({
+        id: t._id,
+        title: t.title || '',
+        body: t.messageBody || '',
+        isSystem: !!t.isSystem,
+    }));
+});
+
+export const saveStaffTemplate = webMethod(Permissions.SiteMember, async (template) => {
+    await assertEmployeeAccess('manageTemplates');
+    const title = String(template?.title || '').trim().slice(0, 120);
+    const body = String(template?.body || '').trim();
+    if (!title || !body) throw new Error('BAD_REQUEST: יש להזין כותרת ותוכן.');
+
+    const data = { title, messageBody: body };
+    let saved;
+    if (template?.id) {
+        const existing = await wixData.get('WhatsApp_Templates', template.id, SA).catch(() => null);
+        if (!existing) throw new Error('NOT_FOUND: התבנית לא נמצאה.');
+        saved = await wixData.update('WhatsApp_Templates', { ...existing, ...data }, SA);
+    } else {
+        saved = await wixData.insert('WhatsApp_Templates', { ...data, isSystem: false }, SA);
+    }
+    return { id: saved._id, title: saved.title, body: saved.messageBody, isSystem: !!saved.isSystem };
+});
+
+export const deleteStaffTemplate = webMethod(Permissions.SiteMember, async (templateId) => {
+    await assertEmployeeAccess('manageTemplates');
+    const existing = await wixData.get('WhatsApp_Templates', templateId, SA).catch(() => null);
+    if (!existing) throw new Error('NOT_FOUND: התבנית לא נמצאה.');
+    if (existing.isSystem) throw new Error('BAD_REQUEST: לא ניתן למחוק תבנית מערכת.');
+    await wixData.remove('WhatsApp_Templates', templateId, SA);
     return { ok: true };
 });
 

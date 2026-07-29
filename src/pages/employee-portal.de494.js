@@ -30,6 +30,11 @@ import {
     updateEmployeeProfile,
     updateSchedulingRule,
     updateDayFlags,
+    updateHolidays,
+    updateAvailabilitySettings,
+    getStaffTemplates,
+    saveStaffTemplate,
+    deleteStaffTemplate,
     sendAvailabilityNudge,
     manualAssign,
     cancelAssignment,
@@ -203,6 +208,11 @@ async function loadAndPushHoursData(portalEl, monthKey) {
     }
 }
 
+async function loadAndPushTemplates(portalEl) {
+    const templates = await getStaffTemplates();
+    portalEl.setAttribute('templates-data', JSON.stringify(templates));
+}
+
 function pushActionResult(portalEl, result) {
     portalEl.setAttribute('action-result', JSON.stringify({
         ...result,
@@ -284,6 +294,46 @@ async function handlePortalAction(portalEl, detail) {
             pushActionResult(portalEl, { type, ...result });
             refreshPortal = false;
             refreshAdmin = true;
+            break;
+        }
+
+        case 'adminUpdateSettings': {
+            const result = await updateAvailabilitySettings(payload?.patch);
+            pushActionResult(portalEl, { type, ...result });
+            refreshPortal = true;
+            refreshAdmin = true;
+            break;
+        }
+
+        case 'adminUpdateHolidays': {
+            const result = await updateHolidays(payload?.holidays || []);
+            pushActionResult(portalEl, { type, ...result });
+            refreshPortal = true;
+            refreshAdmin = true;
+            break;
+        }
+
+        case 'adminTemplatesLoad':
+            refreshPortal = false;
+            refreshAdmin = false;
+            await loadAndPushTemplates(portalEl);
+            return;
+
+        case 'adminTemplateSave': {
+            const result = await saveStaffTemplate(payload?.template);
+            pushActionResult(portalEl, { type, ok: true, template: result });
+            refreshPortal = false;
+            refreshAdmin = false;
+            await loadAndPushTemplates(portalEl);
+            break;
+        }
+
+        case 'adminTemplateDelete': {
+            const result = await deleteStaffTemplate(payload?.templateId);
+            pushActionResult(portalEl, { type, ...result });
+            refreshPortal = false;
+            refreshAdmin = false;
+            await loadAndPushTemplates(portalEl);
             break;
         }
 

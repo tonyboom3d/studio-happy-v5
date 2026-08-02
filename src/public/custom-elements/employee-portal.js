@@ -204,7 +204,11 @@ class EmployeePortal extends HTMLElement {
         this._teamTimeMonth = todayKey().slice(0, 7);
         this._teamTimeEmployee = null;
         this._messagesData = null;              // { personal: [...], system: [...] }
+        this._messagesRequested = false;
+        this._msgSubTab = 'personal';           // internal sub-tab within הפורטל שלי
         this._adminMessagesData = null;         // admin messages management list
+        this._shiftSubTab = 'myShifts';         // 'myShifts' | 'mySubmissions' — internal sub-tab
+        this._shiftModal = null;                // { type: 'edit'|'requestEdit'|'requestDelete', submissionId }
         this._busy = null;                      // busy-overlay message while a mutation is in flight
         // Hours tab state (Module E)
         this._hoursData = null;
@@ -256,6 +260,10 @@ class EmployeePortal extends HTMLElement {
                 // Default view: first future month if open, else current month.
                 const future = this._data.months.find(m => !m.isCurrentMonth);
                 this._viewMonth = (future || this._data.months[0]).monthKey;
+            }
+            if (!this._messagesRequested) {
+                this._messagesRequested = true;
+                this._dispatch('loadMyMessages');
             }
             this.render();
         }
@@ -416,6 +424,15 @@ class EmployeePortal extends HTMLElement {
         if (result.type === 'withdrawAvailability' && result.ok) {
             this._toast('הזמינות בוטלה.', 'success');
         }
+        if (result.type === 'updateSubmission' && result.ok) {
+            this._toast('המשמרת עודכנה בהצלחה.', 'success');
+        }
+        if (result.type === 'requestShiftChange' && result.ok) {
+            this._toast('הבקשה נשלחה למנהל/ת ותטופל בקרוב.', 'success');
+        }
+        if (result.type === 'acknowledgeShiftRequest' && result.ok) {
+            this._toast('הבנתי.', 'success');
+        }
         if (result.type === 'respondToOffer' && result.ok) {
             this._toast(result.accepted ? 'המשמרת שובצה לך! 🎉' : 'ההצעה נדחתה.', 'success');
         }
@@ -459,8 +476,6 @@ class EmployeePortal extends HTMLElement {
             <div class="ep-tabs">
                 <button class="ep-tabbtn ${this._tab === 'portal' ? 'active' : ''}" data-action="tab-portal">הפורטל שלי</button>
                 <button class="ep-tabbtn ${this._tab === 'hours' ? 'active' : ''}" data-action="tab-hours">השעות שלי</button>
-                <button class="ep-tabbtn ${this._tab === 'msgPersonal' ? 'active' : ''}" data-action="tab-msg-personal">הודעות אישיות</button>
-                <button class="ep-tabbtn ${this._tab === 'msgSystem' ? 'active' : ''}" data-action="tab-msg-system">הודעות מערכת</button>
                 ${isAdmin ? `<button class="ep-tabbtn ${this._tab === 'admin' ? 'active' : ''}" data-action="tab-admin">ניהול צוות</button>` : ''}
             </div>`;
 
@@ -470,10 +485,11 @@ class EmployeePortal extends HTMLElement {
             <div class="ep-grid">
                 <div>
                     <div class="ep-card">${this._renderCalendar()}</div>
+                    <div class="ep-card" style="margin-top:16px">${this._renderShiftsCard()}</div>
                     <div class="ep-card" style="margin-top:16px">${this._renderSelectionPanel()}</div>
                 </div>
                 <div>
-                    <div class="ep-card">${this._renderBoard()}</div>
+                    <div class="ep-card">${this._renderMessagesCard()}</div>
                     <div class="ep-card" style="margin-top:16px">${this._renderScheduledWorkshops()}</div>
                 </div>
             </div>`;
@@ -483,10 +499,6 @@ class EmployeePortal extends HTMLElement {
             tabContent = `<div style="margin-top:12px">${renderAdminTab(this)}</div>`;
         } else if (this._tab === 'hours') {
             tabContent = `<div style="margin-top:12px">${this._renderHoursTab()}</div>`;
-        } else if (this._tab === 'msgPersonal') {
-            tabContent = `<div style="margin-top:12px">${this._renderMessagesTab('personal')}</div>`;
-        } else if (this._tab === 'msgSystem') {
-            tabContent = `<div style="margin-top:12px">${this._renderMessagesTab('system')}</div>`;
         } else {
             tabContent = portalTab;
         }
@@ -498,6 +510,7 @@ class EmployeePortal extends HTMLElement {
                 ${tabContent}
             </div>
             ${this._busy ? `<div class="ep-busy"><div class="ep-spinner"></div>${escapeHtml(this._busy)}</div>` : ''}
+            ${this._shiftModal ? this._renderShiftModal() : ''}
             <div class="ep-toast" id="epToast"></div>
         `;
         this._restoreToast();
@@ -551,18 +564,27 @@ class EmployeePortal extends HTMLElement {
             </div>`;
     }
 
-    /** "הודעות אישיות" / "הודעות מערכת" — messages sent by the admin. */
+    /** "הודעות אישיות" / "הודעות מערכת" card — internal tabs within הפורטל שלי. */
+    _renderMessagesCard() {
+        const scope = this._msgSubTab === 'system' ? 'system' : 'personal';
+        return `
+            <div class="ep-tabs" style="margin-top:0">
+                <button class="ep-tabbtn ${scope === 'personal' ? 'active' : ''}" data-action="subtab-msg-personal">הודעות אישיות</button>
+                <button class="ep-tabbtn ${scope === 'system' ? 'active' : ''}" data-action="subtab-msg-system">הודעות מערכת</button>
+            </div>
+            <div style="margin-top:12px">${this._renderMessagesTab(scope)}</div>`;
+    }
+
     _renderMessagesTab(scope) {
         const m = this._messagesData;
         if (!m) {
-            return `<div class="ep-card"><div class="ep-loading"><div class="ep-spinner"></div>טוען הודעות…</div></div>`;
+            return `<div class="ep-loading"><div class="ep-spinner"></div>טוען הודעות…</div>`;
         }
         const list = scope === 'personal' ? (m.personal || []) : (m.system || []);
-        const title = scope === 'personal' ? 'הודעות אישיות' : 'הודעות מערכת';
         if (!list.length) {
-            return `<div class="ep-card"><h2>${title}</h2><div class="ep-empty">אין הודעות כרגע</div></div>`;
+            return `<div class="ep-empty">אין הודעות כרגע</div>`;
         }
-        const cards = list.map(msg => `
+        return list.map(msg => `
             <div class="ep-msg-card ${scope === 'system' ? 'system' : ''}">
                 <div class="ep-msg-head">
                     <span>${escapeHtml(msg.title)}</span>
@@ -571,7 +593,6 @@ class EmployeePortal extends HTMLElement {
                 <div class="ep-msg-body">${escapeHtml(msg.body)}</div>
                 ${msg.expiresAt ? `<div class="ep-msg-exp">בתוקף עד ${formatDateHe(String(msg.expiresAt).slice(0, 10))}</div>` : ''}
             </div>`).join('');
-        return `<div class="ep-card"><h2>${title}</h2>${cards}</div>`;
     }
 
     /** Waiting-list offers addressed to me + open calls matching my skills. */
@@ -798,29 +819,122 @@ class EmployeePortal extends HTMLElement {
             ${invalid ? `<div class="ep-banner warn" style="margin-top:8px">יש משמרות קצרות מהמינימום (${rules.minShiftHours} שעות) או עם שעות שגויות.</div>` : ''}`;
     }
 
-    _renderBoard() {
+    /** "המשמרות שלי" (SCHEDULED+STANDBY) / "ההגשות שלי" (SUBMITTED) — internal tabs. */
+    _renderShiftsCard() {
+        const subTab = this._shiftSubTab === 'mySubmissions' ? 'mySubmissions' : 'myShifts';
         const subs = (this._data.submissions || []).filter(s => s.status !== 'REJECTED');
-        const tKey = todayKey();
-        if (!subs.length) return `<h2>הלוח האישי שלי</h2><div class="ep-empty">טרם הוגשה זמינות</div>`;
+        const list = subTab === 'mySubmissions'
+            ? subs.filter(s => s.status === 'SUBMITTED')
+            : subs.filter(s => s.status === 'SCHEDULED' || s.status === 'STANDBY');
 
-        const item = (s) => `
+        const pendingBySubmission = {};
+        for (const r of (this._data.changeRequests || [])) {
+            if (r.status === 'PENDING') pendingBySubmission[r.submissionId] = r;
+        }
+        const decided = (this._data.changeRequests || []).filter(r => r.status !== 'PENDING');
+
+        const rows = list.length
+            ? list.map(s => this._renderShiftRow(s, pendingBySubmission[s.id])).join('')
+            : `<div class="ep-empty">${subTab === 'mySubmissions' ? 'אין הגשות בהמתנה לאישור' : 'אין משמרות משובצות'}</div>`;
+
+        const decidedBanners = decided.map(r => `
+            <div class="ep-banner ${r.status === 'APPROVED' ? 'info' : 'closed'}" style="align-items:flex-start">
+                <div style="flex:1">
+                    בקשתך ל${r.type === 'DELETE' ? 'מחיקת' : 'שינוי'} המשמרת בתאריך ${formatDateHe(r.originalDate)} ${r.status === 'APPROVED' ? 'אושרה ✔' : 'נדחתה ✕'}.
+                    ${r.managerComment ? `<div style="margin-top:4px;font-weight:600">הערת מנהל/ת: ${escapeHtml(r.managerComment)}</div>` : ''}
+                </div>
+                <button class="ep-withdraw" data-action="ack-request" data-id="${escapeHtml(r.id)}">הבנתי</button>
+            </div>`).join('');
+
+        return `
+            <div class="ep-tabs" style="margin-top:0">
+                <button class="ep-tabbtn ${subTab === 'myShifts' ? 'active' : ''}" data-action="subtab-myshifts">המשמרות שלי</button>
+                <button class="ep-tabbtn ${subTab === 'mySubmissions' ? 'active' : ''}" data-action="subtab-mysubmissions">ההגשות שלי</button>
+            </div>
+            <div style="margin-top:12px">
+                ${decidedBanners}
+                ${rows}
+            </div>`;
+    }
+
+    /** One shift row: free edit/delete (SUBMITTED) or request-change/delete (SCHEDULED/STANDBY). */
+    _renderShiftRow(s, pendingReq) {
+        const tKey = todayKey();
+        let actions = '';
+        if (pendingReq) {
+            actions = `<span class="ep-status PENDING">🕐 בקשת ${pendingReq.type === 'DELETE' ? 'מחיקה' : 'שינוי'} בטיפול</span>`;
+        } else if (s.date > tKey) {
+            if (s.status === 'SUBMITTED') {
+                actions = `
+                    <button class="ep-withdraw" data-action="shift-edit" data-id="${escapeHtml(s.id)}">ערוך</button>
+                    <button class="ep-withdraw" data-action="withdraw" data-id="${escapeHtml(s.id)}">מחיקה</button>`;
+            } else if (s.status === 'SCHEDULED' || s.status === 'STANDBY') {
+                actions = `
+                    <button class="ep-withdraw" data-action="shift-request-edit" data-id="${escapeHtml(s.id)}">בקשת שינוי</button>
+                    <button class="ep-withdraw" data-action="shift-request-delete" data-id="${escapeHtml(s.id)}">בקשת מחיקה</button>`;
+            }
+        }
+        return `
             <div class="ep-board-item">
                 <div>
                     <div class="ep-b-date">${formatDateHe(s.date)}</div>
                     <div class="ep-b-time">${escapeHtml(s.startTime)}–${escapeHtml(s.endTime)}${s.hours ? ` · ${s.hours} ש׳` : ''}</div>
                 </div>
-                <div style="display:flex;align-items:center;gap:6px">
+                <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;justify-content:flex-end">
                     <span class="ep-status ${escapeHtml(s.status)}">${STATUS_LABELS[s.status] || s.status}</span>
-                    ${s.status !== 'SCHEDULED' && s.date > tKey ? `<button class="ep-withdraw" data-action="withdraw" data-id="${escapeHtml(s.id)}">ביטול</button>` : ''}
+                    ${actions}
                 </div>
             </div>`;
+    }
 
-        const scheduled = subs.filter(s => s.status === 'SCHEDULED');
-        const waiting = subs.filter(s => s.status !== 'SCHEDULED');
-        let html = `<h2>הלוח האישי שלי</h2>`;
-        if (scheduled.length) html += `<div style="font-size:12px;font-weight:700;color:#065f46;margin:4px 0 6px">משובצות (${scheduled.length})</div>` + scheduled.map(item).join('');
-        if (waiting.length) html += `<div style="font-size:12px;font-weight:700;color:#3730a3;margin:10px 0 6px">בהמתנה לשיבוץ (${waiting.length})</div>` + waiting.map(item).join('');
-        return html;
+    /** Modal for free edit (SUBMITTED) or filing a change/deletion request (SCHEDULED/STANDBY). */
+    _renderShiftModal() {
+        const modal = this._shiftModal;
+        if (!modal) return '';
+        const s = (this._data.submissions || []).find(x => x.id === modal.submissionId);
+        if (!s) return '';
+
+        let title, body;
+        const timeInputs = `
+            <div class="epa-form">
+                <div><label>התחלה</label><input id="epShiftStart" type="time" min="${SHIFT_MIN_TIME}" max="${SHIFT_MAX_TIME}" value="${escapeHtml(s.startTime)}"></div>
+                <div><label>סיום</label><input id="epShiftEnd" type="time" min="${SHIFT_MIN_TIME}" max="${SHIFT_MAX_TIME}" value="${escapeHtml(s.endTime)}"></div>
+            </div>`;
+
+        if (modal.type === 'edit') {
+            title = 'עריכת משמרת';
+            body = `${timeInputs}
+                <div class="epa-inline">
+                    <button class="epa-btn primary" data-action="shift-modal-save-edit" data-id="${escapeHtml(s.id)}">שמירה</button>
+                    <button class="epa-btn" data-action="shift-modal-cancel">ביטול</button>
+                </div>`;
+        } else if (modal.type === 'requestEdit') {
+            title = 'בקשת שינוי שעות משמרת';
+            body = `
+                <div class="ep-empty" style="text-align:right;margin-bottom:8px">המשמרת הזו כבר משובצת/בהמתנה — הבקשה תישלח למנהל/ת לאישור.</div>
+                ${timeInputs}
+                <div class="epa-field" style="margin-top:8px"><label>הערה למנהל/ת (לא חובה)</label><input id="epShiftNotes" value=""></div>
+                <div class="epa-inline">
+                    <button class="epa-btn primary" data-action="shift-modal-save-request-edit" data-id="${escapeHtml(s.id)}">שליחת בקשה</button>
+                    <button class="epa-btn" data-action="shift-modal-cancel">ביטול</button>
+                </div>`;
+        } else {
+            title = 'בקשת מחיקת משמרת';
+            body = `
+                <div class="ep-empty" style="text-align:right;margin-bottom:8px">המשמרת הזו כבר משובצת/בהמתנה — הבקשה תישלח למנהל/ת לאישור.</div>
+                <div class="epa-field"><label>הערה למנהל/ת (לא חובה)</label><input id="epShiftNotes" value=""></div>
+                <div class="epa-inline">
+                    <button class="epa-btn danger" data-action="shift-modal-save-request-delete" data-id="${escapeHtml(s.id)}">שליחת בקשת מחיקה</button>
+                    <button class="epa-btn" data-action="shift-modal-cancel">ביטול</button>
+                </div>`;
+        }
+
+        return `<div class="epa-modal-backdrop">
+            <div class="epa-modal" role="dialog" aria-modal="true" aria-label="${escapeHtml(title)}">
+                <div class="epa-modal-head"><h2>${escapeHtml(title)}</h2><button class="epa-modal-close" data-action="shift-modal-cancel" aria-label="סגירה">×</button></div>
+                ${body}
+            </div>
+        </div>`;
     }
 
     _renderScheduledWorkshops() {
@@ -878,13 +992,64 @@ class EmployeePortal extends HTMLElement {
                 if (!this._hoursData) this._requestHoursData();
                 else this.render();
                 return;
-            case 'tab-msg-personal':
-            case 'tab-msg-system':
-                this._tab = action === 'tab-msg-personal' ? 'msgPersonal' : 'msgSystem';
-                if (!this._messagesData) {
-                    this._dispatch('loadMyMessages');
-                }
+            case 'subtab-msg-personal':
+            case 'subtab-msg-system':
+                this._msgSubTab = action === 'subtab-msg-system' ? 'system' : 'personal';
                 this.render();
+                return;
+            case 'subtab-myshifts':
+            case 'subtab-mysubmissions':
+                this._shiftSubTab = action === 'subtab-mysubmissions' ? 'mySubmissions' : 'myShifts';
+                this.render();
+                return;
+            case 'shift-edit':
+                this._shiftModal = { type: 'edit', submissionId: target.dataset.id };
+                this.render();
+                return;
+            case 'shift-request-edit':
+                this._shiftModal = { type: 'requestEdit', submissionId: target.dataset.id };
+                this.render();
+                return;
+            case 'shift-request-delete':
+                this._shiftModal = { type: 'requestDelete', submissionId: target.dataset.id };
+                this.render();
+                return;
+            case 'shift-modal-cancel':
+                this._shiftModal = null;
+                this.render();
+                return;
+            case 'shift-modal-save-edit': {
+                const startTime = this.querySelector('#epShiftStart')?.value;
+                const endTime = this.querySelector('#epShiftEnd')?.value;
+                this._shiftModal = null;
+                this._startBusy('שומר שינויים…');
+                this._dispatch('updateSubmission', { id: target.dataset.id, patch: { startTime, endTime } });
+                return;
+            }
+            case 'shift-modal-save-request-edit': {
+                const requestedStartTime = this.querySelector('#epShiftStart')?.value;
+                const requestedEndTime = this.querySelector('#epShiftEnd')?.value;
+                const notes = this.querySelector('#epShiftNotes')?.value || '';
+                this._shiftModal = null;
+                this._startBusy('שולח בקשה למנהל/ת…');
+                this._dispatch('requestShiftChange', {
+                    submissionId: target.dataset.id,
+                    payload: { type: 'EDIT', requestedStartTime, requestedEndTime, notes },
+                });
+                return;
+            }
+            case 'shift-modal-save-request-delete': {
+                const notes = this.querySelector('#epShiftNotes')?.value || '';
+                this._shiftModal = null;
+                this._startBusy('שולח בקשה למנהל/ת…');
+                this._dispatch('requestShiftChange', {
+                    submissionId: target.dataset.id,
+                    payload: { type: 'DELETE', notes },
+                });
+                return;
+            }
+            case 'ack-request':
+                this._dispatch('acknowledgeShiftRequest', { requestId: target.dataset.id });
                 return;
             case 'hours-month-prev':
             case 'hours-month-next': {

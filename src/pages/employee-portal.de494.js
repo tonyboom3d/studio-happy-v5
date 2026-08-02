@@ -24,7 +24,12 @@ import {
     getMyPortalData,
     submitAvailability,
     withdrawAvailability,
+    updateSubmission,
 } from 'backend/employeeService.web.js';
+import {
+    requestShiftChange,
+    acknowledgeShiftRequest,
+} from 'backend/shiftChangeRequests.web.js';
 import {
     getStaffAdminData,
     updateEmployeeProfile,
@@ -289,6 +294,24 @@ async function handlePortalAction(portalEl, detail) {
         case 'withdrawAvailability': {
             await withdrawAvailability(payload?.id);
             pushActionResult(portalEl, { type, ok: true });
+            break;
+        }
+
+        case 'updateSubmission': {
+            const result = await updateSubmission(payload?.id, payload?.patch);
+            pushActionResult(portalEl, { type, ...result });
+            break;
+        }
+
+        case 'requestShiftChange': {
+            const result = await requestShiftChange(payload?.submissionId, payload?.payload);
+            pushActionResult(portalEl, { type, ...result });
+            break;
+        }
+
+        case 'acknowledgeShiftRequest': {
+            const result = await acknowledgeShiftRequest(payload?.requestId);
+            pushActionResult(portalEl, { type, ...result });
             break;
         }
 

@@ -42,8 +42,12 @@ import {
     OFFER_STATUS,
 } from 'backend/schedulingEngine.js';
 import { getRoleSkillWorkshopIds } from 'backend/staffRoles.js';
+import { loadMyChangeRequests } from 'backend/shiftChangeRequests.js';
 
 const SA = { suppressAuth: true };
+// Business hours enforced across the portal's shift time pickers.
+const SHIFT_MIN_TIME = '07:00';
+const SHIFT_MAX_TIME = '23:59';
 
 // ---------------------------------------------------------------------------
 // Data helpers
@@ -219,7 +223,10 @@ export const getMyPortalData = webMethod(Permissions.SiteMember, async () => {
         throw new Error('ACCESS_DENIED: Employee profile is inactive.');
     }
 
-    const rawSubmissions = await loadMySubmissions(roleRow._id, now);
+    const [rawSubmissions, changeRequests] = await Promise.all([
+        loadMySubmissions(roleRow._id, now),
+        loadMyChangeRequests(roleRow._id),
+    ]);
     const submissions = rawSubmissions.map(mapSubmission);
     const scheduled = submissions.filter(s => s.status === SUBMISSION_STATUS.SCHEDULED);
     const scheduledWorkshops = await loadScheduledWorkshopDetails(scheduled);
@@ -292,6 +299,7 @@ export const getMyPortalData = webMethod(Permissions.SiteMember, async () => {
         months: buildMonthsSummary(roleRow, settings, submissions, now),
         submissions,
         scheduledWorkshops,
+        changeRequests,
         serverNow: now.toISOString(),
     };
 });
@@ -391,8 +399,8 @@ export const withdrawAvailability = webMethod(Permissions.SiteMember, async (sub
     if (!item || item.employeeId !== roleRow._id) {
         throw new Error('NOT_FOUND: Submission not found.');
     }
-    if (item.status === SUBMISSION_STATUS.SCHEDULED) {
-        throw new Error('FORBIDDEN: לא ניתן לבטל משמרת שכבר שובצה — יש לפנות למנהל/ת.');
+    if (item.status !== SUBMISSION_STATUS.SUBMITTED) {
+        throw new Error('FORBIDDEN: ניתן לבטל ישירות רק משמרות שטרם אושרו — למשמרות משובצות/בהמתנה יש לשלוח בקשת מחיקה.');
     }
     if (toDateKey(item.date) <= toDateKey(new Date())) {
         throw new Error('FORBIDDEN: לא ניתן לבטל זמינות לתאריך שעבר.');
@@ -401,6 +409,49 @@ export const withdrawAvailability = webMethod(Permissions.SiteMember, async (sub
     await wixData.remove('AvailabilitySubmissions', submissionId, SA);
     await publishSchedulingUpdate('withdrawal', { dates: [toDateKey(item.date)] });
     console.log(`[employeeService] withdrawAvailability: role=${roleRow._id} removed=${submissionId}`);
+    return { ok: true };
+});
+
+/**
+ * Free edit of a SUBMITTED (not-yet-placed) shift owned by the caller.
+ * SCHEDULED/STANDBY shifts must go through requestShiftChange instead.
+ */
+export const updateSubmission = webMethod(Permissions.SiteMember, async (submissionId, patch) => {
+    const { member, role } = await assertEmployeeAccess('submitAvailability');
+    if (!submissionId) throw new Error('BAD_REQUEST: submissionId is required.');
+
+    const roleRow = await ensureRoleProfile(role, member);
+    const item = await wixData.get('AvailabilitySubmissions', submissionId, SA).catch(() => null);
+    if (!item || item.employeeId !== roleRow._id) {
+        throw new Error('NOT_FOUND: Submission not found.');
+    }
+    if (item.status !== SUBMISSION_STATUS.SUBMITTED) {
+        throw new Error('FORBIDDEN: ניתן לערוך ישירות רק משמרות שטרם אושרו — למשמרות משובצות/בהמתנה יש לשלוח בקשת שינוי.');
+    }
+    if (toDateKey(item.date) <= toDateKey(new Date())) {
+        throw new Error('FORBIDDEN: לא ניתן לערוך זמינות לתאריך שעבר.');
+    }
+
+    const startTime = String(patch?.startTime || '').trim();
+    const endTime = String(patch?.endTime || '').trim();
+    if (startTime < SHIFT_MIN_TIME || startTime > SHIFT_MAX_TIME || endTime < SHIFT_MIN_TIME || endTime > SHIFT_MAX_TIME) {
+        throw new Error(`BAD_REQUEST: שעות המשמרת חייבות להיות בין ${SHIFT_MIN_TIME} ל-${SHIFT_MAX_TIME}.`);
+    }
+    const settings = await loadSettings();
+    const hrs = shiftHours(startTime, endTime);
+    const minHrs = getMinShiftHours(roleRow, settings);
+    if (hrs === null || hrs < minHrs) {
+        throw new Error(`BAD_REQUEST: אורך המשמרת קצר מהמינימום (${minHrs} שעות) או שהשעות שגויות.`);
+    }
+
+    await wixData.update('AvailabilitySubmissions', {
+        ...item,
+        startTime,
+        endTime,
+        hours: hrs,
+    }, SA);
+    await publishSchedulingUpdate('submission-edit', { dates: [toDateKey(item.date)] });
+    console.log(`[employeeService] updateSubmission: role=${roleRow._id} id=${submissionId}`);
     return { ok: true };
 });
 

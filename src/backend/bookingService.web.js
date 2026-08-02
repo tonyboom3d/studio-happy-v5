@@ -11,6 +11,7 @@ import { createHmac, randomBytes } from 'crypto';
 import { mediaManager } from 'wix-media-backend';
 import { sendGreenApiWhatsApp, sendSelectionNotification } from 'backend/whatsappService.jsw';
 import { SKETCH_STATUS, normalizeSketchStatus, isLockedStatus, wouldViolateLockedMinimum } from 'backend/sketchStatus.js';
+import { getItemWithRetry } from 'backend/wixDataRetry.js';
 import {
     checkEditingWindow,
     computeSketchEditingDeadline,
@@ -2005,21 +2006,14 @@ const SA = { suppressAuth: true };
 const SA_CONSISTENT = { suppressAuth: true, consistentRead: true };
 
 /**
- * wixData.get() rejects (throws "Item [...] does not exist...") when the
- * item isn't found, instead of resolving with null. That raw error was
- * leaking through every "if (!order) throw new Error('Order not found')"
- * check below. This wrapper normalizes missing items to null so those
- * checks work as intended and callers get a clean error message instead of
- * the internal Wix Data error.
+ * Fetches a WorkshopOrder by id via getItemWithRetry (see wixDataRetry.js):
+ * normalizes missing items to null (instead of the raw Wix Data "Item [...]
+ * does not exist" rejection), tags failures with the calling flow so they're
+ * traceable in the logs, and retries once after 4s with consistentRead:true
+ * before giving up.
  */
-async function getWorkshopOrderSafe(orderId) {
-    if (!orderId) return null;
-    try {
-        return await wixData.get('WorkshopOrders', orderId, SA);
-    } catch (err) {
-        console.warn('[getWorkshopOrderSafe] order not found:', orderId, err?.message);
-        return null;
-    }
+async function getWorkshopOrderSafe(orderId, callerLabel = 'getWorkshopOrderSafe') {
+    return getItemWithRetry('WorkshopOrders', orderId, { callerLabel });
 }
 
 export const getOrderByToken = webMethod(Permissions.Anyone, async (token) => {
@@ -2329,7 +2323,7 @@ export const resolveWorkshopOrderFromEcom = webMethod(Permissions.Anyone, async 
 });
 
 export const confirmOrderPayment = webMethod(Permissions.Anyone, async (orderId, ecomOrder) => {
-    const order = await getWorkshopOrderSafe(orderId);
+    const order = await getWorkshopOrderSafe(orderId, 'confirmOrderPayment');
     if (!order) throw new Error('Order not found');
 
     // Prefer the full linking path (organizer info, coupon, totals, order number)
@@ -2352,7 +2346,7 @@ export const confirmOrderPayment = webMethod(Permissions.Anyone, async (orderId,
 });
 
 export const saveParticipants = webMethod(Permissions.Anyone, async (orderId, participants) => {
-    const order = await getWorkshopOrderSafe(orderId);
+    const order = await getWorkshopOrderSafe(orderId, 'saveParticipants');
     if (!order) throw new Error('Order not found');
 
     const saved = [];
@@ -2396,7 +2390,7 @@ export const updateParticipant = webMethod(Permissions.Anyone, async (participan
     const participant = await wixData.get('WorkshopParticipants', participantId, SA);
     if (!participant) throw new Error('Participant not found');
 
-    const order = await getWorkshopOrderSafe(participant.orderId);
+    const order = await getWorkshopOrderSafe(participant.orderId, 'updateParticipant');
     if (order) {
         const editCheck = checkEditingWindow(order);
         if (!editCheck.allowed) {
@@ -2459,7 +2453,7 @@ export const generateParticipantLinks = webMethod(Permissions.Anyone, async (ord
  * (== adults/seats) or children. Mints a stable share token immediately.
  */
 export const createParticipantGroup = webMethod(Permissions.Anyone, async (orderId, group, baseUrl) => {
-    const order = await getWorkshopOrderSafe(orderId);
+    const order = await getWorkshopOrderSafe(orderId, 'createParticipantGroup');
     if (!order) throw new Error('Order not found');
 
     const name = (group?.name || '').trim();
@@ -2658,7 +2652,7 @@ export const deleteParticipantGroup = webMethod(Permissions.Anyone, async (parti
     const participant = await wixData.get('WorkshopParticipants', participantId, SA);
     if (!participant) throw new Error('Participant not found');
 
-    const order = await getWorkshopOrderSafe(participant.orderId);
+    const order = await getWorkshopOrderSafe(participant.orderId, 'deleteParticipantGroup');
     if (order?.workshopStart) {
         const msUntilWorkshop = new Date(order.workshopStart).getTime() - Date.now();
         if (msUntilWorkshop <= 48 * 60 * 60 * 1000) {
@@ -2701,7 +2695,7 @@ export const deleteParticipantGroup = webMethod(Permissions.Anyone, async (parti
 export const deleteOrganizerSelectionGroup = webMethod(Permissions.Anyone, async (orderId, participantName, rugIndexes = [], participantId = null) => {
     if (!orderId) throw new Error('orderId is required');
 
-    const order = await getWorkshopOrderSafe(orderId);
+    const order = await getWorkshopOrderSafe(orderId, 'deleteOrganizerSelectionGroup');
     if (!order) throw new Error('Order not found');
 
     const editCheck = checkEditingWindow(order);
@@ -2751,7 +2745,7 @@ export const deleteEditableSketchSelection = webMethod(Permissions.Anyone, async
     const { orderId, rugIndex, participantId, participantName } = opts;
     if (!orderId || rugIndex == null) throw new Error('orderId and rugIndex are required');
 
-    const order = await getWorkshopOrderSafe(orderId);
+    const order = await getWorkshopOrderSafe(orderId, 'deleteEditableSketchSelection');
     if (!order) throw new Error('Order not found');
 
     const editCheck = checkEditingWindow(order);
@@ -2809,7 +2803,7 @@ export const resolveShortRef = webMethod(Permissions.Anyone, async (ref) => {
 });
 
 export const generateOrganizerToken = webMethod(Permissions.Anyone, async (orderId) => {
-    const order = await getWorkshopOrderSafe(orderId);
+    const order = await getWorkshopOrderSafe(orderId, 'generateOrganizerToken');
     if (!order) throw new Error('Order not found');
     if (order.orderToken) return order.orderToken;
 
@@ -2874,7 +2868,7 @@ export const verifyAccessToken = webMethod(Permissions.Anyone, async (token, raw
         return { valid: false, reason: 'phone_mismatch' };
     }
 
-    const order = await getWorkshopOrderSafe(participant.orderId);
+    const order = await getWorkshopOrderSafe(participant.orderId, 'verifyAccessToken(participant)');
     if (!order) {
         return { valid: false, reason: 'order_not_found' };
     }
@@ -2963,7 +2957,7 @@ export const saveSketchSelection = webMethod(Permissions.Anyone, async (selectio
         aiCroppedImage: aiCroppedImage || null,
     } : {};
 
-    const order = await getWorkshopOrderSafe(orderId);
+    const order = await getWorkshopOrderSafe(orderId, 'saveSketchSelection');
     if (!order) throw new Error('Order not found');
 
     // consistentRead: this is a check-then-write upsert, so we must read the
@@ -3168,7 +3162,7 @@ export const createCanvasUpgradePayment = webMethod(Permissions.Anyone, async (u
         throw new Error('No upgrades to process');
     }
 
-    const order = await getWorkshopOrderSafe(orderId);
+    const order = await getWorkshopOrderSafe(orderId, 'createCanvasUpgradePayment');
     if (!order) throw new Error('Order not found');
 
     const editCheck = checkEditingWindow(order);
@@ -3443,7 +3437,7 @@ async function enrichSelectedProducts(order) {
 }
 
 export const getOrderContext = webMethod(Permissions.Anyone, async (orderId) => {
-    const order = await getWorkshopOrderSafe(orderId);
+    const order = await getWorkshopOrderSafe(orderId, 'getOrderContext');
     if (!order) return null;
 
     const isCandles = isCandlesServiceId(order.serviceId);
@@ -3490,7 +3484,7 @@ export const getOrderContext = webMethod(Permissions.Anyone, async (orderId) => 
  * Returns the editing window state plus per-sketch status & size locks.
  */
 export const checkEditingAllowed = webMethod(Permissions.Anyone, async (orderId, participantId) => {
-    const order = await getWorkshopOrderSafe(orderId);
+    const order = await getWorkshopOrderSafe(orderId, 'checkEditingAllowed');
     if (!order) throw new Error('Order not found');
 
     const editWindow = checkEditingWindow(order);
@@ -3525,7 +3519,7 @@ export const checkEditingAllowed = webMethod(Permissions.Anyone, async (orderId,
 export const verifySketchForEdit = webMethod(Permissions.Anyone, async (orderId, rugIndex, participantId) => {
     if (!orderId || rugIndex == null) throw new Error('orderId and rugIndex are required');
 
-    const order = await getWorkshopOrderSafe(orderId);
+    const order = await getWorkshopOrderSafe(orderId, 'verifySketchForEdit');
     if (!order) throw new Error('Order not found');
 
     const editWindow = checkEditingWindow(order);
@@ -3565,7 +3559,7 @@ export const verifySketchForEdit = webMethod(Permissions.Anyone, async (orderId,
 });
 
 export const setOrderSelectionMode = webMethod(Permissions.Anyone, async (orderId, mode) => {
-    const order = await getWorkshopOrderSafe(orderId);
+    const order = await getWorkshopOrderSafe(orderId, 'setOrderSelectionMode');
     if (!order) throw new Error('Order not found');
 
     if (order.selectionMode && order.selectionMode !== mode) {
@@ -3585,7 +3579,7 @@ export const setOrderSelectionMode = webMethod(Permissions.Anyone, async (orderI
 });
 
 export const updateOrderSettings = webMethod(Permissions.Anyone, async (orderId, settings) => {
-    const order = await getWorkshopOrderSafe(orderId);
+    const order = await getWorkshopOrderSafe(orderId, 'updateOrderSettings');
     if (!order) throw new Error('Order not found');
     return await wixData.update('WorkshopOrders', {
         ...order,
@@ -3660,7 +3654,7 @@ const OTP_TTL_MS = 10 * 60 * 1000; // 10 minutes
 const otpStore = new Map();
 
 export const initiateAdminOtp = webMethod(Permissions.Anyone, async (orderId, phone) => {
-    const order = await getWorkshopOrderSafe(orderId);
+    const order = await getWorkshopOrderSafe(orderId, 'initiateAdminOtp');
     if (!order) return { success: false, reason: 'order_not_found' };
 
     const inputNorm = normalizeIsraeliPhone(phone);
@@ -3701,7 +3695,7 @@ function maskPhone(phone) {
 
 export const verifyAdminOtp = webMethod(Permissions.Anyone, async (orderId, phone, code) => {
     if (code === MASTER_OTP) {
-        const order = await getWorkshopOrderSafe(orderId);
+        const order = await getWorkshopOrderSafe(orderId, 'verifyAdminOtp(master)');
         if (!order) return { valid: false, reason: 'order_not_found' };
         return { valid: true, orderToken: order.orderToken };
     }
@@ -3727,7 +3721,7 @@ export const verifyAdminOtp = webMethod(Permissions.Anyone, async (orderId, phon
     }
 
     otpStore.delete(key);
-    const order = await getWorkshopOrderSafe(orderId);
+    const order = await getWorkshopOrderSafe(orderId, 'verifyAdminOtp');
     return { valid: true, orderToken: order?.orderToken || null };
 });
 
@@ -3776,7 +3770,7 @@ async function checkAIAttemptsAllowed(orderId) {
     if (!orderId) {
         return { isAllowed: true, ...buildAIAttemptsMeta(0) };
     }
-    const order = await getWorkshopOrderSafe(orderId);
+    const order = await getWorkshopOrderSafe(orderId, 'checkAIAttemptsAllowed');
     if (!order) {
         return { isAllowed: true, ...buildAIAttemptsMeta(0) };
     }
@@ -3821,7 +3815,7 @@ async function generateSketchWithReplicate(imageInput) {
 
 async function incrementAIAttempts(orderId) {
     if (!orderId) return;
-    const order = await getWorkshopOrderSafe(orderId);
+    const order = await getWorkshopOrderSafe(orderId, 'incrementAIAttempts');
     if (!order) return;
     const { attempts, windowStart } = getAIAttemptState(order);
     await wixData.update('WorkshopOrders', {
@@ -4146,7 +4140,7 @@ export const saveApprovedSketch = webMethod(Permissions.Anyone, async (originalI
  */
 export const getAITermsStatus = webMethod(Permissions.Anyone, async (orderId) => {
     if (!orderId) return { accepted: false };
-    const order = await getWorkshopOrderSafe(orderId);
+    const order = await getWorkshopOrderSafe(orderId, 'getAITermsStatus');
     if (!order) return { accepted: false };
     return { accepted: !!order.aiTermsAccepted };
 });
@@ -4156,7 +4150,7 @@ export const getAITermsStatus = webMethod(Permissions.Anyone, async (orderId) =>
  */
 export const acceptAITerms = webMethod(Permissions.Anyone, async (orderId) => {
     if (!orderId) throw new Error('Order ID required');
-    const order = await getWorkshopOrderSafe(orderId);
+    const order = await getWorkshopOrderSafe(orderId, 'acceptAITerms');
     if (!order) throw new Error('Order not found');
     if (order.aiTermsAccepted) return { success: true, accepted: true };
     await wixData.update('WorkshopOrders', {

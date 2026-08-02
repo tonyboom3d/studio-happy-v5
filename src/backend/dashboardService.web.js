@@ -9,6 +9,7 @@ import { currentMember } from 'wix-members-backend';
 import { sendGreenApiWhatsApp } from 'backend/whatsappService.jsw';
 import { SKETCH_STATUS, SKETCH_STATUSES, normalizeSketchStatus, isLockedStatus } from 'backend/sketchStatus.js';
 import { PERMISSION_KEYS, PERMISSION_DEFAULTS, refId } from 'backend/staffRoles.js';
+import { getItemWithRetry } from 'backend/wixDataRetry.js';
 
 const SA = { suppressAuth: true };
 const ISRAEL_TZ = 'Asia/Jerusalem';
@@ -509,7 +510,7 @@ function buildSketchLogContext(sel, participantsForOrder, order) {
 async function logSketchOrderAction(orderId, sel, actionText, userOverride) {
     const [participantsByOrderId, order] = await Promise.all([
         loadParticipantsForOrders([orderId]),
-        wixData.get('WorkshopOrders', orderId, SA),
+        getItemWithRetry('WorkshopOrders', orderId, { callerLabel: 'logSketchOrderAction' }),
     ]);
     const context = buildSketchLogContext(sel, participantsByOrderId[orderId], order);
     await logOrderAction(orderId, `${context} — ${actionText}`, userOverride);
@@ -932,7 +933,7 @@ export const getCurrentDashboardUser = webMethod(Permissions.SiteMember, async (
 });
 
 async function logOrderAction(orderId, action, userOverride) {
-    const order = await wixData.get('WorkshopOrders', orderId, SA);
+    const order = await getItemWithRetry('WorkshopOrders', orderId, { callerLabel: 'logOrderAction' });
     if (!order) return;
 
     let userName = userOverride;
@@ -987,7 +988,7 @@ export const updateSketchState = webMethod(Permissions.SiteMember, async (orderI
 
         if (options?.sendWhatsApp && options?.customMessage) {
             try {
-                const order = await wixData.get('WorkshopOrders', orderId, SA);
+                const order = await getItemWithRetry('WorkshopOrders', orderId, { callerLabel: 'updateSketchState(whatsapp)' });
                 const targetPhone = normalizePhone(order?.organizerPhone);
                 if (targetPhone) {
                     await sendGreenApiWhatsApp(targetPhone, options.customMessage);
@@ -998,7 +999,7 @@ export const updateSketchState = webMethod(Permissions.SiteMember, async (orderI
             }
         }
 
-        return { sketch: mapSketch(updated, (await loadParticipantsForOrders([orderId]))[orderId], await wixData.get('WorkshopOrders', orderId, SA), await loadProductWixImagesById([updated.productId])) };
+        return { sketch: mapSketch(updated, (await loadParticipantsForOrders([orderId]))[orderId], await getItemWithRetry('WorkshopOrders', orderId, { callerLabel: 'updateSketchState(rejected)' }), await loadProductWixImagesById([updated.productId])) };
     }
 
     const updated = await wixData.update('SketchSelections', {
@@ -1011,7 +1012,7 @@ export const updateSketchState = webMethod(Permissions.SiteMember, async (orderI
 
     const [participantsByOrderId, orderRecord, productWixImageById] = await Promise.all([
         loadParticipantsForOrders([orderId]),
-        wixData.get('WorkshopOrders', orderId, SA),
+        getItemWithRetry('WorkshopOrders', orderId, { callerLabel: 'updateSketchState' }),
         loadProductWixImagesById([updated.productId]),
     ]);
     return { sketch: mapSketch(updated, participantsByOrderId[orderId], orderRecord, productWixImageById) };
@@ -1037,7 +1038,7 @@ export const deleteSketchImage = webMethod(Permissions.SiteMember, async (orderI
     await logSketchOrderAction(orderId, sel, 'תמונת הסקיצה נמחקה על ידי העובד', options?.user);
     const [participantsByOrderId, orderRecord] = await Promise.all([
         loadParticipantsForOrders([orderId]),
-        wixData.get('WorkshopOrders', orderId, SA),
+        getItemWithRetry('WorkshopOrders', orderId, { callerLabel: 'deleteSketchImage' }),
     ]);
     return { sketch: mapSketch(updated, participantsByOrderId[orderId], orderRecord) };
 });
@@ -1045,7 +1046,7 @@ export const deleteSketchImage = webMethod(Permissions.SiteMember, async (orderI
 export const updateOrderInternalNotes = webMethod(Permissions.SiteMember, async (orderId, text, options) => {
     await assertPermission('editOrderNotes');
 
-    const order = await wixData.get('WorkshopOrders', orderId, SA);
+    const order = await getItemWithRetry('WorkshopOrders', orderId, { callerLabel: 'updateOrderInternalNotes' });
     if (!order) throw new Error('Order not found');
     await wixData.update('WorkshopOrders', { ...order, internalNotes: text || '' }, SA);
     await logOrderAction(orderId, 'הערות פנימיות עודכנו', options?.user);

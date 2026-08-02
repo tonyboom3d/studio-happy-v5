@@ -84,7 +84,6 @@ employee-portal * { box-sizing: border-box; }
 .ep-sel-row { display: flex; align-items: center; gap: 6px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 10px; padding: 7px 9px; font-size: 12.5px; flex-wrap: nowrap; }
 .ep-sel-date { font-weight: 700; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .ep-sel-row input[type="time"] { border: 1px solid #d1d5db; border-radius: 7px; padding: 3px 5px; font-size: 12px; font-family: inherit; width: 78px; }
-.ep-status.PENDING { background: #f3f4f6; color: #6b7280; }
 .ep-sel-remove { border: none; background: none; color: #ef4444; cursor: pointer; font-size: 15px; padding: 2px 4px; }
 .ep-sel-hours { font-size: 11px; color: #6b7280; min-width: 54px; text-align: center; }
 .ep-sel-hours.bad { color: #dc2626; font-weight: 700; }
@@ -97,8 +96,15 @@ employee-portal * { box-sizing: border-box; }
 .ep-board-item .ep-b-date { font-weight: 700; }
 .ep-board-item .ep-b-time { color: #6b7280; }
 .ep-status { font-size: 11px; font-weight: 700; padding: 2px 9px; border-radius: 999px; white-space: nowrap; }
-.ep-status.SUBMITTED, .ep-status.STANDBY { background: #e0e7ff; color: #3730a3; }
+.ep-status.SUBMITTED { background: #e0e7ff; color: #3730a3; }
+.ep-status.STANDBY { background: #fef3c7; color: #92400e; }
 .ep-status.SCHEDULED { background: #d1fae5; color: #065f46; }
+.ep-status.REJECTED { background: #fee2e2; color: #991b1b; }
+.ep-status.PENDING { background: #f3f4f6; color: #6b7280; }
+.ep-worktype { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: #f3f4f6; color: #4b5563; white-space: nowrap; }
+.ep-status-guide { font-size: 11.5px; color: #6b7280; background: #f8fafc; border: 1px solid #e5e7eb; border-radius: 10px; padding: 10px 12px; margin-bottom: 12px; line-height: 1.55; }
+.ep-status-guide b { color: #374151; font-weight: 700; }
+.ep-msg-card-title { margin: 0 0 10px; font-size: 15px; font-weight: 700; }
 .ep-withdraw { border: 1px solid #fecaca; background: #fff; color: #b91c1c; border-radius: 8px; font-size: 11px; padding: 3px 9px; cursor: pointer; font-family: inherit; }
 .ep-withdraw:hover { background: #fef2f2; }
 .ep-ws-card { border: 1px solid #d1fae5; background: #f0fdf9; border-radius: 12px; padding: 11px 13px; margin-bottom: 10px; font-size: 12.5px; }
@@ -154,7 +160,20 @@ const HEBREW_DOW = ['א׳', 'ב׳', 'ג׳', 'ד׳', 'ה׳', 'ו׳', 'ש׳'];
 // Business hours for shift start/end pickers: 07:00 through midnight.
 const SHIFT_MIN_TIME = '07:00';
 const SHIFT_MAX_TIME = '23:59';
-const STATUS_LABELS = { SUBMITTED: 'המתנה', STANDBY: 'המתנה', SCHEDULED: 'משובץ', REJECTED: 'נדחה' };
+const STATUS_LABELS = {
+    SUBMITTED: 'הוגש',
+    STANDBY: 'בהמתנה',
+    SCHEDULED: 'משובץ',
+    REJECTED: 'נדחה',
+    PENDING: 'טרם הוגש',
+};
+const STATUS_HINTS = {
+    SUBMITTED: 'הגשת זמינות — ממתין לאישור מנהל/ת או לשיבוץ אוטומטי',
+    STANDBY: 'היום מאויש — נמצא/ת ברשימת המתנה; ייתכן שיבוץ אם ייפנה מקום',
+    SCHEDULED: 'המשמרת אושרה ואת/ה משובץ/ת ליום זה',
+    REJECTED: 'המשמרת לא אושרה על ידי מנהל/ת',
+    PENDING: 'ימים שבחרת בלוח — טרם נשלחו להגשה',
+};
 
 function pad2(n) { return String(n).padStart(2, '0'); }
 function todayKey() {
@@ -214,7 +233,6 @@ class EmployeePortal extends HTMLElement {
         this._teamTimeEmployee = null;
         this._messagesData = null;              // { personal: [...], system: [...] }
         this._messagesRequested = false;
-        this._msgSubTab = 'personal';           // internal sub-tab within הפורטל שלי
         this._msgCarIdx = { personal: 0, system: 0 };  // carousel position per scope
         this._msgCarTimer = null;               // auto-rotate interval
         this._msgCarTouchX = null;              // swipe start X
@@ -523,7 +541,8 @@ class EmployeePortal extends HTMLElement {
                     <div class="ep-card" style="margin-top:16px">${this._renderSelectionPanel()}</div>
                 </div>
                 <div>
-                    <div class="ep-card">${this._renderMessagesCard()}</div>
+                    <div class="ep-card">${this._renderMessageCard('personal', 'הודעות אישיות')}</div>
+                    <div class="ep-card" style="margin-top:16px">${this._renderMessageCard('system', 'הודעות מערכת')}</div>
                     <div class="ep-card" style="margin-top:16px">${this._renderScheduledWorkshops()}</div>
                 </div>
             </div>`;
@@ -599,15 +618,20 @@ class EmployeePortal extends HTMLElement {
             </div>`;
     }
 
-    /** "הודעות אישיות" / "הודעות מערכת" card — internal tabs within הפורטל שלי. */
-    _renderMessagesCard() {
-        const scope = this._msgSubTab === 'system' ? 'system' : 'personal';
-        return `
-            <div class="ep-tabs" style="margin-top:0">
-                <button class="ep-tabbtn ${scope === 'personal' ? 'active' : ''}" data-action="subtab-msg-personal">הודעות אישיות</button>
-                <button class="ep-tabbtn ${scope === 'system' ? 'active' : ''}" data-action="subtab-msg-system">הודעות מערכת</button>
-            </div>
-            <div style="margin-top:12px">${this._renderMessagesTab(scope)}</div>`;
+    /** Separate card per message scope (personal / system). */
+    _renderMessageCard(scope, title) {
+        return `<h2 class="ep-msg-card-title">${escapeHtml(title)}</h2>${this._renderMessagesTab(scope)}`;
+    }
+
+    _renderStatusGuide() {
+        const items = [
+            { key: 'SUBMITTED', show: true },
+            { key: 'STANDBY', show: true },
+            { key: 'SCHEDULED', show: true },
+            { key: 'PENDING', show: true },
+        ];
+        return `<div class="ep-status-guide">${items.map(({ key }) =>
+            `<div><b>${STATUS_LABELS[key]}:</b> ${STATUS_HINTS[key]}</div>`).join('')}</div>`;
     }
 
     _renderMessagesTab(scope) {
@@ -810,9 +834,13 @@ class EmployeePortal extends HTMLElement {
             if (isPast) cls += ' disabled';
             else if (sub) {
                 cls += sub.status === 'SCHEDULED' ? ' scheduled' : ' submitted';
-                badge = sub.status === 'SCHEDULED'
-                    ? `<span class="ep-day-badge ep-badge-scheduled">משובץ</span>`
-                    : `<span class="ep-day-badge ep-badge-standby">המתנה</span>`;
+                if (sub.status === 'SCHEDULED') {
+                    badge = `<span class="ep-day-badge ep-badge-scheduled">משובץ</span>`;
+                } else if (sub.status === 'STANDBY') {
+                    badge = `<span class="ep-day-badge ep-badge-waitlist">בהמתנה</span>`;
+                } else {
+                    badge = `<span class="ep-day-badge ep-badge-standby">הוגש</span>`;
+                }
             } else if (blocked) {
                 cls += ' blocked';
                 badge = `<span class="ep-day-badge ep-badge-blocked">חסום</span>`;
@@ -886,7 +914,7 @@ class EmployeePortal extends HTMLElement {
                     <span>-</span>
                     <input type="time" min="${SHIFT_MIN_TIME}" max="${SHIFT_MAX_TIME}" data-role="end" data-date="${dateKey}" value="${escapeHtml(times.endTime)}">
                     <span class="ep-sel-hours ${tooShort || hrs === null ? 'bad' : ''}">${hoursLabel}</span>
-                    <span class="ep-status PENDING">טרם הוגש</span>
+                    <span class="ep-status PENDING" title="${escapeHtml(STATUS_HINTS.PENDING)}">${STATUS_LABELS.PENDING}</span>
                     <button class="ep-sel-remove" data-action="remove-day" data-date="${dateKey}" title="הסרה">✕</button>
                 </div>`;
             }).join('') + `</div>`;
@@ -938,6 +966,7 @@ class EmployeePortal extends HTMLElement {
                 <button class="ep-tabbtn ${subTab === 'myShifts' ? 'active' : ''}" data-action="subtab-myshifts">המשמרות שלי (${myShifts.length})</button>
                 <button class="ep-tabbtn ${subTab === 'mySubmissions' ? 'active' : ''}" data-action="subtab-mysubmissions">ההגשות שלי (${mySubmissions.length})</button>
             </div>
+            ${this._renderStatusGuide()}
             <div style="margin-top:12px">
                 ${decidedBanners}
                 ${rows}
@@ -961,6 +990,12 @@ class EmployeePortal extends HTMLElement {
                     <button class="ep-withdraw" data-action="shift-request-delete" data-id="${escapeHtml(s.id)}">בקשת מחיקה</button>`;
             }
         }
+        const workTypeLabel = (s.status === 'SCHEDULED' || s.status === 'STANDBY')
+            ? (s.workTypeLabel || 'סדנה')
+            : null;
+        const workTypeChip = workTypeLabel
+            ? `<span class="ep-worktype" title="סוג העבודה שהוגדר לך">${escapeHtml(workTypeLabel)}</span>`
+            : '';
         return `
             <div class="ep-board-item">
                 <div>
@@ -968,7 +1003,8 @@ class EmployeePortal extends HTMLElement {
                     <div class="ep-b-time">${escapeHtml(s.startTime)}–${escapeHtml(s.endTime)}${s.hours ? ` · ${s.hours} ש׳` : ''}</div>
                 </div>
                 <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;justify-content:flex-end">
-                    <span class="ep-status ${escapeHtml(s.status)}">${STATUS_LABELS[s.status] || s.status}</span>
+                    ${workTypeChip}
+                    <span class="ep-status ${escapeHtml(s.status)}" title="${escapeHtml(STATUS_HINTS[s.status] || '')}">${STATUS_LABELS[s.status] || s.status}</span>
                     ${actions}
                 </div>
             </div>`;
@@ -1090,9 +1126,9 @@ class EmployeePortal extends HTMLElement {
                 if (!this._hoursData) this._requestHoursData();
                 else this.render();
                 return;
-            case 'subtab-msg-personal':
-            case 'subtab-msg-system':
-                this._msgSubTab = action === 'subtab-msg-system' ? 'system' : 'personal';
+            case 'subtab-myshifts':
+            case 'subtab-mysubmissions':
+                this._shiftSubTab = action === 'subtab-mysubmissions' ? 'mySubmissions' : 'myShifts';
                 this.render();
                 return;
             case 'msg-car-prev':
@@ -1111,11 +1147,6 @@ class EmployeePortal extends HTMLElement {
                 this._updateMsgCar(scope);
                 return;
             }
-            case 'subtab-myshifts':
-            case 'subtab-mysubmissions':
-                this._shiftSubTab = action === 'subtab-mysubmissions' ? 'mySubmissions' : 'myShifts';
-                this.render();
-                return;
             case 'shift-edit':
                 this._shiftModal = { type: 'edit', submissionId: target.dataset.id };
                 this.render();

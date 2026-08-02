@@ -246,7 +246,38 @@ function renderBoardPage(ce, d) {
             ${ce._adminView === 'list' ? renderListView(ce, d) : renderHeatmap(ce, d)}
             ${ce._adminSelectedDay ? renderDayDetail(ce, d) : ''}
         </section>
-        ${d.openOffers?.length ? `<section class="epa-panel">${renderOpenOffers(d)}</section>` : ''}`;
+        ${d.openOffers?.length ? `<section class="epa-panel">${renderOpenOffers(d)}</section>` : ''}
+        <section class="epa-panel">${renderBoardSubmissions(d)}</section>`;
+}
+
+/** Every request and assignment for the month, always visible below the calendar. */
+function renderBoardSubmissions(d) {
+    const statusLabel = { SUBMITTED: 'הוגש', STANDBY: 'בהמתנה', SCHEDULED: 'משובץ' };
+    const statusBadge = { SUBMITTED: 'kind', STANDBY: 'kind', SCHEDULED: 'ok' };
+    const subs = (d.submissions || [])
+        .filter(s => s.status !== 'REJECTED')
+        .slice()
+        .sort((a, b) => a.date.localeCompare(b.date) || (a.employeeName || '').localeCompare(b.employeeName || ''));
+
+    const assigned = subs.filter(s => s.status === 'SCHEDULED').length;
+    const waiting = subs.length - assigned;
+
+    const rows = subs.map(s => {
+        const employee = (d.employees || []).find(e => e.id === s.employeeId);
+        return `<tr class="epa-row-click" data-action="admin-select-day" data-date="${esc(s.date)}">
+            <td>${fmtDate(s.date)}</td>
+            <td><span class="epa-dot-lg" style="background:${esc(employee?.color || '#2563eb')}"></span>${esc(s.employeeName)}</td>
+            <td>${esc(s.startTime)}–${esc(s.endTime)}</td>
+            <td>${s.workshopName ? esc(s.workshopName) : '—'}</td>
+            <td><span class="epa-badge ${statusBadge[s.status] || 'kind'}">${statusLabel[s.status] || esc(s.status)}${s.managerOverride ? ' · ידני' : ''}</span></td>
+        </tr>`;
+    }).join('');
+
+    return `<h2>כל ההגשות והשיבוצים — ${monthTitle(d.monthKey)} (${subs.length})</h2>
+        <div style="font-size:12px;color:#6b7280;margin:2px 0 8px">שובצו ${assigned} · ממתינים ${waiting} — לחיצה על שורה פותחת את פרטי היום בלוח</div>
+        <div class="epa-table-wrap"><table class="epa-table"><thead><tr><th>תאריך</th><th>עובד/ת</th><th>שעות</th><th>סדנה</th><th>סטטוס</th></tr></thead>
+            <tbody>${rows || '<tr><td colspan="5" class="ep-empty">אין הגשות בחודש זה</td></tr>'}</tbody>
+        </table></div>`;
 }
 
 function renderToolbar(ce, d) {
@@ -264,8 +295,10 @@ function renderToolbar(ce, d) {
 }
 
 function submissionsByDate(d) {
+    // REJECTED rows are only relevant on the tracker page, not the board views.
     const map = {};
     for (const s of (d.submissions || [])) {
+        if (s.status === 'REJECTED') continue;
         if (!map[s.date]) map[s.date] = [];
         map[s.date].push(s);
     }
@@ -431,20 +464,47 @@ function renderTrackerPage(ce, d) {
             <td>${!t.met && d.permissions.manageScheduling ? `<button class="epa-btn" data-action="admin-nudge" data-emp="${t.employeeId}">שליחת תזכורת</button>` : ''}</td>
         </tr>`;
     }).join('');
-    const statusLabel = { SUBMITTED: 'הוגש', STANDBY: 'בהמתנה', SCHEDULED: 'משובץ' };
-    const submissionRows = (d.submissions || []).slice().sort((a, b) => a.date.localeCompare(b.date)).map(s => {
+    const statusLabel = { SUBMITTED: 'הוגש', STANDBY: 'בהמתנה', SCHEDULED: 'משובץ', REJECTED: 'נדחה' };
+    const statusBadge = { SUBMITTED: 'kind', STANDBY: 'kind', SCHEDULED: 'ok', REJECTED: 'miss' };
+    const allSubs = (d.submissions || []).slice().sort((a, b) => a.date.localeCompare(b.date));
+
+    // Status filter chips (with per-status counts).
+    const statusFilter = ce._trackerStatusFilter || 'ALL';
+    const countByStatus = {};
+    for (const s of allSubs) countByStatus[s.status] = (countByStatus[s.status] || 0) + 1;
+    const filterChips = [
+        { key: 'ALL', label: `הכל (${allSubs.length})` },
+        ...['SUBMITTED', 'STANDBY', 'SCHEDULED', 'REJECTED'].map(k => ({
+            key: k, label: `${statusLabel[k]} (${countByStatus[k] || 0})`,
+        })),
+    ].map(f => `<button class="epa-btn ${statusFilter === f.key ? 'active' : ''}" data-action="admin-tracker-status" data-status="${f.key}">${f.label}</button>`).join('');
+
+    const filtered = statusFilter === 'ALL' ? allSubs : allSubs.filter(s => s.status === statusFilter);
+    const submissionRows = filtered.map(s => {
         const employee = (d.employees || []).find(e => e.id === s.employeeId);
         return `<tr class="epa-row-click" data-action="admin-open-submission" data-sub="${esc(s.id)}">
             <td><span class="epa-dot-lg" style="background:${esc(employee?.color || '#2563eb')}"></span>${esc(s.employeeName)}</td>
             <td>${fmtDate(s.date)}</td>
             <td>${esc(s.startTime)}–${esc(s.endTime)}</td>
-            <td><span class="epa-badge kind">${statusLabel[s.status] || esc(s.status)}</span></td>
+            <td>${s.workshopName ? esc(s.workshopName) : '—'}</td>
+            <td><span class="epa-badge ${statusBadge[s.status] || 'kind'}">${statusLabel[s.status] || esc(s.status)}</span></td>
         </tr>`;
     }).join('');
+
+    // Month dropdown: 6 months back through 6 months ahead (always includes the loaded month).
+    const monthKeys = [];
+    const [cy, cm] = d.monthKey.split('-').map(Number);
+    for (let delta = -6; delta <= 6; delta++) {
+        const t = cy * 12 + (cm - 1) + delta;
+        monthKeys.push(`${Math.floor(t / 12)}-${pad2((t % 12) + 1)}`);
+    }
+    const monthSelect = `<select id="epaTrackerMonth">${monthKeys.map(mk =>
+        `<option value="${mk}" ${mk === d.monthKey ? 'selected' : ''}>${monthTitle(mk)}</option>`).join('')}</select>`;
+
     const complete = (d.tracker || []).filter(t => t.met).length;
     return `<div class="epa-page-head"><div><h2>מעקב הגשות</h2><p>כל ההגשות והמכסות לפי חודש</p></div>${renderMonthControls(d)}</div>
         <div class="epa-stat-grid">
-            <div class="epa-stat"><b>${(d.submissions || []).length}</b><span>הגשות בחודש</span></div>
+            <div class="epa-stat"><b>${allSubs.length}</b><span>הגשות בחודש</span></div>
             <div class="epa-stat"><b>${complete}/${(d.tracker || []).length}</b><span>עובדים שהשלימו מכסה</span></div>
         </div>
         <section class="epa-panel">
@@ -452,9 +512,13 @@ function renderTrackerPage(ce, d) {
             <div class="epa-table-wrap"><table class="epa-table"><thead><tr><th>עובד/ת</th><th>הוגשו</th><th>סטטוס</th><th></th></tr></thead><tbody>${trackerRows}</tbody></table></div>
         </section>
         <section class="epa-panel">
-            <div class="epa-panel-title"><h3>כל ההגשות — ${monthTitle(d.monthKey)}</h3></div>
-            <div class="epa-table-wrap"><table class="epa-table"><thead><tr><th>עובד/ת</th><th>תאריך</th><th>שעות</th><th>סטטוס</th></tr></thead>
-                <tbody>${submissionRows || '<tr><td colspan="4" class="ep-empty">אין הגשות בחודש זה</td></tr>'}</tbody>
+            <div class="epa-panel-title">
+                <h3>כל ההגשות — ${monthTitle(d.monthKey)}</h3>
+                <div class="epa-inline" style="margin:0">${monthSelect}</div>
+            </div>
+            <div class="epa-inline" style="margin-bottom:8px">${filterChips}</div>
+            <div class="epa-table-wrap"><table class="epa-table"><thead><tr><th>עובד/ת</th><th>תאריך</th><th>שעות</th><th>סדנה</th><th>סטטוס</th></tr></thead>
+                <tbody>${submissionRows || '<tr><td colspan="5" class="ep-empty">אין הגשות תואמות בחודש זה</td></tr>'}</tbody>
             </table></div>
         </section>`;
 }
@@ -881,6 +945,10 @@ export function handleAdminClick(ce, action, target) {
             ce._adminMonth = shiftMonth(ce._adminMonth, 1);
             ce._adminSelectedDay = null;
             ce._requestAdminData();
+            return true;
+        case 'admin-tracker-status':
+            ce._trackerStatusFilter = target.dataset.status || 'ALL';
+            ce.render();
             return true;
         case 'admin-view-heat':
             ce._adminView = 'heat'; ce.render(); return true;

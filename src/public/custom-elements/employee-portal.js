@@ -137,6 +137,15 @@ employee-portal * { box-sizing: border-box; }
 .ep-msg-date { font-size: 11px; color: #9ca3af; font-weight: 400; white-space: nowrap; }
 .ep-msg-body { font-size: 12.5px; color: #374151; white-space: pre-wrap; }
 .ep-msg-exp { font-size: 10.5px; color: #b45309; margin-top: 7px; }
+.ep-msg-car { touch-action: pan-y; }
+.ep-msg-car-slide { animation: ep-msg-fade .35s ease; }
+@keyframes ep-msg-fade { from { opacity: 0; transform: translateX(-6px); } to { opacity: 1; transform: none; } }
+.ep-msg-car-nav { display: flex; justify-content: center; align-items: center; gap: 10px; margin-top: 4px; }
+.ep-msg-car-arrow { border: 1px solid #dbeafe; background: #fff; color: #1d4ed8; border-radius: 8px; width: 26px; height: 26px; cursor: pointer; font-size: 14px; line-height: 1; transition: background .14s; }
+.ep-msg-car-arrow:hover { background: #eff6ff; }
+.ep-msg-car-dots { display: inline-flex; gap: 5px; }
+.ep-msg-car-dot { width: 8px; height: 8px; border-radius: 50%; border: none; background: #d1d5db; cursor: pointer; padding: 0; transition: background .15s, transform .15s; }
+.ep-msg-car-dot.active { background: #2563eb; transform: scale(1.25); }
 @media (max-width:700px) { .ep-wrap { padding: 12px; } .ep-tabs { display:flex; overflow-x:auto; } .ep-tabbtn { flex:1; white-space:nowrap; padding-inline:11px; } }
 ${ADMIN_STYLE}
 `;
@@ -206,6 +215,9 @@ class EmployeePortal extends HTMLElement {
         this._messagesData = null;              // { personal: [...], system: [...] }
         this._messagesRequested = false;
         this._msgSubTab = 'personal';           // internal sub-tab within הפורטל שלי
+        this._msgCarIdx = { personal: 0, system: 0 };  // carousel position per scope
+        this._msgCarTimer = null;               // auto-rotate interval
+        this._msgCarTouchX = null;              // swipe start X
         this._adminMessagesData = null;         // admin messages management list
         this._shiftSubTab = 'myShifts';         // 'myShifts' | 'mySubmissions' — internal sub-tab
         this._shiftModal = null;                // { type: 'edit'|'requestEdit'|'requestDelete', submissionId }
@@ -227,6 +239,27 @@ class EmployeePortal extends HTMLElement {
         // Event delegation for all dynamic content.
         this.addEventListener('click', (e) => this._onClick(e));
         this.addEventListener('change', (e) => this._onChange(e));
+        // Swipe support for the messages carousel.
+        this.addEventListener('touchstart', (e) => {
+            if (e.target.closest('.ep-msg-car')) this._msgCarTouchX = e.touches[0]?.clientX ?? null;
+        }, { passive: true });
+        this.addEventListener('touchend', (e) => {
+            const car = e.target.closest('.ep-msg-car');
+            if (!car || this._msgCarTouchX === null) return;
+            const dx = (e.changedTouches[0]?.clientX ?? this._msgCarTouchX) - this._msgCarTouchX;
+            this._msgCarTouchX = null;
+            if (Math.abs(dx) < 40) return;
+            const scope = car.dataset.scope;
+            const list = this._msgListFor(scope);
+            if (list.length < 2) return;
+            // RTL: swipe right = next, swipe left = previous.
+            this._msgCarIdx[scope] = (this._msgCarIdx[scope] + (dx > 0 ? 1 : -1) + list.length) % list.length;
+            this._updateMsgCar(scope);
+        }, { passive: true });
+    }
+
+    disconnectedCallback() {
+        clearInterval(this._msgCarTimer);
     }
 
     attributeChangedCallback(name, _oldVal, newVal) {
@@ -514,6 +547,7 @@ class EmployeePortal extends HTMLElement {
             <div class="ep-toast" id="epToast"></div>
         `;
         this._restoreToast();
+        this._setupMsgCarousel();
     }
 
     /** "השעות שלי" — monthly time-clock history + approval (Module E). */
@@ -584,7 +618,14 @@ class EmployeePortal extends HTMLElement {
         if (!list.length) {
             return `<div class="ep-empty">אין הודעות כרגע</div>`;
         }
-        return list.map(msg => `
+        if (list.length === 1) {
+            return this._renderMsgCard(list[0], scope);
+        }
+        return `<div class="ep-msg-car" id="epMsgCar-${scope}" data-scope="${scope}">${this._msgCarInner(scope, list)}</div>`;
+    }
+
+    _renderMsgCard(msg, scope) {
+        return `
             <div class="ep-msg-card ${scope === 'system' ? 'system' : ''}">
                 <div class="ep-msg-head">
                     <span>${escapeHtml(msg.title)}</span>
@@ -592,7 +633,52 @@ class EmployeePortal extends HTMLElement {
                 </div>
                 <div class="ep-msg-body">${escapeHtml(msg.body)}</div>
                 ${msg.expiresAt ? `<div class="ep-msg-exp">בתוקף עד ${formatDateHe(String(msg.expiresAt).slice(0, 10))}</div>` : ''}
-            </div>`).join('');
+            </div>`;
+    }
+
+    _msgCarInner(scope, list) {
+        const idx = ((this._msgCarIdx[scope] || 0) % list.length + list.length) % list.length;
+        this._msgCarIdx[scope] = idx;
+        const dots = list.map((_, i) =>
+            `<button class="ep-msg-car-dot ${i === idx ? 'active' : ''}" data-action="msg-car-dot" data-scope="${scope}" data-idx="${i}" aria-label="הודעה ${i + 1}"></button>`).join('');
+        return `
+            <div class="ep-msg-car-slide">${this._renderMsgCard(list[idx], scope)}</div>
+            <div class="ep-msg-car-nav">
+                <button class="ep-msg-car-arrow" data-action="msg-car-next" data-scope="${scope}" title="ההודעה הבאה">&#8249;</button>
+                <span class="ep-msg-car-dots">${dots}</span>
+                <button class="ep-msg-car-arrow" data-action="msg-car-prev" data-scope="${scope}" title="ההודעה הקודמת">&#8250;</button>
+            </div>`;
+    }
+
+    _msgListFor(scope) {
+        const m = this._messagesData;
+        if (!m) return [];
+        return scope === 'personal' ? (m.personal || []) : (m.system || []);
+    }
+
+    /** Targeted DOM update — avoids a full re-render (which would wipe open inputs). */
+    _updateMsgCar(scope) {
+        const el = this.querySelector(`#epMsgCar-${scope}`);
+        if (!el) return;
+        const list = this._msgListFor(scope);
+        if (list.length < 2) return;
+        el.innerHTML = this._msgCarInner(scope, list);
+    }
+
+    _setupMsgCarousel() {
+        clearInterval(this._msgCarTimer);
+        const hasCarousel = this.querySelector('.ep-msg-car');
+        if (!hasCarousel) return;
+        this._msgCarTimer = setInterval(() => {
+            for (const scope of ['personal', 'system']) {
+                const el = this.querySelector(`#epMsgCar-${scope}`);
+                if (!el) continue;
+                const list = this._msgListFor(scope);
+                if (list.length < 2) continue;
+                this._msgCarIdx[scope] = (this._msgCarIdx[scope] + 1) % list.length;
+                this._updateMsgCar(scope);
+            }
+        }, 6000);
     }
 
     /** Waiting-list offers addressed to me + open calls matching my skills. */
@@ -823,9 +909,9 @@ class EmployeePortal extends HTMLElement {
     _renderShiftsCard() {
         const subTab = this._shiftSubTab === 'mySubmissions' ? 'mySubmissions' : 'myShifts';
         const subs = (this._data.submissions || []).filter(s => s.status !== 'REJECTED');
-        const list = subTab === 'mySubmissions'
-            ? subs.filter(s => s.status === 'SUBMITTED')
-            : subs.filter(s => s.status === 'SCHEDULED' || s.status === 'STANDBY');
+        const myShifts = subs.filter(s => s.status === 'SCHEDULED' || s.status === 'STANDBY');
+        const mySubmissions = subs.filter(s => s.status === 'SUBMITTED');
+        const list = subTab === 'mySubmissions' ? mySubmissions : myShifts;
 
         const pendingBySubmission = {};
         for (const r of (this._data.changeRequests || [])) {
@@ -848,8 +934,8 @@ class EmployeePortal extends HTMLElement {
 
         return `
             <div class="ep-tabs" style="margin-top:0">
-                <button class="ep-tabbtn ${subTab === 'myShifts' ? 'active' : ''}" data-action="subtab-myshifts">המשמרות שלי</button>
-                <button class="ep-tabbtn ${subTab === 'mySubmissions' ? 'active' : ''}" data-action="subtab-mysubmissions">ההגשות שלי</button>
+                <button class="ep-tabbtn ${subTab === 'myShifts' ? 'active' : ''}" data-action="subtab-myshifts">המשמרות שלי (${myShifts.length})</button>
+                <button class="ep-tabbtn ${subTab === 'mySubmissions' ? 'active' : ''}" data-action="subtab-mysubmissions">ההגשות שלי (${mySubmissions.length})</button>
             </div>
             <div style="margin-top:12px">
                 ${decidedBanners}
@@ -867,7 +953,7 @@ class EmployeePortal extends HTMLElement {
             if (s.status === 'SUBMITTED') {
                 actions = `
                     <button class="ep-withdraw" data-action="shift-edit" data-id="${escapeHtml(s.id)}">ערוך</button>
-                    <button class="ep-withdraw" data-action="withdraw" data-id="${escapeHtml(s.id)}">מחיקה</button>`;
+                    <button class="ep-withdraw" data-action="shift-delete" data-id="${escapeHtml(s.id)}">מחיקה</button>`;
             } else if (s.status === 'SCHEDULED' || s.status === 'STANDBY') {
                 actions = `
                     <button class="ep-withdraw" data-action="shift-request-edit" data-id="${escapeHtml(s.id)}">בקשת שינוי</button>
@@ -901,7 +987,18 @@ class EmployeePortal extends HTMLElement {
                 <div><label>סיום</label><input id="epShiftEnd" type="time" min="${SHIFT_MIN_TIME}" max="${SHIFT_MAX_TIME}" value="${escapeHtml(s.endTime)}"></div>
             </div>`;
 
-        if (modal.type === 'edit') {
+        if (modal.type === 'confirmDelete') {
+            title = 'מחיקת הגשה';
+            body = `
+                <div style="font-size:14px;margin-bottom:14px">
+                    האם את/ה בטוח/ה שברצונך למחוק את ההגשה לתאריך
+                    <b>${formatDateHe(s.date)}</b> (${escapeHtml(s.startTime)}–${escapeHtml(s.endTime)})?
+                </div>
+                <div class="epa-inline">
+                    <button class="epa-btn danger" data-action="shift-modal-confirm-delete" data-id="${escapeHtml(s.id)}">כן, למחוק</button>
+                    <button class="epa-btn" data-action="shift-modal-cancel">ביטול</button>
+                </div>`;
+        } else if (modal.type === 'edit') {
             title = 'עריכת משמרת';
             body = `${timeInputs}
                 <div class="epa-inline">
@@ -997,6 +1094,22 @@ class EmployeePortal extends HTMLElement {
                 this._msgSubTab = action === 'subtab-msg-system' ? 'system' : 'personal';
                 this.render();
                 return;
+            case 'msg-car-prev':
+            case 'msg-car-next': {
+                const scope = target.dataset.scope;
+                const list = this._msgListFor(scope);
+                if (list.length < 2) return;
+                const delta = action === 'msg-car-next' ? 1 : -1;
+                this._msgCarIdx[scope] = (this._msgCarIdx[scope] + delta + list.length) % list.length;
+                this._updateMsgCar(scope);
+                return;
+            }
+            case 'msg-car-dot': {
+                const scope = target.dataset.scope;
+                this._msgCarIdx[scope] = Number(target.dataset.idx) || 0;
+                this._updateMsgCar(scope);
+                return;
+            }
             case 'subtab-myshifts':
             case 'subtab-mysubmissions':
                 this._shiftSubTab = action === 'subtab-mysubmissions' ? 'mySubmissions' : 'myShifts';
@@ -1005,6 +1118,15 @@ class EmployeePortal extends HTMLElement {
             case 'shift-edit':
                 this._shiftModal = { type: 'edit', submissionId: target.dataset.id };
                 this.render();
+                return;
+            case 'shift-delete':
+                this._shiftModal = { type: 'confirmDelete', submissionId: target.dataset.id };
+                this.render();
+                return;
+            case 'shift-modal-confirm-delete':
+                this._shiftModal = null;
+                this._startBusy('מוחק את ההגשה…');
+                this._dispatch('withdrawAvailability', { id: target.dataset.id });
                 return;
             case 'shift-request-edit':
                 this._shiftModal = { type: 'requestEdit', submissionId: target.dataset.id };
@@ -1121,6 +1243,12 @@ class EmployeePortal extends HTMLElement {
         if (input.id === 'epaStaffSearch') {
             this._staffSearch = input.value;
             this.render();
+            return;
+        }
+        if (input.id === 'epaTrackerMonth') {
+            this._adminMonth = input.value;
+            this._adminSelectedDay = null;
+            this._requestAdminData();
             return;
         }
         if (input.id === 'epaM_scope') {

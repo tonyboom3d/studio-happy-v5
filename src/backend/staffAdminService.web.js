@@ -94,8 +94,9 @@ export const getStaffAdminData = webMethod(Permissions.SiteMember, async (monthK
     const [board, settings, submissionsRaw] = await Promise.all([
         buildBoard(fromKey, toKey, { includeOffers: true }),
         loadSettings(),
+        // All statuses (incl. REJECTED) so the tracker page shows the full picture;
+        // board views and quota counts filter REJECTED out downstream.
         wixData.query('AvailabilitySubmissions')
-            .ne('status', SUBMISSION_STATUS.REJECTED)
             .eq('monthKey', monthKey)
             .limit(1000).find(SA).catch(() => ({ items: [] })),
     ]);
@@ -143,7 +144,10 @@ export const getStaffAdminData = webMethod(Permissions.SiteMember, async (monthK
 
     // Submission tracker: submitted vs required per employee for this month.
     const countByEmployee = {};
-    for (const s of submissions) countByEmployee[s.employeeId] = (countByEmployee[s.employeeId] || 0) + 1;
+    for (const s of submissions) {
+        if (s.status === SUBMISSION_STATUS.REJECTED) continue;
+        countByEmployee[s.employeeId] = (countByEmployee[s.employeeId] || 0) + 1;
+    }
     const tracker = employees.filter(e => e.active).map(e => {
         const required = getRequiredShifts(board.rolesById[e.id], settings);
         const submitted = countByEmployee[e.id] || 0;

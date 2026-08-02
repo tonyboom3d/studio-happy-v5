@@ -55,6 +55,12 @@ import {
     deleteTimeEntry,
     exportMonthCsv,
 } from 'backend/timeClockService.web.js';
+import {
+    getMyMessages,
+    listAllMessages,
+    saveMessage,
+    deleteMessage,
+} from 'backend/messagingService.web.js';
 
 const PORTAL_ELEMENT_ID = '#employeePortal1';
 const REALTIME_DEBOUNCE_MS = 1500;
@@ -235,6 +241,26 @@ async function loadAndPushTeamTime(portalEl, monthKey) {
     }
 }
 
+async function loadAndPushMessages(portalEl) {
+    try {
+        const data = await getMyMessages();
+        portalEl.setAttribute('messages-data', JSON.stringify({ ...data, __fetchedAt: Date.now() }));
+    } catch (err) {
+        console.error('[employee-portal] Failed to load messages:', err?.message || err);
+        pushActionResult(portalEl, { type: 'loadMyMessages', error: true, message: friendlyError(err) });
+    }
+}
+
+async function loadAndPushAdminMessages(portalEl) {
+    try {
+        const messages = await listAllMessages();
+        portalEl.setAttribute('messages-admin-data', JSON.stringify({ messages, __fetchedAt: Date.now() }));
+    } catch (err) {
+        console.error('[employee-portal] Failed to load admin messages:', err?.message || err);
+        pushActionResult(portalEl, { type: 'adminMessagesLoad', error: true, message: friendlyError(err) });
+    }
+}
+
 function pushActionResult(portalEl, result) {
     portalEl.setAttribute('action-result', JSON.stringify({
         ...result,
@@ -292,6 +318,38 @@ async function handlePortalAction(portalEl, detail) {
             refreshPortal = false;
             refreshAdmin = false;
             await loadAndPushHoursData(portalEl, payload?.monthKey);
+            break;
+        }
+
+        // --- Messaging (messagingService) ---
+
+        case 'loadMyMessages':
+            refreshPortal = false;
+            refreshAdmin = false;
+            await loadAndPushMessages(portalEl);
+            return;
+
+        case 'adminMessagesLoad':
+            refreshPortal = false;
+            refreshAdmin = false;
+            await loadAndPushAdminMessages(portalEl);
+            return;
+
+        case 'adminMessageSave': {
+            const result = await saveMessage(payload?.message);
+            pushActionResult(portalEl, { type, ...result });
+            refreshPortal = false;
+            refreshAdmin = false;
+            await loadAndPushAdminMessages(portalEl);
+            break;
+        }
+
+        case 'adminMessageDelete': {
+            const result = await deleteMessage(payload?.messageId);
+            pushActionResult(portalEl, { type, ...result });
+            refreshPortal = false;
+            refreshAdmin = false;
+            await loadAndPushAdminMessages(portalEl);
             break;
         }
 

@@ -44,6 +44,8 @@ import {
     saveApprovedSketch,
     submitFeedback,
     checkAIRateLimit,
+    getAITermsStatus,
+    acceptAITerms,
 } from 'backend/bookingService.web.js';
 
 let pendingIframePayload = null;
@@ -502,6 +504,18 @@ async function handlePostPaymentMessage(data, iframe) {
 
             case 'CHECK_RATE_LIMIT': {
                 const result = await checkAIRateLimit(data.data?.orderId);
+                respond(result);
+                break;
+            }
+
+            case 'GET_AI_TERMS_STATUS': {
+                const result = await getAITermsStatus(data.data?.orderId);
+                respond(result);
+                break;
+            }
+
+            case 'ACCEPT_AI_TERMS': {
+                const result = await acceptAITerms(data.data?.orderId);
                 respond(result);
                 break;
             }

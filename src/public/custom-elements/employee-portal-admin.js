@@ -174,6 +174,7 @@ export function renderAdminTab(ce) {
     }
     const allowedPages = ['board', 'tracker', 'employees'];
     if (d.permissions.editTimeEntries) allowedPages.push('teamTime');
+    if (d.permissions.manageEmployees) allowedPages.push('messages');
     if (d.permissions.manageRules) allowedPages.push('settings');
     if (d.permissions.manageTemplates) allowedPages.push('templates');
     if (!allowedPages.includes(ce._adminPage)) ce._adminPage = 'board';
@@ -193,6 +194,7 @@ function icon(name) {
         tracker: '<path d="M4 19V5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v14"/><path d="M8 8h8M8 12h8M8 16h5"/>',
         employees: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>',
         teamTime: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/>',
+        messages: '<path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>',
         settings: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.83 2.83-.06-.06a1.7 1.7 0 0 0-1.88-.34 1.7 1.7 0 0 0-1.03 1.56V21h-4v-.08A1.7 1.7 0 0 0 9 19.37a1.7 1.7 0 0 0-1.88.34l-.06.06-2.83-2.83.06-.06A1.7 1.7 0 0 0 4.63 15 1.7 1.7 0 0 0 3.08 14H3v-4h.08A1.7 1.7 0 0 0 4.63 9a1.7 1.7 0 0 0-.34-1.88l-.06-.06 2.83-2.83.06.06A1.7 1.7 0 0 0 9 4.63h.01A1.7 1.7 0 0 0 10 3.08V3h4v.08A1.7 1.7 0 0 0 15 4.63a1.7 1.7 0 0 0 1.88-.34l.06-.06 2.83 2.83-.06.06A1.7 1.7 0 0 0 19.37 9v.01A1.7 1.7 0 0 0 20.92 10H21v4h-.08A1.7 1.7 0 0 0 19.4 15z"/>',
         templates: '<path d="M4 4h16v16H4z"/><path d="M8 8h8M8 12h8M8 16h5"/>',
     };
@@ -207,6 +209,7 @@ function renderSidebar(ce, d) {
         { page: 'tracker', label: 'מעקב הגשות', show: d.permissions.viewTeamSchedule !== false },
         { page: 'employees', label: 'עובדים', show: d.permissions.viewTeamSchedule !== false },
         { page: 'teamTime', label: 'שעות צוות', show: d.permissions.editTimeEntries },
+        { page: 'messages', label: 'הודעות', show: d.permissions.manageEmployees },
         { page: 'settings', label: 'הגדרות', show: d.permissions.manageRules },
         { page: 'templates', label: 'תבניות', show: d.permissions.manageTemplates },
     ].filter(x => x.show);
@@ -229,6 +232,7 @@ function renderAdminPage(ce, d) {
         case 'tracker': return renderTrackerPage(ce, d);
         case 'employees': return renderEmployeesPage(ce, d);
         case 'teamTime': return renderTeamTimePage(ce, d);
+        case 'messages': return renderMessagesPage(ce, d);
         case 'settings': return renderSettingsPage(ce, d);
         case 'templates': return renderTemplatesPage(ce, d);
         default: return renderBoardPage(ce, d);
@@ -740,6 +744,52 @@ function renderTemplateForm(template) {
         </div>`;
 }
 
+function renderMessagesPage(ce, _d) {
+    const messages = ce._adminMessagesData;
+    const head = `<div class="epa-page-head"><div><h2>הודעות</h2><p>הודעות אישיות והודעות מערכת לעובדים</p></div>
+        ${messages ? `<button class="epa-btn primary" data-action="admin-new-message">הודעה חדשה +</button>` : ''}</div>`;
+    if (!messages) {
+        return `${head}<section class="epa-panel"><div class="ep-loading"><div class="ep-spinner"></div>טוען הודעות…</div></section>`;
+    }
+    const rows = messages.map(m => `
+        <tr class="epa-row-click" data-action="admin-edit-message" data-message="${esc(m.id)}" style="${m.expired ? 'opacity:.55' : ''}">
+            <td><span class="epa-badge kind">${m.scope === 'ALL' ? 'מערכת' : 'אישי'}</span></td>
+            <td>${esc(m.title)}</td>
+            <td>${m.scope === 'EMPLOYEE' ? esc(m.employeeName || '—') : 'כל העובדים'}</td>
+            <td>${m.expiresAt ? fmtDate(String(m.expiresAt).slice(0, 10)) : '—'}</td>
+            <td><span class="epa-badge ${m.expired ? 'miss' : 'ok'}">${m.expired ? 'פג תוקף' : 'פעיל'}</span></td>
+            <td><button class="epa-btn danger" data-action="admin-delete-message" data-message="${esc(m.id)}">מחיקה</button></td>
+        </tr>`).join('');
+    return `${head}
+        <section class="epa-panel">
+            <div class="epa-panel-title"><h3>כל ההודעות (${messages.length})</h3></div>
+            <div class="epa-table-wrap"><table class="epa-table"><thead><tr><th>סוג</th><th>כותרת</th><th>יעד</th><th>תוקף עד</th><th>סטטוס</th><th></th></tr></thead>
+                <tbody>${rows || '<tr><td colspan="6" class="ep-empty">אין הודעות</td></tr>'}</tbody>
+            </table></div>
+        </section>`;
+}
+
+function renderMessageForm(ce, d, message) {
+    const employees = (d.employees || []).slice().sort((a, b) => a.displayName.localeCompare(b.displayName, 'he'));
+    const empOptions = employees.map(e => `<option value="${esc(e.id)}" ${message?.employeeId === e.id ? 'selected' : ''}>${esc(e.displayName)}</option>`).join('');
+    const scope = message?.scope || 'ALL';
+    return `<div class="epa-form">
+            <div style="grid-column:1/-1"><label>כותרת</label><input id="epaM_title" value="${esc(message?.title || '')}" maxlength="150"></div>
+            <div><label>סוג הודעה</label><select id="epaM_scope">
+                <option value="ALL" ${scope === 'ALL' ? 'selected' : ''}>הודעת מערכת (לכל העובדים)</option>
+                <option value="EMPLOYEE" ${scope === 'EMPLOYEE' ? 'selected' : ''}>הודעה אישית</option>
+            </select></div>
+            <div id="epaM_empWrap" style="${scope === 'EMPLOYEE' ? '' : 'display:none'}"><label>עובד/ת</label><select id="epaM_employeeId">${empOptions}</select></div>
+            <div><label>תוקף עד (אופציונלי)</label><input id="epaM_expiresAt" type="date" value="${message?.expiresAt ? esc(String(message.expiresAt).slice(0, 10)) : ''}"></div>
+        </div>
+        <div class="epa-field" style="margin-top:8px"><label>תוכן ההודעה</label><textarea id="epaM_body">${esc(message?.body || '')}</textarea></div>
+        <div class="epa-inline">
+            <button class="epa-btn primary" data-action="admin-save-message" data-message="${esc(message?.id || '')}">שמירה</button>
+            ${message?.id ? `<button class="epa-btn danger" data-action="admin-delete-message" data-message="${esc(message.id)}">מחיקה</button>` : ''}
+            <button class="epa-btn" data-action="admin-close-modal">ביטול</button>
+        </div>`;
+}
+
 function renderModal(ce, d) {
     const modal = ce._adminModal;
     if (!modal) return '';
@@ -781,6 +831,10 @@ function renderModal(ce, d) {
             : null;
         title = entry ? 'עריכת רישום שעות' : 'רישום שעות חדש';
         body = renderTimeEntryForm(ce, d, entry);
+    } else if (modal.type === 'message') {
+        const message = modal.id ? (ce._adminMessagesData || []).find(m => m.id === modal.id) : null;
+        title = message ? 'עריכת הודעה' : 'הודעה חדשה';
+        body = renderMessageForm(ce, d, message);
     }
     return `<div class="epa-modal-backdrop">
         <div class="epa-modal" role="dialog" aria-modal="true" aria-label="${esc(title)}">
@@ -812,6 +866,9 @@ export function handleAdminClick(ce, action, target) {
             }
             if (ce._adminPage === 'teamTime' && !ce._teamTimeData && d?.permissions?.editTimeEntries) {
                 ce._dispatch('adminTeamTimeLoad', { monthKey: ce._teamTimeMonth });
+            }
+            if (ce._adminPage === 'messages' && !ce._adminMessagesData && d?.permissions?.manageEmployees) {
+                ce._dispatch('adminMessagesLoad');
             }
             ce.render();
             return true;
@@ -1055,6 +1112,44 @@ export function handleAdminClick(ce, action, target) {
             ce._adminModal = null;
             ce._startBusy('מוחק תבנית…');
             ce._dispatch('adminTemplateDelete', { templateId: target.dataset.template });
+            return true;
+        case 'admin-new-message':
+            ce._adminModal = { type: 'message', id: null };
+            ce.render();
+            return true;
+        case 'admin-edit-message':
+            ce._adminModal = { type: 'message', id: target.dataset.message };
+            ce.render();
+            return true;
+        case 'admin-save-message': {
+            const val = (id) => ce.querySelector(`#${id}`)?.value;
+            const scope = val('epaM_scope') === 'EMPLOYEE' ? 'EMPLOYEE' : 'ALL';
+            const title = (val('epaM_title') || '').trim();
+            const body = (val('epaM_body') || '').trim();
+            if (!title || !body) {
+                ce._toast('יש להזין כותרת ותוכן להודעה.', 'error');
+                return true;
+            }
+            const employeeId = scope === 'EMPLOYEE' ? val('epaM_employeeId') : null;
+            if (scope === 'EMPLOYEE' && !employeeId) {
+                ce._toast('יש לבחור עובד/ת להודעה אישית.', 'error');
+                return true;
+            }
+            ce._adminModal = null;
+            ce._startBusy('שומר הודעה…');
+            ce._dispatch('adminMessageSave', {
+                message: {
+                    id: target.dataset.message || undefined,
+                    title, body, scope, employeeId,
+                    expiresAt: val('epaM_expiresAt') || null,
+                },
+            });
+            return true;
+        }
+        case 'admin-delete-message':
+            ce._adminModal = null;
+            ce._startBusy('מוחק הודעה…');
+            ce._dispatch('adminMessageDelete', { messageId: target.dataset.message });
             return true;
         case 'admin-save-rule': {
             const row = target.closest('tr');

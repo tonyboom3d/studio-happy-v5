@@ -4078,6 +4078,31 @@ export const saveApprovedSketch = webMethod(Permissions.Anyone, async (originalI
 });
 
 /**
+ * Returns whether the order has accepted AI sketch terms.
+ */
+export const getAITermsStatus = webMethod(Permissions.Anyone, async (orderId) => {
+    if (!orderId) return { accepted: false };
+    const order = await getWorkshopOrderSafe(orderId);
+    if (!order) return { accepted: false };
+    return { accepted: !!order.aiTermsAccepted };
+});
+
+/**
+ * Persist AI sketch terms acceptance on WorkshopOrders (CMS boolean: aiTermsAccepted).
+ */
+export const acceptAITerms = webMethod(Permissions.Anyone, async (orderId) => {
+    if (!orderId) throw new Error('Order ID required');
+    const order = await getWorkshopOrderSafe(orderId);
+    if (!order) throw new Error('Order not found');
+    if (order.aiTermsAccepted) return { success: true, accepted: true };
+    await wixData.update('WorkshopOrders', {
+        ...order,
+        aiTermsAccepted: true,
+    }, SA);
+    return { success: true, accepted: true };
+});
+
+/**
  * Submit user feedback — stored in WorkshopNotifications.
  */
 export const submitFeedback = webMethod(Permissions.Anyone, async (feedbackText, type, orderId) => {

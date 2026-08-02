@@ -54,7 +54,7 @@ employee-portal * { box-sizing: border-box; }
 .ep-cal-nav button:disabled { opacity: .35; cursor: default; }
 .ep-cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; }
 .ep-dow { text-align: center; font-size: 11px; color: #9ca3af; font-weight: 600; padding: 4px 0; }
-.ep-day { position: relative; border: 1px solid #e5e7eb; border-radius: 10px; min-height: 52px; padding: 5px; font-size: 12px; cursor: pointer; background: #fff; text-align: right; transition: border-color .15s,background .15s,transform .15s,box-shadow .15s; }
+.ep-day { position: relative; border: 1px solid #e5e7eb; border-radius: 10px; min-height: 84px; padding: 5px; font-size: 12px; cursor: pointer; background: #fff; text-align: right; transition: border-color .15s,background .15s,transform .15s,box-shadow .15s; }
 .ep-day:hover:not(.disabled):not(.submitted) { border-color: #60a5fa; transform: translateY(-1px); box-shadow: 0 4px 10px rgba(37,99,235,.09); }
 .ep-day.other { visibility: hidden; }
 .ep-day.disabled { background: #f9fafb; color: #c4c7cc; cursor: default; }
@@ -66,6 +66,8 @@ employee-portal * { box-sizing: border-box; }
 .ep-day.submitted { border-color: #d1d5db; background: #eef2ff; cursor: default; }
 .ep-day.scheduled { border-color: #6ee7b7; background: #ecfdf5; cursor: default; }
 .ep-day-num { font-weight: 700; }
+.ep-day-ws { margin-top: 3px; display: flex; flex-direction: column; gap: 2px; }
+.ep-day-ws span { display: block; font-size: 8.5px; line-height: 1.25; color: #1d4ed8; background: #eff6ff; border-radius: 4px; padding: 1px 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ep-day-badge { position: absolute; bottom: 4px; inset-inline-start: 5px; font-size: 9.5px; font-weight: 600; padding: 1px 5px; border-radius: 999px; }
 .ep-badge-standby { background: #e0e7ff; color: #3730a3; }
 .ep-badge-scheduled { background: #d1fae5; color: #065f46; }
@@ -75,10 +77,14 @@ employee-portal * { box-sizing: border-box; }
 .ep-legend { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 10px; font-size: 11px; color: #6b7280; }
 .ep-legend span { display: inline-flex; align-items: center; gap: 5px; }
 .ep-dot { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
-.ep-sel-list { display: flex; flex-direction: column; gap: 8px; max-height: 300px; overflow-y: auto; }
-.ep-sel-row { display: flex; align-items: center; gap: 6px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 10px; padding: 7px 9px; font-size: 12.5px; }
-.ep-sel-date { font-weight: 700; flex: 1; }
+.ep-sel-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+.ep-sel-head h2 { margin: 0; }
+.ep-submit-btn.small { width: auto; margin-top: 0; padding: 8px 16px; font-size: 12.5px; border-radius: 9px; }
+.ep-sel-list { display: flex; flex-direction: column; gap: 8px; max-height: 340px; overflow-y: auto; }
+.ep-sel-row { display: flex; align-items: center; gap: 6px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 10px; padding: 7px 9px; font-size: 12.5px; flex-wrap: nowrap; }
+.ep-sel-date { font-weight: 700; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .ep-sel-row input[type="time"] { border: 1px solid #d1d5db; border-radius: 7px; padding: 3px 5px; font-size: 12px; font-family: inherit; width: 78px; }
+.ep-status.PENDING { background: #f3f4f6; color: #6b7280; }
 .ep-sel-remove { border: none; background: none; color: #ef4444; cursor: pointer; font-size: 15px; padding: 2px 4px; }
 .ep-sel-hours { font-size: 11px; color: #6b7280; min-width: 54px; text-align: center; }
 .ep-sel-hours.bad { color: #dc2626; font-weight: 700; }
@@ -125,11 +131,20 @@ employee-portal * { box-sizing: border-box; }
 .ep-offer-btns button { border-radius: 8px; padding: 6px 14px; font-size: 12.5px; font-weight: 700; cursor: pointer; font-family: inherit; border: 1px solid transparent; }
 .ep-offer-accept { background: #059669; color: #fff; }
 .ep-offer-decline { background: #fff; color: #b91c1c; border-color: #fecaca !important; }
+.ep-msg-card { border: 1px solid #e5e7eb; background: #fff; border-radius: 12px; padding: 12px 14px; margin-bottom: 10px; }
+.ep-msg-card.system { border-color: #bfdbfe; background: #f5f9ff; }
+.ep-msg-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-weight: 700; margin-bottom: 5px; }
+.ep-msg-date { font-size: 11px; color: #9ca3af; font-weight: 400; white-space: nowrap; }
+.ep-msg-body { font-size: 12.5px; color: #374151; white-space: pre-wrap; }
+.ep-msg-exp { font-size: 10.5px; color: #b45309; margin-top: 7px; }
 @media (max-width:700px) { .ep-wrap { padding: 12px; } .ep-tabs { display:flex; overflow-x:auto; } .ep-tabbtn { flex:1; white-space:nowrap; padding-inline:11px; } }
 ${ADMIN_STYLE}
 `;
 
 const HEBREW_DOW = ['א׳', 'ב׳', 'ג׳', 'ד׳', 'ה׳', 'ו׳', 'ש׳'];
+// Business hours for shift start/end pickers: 07:00 through midnight.
+const SHIFT_MIN_TIME = '07:00';
+const SHIFT_MAX_TIME = '23:59';
 const STATUS_LABELS = { SUBMITTED: 'המתנה', STANDBY: 'המתנה', SCHEDULED: 'משובץ', REJECTED: 'נדחה' };
 
 function pad2(n) { return String(n).padStart(2, '0'); }
@@ -163,7 +178,7 @@ function escapeHtml(str) {
 }
 
 class EmployeePortal extends HTMLElement {
-    static get observedAttributes() { return ['portal-data', 'action-result', 'admin-data', 'hours-data', 'templates-data', 'staff-data', 'team-time-data']; }
+    static get observedAttributes() { return ['portal-data', 'action-result', 'admin-data', 'hours-data', 'templates-data', 'staff-data', 'team-time-data', 'messages-data', 'messages-admin-data']; }
 
     constructor() {
         super();
@@ -188,6 +203,8 @@ class EmployeePortal extends HTMLElement {
         this._teamTimeData = null;              // Team time admin page
         this._teamTimeMonth = todayKey().slice(0, 7);
         this._teamTimeEmployee = null;
+        this._messagesData = null;              // { personal: [...], system: [...] }
+        this._adminMessagesData = null;         // admin messages management list
         this._busy = null;                      // busy-overlay message while a mutation is in flight
         // Hours tab state (Module E)
         this._hoursData = null;
@@ -305,6 +322,27 @@ class EmployeePortal extends HTMLElement {
             if (this._teamTimeData?.monthKey) this._teamTimeMonth = this._teamTimeData.monthKey;
             this.render();
         }
+        if (name === 'messages-data') {
+            try {
+                this._messagesData = JSON.parse(newVal);
+            } catch (err) {
+                console.error('[employee-portal] bad messages-data JSON:', err);
+                return;
+            }
+            this._busy = null;
+            this.render();
+        }
+        if (name === 'messages-admin-data') {
+            try {
+                const parsed = JSON.parse(newVal);
+                this._adminMessagesData = parsed.messages || [];
+            } catch (err) {
+                console.error('[employee-portal] bad messages-admin-data JSON:', err);
+                return;
+            }
+            this._busy = null;
+            this.render();
+        }
         if (name === 'action-result') {
             try {
                 const result = JSON.parse(newVal);
@@ -345,6 +383,8 @@ class EmployeePortal extends HTMLElement {
             if (result.type === 'adminTemplatesLoad') this._templatesData = [];
             if (result.type === 'adminStaffLoad') this._staffData = [];
             if (result.type === 'adminTeamTimeLoad') this._teamTimeData = { employees: [], monthKey: this._teamTimeMonth };
+            if (result.type === 'loadMyMessages') this._messagesData = { personal: [], system: [] };
+            if (result.type === 'adminMessagesLoad') this._adminMessagesData = [];
             this._toast(result.message || 'אירעה שגיאה. נסו שוב.', 'error');
             this.render();
             return;
@@ -419,6 +459,8 @@ class EmployeePortal extends HTMLElement {
             <div class="ep-tabs">
                 <button class="ep-tabbtn ${this._tab === 'portal' ? 'active' : ''}" data-action="tab-portal">הפורטל שלי</button>
                 <button class="ep-tabbtn ${this._tab === 'hours' ? 'active' : ''}" data-action="tab-hours">השעות שלי</button>
+                <button class="ep-tabbtn ${this._tab === 'msgPersonal' ? 'active' : ''}" data-action="tab-msg-personal">הודעות אישיות</button>
+                <button class="ep-tabbtn ${this._tab === 'msgSystem' ? 'active' : ''}" data-action="tab-msg-system">הודעות מערכת</button>
                 ${isAdmin ? `<button class="ep-tabbtn ${this._tab === 'admin' ? 'active' : ''}" data-action="tab-admin">ניהול צוות</button>` : ''}
             </div>`;
 
@@ -428,11 +470,11 @@ class EmployeePortal extends HTMLElement {
             <div class="ep-grid">
                 <div>
                     <div class="ep-card">${this._renderCalendar()}</div>
-                    <div class="ep-card" style="margin-top:16px">${this._renderScheduledWorkshops()}</div>
+                    <div class="ep-card" style="margin-top:16px">${this._renderSelectionPanel()}</div>
                 </div>
                 <div>
-                    <div class="ep-card">${this._renderSelectionPanel()}</div>
-                    <div class="ep-card" style="margin-top:16px">${this._renderBoard()}</div>
+                    <div class="ep-card">${this._renderBoard()}</div>
+                    <div class="ep-card" style="margin-top:16px">${this._renderScheduledWorkshops()}</div>
                 </div>
             </div>`;
 
@@ -441,6 +483,10 @@ class EmployeePortal extends HTMLElement {
             tabContent = `<div style="margin-top:12px">${renderAdminTab(this)}</div>`;
         } else if (this._tab === 'hours') {
             tabContent = `<div style="margin-top:12px">${this._renderHoursTab()}</div>`;
+        } else if (this._tab === 'msgPersonal') {
+            tabContent = `<div style="margin-top:12px">${this._renderMessagesTab('personal')}</div>`;
+        } else if (this._tab === 'msgSystem') {
+            tabContent = `<div style="margin-top:12px">${this._renderMessagesTab('system')}</div>`;
         } else {
             tabContent = portalTab;
         }
@@ -503,6 +549,29 @@ class EmployeePortal extends HTMLElement {
                 ${rows || '<div class="ep-empty">אין רישומי שעות לחודש זה</div>'}
                 ${approval}
             </div>`;
+    }
+
+    /** "הודעות אישיות" / "הודעות מערכת" — messages sent by the admin. */
+    _renderMessagesTab(scope) {
+        const m = this._messagesData;
+        if (!m) {
+            return `<div class="ep-card"><div class="ep-loading"><div class="ep-spinner"></div>טוען הודעות…</div></div>`;
+        }
+        const list = scope === 'personal' ? (m.personal || []) : (m.system || []);
+        const title = scope === 'personal' ? 'הודעות אישיות' : 'הודעות מערכת';
+        if (!list.length) {
+            return `<div class="ep-card"><h2>${title}</h2><div class="ep-empty">אין הודעות כרגע</div></div>`;
+        }
+        const cards = list.map(msg => `
+            <div class="ep-msg-card ${scope === 'system' ? 'system' : ''}">
+                <div class="ep-msg-head">
+                    <span>${escapeHtml(msg.title)}</span>
+                    <span class="ep-msg-date">${msg.createdAt ? formatDateHe(String(msg.createdAt).slice(0, 10)) : ''}</span>
+                </div>
+                <div class="ep-msg-body">${escapeHtml(msg.body)}</div>
+                ${msg.expiresAt ? `<div class="ep-msg-exp">בתוקף עד ${formatDateHe(String(msg.expiresAt).slice(0, 10))}</div>` : ''}
+            </div>`).join('');
+        return `<div class="ep-card"><h2>${title}</h2>${cards}</div>`;
     }
 
     /** Waiting-list offers addressed to me + open calls matching my skills. */
@@ -659,9 +728,15 @@ class EmployeePortal extends HTMLElement {
                 if (selected) cls += ' selected';
             }
 
+            const dayWorkshops = this._data.dayStates?.[dateKey]?.workshops || [];
+            const wsList = dayWorkshops.length
+                ? `<div class="ep-day-ws">${dayWorkshops.map(w => `<span>${escapeHtml(w)}</span>`).join('')}</div>`
+                : '';
+
             cells += `<div class="${cls}" ${clickable ? `data-action="toggle-day" data-date="${dateKey}"` : ''}>
                 <span class="ep-day-num">${day}</span>
                 ${holidayByDate[dateKey] ? `<span class="ep-day-hol">${escapeHtml(holidayByDate[dateKey])}</span>` : ''}
+                ${wsList}
                 ${badge}
             </div>`;
         }
@@ -699,10 +774,11 @@ class EmployeePortal extends HTMLElement {
                 const hoursLabel = hrs === null ? '—' : `${hrs} ש׳`;
                 return `<div class="ep-sel-row">
                     <span class="ep-sel-date">${formatDateHe(dateKey)}</span>
-                    <input type="time" data-role="start" data-date="${dateKey}" value="${escapeHtml(times.startTime)}">
+                    <input type="time" min="${SHIFT_MIN_TIME}" max="${SHIFT_MAX_TIME}" data-role="start" data-date="${dateKey}" value="${escapeHtml(times.startTime)}">
                     <span>-</span>
-                    <input type="time" data-role="end" data-date="${dateKey}" value="${escapeHtml(times.endTime)}">
+                    <input type="time" min="${SHIFT_MIN_TIME}" max="${SHIFT_MAX_TIME}" data-role="end" data-date="${dateKey}" value="${escapeHtml(times.endTime)}">
                     <span class="ep-sel-hours ${tooShort || hrs === null ? 'bad' : ''}">${hoursLabel}</span>
+                    <span class="ep-status PENDING">טרם הוגש</span>
                     <button class="ep-sel-remove" data-action="remove-day" data-date="${dateKey}" title="הסרה">✕</button>
                 </div>`;
             }).join('') + `</div>`;
@@ -712,11 +788,13 @@ class EmployeePortal extends HTMLElement {
             return hrs === null || hrs < rules.minShiftHours;
         });
         return `
-            <h2>הגשת זמינות (${entries.length})</h2>
+            <div class="ep-sel-head">
+                <h2>הגשת זמינות (${entries.length})</h2>
+                <button class="ep-submit-btn small" data-action="submit" ${(!entries.length || invalid || this._submitting) ? 'disabled' : ''}>
+                    ${this._submitting ? 'שולח…' : 'הגשת זמינות'}
+                </button>
+            </div>
             ${rows}
-            <button class="ep-submit-btn" data-action="submit" ${(!entries.length || invalid || this._submitting) ? 'disabled' : ''}>
-                ${this._submitting ? 'שולח…' : 'הגשת זמינות'}
-            </button>
             ${invalid ? `<div class="ep-banner warn" style="margin-top:8px">יש משמרות קצרות מהמינימום (${rules.minShiftHours} שעות) או עם שעות שגויות.</div>` : ''}`;
     }
 
@@ -800,6 +878,14 @@ class EmployeePortal extends HTMLElement {
                 if (!this._hoursData) this._requestHoursData();
                 else this.render();
                 return;
+            case 'tab-msg-personal':
+            case 'tab-msg-system':
+                this._tab = action === 'tab-msg-personal' ? 'msgPersonal' : 'msgSystem';
+                if (!this._messagesData) {
+                    this._dispatch('loadMyMessages');
+                }
+                this.render();
+                return;
             case 'hours-month-prev':
             case 'hours-month-next': {
                 const [hy, hm] = this._hoursMonth.split('-').map(Number);
@@ -872,12 +958,22 @@ class EmployeePortal extends HTMLElement {
             this.render();
             return;
         }
+        if (input.id === 'epaM_scope') {
+            const wrap = this.querySelector('#epaM_empWrap');
+            if (wrap) wrap.style.display = input.value === 'EMPLOYEE' ? '' : 'none';
+            return;
+        }
         if (input.tagName !== 'INPUT' || input.type !== 'time') return;
         const dateKey = input.dataset.date;
         const entry = this._selected.get(dateKey);
         if (!entry) return;
-        if (input.dataset.role === 'start') entry.startTime = input.value;
-        if (input.dataset.role === 'end') entry.endTime = input.value;
+        let value = input.value;
+        if (value && (value < SHIFT_MIN_TIME || value > SHIFT_MAX_TIME)) {
+            value = value < SHIFT_MIN_TIME ? SHIFT_MIN_TIME : SHIFT_MAX_TIME;
+            input.value = value;
+        }
+        if (input.dataset.role === 'start') entry.startTime = value;
+        if (input.dataset.role === 'end') entry.endTime = value;
         this.render();
     }
 

@@ -15,7 +15,7 @@
  */
 import wixData from 'wix-data';
 import { publish } from 'wix-realtime-backend';
-import { SUBMISSION_STATUS, toDateKey, normalizeSettings } from 'backend/availabilityRules.js';
+import { SUBMISSION_STATUS, toDateKey, normalizeSettings, DEFAULT_WORK_TYPE } from 'backend/availabilityRules.js';
 import { refIds, getRolePermissionValue } from 'backend/staffRoles.js';
 import { sendGreenApiWhatsApp } from 'backend/whatsappService.jsw';
 
@@ -417,6 +417,7 @@ export async function runScheduling(fromKey, toKey) {
                     submissionId: sub._id,
                     status: ASSIGNMENT_STATUS.APPROVED,
                     source: 'AUTO',
+                    workType: DEFAULT_WORK_TYPE,
                 }, SA);
                 if (sub.status !== SUBMISSION_STATUS.SCHEDULED) {
                     await wixData.update('AvailabilitySubmissions', { ...sub, status: SUBMISSION_STATUS.SCHEDULED }, SA);
@@ -538,6 +539,7 @@ export async function processBookingPaid(order) {
                 submissionId: sub._id,
                 status: ASSIGNMENT_STATUS.APPROVED,
                 source: 'AUTO',
+                workType: DEFAULT_WORK_TYPE,
             }, SA);
             if (sub.status !== SUBMISSION_STATUS.SCHEDULED) {
                 await wixData.update('AvailabilitySubmissions', { ...sub, status: SUBMISSION_STATUS.SCHEDULED }, SA);
@@ -596,6 +598,7 @@ async function assignFromClaim(dateKey, t, role, submission) {
         submissionId: submission._id,
         status: ASSIGNMENT_STATUS.APPROVED,
         source: 'AUTO',
+        workType: DEFAULT_WORK_TYPE,
     }, SA);
     if (submission.status !== SUBMISSION_STATUS.SCHEDULED) {
         await wixData.update('AvailabilitySubmissions', { ...submission, status: SUBMISSION_STATUS.SCHEDULED }, SA);

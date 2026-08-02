@@ -31,6 +31,8 @@ import {
     getRequiredShifts,
     evaluateQuota,
     validateSubmission,
+    normalizeWorkType,
+    WORK_TYPE_LABELS,
 } from 'backend/availabilityRules.js';
 import {
     buildBoard,
@@ -111,6 +113,8 @@ function mapSubmission(item) {
         monthKey: item.monthKey || toMonthKey(item.date),
         managerOverride: !!item.managerOverride,
         notes: item.notes || '',
+        workType: normalizeWorkType(item.workType),
+        workTypeLabel: WORK_TYPE_LABELS[normalizeWorkType(item.workType)],
     };
 }
 
@@ -379,6 +383,7 @@ export const submitAvailability = webMethod(Permissions.Anyone, async (shifts) =
             status: placements[shift.date],
             monthKey: shift.date.slice(0, 7),
             managerOverride: false,
+            workType: 'WORKSHOP',
             notes: shift.notes,
         }, SA);
         inserted++;

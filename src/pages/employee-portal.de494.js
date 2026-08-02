@@ -44,6 +44,9 @@ import {
     sendAvailabilityNudge,
     manualAssign,
     cancelAssignment,
+    approveSubmission,
+    rejectSubmission,
+    updateSubmissionWorkType,
     listBookingStaff,
     linkEmployeeStaff,
 } from 'backend/staffAdminService.web.js';
@@ -511,7 +514,28 @@ async function handlePortalAction(portalEl, detail) {
         }
 
         case 'adminManualAssign': {
-            const result = await manualAssign(payload?.dateKey, payload?.workshopTypeId, payload?.employeeId);
+            const result = await manualAssign(payload?.dateKey, payload?.workshopTypeId, payload?.employeeId, payload?.workType);
+            pushActionResult(portalEl, { type, ...result });
+            refreshAdmin = true;
+            break;
+        }
+
+        case 'adminApproveSubmission': {
+            const result = await approveSubmission(payload?.submissionId, payload?.workshopTypeId, payload?.workType);
+            pushActionResult(portalEl, { type, ...result });
+            refreshAdmin = true;
+            break;
+        }
+
+        case 'adminRejectSubmission': {
+            const result = await rejectSubmission(payload?.submissionId);
+            pushActionResult(portalEl, { type, ...result });
+            refreshAdmin = true;
+            break;
+        }
+
+        case 'adminUpdateWorkType': {
+            const result = await updateSubmissionWorkType(payload?.submissionId, payload?.workType);
             pushActionResult(portalEl, { type, ...result });
             refreshAdmin = true;
             break;

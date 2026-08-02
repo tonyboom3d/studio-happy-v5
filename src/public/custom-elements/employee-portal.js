@@ -20,7 +20,7 @@
  * טאב ניהול (Module B): נטען מ-employee-portal-admin.js ומוצג רק לבעלי
  * הרשאת viewTeamSchedule. קלט נוסף: attribute בשם `admin-data`.
  */
-import { ADMIN_STYLE, renderAdminTab, handleAdminClick } from './employee-portal-admin.js';
+import { ADMIN_STYLE, renderAdminTab, handleAdminClick, handleAdminChange } from './employee-portal-admin.js';
 
 const EP_STYLE = `
 employee-portal { display: block; direction: rtl; font-family: 'Heebo', 'Segoe UI', Arial, sans-serif; background: linear-gradient(145deg,#f8fafc,#eff6ff); color: #1f2937; min-height: 100%; }
@@ -308,6 +308,7 @@ class EmployeePortal extends HTMLElement {
                 return;
             }
             this._busy = null;
+            this._pendingWorkTypes = null;
             if (this._adminData?.monthKey) this._adminMonth = this._adminData.monthKey;
             console.log('[employee-portal] admin-data received', {
                 month: this._adminData.monthKey,
@@ -1240,6 +1241,7 @@ class EmployeePortal extends HTMLElement {
 
     _onChange(e) {
         const input = e.target;
+        if (input?.dataset?.action?.startsWith('admin-') && handleAdminChange(this, input)) return;
         if (input.id === 'epaStaffSearch') {
             this._staffSearch = input.value;
             this.render();

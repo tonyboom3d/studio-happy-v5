@@ -16,6 +16,26 @@ export const SUBMISSION_STATUS = {
     REJECTED: 'REJECTED',
 };
 
+/** Duty during a shift (stored on AvailabilitySubmissions + ShiftAssignments). */
+export const WORK_TYPES = ['WORKSHOP', 'OPENING', 'CLOSING'];
+export const DEFAULT_WORK_TYPE = 'WORKSHOP';
+export const WORK_TYPE_LABELS = {
+    WORKSHOP: 'סדנה',
+    OPENING: 'פתיחה',
+    CLOSING: 'קיפול',
+};
+
+export function normalizeWorkType(value) {
+    const raw = String(value || '').trim();
+    if (!raw) return DEFAULT_WORK_TYPE;
+    const upper = raw.toUpperCase();
+    if (WORK_TYPES.includes(upper)) return upper;
+    for (const key of WORK_TYPES) {
+        if (WORK_TYPE_LABELS[key] === raw) return key;
+    }
+    return DEFAULT_WORK_TYPE;
+}
+
 export const DEFAULT_SETTINGS = {
     deadlineDaysBeforeMonthEnd: 4,
     monthsAheadAllowed: 1,

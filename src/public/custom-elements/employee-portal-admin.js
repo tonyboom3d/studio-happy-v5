@@ -83,6 +83,8 @@ export const ADMIN_STYLE = `
 .epa-panel-title h3 { margin: 0; font-size: 14px; }
 .epa-table-wrap { overflow-x: auto; border: 1px solid #e2e8f0; border-radius: 11px; }
 .epa-table-wrap .epa-table th { background: #f8fafc; }
+.epa-table select { font-size: 12px; padding: 4px 6px; border-radius: 6px; border: 1px solid #e5e7eb; max-width: 120px; }
+.epa-sub-actions { display: flex; gap: 4px; flex-wrap: wrap; }
 .epa-row-click { cursor: pointer; transition: background .14s; }
 .epa-row-click:hover { background: #eff6ff; }
 .epa-row-click.active { background: #eff6ff; box-shadow: inset 2px 0 0 #2563eb; }
@@ -152,6 +154,55 @@ function shiftMonth(monthKey, n) {
     const [y, m] = monthKey.split('-').map(Number);
     const t = y * 12 + (m - 1) + n;
     return `${Math.floor(t / 12)}-${pad2((t % 12) + 1)}`;
+}
+
+const DEFAULT_WORK_TYPE = 'WORKSHOP';
+const WORK_TYPE_LABELS = { WORKSHOP: 'סדנה', OPENING: 'פתיחה', CLOSING: 'קיפול' };
+
+function workTypeOptions(selected) {
+    const sel = selected || DEFAULT_WORK_TYPE;
+    return ['WORKSHOP', 'OPENING', 'CLOSING'].map(v =>
+        `<option value="${v}" ${sel === v ? 'selected' : ''}>${WORK_TYPE_LABELS[v]}</option>`).join('');
+}
+
+function workshopOptionsForSubmission(d, s) {
+    const dayTypes = d.days?.[s.date]?.types || [];
+    const opts = [];
+    if (dayTypes.length) {
+        for (const t of dayTypes) opts.push({ id: t.typeId, name: t.name });
+    } else if (s.workshopTypeId) {
+        opts.push({ id: s.workshopTypeId, name: s.workshopName || 'סדנה' });
+    } else {
+        for (const w of (d.workshopTypes || [])) opts.push({ id: w.id, name: w.name });
+    }
+    return opts;
+}
+
+function renderWorkshopCell(ce, d, s, canEdit) {
+    if (s.status === 'SCHEDULED' && s.workshopName) return esc(s.workshopName);
+    if (!canEdit || s.status === 'REJECTED') return s.workshopName ? esc(s.workshopName) : '—';
+    const opts = workshopOptionsForSubmission(d, s);
+    if (!opts.length) return '—';
+    const selected = s.workshopTypeId || opts[0].id;
+    return `<select class="epa-sub-ws" data-sub="${esc(s.id)}" data-action="admin-sub-ws">${opts.map(o =>
+        `<option value="${esc(o.id)}" ${o.id === selected ? 'selected' : ''}>${esc(o.name)}</option>`).join('')}</select>`;
+}
+
+function renderWorkTypeCell(ce, d, s, canEdit) {
+    const wt = (ce._pendingWorkTypes && ce._pendingWorkTypes[s.id]) || s.workType || DEFAULT_WORK_TYPE;
+    if (!canEdit || s.status === 'REJECTED') return esc(WORK_TYPE_LABELS[wt] || wt);
+    return `<select class="epa-sub-worktype" data-sub="${esc(s.id)}" data-prev="${esc(wt)}" data-action="admin-sub-worktype">${workTypeOptions(wt)}</select>`;
+}
+
+function renderSubmissionActions(ce, d, s) {
+    if (!d.permissions.manageScheduling || s.status === 'REJECTED') return '';
+    if (s.status === 'SCHEDULED') {
+        return `<button class="epa-btn danger" data-action="admin-reject-submission" data-sub="${esc(s.id)}">ביטול</button>`;
+    }
+    return `<div class="epa-sub-actions">
+        <button class="epa-btn primary" data-action="admin-approve-submission" data-sub="${esc(s.id)}">אישור</button>
+        <button class="epa-btn danger" data-action="admin-reject-submission" data-sub="${esc(s.id)}">דחייה</button>
+    </div>`;
 }
 
 function coverageClass(day) {
@@ -481,14 +532,18 @@ function renderTrackerPage(ce, d) {
     ].map(f => `<button class="epa-btn ${statusFilter === f.key ? 'active' : ''}" data-action="admin-tracker-status" data-status="${f.key}">${f.label}</button>`).join('');
 
     const filtered = statusFilter === 'ALL' ? allSubs : allSubs.filter(s => s.status === statusFilter);
+    const canSchedule = d.permissions.manageScheduling;
+    const colCount = canSchedule ? 7 : 6;
     const submissionRows = filtered.map(s => {
         const employee = (d.employees || []).find(e => e.id === s.employeeId);
-        return `<tr class="epa-row-click" data-action="admin-open-submission" data-sub="${esc(s.id)}">
+        return `<tr>
             <td><span class="epa-dot-lg" style="background:${esc(employee?.color || '#2563eb')}"></span>${esc(s.employeeName)}</td>
             <td>${fmtDate(s.date)}</td>
             <td>${esc(s.startTime)}–${esc(s.endTime)}</td>
-            <td>${s.workshopName ? esc(s.workshopName) : '—'}</td>
+            <td>${renderWorkshopCell(ce, d, s, canSchedule)}</td>
+            <td>${renderWorkTypeCell(ce, d, s, canSchedule)}</td>
             <td><span class="epa-badge ${statusBadge[s.status] || 'kind'}">${statusLabel[s.status] || esc(s.status)}</span></td>
+            ${canSchedule ? `<td>${renderSubmissionActions(ce, d, s)}</td>` : ''}
         </tr>`;
     }).join('');
 
@@ -518,8 +573,8 @@ function renderTrackerPage(ce, d) {
                 <div class="epa-inline" style="margin:0">${monthSelect}</div>
             </div>
             <div class="epa-inline" style="margin-bottom:8px">${filterChips}</div>
-            <div class="epa-table-wrap"><table class="epa-table"><thead><tr><th>עובד/ת</th><th>תאריך</th><th>שעות</th><th>סדנה</th><th>סטטוס</th></tr></thead>
-                <tbody>${submissionRows || '<tr><td colspan="5" class="ep-empty">אין הגשות תואמות בחודש זה</td></tr>'}</tbody>
+            <div class="epa-table-wrap"><table class="epa-table"><thead><tr><th>עובד/ת</th><th>תאריך</th><th>שעות</th><th>סדנה</th><th>סוג עבודה</th><th>סטטוס</th>${canSchedule ? '<th>פעולות</th>' : ''}</tr></thead>
+                <tbody>${submissionRows || `<tr><td colspan="${colCount}" class="ep-empty">אין הגשות תואמות בחודש זה</td></tr>`}</tbody>
             </table></div>
         </section>`;
 }
@@ -875,6 +930,7 @@ function renderModal(ce, d) {
             <div class="epa-detail-item"><span>תאריך</span><b>${fmtDate(s.date)}</b></div>
             <div class="epa-detail-item"><span>שעות</span><b>${esc(s.startTime)}–${esc(s.endTime)}</b></div>
             <div class="epa-detail-item"><span>סטטוס</span><b>${statusLabel[s.status] || esc(s.status)}</b></div>
+            <div class="epa-detail-item"><span>סוג עבודה</span><b>${esc(WORK_TYPE_LABELS[s.workType] || 'סדנה')}</b></div>
             <div class="epa-detail-item"><span>סוג סדנה</span><b>${esc(s.workshopName || '—')}</b></div>
             <div class="epa-detail-item"><span>שיבוץ מנהל/ת</span><b>${s.managerOverride ? 'כן' : 'לא'}</b></div>
         </div>
@@ -897,6 +953,14 @@ function renderModal(ce, d) {
             : null;
         title = entry ? 'עריכת רישום שעות' : 'רישום שעות חדש';
         body = renderTimeEntryForm(ce, d, entry);
+    } else if (modal.type === 'workTypeConfirm') {
+        const label = WORK_TYPE_LABELS[modal.workType] || modal.workType;
+        title = 'אישור שינוי סוג עבודה';
+        body = `<p style="margin:0 0 12px">האם לאשר שינוי סוג העבודה ל<strong>${esc(label)}</strong>?</p>
+            <div class="epa-inline">
+                <button class="epa-btn primary" data-action="admin-worktype-confirm">אישור</button>
+                <button class="epa-btn" data-action="admin-worktype-cancel">ביטול</button>
+            </div>`;
     } else if (modal.type === 'message') {
         const message = modal.id ? (ce._adminMessagesData || []).find(m => m.id === modal.id) : null;
         title = message ? 'עריכת הודעה' : 'הודעה חדשה';
@@ -913,6 +977,26 @@ function renderModal(ce, d) {
 // ---------------------------------------------------------------------------
 // Click handling — returns true when the action was handled here
 // ---------------------------------------------------------------------------
+
+export function handleAdminChange(ce, input) {
+    if (input?.dataset?.action !== 'admin-sub-worktype') return false;
+    const newVal = input.value;
+    const prev = input.dataset.prev || DEFAULT_WORK_TYPE;
+    if (newVal === DEFAULT_WORK_TYPE || newVal === prev) {
+        input.dataset.prev = newVal;
+        if (ce._pendingWorkTypes) delete ce._pendingWorkTypes[input.dataset.sub];
+        return true;
+    }
+    input.value = prev;
+    ce._adminModal = {
+        type: 'workTypeConfirm',
+        submissionId: input.dataset.sub,
+        workType: newVal,
+        prevWorkType: prev,
+    };
+    ce.render();
+    return true;
+}
 
 export function handleAdminClick(ce, action, target) {
     const d = ce._adminData;
@@ -992,6 +1076,45 @@ export function handleAdminClick(ce, action, target) {
                 workshopTypeId: target.dataset.type,
                 employeeId: target.dataset.emp,
             });
+            return true;
+        case 'admin-approve-submission': {
+            if (!d?.permissions?.manageScheduling) return true;
+            const subId = target.dataset.sub;
+            const wsSelect = ce.querySelector(`.epa-sub-ws[data-sub="${subId}"]`);
+            const workshopTypeId = wsSelect?.value;
+            if (!workshopTypeId) {
+                ce._toast('יש לבחור סוג סדנה.', 'error');
+                return true;
+            }
+            const workType = (ce._pendingWorkTypes && ce._pendingWorkTypes[subId])
+                || ce.querySelector(`.epa-sub-worktype[data-sub="${subId}"]`)?.value
+                || DEFAULT_WORK_TYPE;
+            ce._startBusy('מאשר משמרת…');
+            ce._dispatch('adminApproveSubmission', { submissionId: subId, workshopTypeId, workType });
+            return true;
+        }
+        case 'admin-reject-submission':
+            ce._startBusy('דוחה משמרת…');
+            ce._dispatch('adminRejectSubmission', { submissionId: target.dataset.sub });
+            return true;
+        case 'admin-worktype-confirm': {
+            const pending = ce._adminModal;
+            ce._adminModal = null;
+            if (!pending?.submissionId) return true;
+            const s = (d?.submissions || []).find(x => x.id === pending.submissionId);
+            if (s?.status === 'SCHEDULED') {
+                ce._startBusy('מעדכן סוג עבודה…');
+                ce._dispatch('adminUpdateWorkType', { submissionId: pending.submissionId, workType: pending.workType });
+            } else {
+                ce._pendingWorkTypes = ce._pendingWorkTypes || {};
+                ce._pendingWorkTypes[pending.submissionId] = pending.workType;
+                ce.render();
+            }
+            return true;
+        }
+        case 'admin-worktype-cancel':
+            ce._adminModal = null;
+            ce.render();
             return true;
         case 'admin-edit-employee':
             if (!d?.permissions?.manageEmployees) return true;

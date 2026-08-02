@@ -211,7 +211,7 @@ function buildMonthsSummary(role, settings, submissions, now) {
 // Web methods
 // ---------------------------------------------------------------------------
 
-export const getMyPortalData = webMethod(Permissions.SiteMember, async () => {
+export const getMyPortalData = webMethod(Permissions.Anyone, async () => {
     const { member, role } = await assertEmployeeAccess('submitAvailability');
     const now = new Date();
 
@@ -309,7 +309,7 @@ export const getMyPortalData = webMethod(Permissions.SiteMember, async () => {
  * Submits a batch of availability shifts.
  * @param {Array<{date: string, startTime: string, endTime: string, notes?: string}>} shifts
  */
-export const submitAvailability = webMethod(Permissions.SiteMember, async (shifts) => {
+export const submitAvailability = webMethod(Permissions.Anyone, async (shifts) => {
     const { member, role } = await assertEmployeeAccess('submitAvailability');
     const now = new Date();
 
@@ -400,7 +400,7 @@ export const submitAvailability = webMethod(Permissions.SiteMember, async (shift
 });
 
 /** Withdraws a future, not-yet-scheduled submission owned by the caller. */
-export const withdrawAvailability = webMethod(Permissions.SiteMember, async (submissionId) => {
+export const withdrawAvailability = webMethod(Permissions.Anyone, async (submissionId) => {
     const { member, role } = await assertEmployeeAccess('submitAvailability');
     if (!submissionId) throw new Error('BAD_REQUEST: submissionId is required.');
 
@@ -426,7 +426,7 @@ export const withdrawAvailability = webMethod(Permissions.SiteMember, async (sub
  * Free edit of a SUBMITTED (not-yet-placed) shift owned by the caller.
  * SCHEDULED/STANDBY shifts must go through requestShiftChange instead.
  */
-export const updateSubmission = webMethod(Permissions.SiteMember, async (submissionId, patch) => {
+export const updateSubmission = webMethod(Permissions.Anyone, async (submissionId, patch) => {
     const { member, role } = await assertEmployeeAccess('submitAvailability');
     if (!submissionId) throw new Error('BAD_REQUEST: submissionId is required.');
 
@@ -466,7 +466,7 @@ export const updateSubmission = webMethod(Permissions.SiteMember, async (submiss
 });
 
 /** Scheduled-workshop details for a given month (or all upcoming when omitted). */
-export const getMyScheduledWorkshops = webMethod(Permissions.SiteMember, async (monthKey) => {
+export const getMyScheduledWorkshops = webMethod(Permissions.Anyone, async (monthKey) => {
     const { member, role } = await assertEmployeeAccess('submitAvailability');
     const roleRow = await ensureRoleProfile(role, member);
 

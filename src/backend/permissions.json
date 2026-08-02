@@ -22,7 +22,33 @@
           "invoke": true
         },
         "anonymous": {
-          "invoke": false
+          "invoke": true
+        }
+      }
+    },
+    "messagingService.web.js": {
+      "*": {
+        "siteOwner": {
+          "invoke": true
+        },
+        "siteMember": {
+          "invoke": true
+        },
+        "anonymous": {
+          "invoke": true
+        }
+      }
+    },
+    "shiftChangeRequests.web.js": {
+      "*": {
+        "siteOwner": {
+          "invoke": true
+        },
+        "siteMember": {
+          "invoke": true
+        },
+        "anonymous": {
+          "invoke": true
         }
       }
     },

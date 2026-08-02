@@ -32,7 +32,7 @@ function mapMessage(item, now) {
 }
 
 /** Personal + system messages relevant to the logged-in employee, not expired. */
-export const getMyMessages = webMethod(Permissions.SiteMember, async () => {
+export const getMyMessages = webMethod(Permissions.Anyone, async () => {
     const { role } = await assertEmployeeAccess('submitAvailability');
     const now = new Date();
 

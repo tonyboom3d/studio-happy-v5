@@ -14,13 +14,13 @@ import {
 } from 'backend/shiftChangeRequests.js';
 
 /** Employee files a change/deletion request for a SCHEDULED/STANDBY shift. */
-export const requestShiftChange = webMethod(Permissions.SiteMember, async (submissionId, payload) => {
+export const requestShiftChange = webMethod(Permissions.Anyone, async (submissionId, payload) => {
     const { role } = await assertEmployeeAccess('submitAvailability');
     return createShiftChangeRequest(role, submissionId, payload);
 });
 
 /** Employee dismisses a decided request's banner in their portal. */
-export const acknowledgeShiftRequest = webMethod(Permissions.SiteMember, async (requestId) => {
+export const acknowledgeShiftRequest = webMethod(Permissions.Anyone, async (requestId) => {
     const { role } = await assertEmployeeAccess('submitAvailability');
     return acknowledgeRequest(role._id, requestId);
 });

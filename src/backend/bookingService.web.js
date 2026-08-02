@@ -173,9 +173,23 @@ function isTemporarySketchUrl(url) {
     return /replicate\.(delivery|com)/i.test(url || '');
 }
 
+function isWixHostedUrl(url) {
+    if (!url || typeof url !== 'string') return false;
+    if (url.startsWith('wix:image://')) return true;
+    return /static\.wixstatic\.com\/media\//i.test(url);
+}
+
 function isSketchPersistedOnWix(sketchMediaUrl, sketchWixFileUrl) {
     if (sketchWixFileUrl?.startsWith('wix:image://')) return true;
+    if (isWixHostedUrl(sketchMediaUrl)) return true;
     return !!wixFileUrlFromPublicUrl(sketchMediaUrl);
+}
+
+function extractWixFileUrlFromUploadResult(upload) {
+    if (!upload) return null;
+    const direct = upload.fileUrl || upload?.file?.fileUrl || upload?.url;
+    if (typeof direct === 'string' && direct.startsWith('wix:')) return direct;
+    return null;
 }
 
 async function resolveSketchWixFileUrlForSave({ productId, productSnapshot }) {
@@ -3723,7 +3737,7 @@ async function uploadBase64ToWixMedia(base64, folder, filename) {
         buffer,
         filename, { mediaOptions: { mimeType } }
     );
-    const wixUrl = upload.fileUrl || null;
+    const wixUrl = extractWixFileUrlFromUploadResult(upload);
     const publicUrl = wixMediaToPublicUrl(wixUrl);
     return { wixUrl, publicUrl };
 }
@@ -3914,9 +3928,10 @@ async function persistSketchToWix(sketchUrl) {
             '/ai-sketches/sketches',
             `sketch_${Date.now()}.jpg`
         );
+        const wix = uploaded?.wixUrl || null;
         return {
-            sketchMediaUrl: uploaded?.publicUrl || wixMediaToPublicUrl(uploaded?.wixUrl),
-            sketchWixFileUrl: uploaded?.wixUrl || null,
+            sketchMediaUrl: uploaded?.publicUrl || wixMediaToPublicUrl(wix) || sketchUrl,
+            sketchWixFileUrl: wix,
         };
     }
 
@@ -3925,38 +3940,28 @@ async function persistSketchToWix(sketchUrl) {
         return { sketchMediaUrl: sketchUrl, sketchWixFileUrl: existingWix };
     }
 
-    try {
-        const sketchImport = await mediaManager.importFile(
-            '/ai-sketches/sketches',
-            sketchUrl, {
-                mediaOptions: { mimeType: 'image/png', mediaType: 'image' },
-                metadataOptions: { fileName: `sketch_${Date.now()}.png` },
-            }
-        );
-        const wix = sketchImport.fileUrl || null;
-        return {
-            sketchMediaUrl: wixMediaToPublicUrl(wix) || sketchUrl,
-            sketchWixFileUrl: wix,
-        };
-    } catch (importErr) {
-        console.warn('[persistSketchToWix] importFile failed, trying fetch:', importErr?.message);
-        const response = await fetch(sketchUrl);
-        if (!response.ok) {
-            throw new Error(`שגיאה בהורדת הסקיצה לשמירה (HTTP ${response.status}). נסו שוב — ייתכן שקישור הסקיצה פג תוקף.`);
-        }
-        const buffer = Buffer.from(await response.arrayBuffer());
-        const upload = await mediaManager.upload(
-            '/ai-sketches/sketches',
-            buffer,
-            `sketch_${Date.now()}.png`,
-            { mediaOptions: { mimeType: 'image/png' } }
-        );
-        const wix = upload.fileUrl || null;
-        return {
-            sketchMediaUrl: wixMediaToPublicUrl(wix) || sketchUrl,
-            sketchWixFileUrl: wix,
-        };
+    // External URL (e.g. Replicate) — fetch + upload is more reliable than importFile.
+    const response = await fetch(sketchUrl);
+    if (!response.ok) {
+        throw new Error(`שגיאה בהורדת הסקיצה לשמירה (HTTP ${response.status}). נסו שוב — ייתכן שקישור הסקיצה פג תוקף.`);
     }
+    const buffer = Buffer.from(await response.arrayBuffer());
+    const upload = await mediaManager.upload(
+        '/ai-sketches/sketches',
+        buffer,
+        `sketch_${Date.now()}.png`,
+        { mediaOptions: { mimeType: 'image/png' } }
+    );
+    const wix = extractWixFileUrlFromUploadResult(upload);
+    const publicUrl = wixMediaToPublicUrl(wix);
+    if (!wix && !publicUrl) {
+        console.error('[persistSketchToWix] Upload succeeded but no Wix URL in response:', upload);
+        throw new Error('הסקיצה הועלתה אך לא התקבלה כתובת קבועה מהשרת. נסו שוב.');
+    }
+    return {
+        sketchMediaUrl: publicUrl || sketchUrl,
+        sketchWixFileUrl: wix || wixFileUrlFromPublicUrl(publicUrl),
+    };
 }
 
 async function executeSketchGeneration(jobId, { imageBase64, orderId }) {
@@ -4059,66 +4064,23 @@ export const getSketchJobStatus = webMethod(Permissions.Anyone, async (jobId) =>
  * Save approved AI sketch images to Wix Media Manager (permanent CMS URLs).
  */
 export const saveApprovedSketch = webMethod(Permissions.Anyone, async (originalInput, sketchUrl, colors, orderId, croppedInput) => {
-    let originalMediaUrl = null;
     let sketchMediaUrl = sketchUrl;
     let sketchWixFileUrl = null;
-    let croppedMediaUrl = null;
 
-    // Sketch first — critical path; avoid timeout after a successful upload.
+    // Only the sketch is persisted here — fast path to avoid Wix webMethod timeout.
+    // Original/cropped reference images are kept client-side until the selection is saved.
     if (sketchUrl) {
-        try {
-            const persisted = await persistSketchToWix(sketchUrl);
-            sketchMediaUrl = persisted.sketchMediaUrl || sketchUrl;
-            sketchWixFileUrl = persisted.sketchWixFileUrl || null;
-        } catch (e) {
-            console.warn('[saveApprovedSketch] Sketch persist failed:', e?.message);
-            throw new Error(e?.message || 'שגיאה בהעלאת הסקיצה לאחסון הקבוע של השרת. נסו ללחוץ שוב על "אישור ושמירה".');
-        }
+        const persisted = await persistSketchToWix(sketchUrl);
+        sketchMediaUrl = persisted.sketchMediaUrl || sketchUrl;
+        sketchWixFileUrl = persisted.sketchWixFileUrl || wixFileUrlFromPublicUrl(sketchMediaUrl);
 
-        if (!isSketchPersistedOnWix(sketchMediaUrl, sketchWixFileUrl) &&
-            (sketchUrl.startsWith('data:') || isTemporarySketchUrl(sketchUrl))) {
+        if (!isSketchPersistedOnWix(sketchMediaUrl, sketchWixFileUrl)) {
+            console.error('[saveApprovedSketch] Sketch not on Wix after persist:', {
+                sketchMediaUrl,
+                sketchWixFileUrl,
+                inputType: sketchUrl?.slice(0, 30),
+            });
             throw new Error('שגיאה בשמירת הסקיצה לאחסון הקבוע של השרת. נסו ללחוץ שוב על "אישור ושמירה".');
-        }
-    }
-
-    if (croppedInput) {
-        try {
-            if (croppedInput.startsWith('data:')) {
-                const uploaded = await uploadBase64ToWixMedia(
-                    croppedInput,
-                    '/ai-sketches/cropped',
-                    `cropped_${Date.now()}.png`
-                );
-                croppedMediaUrl = uploaded?.publicUrl || wixMediaToPublicUrl(uploaded?.wixUrl);
-            } else if (croppedInput.startsWith('http')) {
-                croppedMediaUrl = croppedInput;
-            } else if (croppedInput.startsWith('wix:')) {
-                croppedMediaUrl = wixMediaToPublicUrl(croppedInput);
-            }
-        } catch (e) {
-            console.warn('[saveApprovedSketch] Cropped upload failed:', e?.message);
-        }
-    }
-
-    if (originalInput) {
-        try {
-            if (originalInput.startsWith('data:')) {
-                const uploaded = await uploadBase64ToWixMedia(
-                    originalInput,
-                    '/ai-sketches/originals',
-                    `original_${Date.now()}.png`
-                );
-                originalMediaUrl = uploaded?.publicUrl || wixMediaToPublicUrl(uploaded?.wixUrl);
-            } else if (originalInput.startsWith('http')) {
-                originalMediaUrl = originalInput;
-            } else if (originalInput.startsWith('wix:')) {
-                originalMediaUrl = wixMediaToPublicUrl(originalInput);
-            }
-        } catch (e) {
-            console.warn('[saveApprovedSketch] Original upload failed:', e?.message);
-            if (originalInput.startsWith('http')) {
-                originalMediaUrl = originalInput;
-            }
         }
     }
 
@@ -4129,8 +4091,8 @@ export const saveApprovedSketch = webMethod(Permissions.Anyone, async (originalI
         success: true,
         sketchUrl: sketchMediaUrl,
         wixFileUrl: sketchWixFileUrl,
-        originalUrl: originalMediaUrl,
-        croppedUrl: croppedMediaUrl,
+        originalUrl: null,
+        croppedUrl: null,
         colors: colorStr,
         taskId,
     };

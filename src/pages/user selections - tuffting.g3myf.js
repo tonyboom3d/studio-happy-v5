@@ -525,11 +525,21 @@ async function handlePostPaymentMessage(data, iframe) {
         }
     } catch (err) {
         console.error('[UserSelections] Error handling message:', data.type, err?.message || err, err?.stack);
-        const genericMessages = {
-            GENERATE_SKETCH: 'שגיאה ביצירת הסקיצה. נסו שוב.',
-            SAVE_APPROVED_SKETCH: 'שגיאה בשמירת הסקיצה. נסו שוב.',
-        };
-        const userMessage = genericMessages[data.type] || (err?.message || 'Unknown error');
+        // Prefer the specific error thrown by the backend method (already a
+        // clear, user-facing Hebrew message) — only fall back to a generic
+        // message when none is available (e.g. unexpected network failure).
+        const raw = String(err?.message || '');
+        let userMessage = raw;
+        if (/\b413\b|Payload Too Large|entity too large/i.test(raw)) {
+            userMessage = 'התמונה גדולה מדי לשליחה לשרת. נסו לחתוך אזור קטן יותר או להעלות תמונה באיכות נמוכה יותר.';
+        } else if (!userMessage) {
+            const fallbackMessages = {
+                GENERATE_SKETCH: 'שגיאה לא צפויה בתקשורת עם השרת בזמן יצירת הסקיצה. בדקו את החיבור לאינטרנט ונסו שוב.',
+                SAVE_APPROVED_SKETCH: 'שגיאה לא צפויה בתקשורת עם השרת בזמן שמירת הסקיצה. בדקו את החיבור לאינטרנט ונסו שוב.',
+                VALIDATE_IMAGE: 'שגיאה בבדיקת התמונה. נסו שוב.',
+            };
+            userMessage = fallbackMessages[data.type] || 'שגיאה לא צפויה. נסו שוב.';
+        }
         respond({ error: userMessage });
     }
 }

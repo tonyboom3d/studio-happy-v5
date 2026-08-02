@@ -1,5 +1,6 @@
 import wixData from 'wix-data';
 import { sendOrderConfirmationWhatsApp } from 'backend/whatsappService.jsw';
+import { processBookingPaid } from 'backend/schedulingEngine.js';
 
 const SA = { suppressAuth: true, suppressHooks: true };
 
@@ -23,6 +24,19 @@ export function WorkshopOrders_afterUpdate(item, context) {
     const resendRequested = item.resendWhatsApp === true && previousItem.resendWhatsApp !== true;
 
     if (!justPaid && !resendRequested) return item;
+
+    // Dynamic staff assignment (Module B/C): the moment an order is paid,
+    // check whether the day's workshop now needs instructors and assign a
+    // pending employee (>24h out) or request their confirmation (<24h out).
+    if (justPaid) {
+        processBookingPaid(item)
+            .then(report => {
+                if (report?.handled) console.log('[data.js hook] processBookingPaid:', item._id, JSON.stringify(report));
+            })
+            .catch(err => {
+                console.error('[data.js hook] processBookingPaid failed. orderId:', item._id, 'error:', err?.message || err);
+            });
+    }
 
     if (!item.organizerPhone) {
         console.warn('[data.js hook] Skipping WhatsApp — no organizerPhone. orderId:', item._id);

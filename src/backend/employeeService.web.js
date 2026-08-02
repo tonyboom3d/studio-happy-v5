@@ -38,6 +38,7 @@ import {
     resolvePlacement,
     publishSchedulingUpdate,
     loadSettings as loadEngineSettings,
+    runScheduling,
     OFFER_KIND,
     OFFER_STATUS,
 } from 'backend/schedulingEngine.js';
@@ -382,6 +383,15 @@ export const submitAvailability = webMethod(Permissions.SiteMember, async (shift
         }, SA);
         inserted++;
         if (placements[shift.date] === SUBMISSION_STATUS.STANDBY) standby++;
+    }
+
+    // Auto-approve mode: run the engine immediately so days with active
+    // customer bookings assign the employee on the spot (skill-matched);
+    // days without bookings simply stay pending. Manual mode: no-op
+    // (runScheduling is gated internally on the same setting).
+    if (settings.autoApproveShifts !== false) {
+        await runScheduling(batchDates[0], batchDates[batchDates.length - 1]).catch(err =>
+            console.error('[employeeService] post-submit runScheduling failed:', err?.message || err));
     }
 
     await publishSchedulingUpdate('submission', { dates: batchDates });

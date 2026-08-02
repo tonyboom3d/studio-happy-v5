@@ -368,8 +368,16 @@ async function ensureShortageHandled(dateKey, t, board) {
 /**
  * Auto-assigns SUBMITTED availability to short workshops (priorityRank, then
  * FIFO), then routes remaining shortages to waiting-list offers / open calls.
+ *
+ * Fully disabled when the "אישור אוטומטי של משמרות" setting is OFF — in that
+ * mode all submissions stay pending until a manager assigns them manually.
  */
 export async function runScheduling(fromKey, toKey) {
+    const settings = await loadSettings();
+    if (settings.autoApproveShifts === false) {
+        console.log('[schedulingEngine] runScheduling skipped — autoApproveShifts is OFF (manual mode)');
+        return { assigned: 0, offers: 0, openCalls: 0, skipped: 'manual-mode' };
+    }
     const board = await buildBoard(fromKey, toKey, { consistent: true, includeOffers: true });
     const submissions = await loadSubmissions(fromKey, toKey, true);
     const subsById = {};
@@ -455,6 +463,122 @@ export async function processOfferEscalation(now = new Date()) {
     }
     if (escalated) await publishSchedulingUpdate('offer-escalation', { escalated });
     return { expired: result.items?.length || 0, escalated };
+}
+
+// ---------------------------------------------------------------------------
+// Booking-paid trigger — dynamic assignment for pending employees
+// ---------------------------------------------------------------------------
+
+const CONFIRM_WINDOW_HOURS = 24;
+
+/**
+ * Fired the moment a WorkshopOrders row turns 'paid' (data.js afterUpdate
+ * hook). If instructors are now needed for that day's workshop and pending
+ * (SUBMITTED) employees with the right skill exist:
+ * - more than 24h before the workshop → auto-assign (priorityRank, then FIFO);
+ * - less than 24h before → a pending offer + WhatsApp requiring the
+ *   employee's confirmation in the portal before the assignment is final.
+ * No-op when autoApproveShifts is OFF (manual mode).
+ */
+export async function processBookingPaid(order) {
+    if (!order?.workshopStart || !order?.serviceId) return { handled: false };
+
+    const settings = await loadSettings();
+    if (settings.autoApproveShifts === false) {
+        return { handled: false, reason: 'manual-mode' };
+    }
+
+    const workshopStart = new Date(order.workshopStart);
+    const dateKey = toDateKey(workshopStart);
+    if (!dateKey || dateKey <= toDateKey(new Date())) return { handled: false, reason: 'past-or-today' };
+
+    const [{ serviceIdToTypeId }, board] = await Promise.all([
+        loadWorkshopTypeMap(),
+        buildBoard(dateKey, dateKey, { consistent: true, includeOffers: true }),
+    ]);
+    const typeId = serviceIdToTypeId[order.serviceId];
+    const t = board.days[dateKey]?.types?.[typeId];
+    if (!typeId || !t) return { handled: false, reason: 'no-type' };
+
+    let shortage = t.required - t.assignedCount;
+    if (shortage <= 0) return { handled: false, reason: 'covered' };
+
+    const submissions = await loadSubmissions(dateKey, dateKey, true);
+    const candidates = submissions
+        .filter(s => toDateKey(s.date) === dateKey
+            && s.status === SUBMISSION_STATUS.SUBMITTED
+            && (board.skillsByRoleId[s.employeeId] || []).includes(typeId)
+            && !t.assignedEmployeeIds.includes(s.employeeId))
+        .sort((a, b) => {
+            const ra = Number(board.rolesById[a.employeeId]?.priorityRank) || 999;
+            const rb = Number(board.rolesById[b.employeeId]?.priorityRank) || 999;
+            return ra - rb || new Date(a._createdDate) - new Date(b._createdDate);
+        });
+
+    if (!candidates.length) {
+        // No pending employees — fall back to standby offers / open call.
+        await ensureShortageHandled(dateKey, t, board);
+        await publishSchedulingUpdate('booking-paid', { dateKey });
+        return { handled: true, mode: 'shortage-flow' };
+    }
+
+    const hoursUntil = (workshopStart.getTime() - Date.now()) / 3600000;
+    const report = { handled: true, assigned: 0, confirmations: 0 };
+
+    if (hoursUntil > CONFIRM_WINDOW_HOURS) {
+        for (const sub of candidates) {
+            if (shortage <= 0) break;
+            await wixData.insert('ShiftAssignments', {
+                dateKey,
+                date: new Date(`${dateKey}T12:00:00Z`),
+                monthKey: dateKey.slice(0, 7),
+                workshopTypeId: typeId,
+                workshopName: t.name,
+                employeeId: sub.employeeId,
+                submissionId: sub._id,
+                status: ASSIGNMENT_STATUS.APPROVED,
+                source: 'AUTO',
+            }, SA);
+            if (sub.status !== SUBMISSION_STATUS.SCHEDULED) {
+                await wixData.update('AvailabilitySubmissions', { ...sub, status: SUBMISSION_STATUS.SCHEDULED }, SA);
+            }
+            t.assignedCount++;
+            t.assignedEmployeeIds.push(sub.employeeId);
+            shortage--;
+            report.assigned++;
+            const role = board.rolesById[sub.employeeId];
+            await notifyEmployee(role,
+                `היי ${role?.displayName || ''} 👋\nהתקבלה הזמנה לסדנת ${t.name} בתאריך ${formatDateHe(dateKey)} — שובצת אוטומטית למשמרת! 🎉\nפרטים בפורטל העובדים: https://www.studiohappy.art/employee-portal`);
+        }
+    } else {
+        // Inside the confirmation window: one pending offer at a time (FIFO);
+        // the hourly escalation moves it along if unanswered.
+        const existing = offersFor(board.offers, dateKey, typeId);
+        if (!existing.some(o => o.status === OFFER_STATUS.PENDING || o.status === OFFER_STATUS.OPEN)) {
+            const first = candidates[0];
+            await wixData.insert('ShiftOffers', {
+                dateKey,
+                date: new Date(`${dateKey}T12:00:00Z`),
+                monthKey: dateKey.slice(0, 7),
+                workshopTypeId: typeId,
+                workshopName: t.name,
+                kind: OFFER_KIND.WAITLIST_OFFER,
+                status: OFFER_STATUS.PENDING,
+                employeeId: first.employeeId,
+                submissionId: first._id,
+                expiresAt: new Date(Date.now() + OFFER_TTL_MS),
+                notifiedAt: new Date(),
+            }, SA);
+            const role = board.rolesById[first.employeeId];
+            await notifyEmployee(role,
+                `היי ${role?.displayName || ''} 👋\nהתקבלה הזמנה לסדנת ${t.name} בתאריך ${formatDateHe(dateKey)} (פחות מ-${CONFIRM_WINDOW_HOURS} שעות מראש).\nכדי להשלים את השיבוץ נדרש אישורך — ההצעה שמורה לך לשעה הקרובה בפורטל העובדים:\nhttps://www.studiohappy.art/employee-portal`);
+            report.confirmations++;
+        }
+    }
+
+    await publishSchedulingUpdate('booking-paid', { dateKey });
+    console.log(`[schedulingEngine] processBookingPaid ${dateKey}/${typeId}:`, JSON.stringify(report));
+    return report;
 }
 
 // ---------------------------------------------------------------------------

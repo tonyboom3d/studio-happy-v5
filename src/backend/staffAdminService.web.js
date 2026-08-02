@@ -207,6 +207,7 @@ export const getStaffAdminData = webMethod(Permissions.SiteMember, async (monthK
             defaultShiftStart: settings.defaultShiftStart,
             defaultShiftEnd: settings.defaultShiftEnd,
             bonusUnlockEnabled: settings.bonusUnlockEnabled,
+            autoApproveShifts: settings.autoApproveShifts,
             blockedDates: settings.blockedDates,
             promotedDates: settings.promotedDates,
             holidays: settings.holidays,
@@ -506,6 +507,7 @@ export const updateAvailabilitySettings = webMethod(Permissions.SiteMember, asyn
         updated[field] = value;
     }
     if (patch.bonusUnlockEnabled !== undefined) updated.bonusUnlockEnabled = !!patch.bonusUnlockEnabled;
+    if (patch.autoApproveShifts !== undefined) updated.autoApproveShifts = !!patch.autoApproveShifts;
 
     await wixData.update('AvailabilitySettings', updated, SA);
     await publishSchedulingUpdate('settings-updated', {});

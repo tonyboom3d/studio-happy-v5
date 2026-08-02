@@ -3728,7 +3728,7 @@ async function uploadBase64ToWixMedia(base64, folder, filename) {
     return { wixUrl, publicUrl };
 }
 
-async function generateSketchWithReplicate(publicImageUrl) {
+async function generateSketchWithReplicate(imageInput) {
     const token = await wixSecretsBackend.getSecret('nanoToken');
     const response = await fetch('https://api.replicate.com/v1/models/google/nano-banana-pro/predictions', {
         method: 'POST',
@@ -3739,7 +3739,7 @@ async function generateSketchWithReplicate(publicImageUrl) {
         },
         body: JSON.stringify({
             input: {
-                image_input: [publicImageUrl],
+                image_input: [imageInput],
                 prompt: 'Create a faithful, clean black-and-white line drawing of ONLY the main subject for a tufting pattern. Preserve the subject exactly: same pose, body orientation, proportions, head angle, ear/crest positions, limb/wing placement and distinctive features from the source photo. Use smooth, confident single-stroke black outlines that are slightly thicker than a standard coloring-book line and uniform in width. Avoid double outlines, parallel ghost lines, or messy overlapping strokes. CRITICAL eye rule: if eyes are visible in the source (and NOT behind sunglasses), draw them as solid black pupils or small filled black dots so the eyes look natural and expressive — NEVER draw hollow empty circles for visible eyes. If eyes are hidden behind sunglasses or opaque lenses, do NOT invent eyes/pupils — draw only the sunglass frames with EMPTY white lenses. CRITICAL accessory & feature patterns: if clothing, a scarf, bandana, or natural animal marking (like cheek patches or wing sections) has distinct shapes, preserve those as clean outlined regions. For birds or crested animals, group crest feathers and wings into clean, defined single-line shapes. Keep the rest of the body interior white and unfilled. Do not add individual fur/feather texture, hatching, or scribbles. Remove the entire original photo and background completely. Output a standalone flat line drawing on a fully opaque, pure solid white (#FFFFFF) canvas edge-to-edge. Strictly pure black (#000000) line work on pure white (#FFFFFF) only. No color, gray, shadows, shading, gradients, or unnecessary black fills. Style: polished, minimal coloring-book line art; crisp, smooth, single-stroke lines, and anatomically faithful.',
                 negative_prompt: 'empty hollow circle eyes, blank eye sockets, eyes behind sunglasses, double lines, parallel lines, ghost outlines, sketchy overlapping strokes, messy linework, unjoined lines, original photo, photo background, transparent background, alpha channel, scenery, grass, ground, walls, plants, furniture, environment, source-photo pixels, color, colors, colored, colorful, hue, tint, saturation, red, green, blue, yellow, orange, purple, pink, brown, gray, grey, grayscale fill, shadow, shadows, shading, gradient, drop shadow, cast shadow, solid black fill on large body regions, filled sunglasses lenses, dense fur texture, individual feather strands, hatching, stippling, scribbles, distorted anatomy, changed pose, reposed, altered proportions, cartoon distortion, kawaii, chibi, photorealistic, 3D, depth, border, frame, rectangular frame, watermark',
                 aspect_ratio: 'match_input_image',
@@ -3807,16 +3807,17 @@ You must return ONLY a valid JSON object.
 Validation Rules:
 1. REJECT (Safety): Any NSFW, violent, gory, or illegal content.
 2. REJECT (Humans): If the MAIN SUBJECT of the image is a human, person, child, baby, or a portrait/face of a person — REJECT it. Tufting sketches of people are not supported. If a person appears only in the background but the main subject is an animal or object, ACCEPT.
-3. REJECT (Too Much Text / Writing): Count the total visible letters / characters in the image across all words/captions. If the image contains MORE THAN 4 LETTERS or characters total (e.g. words, phrases, sentences, book covers, signboards, meme text, long logos) — REJECT it. Short text up to 4 letters is allowed, but 5 or more letters MUST BE REJECTED.
-4. REJECT (Low Quality): If the image is very blurry, heavily pixelated, extremely dark, or so low resolution that the main subject cannot be clearly identified — REJECT it.
-5. ACCEPT pets, animals, objects, logos, illustrations, and similar subjects (with 4 or fewer letters). Do not reject them because of fur, hair, or realistic textures — the next AI step will simplify those.
-6. IGNORE BACKGROUNDS: Absolutely ignore grass, trees, rooms, or messy backgrounds. If there is a clear main subject in the foreground (like a dog sitting on grass), ACCEPT IT immediately.
-7. REJECT ONLY IF: The image is completely abstract noise, a massive crowd with no main subject, or purely a landscape with no central object.
+3. COMPANY / BRAND LOGOS — SPECIAL CASE: If the image IS a company/brand logo (a standalone logo mark, wordmark, or combination logo, typically on a plain/simple/transparent background, with no unrelated scenery) — ACCEPT it even if the brand name text exceeds 4 letters. This applies only to genuine logos (one brand name and/or a short tagline of a few words), not to general images that merely contain text.
+4. REJECT (Too Much Text / Writing) — for NON-LOGO images only: Count the total visible letters / characters in the image across all words/captions. If the image contains MORE THAN 4 LETTERS or characters total (e.g. words, phrases, sentences, book covers, signboards, meme text) — REJECT it. Short text up to 4 letters is allowed, but 5 or more letters MUST BE REJECTED. (This rule does NOT apply to genuine logos — see rule 3.)
+5. REJECT (Low Quality): If the image is very blurry, heavily pixelated, extremely dark, or so low resolution that the main subject cannot be clearly identified — REJECT it.
+6. ACCEPT pets, animals, objects, company logos, illustrations, and similar subjects. Do not reject them because of fur, hair, or realistic textures — the next AI step will simplify those.
+7. IGNORE BACKGROUNDS: Absolutely ignore grass, trees, rooms, or messy backgrounds. If there is a clear main subject in the foreground (like a dog sitting on grass), ACCEPT IT immediately.
+8. REJECT ONLY IF: The image is completely abstract noise, a massive crowd with no main subject, or purely a landscape with no central object.
 
 JSON Structure format:
 {
   "isValid": true/false,
-  "reason": "If false, explain IN HEBREW why the image was rejected. Examples: 'התמונה מכילה כיתוב רב מדי. לא ניתן לתפור טקסט של יותר מ-4 אותיות. נסו להעלות תמונה ללא כיתוב.', 'לא ניתן לתפור דמויות של אנשים. נסו להעלות תמונה של חיית מחמד או אובייקט.', 'התמונה מטושטשת ואיכות התמונה לא מספיקה. נסו להעלות תמונה חדה וברורה יותר.'. If true, provide a short encouraging message IN HEBREW (e.g., 'תמונה מעולה! הרקע יוסר והאובייקט המרכזי יהפוך לסקיצה.')."
+  "reason": "If false, explain IN HEBREW clearly and specifically WHY the image was rejected, matching the exact rule that failed. Examples: 'התמונה מכילה כיתוב רב מדי (מעל 4 אותיות) שאינו חלק מלוגו חברה. לא ניתן לתפור טקסט ארוך. נסו להעלות תמונה ללא כיתוב, או לוגו חברה מזוהה.', 'לא ניתן לתפור דמויות של אנשים או פורטרטים. נסו להעלות תמונה של חיית מחמד, אובייקט או לוגו.', 'התמונה מטושטשת מדי או ברזולוציה נמוכה מכדי לזהות את האובייקט המרכזי. נסו להעלות תמונה חדה וברורה יותר.', 'התמונה מכילה תוכן שאינו מתאים (עירום/אלימות/תוכן פוגעני) ולא ניתן לעבד אותה.', 'לא זוהה אובייקט מרכזי ברור בתמונה (רעש ויזואלי / נוף כללי ללא מוקד). נסו תמונה עם נושא מרכזי בולט.'. If true, provide a short encouraging message IN HEBREW (e.g., 'תמונה מעולה! הרקע יוסר והאובייקט המרכזי יהפוך לסקיצה.')."
 }`;
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
@@ -3843,7 +3844,16 @@ JSON Structure format:
     if (!response.ok) {
         const errText = await response.text();
         console.error('[validateImage] OpenAI error:', response.status, errText);
-        throw new Error('שגיאה בבדיקת התמונה. נסו שוב.');
+        if (response.status === 429) {
+            throw new Error('שירות בדיקת התמונות עמוס כרגע (יותר מדי בקשות). אנא המתינו כדקה ונסו שוב.');
+        }
+        if (response.status === 401 || response.status === 403) {
+            throw new Error('שגיאת הגדרות מערכת בבדיקת התמונה (בעיית הרשאה מול שירות ה-AI). אנא פנו לתמיכה.');
+        }
+        if (response.status >= 500) {
+            throw new Error('שירות בדיקת התמונות אינו זמין כרגע (שגיאת שרת חיצוני). נסו שוב בעוד מספר דקות.');
+        }
+        throw new Error(`שגיאה בבדיקת התמונה מול שירות ה-AI (קוד ${response.status}). נסו שוב, ואם הבעיה חוזרת פנו לתמיכה.`);
     }
 
     const data = await response.json();
@@ -3861,21 +3871,108 @@ JSON Structure format:
     return { isValid: true, reason: 'התמונה נראית מתאימה' };
 });
 
-async function executeSketchGeneration(jobId, { publicImageUrl, orderId }) {
+/**
+ * Translates raw Replicate/network errors into a clear, specific Hebrew
+ * message for the customer, while the raw technical details still go to
+ * console.error for debugging.
+ */
+function getSketchGenerationFriendlyError(err) {
+    const msg = String(err?.message || err || '');
+    if (/safety|flagged|nsfw|blocked/i.test(msg)) {
+        return 'התמונה נחסמה על ידי מנגנון הבטיחות של ה-AI בשל תוכן שעלול להיות לא מתאים. נסו תמונה אחרת.';
+    }
+    if (/timeout|timed out/i.test(msg)) {
+        return 'תהליך יצירת הסקיצה ארך זמן רב מדי (השרת עמוס). נסו שוב בעוד מספר דקות.';
+    }
+    const statusMatch = msg.match(/Replicate API error (\d+)/);
+    if (statusMatch) {
+        const status = Number(statusMatch[1]);
+        if (status === 429) return 'שירות יצירת הסקיצות עמוס כרגע (יותר מדי בקשות). אנא המתינו כדקה ונסו שוב.';
+        if (status === 401 || status === 403) return 'שגיאת הגדרות מערכת ביצירת הסקיצה (בעיית הרשאה מול שירות ה-AI). אנא פנו לתמיכה.';
+        if (status >= 500) return 'שירות יצירת הסקיצות אינו זמין כרגע (שגיאת שרת חיצוני). נסו שוב בעוד מספר דקות.';
+        return `שגיאה ביצירת הסקיצה מול שירות ה-AI (קוד ${status}). נסו שוב, ואם הבעיה חוזרת פנו לתמיכה.`;
+    }
+    if (/no output image/i.test(msg)) {
+        return 'שירות ה-AI לא הצליח להפיק סקיצה מהתמונה הזו. נסו תמונה אחרת עם אובייקט מרכזי ברור.';
+    }
+    return 'אירעה שגיאה טכנית ביצירת הסקיצה. נסו שוב, ואם הבעיה חוזרת פנו לתמיכה.';
+}
+
+async function persistSketchToWix(sketchUrl) {
+    if (!sketchUrl) return { sketchMediaUrl: null, sketchWixFileUrl: null };
+
+    if (sketchUrl.startsWith('wix:image://')) {
+        return {
+            sketchMediaUrl: wixMediaToPublicUrl(sketchUrl) || sketchUrl,
+            sketchWixFileUrl: sketchUrl,
+        };
+    }
+
+    if (sketchUrl.startsWith('data:')) {
+        const uploaded = await uploadBase64ToWixMedia(
+            sketchUrl,
+            '/ai-sketches/sketches',
+            `sketch_${Date.now()}.jpg`
+        );
+        return {
+            sketchMediaUrl: uploaded?.publicUrl || wixMediaToPublicUrl(uploaded?.wixUrl),
+            sketchWixFileUrl: uploaded?.wixUrl || null,
+        };
+    }
+
+    const existingWix = wixFileUrlFromPublicUrl(sketchUrl);
+    if (existingWix) {
+        return { sketchMediaUrl: sketchUrl, sketchWixFileUrl: existingWix };
+    }
+
+    try {
+        const sketchImport = await mediaManager.importFile(
+            '/ai-sketches/sketches',
+            sketchUrl, {
+                mediaOptions: { mimeType: 'image/png', mediaType: 'image' },
+                metadataOptions: { fileName: `sketch_${Date.now()}.png` },
+            }
+        );
+        const wix = sketchImport.fileUrl || null;
+        return {
+            sketchMediaUrl: wixMediaToPublicUrl(wix) || sketchUrl,
+            sketchWixFileUrl: wix,
+        };
+    } catch (importErr) {
+        console.warn('[persistSketchToWix] importFile failed, trying fetch:', importErr?.message);
+        const response = await fetch(sketchUrl);
+        if (!response.ok) {
+            throw new Error(`שגיאה בהורדת הסקיצה לשמירה (HTTP ${response.status}). נסו שוב — ייתכן שקישור הסקיצה פג תוקף.`);
+        }
+        const buffer = Buffer.from(await response.arrayBuffer());
+        const upload = await mediaManager.upload(
+            '/ai-sketches/sketches',
+            buffer,
+            `sketch_${Date.now()}.png`,
+            { mediaOptions: { mimeType: 'image/png' } }
+        );
+        const wix = upload.fileUrl || null;
+        return {
+            sketchMediaUrl: wixMediaToPublicUrl(wix) || sketchUrl,
+            sketchWixFileUrl: wix,
+        };
+    }
+}
+
+async function executeSketchGeneration(jobId, { imageBase64, orderId }) {
     try {
         console.log('[executeSketchGeneration] Starting Replicate for job:', jobId);
-        // Intentionally NOT persisted to Wix Media here — the sketch is only
-        // ever written to the server once the user clicks "אישור והמשך"
-        // (saveApprovedSketch). Until then this is just the temporary
-        // Replicate result URL (valid ~1 hour), shown in the preview only.
-        const sketchUrl = await generateSketchWithReplicate(publicImageUrl);
+        // Nothing is written to Wix Media here — neither the input image nor the
+        // sketch. saveApprovedSketch persists everything only after the user clicks
+        // "אישור ושמירה". Until then the sketch is a temporary Replicate URL.
+        const sketchUrl = await generateSketchWithReplicate(imageBase64);
         await incrementAIAttempts(orderId);
 
         const job = await wixData.get('WorkshopNotifications', jobId, SA);
         await wixData.update('WorkshopNotifications', {
             ...job,
             status: 'done',
-            text: JSON.stringify({ publicImageUrl, sketchUrl }),
+            text: JSON.stringify({ sketchUrl }),
         }, SA);
         console.log('[executeSketchGeneration] Done job:', jobId);
     } catch (err) {
@@ -3885,7 +3982,10 @@ async function executeSketchGeneration(jobId, { publicImageUrl, orderId }) {
             await wixData.update('WorkshopNotifications', {
                 ...job,
                 status: 'failed',
-                text: JSON.stringify({ error: err?.message, publicImageUrl }),
+                text: JSON.stringify({
+                    error: getSketchGenerationFriendlyError(err),
+                    technicalError: err?.message || String(err),
+                }),
             }, SA);
         } catch (updateErr) {
             console.error('[executeSketchGeneration] Could not mark job failed:', updateErr?.message);
@@ -3897,37 +3997,24 @@ async function executeSketchGeneration(jobId, { publicImageUrl, orderId }) {
  * Start async sketch generation — returns immediately with jobId (avoids Wix 14s timeout).
  */
 export const startGenerateSketch = webMethod(Permissions.Anyone, async (imageBase64, colorPalette, orderId, imageWidth, imageHeight) => {
-    const GENERIC_ERROR = 'שגיאה ביצירת הסקיצה. נסו שוב.';
-
     const rateCheck = await checkAIAttemptsAllowed(orderId);
     if (!rateCheck.isAllowed) {
         throw new Error(rateCheck.reason || AI_RATE_LIMIT_MESSAGE);
     }
 
     if (!imageBase64 || !imageBase64.startsWith('data:')) {
-        throw new Error('לא התקבלה תמונה תקינה. נסו להעלות שוב.');
+        throw new Error('לא התקבלה תמונה תקינה מהדפדפן. נסו להעלות את התמונה מחדש.');
     }
-
-    const uploadResult = await uploadBase64ToWixMedia(
-        imageBase64,
-        '/ai-sketches/originals',
-        `ref_${Date.now()}.png`
-    );
-    const publicImageUrl = uploadResult?.publicUrl;
-    if (!publicImageUrl) {
-        console.error('[startGenerateSketch] Failed public URL from:', uploadResult?.wixUrl);
-        throw new Error(GENERIC_ERROR);
-    }
-    console.log('[startGenerateSketch] Public CDN URL:', publicImageUrl);
 
     const job = await wixData.insert('WorkshopNotifications', {
         orderId: orderId || null,
         type: 'ai_sketch_job',
         status: 'processing',
-        text: JSON.stringify({ publicImageUrl, colorPalette, imageWidth, imageHeight }),
+        text: JSON.stringify({ colorPalette, imageWidth, imageHeight }),
     }, SA);
 
-    executeSketchGeneration(job._id, { publicImageUrl, orderId });
+    // Pass image in-memory only — no Wix Media upload until saveApprovedSketch.
+    executeSketchGeneration(job._id, { imageBase64, orderId });
 
     return { jobId: job._id, status: 'processing' };
 });
@@ -3949,15 +4036,20 @@ export const getSketchJobStatus = webMethod(Permissions.Anyone, async (jobId) =>
         return {
             status: 'done',
             sketchUrl: data.sketchUrl,
-            sketchWixFileUrl: data.sketchWixFileUrl || null,
-            originalUrl: data.publicImageUrl,
+            sketchWixFileUrl: null,
+            originalUrl: null,
             taskId: data.taskId,
         };
     }
 
     if (job.status === 'failed') {
         console.error('[getSketchJobStatus] Job failed:', jobId, job.text);
-        return { status: 'failed' };
+        let reason = 'אירעה שגיאה טכנית ביצירת הסקיצה. נסו שוב, ואם הבעיה חוזרת פנו לתמיכה.';
+        try {
+            const data = JSON.parse(job.text || '{}');
+            if (data?.error) reason = data.error;
+        } catch (_) { /* keep default reason */ }
+        return { status: 'failed', error: reason };
     }
 
     return { status: 'processing' };
@@ -3975,50 +4067,17 @@ export const saveApprovedSketch = webMethod(Permissions.Anyone, async (originalI
     // Sketch first — critical path; avoid timeout after a successful upload.
     if (sketchUrl) {
         try {
-            if (sketchUrl.startsWith('wix:image://')) {
-                sketchWixFileUrl = sketchUrl;
-                sketchMediaUrl = wixMediaToPublicUrl(sketchUrl) || sketchUrl;
-            } else if (sketchUrl.startsWith('data:')) {
-                const uploaded = await uploadBase64ToWixMedia(
-                    sketchUrl,
-                    '/ai-sketches/sketches',
-                    `sketch_${Date.now()}.png`
-                );
-                sketchMediaUrl = uploaded?.publicUrl || wixMediaToPublicUrl(uploaded?.wixUrl);
-                sketchWixFileUrl = uploaded?.wixUrl || null;
-            } else if (sketchUrl.startsWith('http')) {
-                const existingWix = wixFileUrlFromPublicUrl(sketchUrl);
-                if (existingWix) {
-                    sketchWixFileUrl = existingWix;
-                    sketchMediaUrl = sketchUrl;
-                } else {
-                    const sketchImport = await mediaManager.importFile(
-                        '/ai-sketches/sketches',
-                        sketchUrl, {
-                            mediaOptions: { mimeType: 'image/png', mediaType: 'image' },
-                            metadataOptions: { fileName: `sketch_${Date.now()}.png` },
-                        }
-                    );
-                    sketchWixFileUrl = sketchImport.fileUrl || null;
-                    sketchMediaUrl = wixMediaToPublicUrl(sketchImport.fileUrl) || sketchImport.fileUrl || sketchUrl;
-                }
-            }
+            const persisted = await persistSketchToWix(sketchUrl);
+            sketchMediaUrl = persisted.sketchMediaUrl || sketchUrl;
+            sketchWixFileUrl = persisted.sketchWixFileUrl || null;
         } catch (e) {
-            console.warn('[saveApprovedSketch] Sketch upload/import failed:', e?.message);
-            const derived = wixFileUrlFromPublicUrl(sketchMediaUrl);
-            if (derived) {
-                sketchWixFileUrl = derived;
-            } else if (!isSketchPersistedOnWix(sketchMediaUrl, sketchWixFileUrl)) {
-                throw new Error('שגיאה בשמירת הסקיצה לשרת. נסו שוב.');
-            }
+            console.warn('[saveApprovedSketch] Sketch persist failed:', e?.message);
+            throw new Error(e?.message || 'שגיאה בהעלאת הסקיצה לאחסון הקבוע של השרת. נסו ללחוץ שוב על "אישור ושמירה".');
         }
 
-        if (!sketchWixFileUrl) {
-            sketchWixFileUrl = wixFileUrlFromPublicUrl(sketchMediaUrl);
-        }
         if (!isSketchPersistedOnWix(sketchMediaUrl, sketchWixFileUrl) &&
             (sketchUrl.startsWith('data:') || isTemporarySketchUrl(sketchUrl))) {
-            throw new Error('שגיאה בשמירת הסקיצה לשרת. נסו שוב.');
+            throw new Error('שגיאה בשמירת הסקיצה לאחסון הקבוע של השרת. נסו ללחוץ שוב על "אישור ושמירה".');
         }
     }
 

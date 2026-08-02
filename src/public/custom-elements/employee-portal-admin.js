@@ -15,7 +15,7 @@ export const ADMIN_STYLE = `
 .epa-btn.danger { color: #b91c1c; border-color: #fecaca; }
 .epa-btn.active { background: #eff6ff; border-color: #2563eb; color: #1d4ed8; font-weight: 700; }
 .epa-grid7 { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; }
-.epa-day { border: 1px solid #e5e7eb; border-radius: 9px; min-height: 64px; padding: 5px; font-size: 11px; cursor: pointer; background: #fff; position: relative; }
+.epa-day { border: 1px solid #e5e7eb; border-radius: 9px; min-height: 76px; padding: 5px; font-size: 11px; cursor: pointer; background: #fff; position: relative; }
 .epa-day.other { visibility: hidden; }
 .epa-day.sel { box-shadow: inset 0 0 0 2px #2563eb; }
 .epa-day .num { font-weight: 700; font-size: 12px; }
@@ -25,7 +25,7 @@ export const ADMIN_STYLE = `
 .epa-day.no-ws { background: #f9fafb; color: #9ca3af; }
 .epa-day.blocked { background: #e5e7eb; }
 .epa-day .hol { display: block; font-size: 9px; color: #b45309; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.epa-day .cnt { display: block; font-size: 9.5px; color: #4b5563; }
+.epa-day .cnt { display: block; font-size: 9.5px; color: #4b5563; line-height: 1.3; margin-top: 1px; }
 .epa-flag { position: absolute; top: 3px; inset-inline-start: 4px; font-size: 10px; }
 .epa-detail { border: 1px solid #bfdbfe; background: #eff6ff; border-radius: 12px; padding: 12px; margin-top: 12px; font-size: 12.5px; }
 .epa-detail h3 { margin: 0 0 8px; font-size: 14px; }
@@ -329,14 +329,15 @@ function renderHeatmap(ce, d) {
         const subs = subsByDate[dateKey] || [];
         const cls = ['epa-day', blocked ? 'blocked' : coverageClass(info), ce._adminSelectedDay === dateKey ? 'sel' : ''].join(' ');
         const flags = `${promoted ? '⭐' : ''}${blocked ? '🚫' : ''}`;
+        // One line per workshop type so every workshop on the day is visible.
         const summary = info?.hasWorkshops
-            ? (info.types || []).map(t => `${esc(t.name)} ${Math.min(t.filled, t.required)}/${t.required}`).join(' · ')
-            : (subs.length ? `${subs.length} הגשות` : '');
+            ? (info.types || []).map(t => `<span class="cnt">${esc(t.name)} ${Math.min(t.filled, t.required)}/${t.required}</span>`).join('')
+            : (subs.length ? `<span class="cnt">${subs.length} הגשות</span>` : '');
         cells += `<div class="${cls}" data-action="admin-select-day" data-date="${dateKey}">
             ${flags ? `<span class="epa-flag">${flags}</span>` : ''}
             <span class="num">${day}</span>
             ${holidays[dateKey] ? `<span class="hol">${esc(holidays[dateKey])}</span>` : ''}
-            ${summary ? `<span class="cnt">${summary}</span>` : ''}
+            ${summary}
         </div>`;
     }
 
@@ -770,6 +771,7 @@ function renderSettingsPage(_ce, d) {
                 <div class="epa-field"><label>שעת התחלה ברירת מחדל</label><input id="epaS_start" type="time" value="${esc(s.defaultShiftStart || '10:00')}"></div>
                 <div class="epa-field"><label>שעת סיום ברירת מחדל</label><input id="epaS_end" type="time" value="${esc(s.defaultShiftEnd || '16:00')}"></div>
                 <label class="epa-toggle"><input id="epaS_bonus" type="checkbox" ${s.bonusUnlockEnabled !== false ? 'checked' : ''}> פתיחת משמרות נוספות לאחר השלמת מכסה</label>
+                <label class="epa-toggle" title="כשמופעל: הגשה ביום עם הזמנות פעילות משבצת אוטומטית עובדים עם ההכשרה המתאימה. כשכבוי: כל ההגשות ממתינות לאישור ידני של מנהל/ת."><input id="epaS_autoApprove" type="checkbox" ${s.autoApproveShifts !== false ? 'checked' : ''}> אישור אוטומטי של משמרות</label>
             </div>
             <div class="epa-inline"><button class="epa-btn primary" data-action="admin-save-settings">שמירת הגדרות</button></div>
         </section>
@@ -1126,6 +1128,7 @@ export function handleAdminClick(ce, action, target) {
                     defaultShiftStart: value('epaS_start'),
                     defaultShiftEnd: value('epaS_end'),
                     bonusUnlockEnabled: !!ce.querySelector('#epaS_bonus')?.checked,
+                    autoApproveShifts: !!ce.querySelector('#epaS_autoApprove')?.checked,
                 },
             });
             return true;

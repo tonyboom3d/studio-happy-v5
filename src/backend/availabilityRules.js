@@ -28,6 +28,7 @@ export const DEFAULT_SETTINGS = {
     promotedDates: [],
     holidayDates: [],
     bonusUnlockEnabled: true,
+    autoApproveShifts: true,
 };
 
 /** Normalizes a raw AvailabilitySettings CMS row (JSON strings → arrays). */
@@ -43,6 +44,7 @@ export function normalizeSettings(raw) {
     if (typeof raw.defaultShiftStart === 'string' && raw.defaultShiftStart.trim()) s.defaultShiftStart = raw.defaultShiftStart.trim();
     if (typeof raw.defaultShiftEnd === 'string' && raw.defaultShiftEnd.trim()) s.defaultShiftEnd = raw.defaultShiftEnd.trim();
     if (raw.bonusUnlockEnabled !== undefined && raw.bonusUnlockEnabled !== null) s.bonusUnlockEnabled = !!raw.bonusUnlockEnabled;
+    if (raw.autoApproveShifts !== undefined && raw.autoApproveShifts !== null) s.autoApproveShifts = !!raw.autoApproveShifts;
 
     for (const key of ['blockedDates', 'fullDates', 'promotedDates', 'holidayDates']) {
         const v = raw[key];

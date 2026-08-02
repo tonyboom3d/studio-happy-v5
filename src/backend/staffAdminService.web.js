@@ -8,9 +8,15 @@
  */
 import wixData from 'wix-data';
 import { Permissions, webMethod } from 'wix-web-module';
+import { staffMembers } from '@wix/bookings';
+import { auth } from '@wix/essentials';
 import {
     assertEmployeeAccess,
+    buildPermissionsFromPreset,
     getRolePermissionValue,
+    PERMISSION_GROUPS,
+    PERMISSION_KEYS,
+    PERMISSION_LABELS,
     refId,
     refIds,
     ROLE_TYPE_LABELS,
@@ -32,6 +38,15 @@ import { sendGreenApiWhatsApp } from 'backend/whatsappService.jsw';
 
 const SA = { suppressAuth: true };
 
+// Staff members' contact/PII fields are gated behind the Bookings staff-member
+// settings' publiclyAccessible flag; elevation lets the manageEmployees-gated
+// web methods below read them regardless of that setting.
+const elevatedQueryStaffMembers = auth.elevate(staffMembers.queryStaffMembers);
+
+// Placeholder — replace with the actual Wix dashboard URL for creating a new
+// Bookings staff member on this site (Bookings > Staff > New staff member).
+const WIX_NEW_STAFF_URL = 'https://manage.wix.com/dashboard/bookings/staff-members';
+
 function monthRange(monthKey) {
     if (!/^\d{4}-\d{2}$/.test(monthKey || '')) throw new Error('BAD_REQUEST: monthKey לא תקין.');
     const [y, m] = monthKey.split('-').map(Number);
@@ -39,7 +54,7 @@ function monthRange(monthKey) {
     return { fromKey: `${monthKey}-01`, toKey: `${monthKey}-${String(lastDay).padStart(2, '0')}` };
 }
 
-function mapEmployeeForAdmin(role, canSeeRates) {
+function mapEmployeeForAdmin(role, canSeeRates, canManageRoles) {
     return {
         id: role._id,
         displayName: role.displayName || '(ללא שם)',
@@ -54,10 +69,14 @@ function mapEmployeeForAdmin(role, canSeeRates) {
         minShiftsPerMonth: role.minShiftsPerMonth ?? null,
         minShiftHours: role.minShiftHours ?? null,
         skillIds: refIds(role.skills),
+        staffId: refId(role.connectedStaff),
         ...(canSeeRates ? {
             rateStudio: role.rateStudio ?? null,
             rateInstruction: role.rateInstruction ?? null,
             rateWool: role.rateWool ?? null,
+        } : {}),
+        ...(canManageRoles ? {
+            permissions: Object.fromEntries(PERMISSION_KEYS.map(k => [k, getRolePermissionValue(role, k)])),
         } : {}),
     };
 }
@@ -69,6 +88,7 @@ function mapEmployeeForAdmin(role, canSeeRates) {
 export const getStaffAdminData = webMethod(Permissions.SiteMember, async (monthKey) => {
     const { role } = await assertEmployeeAccess('viewTeamSchedule');
     const canSeeRates = getRolePermissionValue(role, 'manageRates');
+    const canManageRoles = getRolePermissionValue(role, 'manageRoles');
     const { fromKey, toKey } = monthRange(monthKey);
 
     const [board, settings, submissionsRaw] = await Promise.all([
@@ -82,7 +102,7 @@ export const getStaffAdminData = webMethod(Permissions.SiteMember, async (monthK
 
     const employees = Object.values(board.rolesById)
         .filter(r => getRolePermissionValue(r, 'submitAvailability'))
-        .map(r => mapEmployeeForAdmin(r, canSeeRates))
+        .map(r => mapEmployeeForAdmin(r, canSeeRates, canManageRoles))
         .sort((a, b) => (a.priorityRank ?? 999) - (b.priorityRank ?? 999));
 
     const submissions = (submissionsRaw.items || []).map(s => {
@@ -159,10 +179,17 @@ export const getStaffAdminData = webMethod(Permissions.SiteMember, async (monthK
             manageScheduling: getRolePermissionValue(role, 'manageScheduling'),
             manageRates: canSeeRates,
             manageTemplates: getRolePermissionValue(role, 'manageTemplates'),
+            manageRoles: canManageRoles,
+            editTimeEntries: getRolePermissionValue(role, 'editTimeEntries'),
         },
         employees,
         workshopTypes: Object.values(board.typesById),
         roleTypes: ROLE_TYPES.map(rt => ({ value: rt, label: ROLE_TYPE_LABELS[rt] })),
+        ...(canManageRoles ? {
+            permissionKeys: PERMISSION_KEYS,
+            permissionLabels: PERMISSION_LABELS,
+            permissionGroups: PERMISSION_GROUPS,
+        } : {}),
         days,
         submissions,
         tracker,
@@ -219,6 +246,146 @@ export const updateEmployeeProfile = webMethod(Permissions.SiteMember, async (ro
     await publishSchedulingUpdate('employee-updated', { roleId });
     console.log(`[staffAdminService] updateEmployeeProfile: ${roleId} by ${role._id}`);
     return { ok: true };
+});
+
+/** Updates granular permission flags on a Dashboard_Roles row. Gated by manageRoles. */
+export const updateEmployeePermissions = webMethod(Permissions.SiteMember, async (roleId, permissions) => {
+    const { role } = await assertEmployeeAccess('manageRoles');
+    if (!roleId || !permissions || typeof permissions !== 'object') throw new Error('BAD_REQUEST: חסרים פרטים.');
+
+    const target = await wixData.get('Dashboard_Roles', roleId, SA).catch(() => null);
+    if (!target) throw new Error('NOT_FOUND: העובד/ת לא נמצא/ה.');
+
+    const updated = { ...target };
+    for (const key of PERMISSION_KEYS) {
+        if (permissions[key] !== undefined) updated[key] = !!permissions[key];
+    }
+
+    await wixData.update('Dashboard_Roles', updated, SA);
+    await publishSchedulingUpdate('employee-permissions-updated', { roleId });
+    console.log(`[staffAdminService] updateEmployeePermissions: ${roleId} by ${role._id}`);
+    return { ok: true };
+});
+
+// ---------------------------------------------------------------------------
+// Wix Bookings Staff — load, link, onboard
+// ---------------------------------------------------------------------------
+
+/**
+ * Lists Wix Bookings staff members alongside their Dashboard_Roles connection
+ * status, so the admin UI can show unlinked staff and offer a one-click link
+ * flow. Gated by manageEmployees (this is onboarding, not role-permission edit).
+ */
+export const listBookingStaff = webMethod(Permissions.SiteMember, async () => {
+    await assertEmployeeAccess('manageEmployees');
+
+    const response = await elevatedQueryStaffMembers(
+        { cursorPaging: { limit: 100 } },
+        { fields: ['ASSOCIATED_IDENTITY_STATUS'] },
+    ).catch((err) => {
+        console.error('[staffAdminService] listBookingStaff query failed:', err?.message || err);
+        throw new Error('LOAD_FAILED: לא ניתן לטעון את רשימת הצוות מ-Wix Bookings.');
+    });
+
+    const staffList = response?.staffMembers || [];
+    const linkedResult = await wixData.query('Dashboard_Roles')
+        .isNotEmpty('connectedStaff')
+        .limit(1000).find(SA).catch(() => ({ items: [] }));
+
+    const roleByStaffId = {};
+    for (const r of (linkedResult.items || [])) {
+        const staffId = refId(r.connectedStaff);
+        if (staffId) roleByStaffId[staffId] = r;
+    }
+
+    return staffList.map((s) => {
+        const linkedRole = roleByStaffId[s._id];
+        return {
+            staffId: s._id,
+            name: s.name || '',
+            email: s.email || '',
+            phone: s.phone || '',
+            connectionStatus: s.associatedWixIdentity?.connection?.status || 'UNKNOWN',
+            linked: !!linkedRole,
+            roleId: linkedRole?._id || null,
+            active: linkedRole ? linkedRole.active !== false : null,
+        };
+    }).sort((a, b) => a.name.localeCompare(b.name, 'he'));
+});
+
+/**
+ * Links (or re-links) an existing Wix Bookings staff member to a
+ * Dashboard_Roles profile. Staff-supplied fields (name/phone) seed the
+ * defaults; the manager can override them via `patch`. roleType selection
+ * applies ROLE_TYPE_PRESETS as the permission baseline — explicit permission
+ * overrides in `patch.permissions` only take effect if the caller also holds
+ * manageRoles, so a manageEmployees-only admin can onboard staff but not
+ * grant sensitive access.
+ */
+export const linkEmployeeStaff = webMethod(Permissions.SiteMember, async (staffId, patch) => {
+    const { role: caller } = await assertEmployeeAccess('manageEmployees');
+    if (!staffId) throw new Error('BAD_REQUEST: חסר מזהה עובד/ת מ-Wix Bookings.');
+
+    const roleType = ROLE_TYPES.includes(patch?.roleType) ? patch.roleType : 'Employee';
+    const canManageRoles = getRolePermissionValue(caller, 'manageRoles');
+    const permissionOverrides = canManageRoles && patch?.permissions && typeof patch.permissions === 'object'
+        ? patch.permissions
+        : {};
+    const permissions = buildPermissionsFromPreset(roleType, permissionOverrides);
+
+    const existing = await wixData.query('Dashboard_Roles')
+        .eq('connectedStaff', staffId).limit(1).find(SA);
+    const existingRow = existing.items?.[0] || null;
+    if (existingRow && existingRow.active !== false) {
+        throw new Error('CONFLICT: העובד/ת הזה/ו כבר מחובר/ת לפרופיל פעיל.');
+    }
+
+    // Prevent linking the same Wix member to a second active profile.
+    if (patch?.userEmail) {
+        const dupEmail = await wixData.query('Dashboard_Roles')
+            .eq('userEmail', patch.userEmail).ne('active', false).limit(1).find(SA).catch(() => ({ items: [] }));
+        if (dupEmail.items?.some(r => r._id !== existingRow?._id)) {
+            throw new Error('CONFLICT: כתובת האימייל הזו מחוברת כבר לפרופיל פעיל אחר.');
+        }
+    }
+
+    let staffInfo = null;
+    try {
+        const response = await elevatedQueryStaffMembers({ filter: { _id: staffId }, cursorPaging: { limit: 1 } }, {});
+        staffInfo = response?.staffMembers?.[0] || null;
+    } catch (err) {
+        console.warn('[staffAdminService] linkEmployeeStaff: could not fetch staff defaults:', err?.message || err);
+    }
+
+    const displayName = String(patch?.displayName || '').trim() || staffInfo?.name || existingRow?.displayName || 'עובד/ת';
+    const phone = patch?.phone !== undefined ? patch.phone : (staffInfo?.phone || existingRow?.phone || '');
+    const userEmail = patch?.userEmail !== undefined ? patch.userEmail : (staffInfo?.email || existingRow?.userEmail || null);
+
+    const baseRow = existingRow || { connectedStaff: staffId };
+    const savedRow = {
+        ...baseRow,
+        connectedStaff: staffId,
+        displayName,
+        phone,
+        userEmail,
+        roleType,
+        active: true,
+        isTrainee: roleType === 'Trainee',
+        color: patch?.color || baseRow.color || null,
+        seniority: patch?.seniority || baseRow.seniority || '',
+        priorityRank: patch?.priorityRank ?? baseRow.priorityRank ?? null,
+        minShiftsPerMonth: patch?.minShiftsPerMonth ?? baseRow.minShiftsPerMonth ?? null,
+        minShiftHours: patch?.minShiftHours ?? baseRow.minShiftHours ?? null,
+        ...permissions,
+    };
+
+    const saved = existingRow
+        ? await wixData.update('Dashboard_Roles', savedRow, SA)
+        : await wixData.insert('Dashboard_Roles', savedRow, SA);
+
+    await publishSchedulingUpdate('employee-linked', { roleId: saved._id, staffId });
+    console.log(`[staffAdminService] linkEmployeeStaff: staff=${staffId} role=${saved._id} by ${caller._id}`);
+    return { ok: true, roleId: saved._id };
 });
 
 // ---------------------------------------------------------------------------

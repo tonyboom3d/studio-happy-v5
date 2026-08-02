@@ -86,6 +86,49 @@ export const ROLE_TYPE_PRESETS = {
     },
 };
 
+/** Hebrew labels for each permission key, for admin UI checkboxes. */
+export const PERMISSION_LABELS = {
+    viewDashboard: 'צפייה בדשבורד הזמנות',
+    editSketchStatus: 'עדכון סטטוס סקיצה',
+    rejectSketchStatus: 'דחיית סקיצה',
+    deleteSketchImage: 'מחיקת תמונת סקיצה',
+    editOrderNotes: 'עריכת הערות הזמנה',
+    sendWhatsApp: 'שליחת הודעות וואטסאפ',
+    manageTemplates: 'ניהול תבניות וואטסאפ',
+    manageRoles: 'ניהול הרשאות עובדים',
+    submitAvailability: 'הגשת זמינות (פורטל עובדים)',
+    viewTeamSchedule: 'צפייה בלוח הצוות',
+    manageScheduling: 'ניהול שיבוץ',
+    manageEmployees: 'ניהול עובדים (חיבור וערכת פרופיל)',
+    editTimeEntries: 'ניהול שעות צוות',
+    manageRates: 'צפייה ועדכון תעריפים',
+    manageRules: 'ניהול הגדרות, כללים ומועדים',
+};
+
+/** Grouping of permission keys for the admin permissions editor UI. */
+export const PERMISSION_GROUPS = [
+    { id: 'dashboard', label: 'דשבורד הזמנות', keys: ['viewDashboard', 'editSketchStatus', 'rejectSketchStatus', 'deleteSketchImage', 'editOrderNotes', 'sendWhatsApp'] },
+    { id: 'portal', label: 'פורטל עובדים ושיבוץ', keys: ['submitAvailability', 'viewTeamSchedule', 'manageScheduling', 'manageEmployees'] },
+    { id: 'hours', label: 'ניהול שעות ותחנות', keys: ['editTimeEntries'] },
+    { id: 'sensitive', label: 'הרשאות והגדרות רגישות', keys: ['manageRates', 'manageRules', 'manageTemplates', 'manageRoles'] },
+];
+
+/**
+ * Builds a full permissions map for a roleType, applying ROLE_TYPE_PRESETS as
+ * the base and layering explicit overrides on top. Used both when linking a
+ * new employee (roleType-only) and when an authorized editor supplies overrides.
+ */
+export function buildPermissionsFromPreset(roleType, overrides = {}) {
+    const preset = ROLE_TYPE_PRESETS[roleType] || ROLE_TYPE_PRESETS.Employee;
+    const out = {};
+    for (const key of PERMISSION_KEYS) {
+        if (overrides[key] !== undefined) out[key] = !!overrides[key];
+        else if (preset[key] !== undefined) out[key] = !!preset[key];
+        else out[key] = PERMISSION_DEFAULTS[key] !== false;
+    }
+    return out;
+}
+
 export function getRolePermissionValue(role, key) {
     if (!role) return PERMISSION_DEFAULTS[key] !== false;
 

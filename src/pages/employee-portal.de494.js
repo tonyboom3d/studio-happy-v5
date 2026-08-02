@@ -28,6 +28,7 @@ import {
 import {
     getStaffAdminData,
     updateEmployeeProfile,
+    updateEmployeePermissions,
     updateSchedulingRule,
     updateDayFlags,
     updateHolidays,
@@ -38,6 +39,8 @@ import {
     sendAvailabilityNudge,
     manualAssign,
     cancelAssignment,
+    listBookingStaff,
+    linkEmployeeStaff,
 } from 'backend/staffAdminService.web.js';
 import {
     runSchedulingNow,
@@ -47,6 +50,10 @@ import {
 import {
     getMyTimeEntries,
     approveMyMonth,
+    getTeamTime,
+    upsertTimeEntry,
+    deleteTimeEntry,
+    exportMonthCsv,
 } from 'backend/timeClockService.web.js';
 
 const PORTAL_ELEMENT_ID = '#employeePortal1';
@@ -213,6 +220,21 @@ async function loadAndPushTemplates(portalEl) {
     portalEl.setAttribute('templates-data', JSON.stringify(templates));
 }
 
+async function loadAndPushStaffList(portalEl) {
+    const staff = await listBookingStaff();
+    portalEl.setAttribute('staff-data', JSON.stringify({ staff, __fetchedAt: Date.now() }));
+}
+
+async function loadAndPushTeamTime(portalEl, monthKey) {
+    try {
+        const data = await getTeamTime(monthKey);
+        portalEl.setAttribute('team-time-data', JSON.stringify({ ...data, __fetchedAt: Date.now() }));
+    } catch (err) {
+        console.error('[employee-portal] Failed to load team time:', err?.message || err);
+        pushActionResult(portalEl, { type: 'adminTeamTimeLoad', error: true, message: friendlyError(err) });
+    }
+}
+
 function pushActionResult(portalEl, result) {
     portalEl.setAttribute('action-result', JSON.stringify({
         ...result,
@@ -286,6 +308,61 @@ async function handlePortalAction(portalEl, detail) {
             pushActionResult(portalEl, { type, ...result });
             refreshPortal = false;
             refreshAdmin = true;
+            break;
+        }
+
+        case 'adminUpdateEmployeePermissions': {
+            const result = await updateEmployeePermissions(payload?.roleId, payload?.permissions);
+            pushActionResult(portalEl, { type, ...result });
+            refreshPortal = false;
+            refreshAdmin = true;
+            break;
+        }
+
+        case 'adminStaffLoad':
+            refreshPortal = false;
+            refreshAdmin = false;
+            await loadAndPushStaffList(portalEl);
+            return;
+
+        case 'adminLinkStaff': {
+            const result = await linkEmployeeStaff(payload?.staffId, payload?.patch);
+            pushActionResult(portalEl, { type, ...result });
+            refreshPortal = false;
+            refreshAdmin = true;
+            await loadAndPushStaffList(portalEl);
+            break;
+        }
+
+        case 'adminTeamTimeLoad':
+            refreshPortal = false;
+            refreshAdmin = false;
+            await loadAndPushTeamTime(portalEl, payload?.monthKey);
+            return;
+
+        case 'adminTeamTimeUpsert': {
+            const result = await upsertTimeEntry(payload?.entry);
+            pushActionResult(portalEl, { type, ...result });
+            refreshPortal = false;
+            refreshAdmin = false;
+            await loadAndPushTeamTime(portalEl, payload?.monthKey);
+            break;
+        }
+
+        case 'adminTeamTimeDelete': {
+            const result = await deleteTimeEntry(payload?.entryId);
+            pushActionResult(portalEl, { type, ...result });
+            refreshPortal = false;
+            refreshAdmin = false;
+            await loadAndPushTeamTime(portalEl, payload?.monthKey);
+            break;
+        }
+
+        case 'adminTeamTimeExport': {
+            const result = await exportMonthCsv(payload?.monthKey);
+            pushActionResult(portalEl, { type, ...result });
+            refreshPortal = false;
+            refreshAdmin = false;
             break;
         }
 

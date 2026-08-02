@@ -3659,7 +3659,7 @@ export const verifyAdminOtp = webMethod(Permissions.Anyone, async (orderId, phon
 // ========================================================================
 
 const OPENAI_SECRET_NAME = 'OPENAI_API_KEY';
-const AI_RATE_LIMIT = 7;
+const AI_RATE_LIMIT = 10;
 const AI_RATE_WINDOW_MS = 30 * 60 * 1000; // 30 minutes
 const AI_RATE_LIMIT_MESSAGE = 'הגעתם למגבלת הניסיונות. אנא המתינו כ-30 דקות לפני שתוכלו לנסות שוב.';
 
@@ -3675,7 +3675,15 @@ function getAIAttemptState(order) {
     return { attempts, windowStart: inWindow ? windowStart : now };
 }
 
-function buildAIRateLimitResult(windowStart) {
+function buildAIAttemptsMeta(attempts) {
+    return {
+        attempts,
+        limit: AI_RATE_LIMIT,
+        remaining: Math.max(0, AI_RATE_LIMIT - attempts),
+    };
+}
+
+function buildAIRateLimitResult(windowStart, attempts = AI_RATE_LIMIT) {
     const retryAfterMs = Math.max(0, AI_RATE_WINDOW_MS - (Date.now() - windowStart));
     const retryAfterMinutes = Math.max(1, Math.ceil(retryAfterMs / 60000));
     return {
@@ -3683,16 +3691,23 @@ function buildAIRateLimitResult(windowStart) {
         retryAfterMs,
         retryAfterMinutes,
         reason: AI_RATE_LIMIT_MESSAGE,
+        ...buildAIAttemptsMeta(attempts),
     };
 }
 
 async function checkAIAttemptsAllowed(orderId) {
-    if (!orderId) return { isAllowed: true };
+    if (!orderId) {
+        return { isAllowed: true, ...buildAIAttemptsMeta(0) };
+    }
     const order = await getWorkshopOrderSafe(orderId);
-    if (!order) return { isAllowed: true };
+    if (!order) {
+        return { isAllowed: true, ...buildAIAttemptsMeta(0) };
+    }
     const { attempts, windowStart } = getAIAttemptState(order);
-    if (attempts < AI_RATE_LIMIT) return { isAllowed: true };
-    return buildAIRateLimitResult(windowStart);
+    if (attempts < AI_RATE_LIMIT) {
+        return { isAllowed: true, ...buildAIAttemptsMeta(attempts) };
+    }
+    return buildAIRateLimitResult(windowStart, attempts);
 }
 
 async function uploadBase64ToWixMedia(base64, folder, filename) {
@@ -3778,6 +3793,9 @@ export const validateImage = webMethod(Permissions.Anyone, async (imageBase64, o
             isAllowed: false,
             retryAfterMs: rateCheck.retryAfterMs,
             retryAfterMinutes: rateCheck.retryAfterMinutes,
+            attempts: rateCheck.attempts,
+            limit: rateCheck.limit,
+            remaining: rateCheck.remaining,
         };
     }
 
@@ -3834,15 +3852,12 @@ JSON Structure format:
     try {
         const jsonMatch = content.match(/\{[\s\S]*\}/);
         if (jsonMatch) {
-            const parsed = JSON.parse(jsonMatch[0]);
-            if (parsed.isValid) await incrementAIAttempts(orderId);
-            return parsed;
+            return JSON.parse(jsonMatch[0]);
         }
     } catch (e) {
         console.error('[validateImage] Failed to parse response:', content);
     }
 
-    await incrementAIAttempts(orderId);
     return { isValid: true, reason: 'התמונה נראית מתאימה' };
 });
 

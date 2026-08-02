@@ -163,7 +163,7 @@ function escapeHtml(str) {
 }
 
 class EmployeePortal extends HTMLElement {
-    static get observedAttributes() { return ['portal-data', 'action-result', 'admin-data', 'hours-data', 'templates-data']; }
+    static get observedAttributes() { return ['portal-data', 'action-result', 'admin-data', 'hours-data', 'templates-data', 'staff-data', 'team-time-data']; }
 
     constructor() {
         super();
@@ -183,6 +183,11 @@ class EmployeePortal extends HTMLElement {
         this._adminSidebarCollapsed = false;
         this._adminModal = null;
         this._templatesData = null;
+        this._staffData = null;                 // Wix Bookings staff list (employees page)
+        this._staffSearch = '';
+        this._teamTimeData = null;              // Team time admin page
+        this._teamTimeMonth = todayKey().slice(0, 7);
+        this._teamTimeEmployee = null;
         this._busy = null;                      // busy-overlay message while a mutation is in flight
         // Hours tab state (Module E)
         this._hoursData = null;
@@ -278,6 +283,28 @@ class EmployeePortal extends HTMLElement {
             this._busy = null;
             this.render();
         }
+        if (name === 'staff-data') {
+            try {
+                const parsed = JSON.parse(newVal);
+                this._staffData = parsed.staff || [];
+            } catch (err) {
+                console.error('[employee-portal] bad staff-data JSON:', err);
+                return;
+            }
+            this._busy = null;
+            this.render();
+        }
+        if (name === 'team-time-data') {
+            try {
+                this._teamTimeData = JSON.parse(newVal);
+            } catch (err) {
+                console.error('[employee-portal] bad team-time-data JSON:', err);
+                return;
+            }
+            this._busy = null;
+            if (this._teamTimeData?.monthKey) this._teamTimeMonth = this._teamTimeData.monthKey;
+            this.render();
+        }
         if (name === 'action-result') {
             try {
                 const result = JSON.parse(newVal);
@@ -316,9 +343,22 @@ class EmployeePortal extends HTMLElement {
         console.log('[employee-portal] action-result ←', result.type, result.error ? result.message : result);
         if (result.error) {
             if (result.type === 'adminTemplatesLoad') this._templatesData = [];
+            if (result.type === 'adminStaffLoad') this._staffData = [];
+            if (result.type === 'adminTeamTimeLoad') this._teamTimeData = { employees: [], monthKey: this._teamTimeMonth };
             this._toast(result.message || 'אירעה שגיאה. נסו שוב.', 'error');
             this.render();
             return;
+        }
+        if (result.type === 'adminTeamTimeExport' && result.csv) {
+            try {
+                const blob = new Blob([result.csv], { type: 'text/csv;charset=utf-8' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = result.filename || `hours-${this._teamTimeMonth}.csv`;
+                a.click();
+                URL.revokeObjectURL(url);
+            } catch (_) { /* ignore */ }
         }
         if (result.type === 'submitAvailability') {
             if (result.ok) {
@@ -827,6 +867,11 @@ class EmployeePortal extends HTMLElement {
 
     _onChange(e) {
         const input = e.target;
+        if (input.id === 'epaStaffSearch') {
+            this._staffSearch = input.value;
+            this.render();
+            return;
+        }
         if (input.tagName !== 'INPUT' || input.type !== 'time') return;
         const dateKey = input.dataset.date;
         const entry = this._selected.get(dateKey);

@@ -49,7 +49,7 @@ export const ADMIN_STYLE = `
 .epa-skills { grid-column: 1 / -1; display: flex; gap: 10px; flex-wrap: wrap; }
 .epa-skills label { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: #1f2937; margin: 0; }
 .epa-inline { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 8px; }
-.epa-inline select { border: 1px solid #d1d5db; border-radius: 7px; padding: 5px 7px; font-size: 12px; font-family: inherit; }
+.epa-inline select, .epa-inline input { border: 1px solid #d1d5db; border-radius: 7px; padding: 5px 7px; font-size: 12px; font-family: inherit; }
 .epa-section { margin-top: 16px; }
 .epa-rule-inputs input { width: 60px; border: 1px solid #d1d5db; border-radius: 7px; padding: 4px 6px; font-size: 12px; font-family: inherit; }
 .epa-list-day { border: 1px solid #e5e7eb; border-radius: 10px; padding: 9px 11px; margin-bottom: 8px; font-size: 12.5px; background: #fff; }
@@ -85,6 +85,7 @@ export const ADMIN_STYLE = `
 .epa-table-wrap .epa-table th { background: #f8fafc; }
 .epa-row-click { cursor: pointer; transition: background .14s; }
 .epa-row-click:hover { background: #eff6ff; }
+.epa-row-click.active { background: #eff6ff; box-shadow: inset 2px 0 0 #2563eb; }
 .epa-dot-lg { width: 12px; height: 12px; display: inline-block; border-radius: 50%; margin-inline-end: 7px; box-shadow: 0 0 0 3px rgba(148,163,184,.14); vertical-align: middle; }
 .epa-status-line { display: flex; align-items: center; gap: 7px; }
 .epa-stat-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(150px,1fr)); gap: 9px; margin-bottom: 12px; }
@@ -130,6 +131,10 @@ export const ADMIN_STYLE = `
 
 const HEBREW_DOW = ['א׳', 'ב׳', 'ג׳', 'ד׳', 'ה׳', 'ו׳', 'ש׳'];
 
+// Placeholder — replace with the actual Wix dashboard URL for creating a new
+// Bookings staff member on this site (Bookings > Staff > New staff member).
+const WIX_NEW_STAFF_URL = 'https://manage.wix.com/dashboard/bookings/staff-members';
+
 function esc(str) {
     return String(str ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
@@ -168,6 +173,7 @@ export function renderAdminTab(ce) {
         return `<div class="ep-card"><div class="ep-loading"><div class="ep-spinner"></div>טוען נתוני ניהול…</div></div>`;
     }
     const allowedPages = ['board', 'tracker', 'employees'];
+    if (d.permissions.editTimeEntries) allowedPages.push('teamTime');
     if (d.permissions.manageRules) allowedPages.push('settings');
     if (d.permissions.manageTemplates) allowedPages.push('templates');
     if (!allowedPages.includes(ce._adminPage)) ce._adminPage = 'board';
@@ -186,6 +192,7 @@ function icon(name) {
         board: '<rect x="3" y="4" width="18" height="17" rx="2"/><path d="M8 2v4M16 2v4M3 9h18"/>',
         tracker: '<path d="M4 19V5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v14"/><path d="M8 8h8M8 12h8M8 16h5"/>',
         employees: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>',
+        teamTime: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/>',
         settings: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.83 2.83-.06-.06a1.7 1.7 0 0 0-1.88-.34 1.7 1.7 0 0 0-1.03 1.56V21h-4v-.08A1.7 1.7 0 0 0 9 19.37a1.7 1.7 0 0 0-1.88.34l-.06.06-2.83-2.83.06-.06A1.7 1.7 0 0 0 4.63 15 1.7 1.7 0 0 0 3.08 14H3v-4h.08A1.7 1.7 0 0 0 4.63 9a1.7 1.7 0 0 0-.34-1.88l-.06-.06 2.83-2.83.06.06A1.7 1.7 0 0 0 9 4.63h.01A1.7 1.7 0 0 0 10 3.08V3h4v.08A1.7 1.7 0 0 0 15 4.63a1.7 1.7 0 0 0 1.88-.34l.06-.06 2.83 2.83-.06.06A1.7 1.7 0 0 0 19.37 9v.01A1.7 1.7 0 0 0 20.92 10H21v4h-.08A1.7 1.7 0 0 0 19.4 15z"/>',
         templates: '<path d="M4 4h16v16H4z"/><path d="M8 8h8M8 12h8M8 16h5"/>',
     };
@@ -199,6 +206,7 @@ function renderSidebar(ce, d) {
         { page: 'board', label: 'לוח שיבוץ', show: d.permissions.viewTeamSchedule !== false },
         { page: 'tracker', label: 'מעקב הגשות', show: d.permissions.viewTeamSchedule !== false },
         { page: 'employees', label: 'עובדים', show: d.permissions.viewTeamSchedule !== false },
+        { page: 'teamTime', label: 'שעות צוות', show: d.permissions.editTimeEntries },
         { page: 'settings', label: 'הגדרות', show: d.permissions.manageRules },
         { page: 'templates', label: 'תבניות', show: d.permissions.manageTemplates },
     ].filter(x => x.show);
@@ -220,6 +228,7 @@ function renderAdminPage(ce, d) {
     switch (ce._adminPage) {
         case 'tracker': return renderTrackerPage(ce, d);
         case 'employees': return renderEmployeesPage(ce, d);
+        case 'teamTime': return renderTeamTimePage(ce, d);
         case 'settings': return renderSettingsPage(ce, d);
         case 'templates': return renderTemplatesPage(ce, d);
         default: return renderBoardPage(ce, d);
@@ -446,7 +455,47 @@ function renderTrackerPage(ce, d) {
         </section>`;
 }
 
-function renderEmployeesPage(_ce, d) {
+function renderStaffPanel(ce, d) {
+    if (!d.permissions.manageEmployees) return '';
+    const staffData = ce._staffData;
+    if (!staffData) {
+        return `<section class="epa-panel">
+            <div class="epa-panel-title"><h3>צוות ב-Wix Bookings</h3></div>
+            <div class="ep-loading"><div class="ep-spinner"></div>טוען רשימת צוות…</div>
+        </section>`;
+    }
+    const search = (ce._staffSearch || '').trim().toLowerCase();
+    const filtered = search
+        ? staffData.filter(s => (s.name || '').toLowerCase().includes(search) || (s.email || '').toLowerCase().includes(search) || (s.phone || '').includes(search))
+        : staffData;
+    const rows = filtered.map(s => `
+        <tr>
+            <td>${esc(s.name || '—')}</td>
+            <td>${esc(s.email || '—')}</td>
+            <td>${esc(s.phone || '—')}</td>
+            <td>${s.linked
+        ? `<span class="epa-badge ${s.active === false ? 'miss' : 'ok'}">${s.active === false ? 'מחובר/ת (לא פעיל/ה)' : 'מחובר/ת לפורטל'}</span>`
+        : '<span class="epa-badge kind">לא מחובר/ת</span>'}</td>
+            <td>${!s.linked || s.active === false
+        ? `<button class="epa-btn primary" data-action="admin-connect-staff" data-staff="${esc(s.staffId)}">${s.linked ? 'חיבור מחדש' : 'חיבור לפורטל'}</button>`
+        : ''}</td>
+        </tr>`).join('');
+    return `<section class="epa-panel">
+        <div class="epa-panel-title">
+            <h3>צוות ב-Wix Bookings (${filtered.length}/${staffData.length})</h3>
+            <div class="epa-inline" style="margin:0">
+                <input id="epaStaffSearch" placeholder="חיפוש לפי שם, אימייל או טלפון" value="${esc(ce._staffSearch || '')}">
+                <button class="epa-btn" data-action="admin-staff-refresh">רענון</button>
+                <button class="epa-btn primary" data-action="admin-new-staff">צור עובד חדש +</button>
+            </div>
+        </div>
+        <div class="epa-table-wrap"><table class="epa-table"><thead><tr><th>שם</th><th>אימייל</th><th>טלפון</th><th>סטטוס</th><th></th></tr></thead>
+            <tbody>${rows || '<tr><td colspan="5" class="ep-empty">אין תוצאות</td></tr>'}</tbody>
+        </table></div>
+    </section>`;
+}
+
+function renderEmployeesPage(ce, d) {
     const rows = (d.employees || []).map(e => `
         <tr class="${d.permissions.manageEmployees ? 'epa-row-click' : ''}" style="${e.active ? '' : 'opacity:.55'}" ${d.permissions.manageEmployees ? `data-action="admin-edit-employee" data-emp="${e.id}"` : ''}>
             <td><span class="epa-dot-lg" style="background:${esc(e.color || '#2563eb')}"></span>${esc(e.displayName)}${e.isTrainee ? ' <span class="ep-tag">חניכה</span>' : ''}</td>
@@ -457,10 +506,115 @@ function renderEmployeesPage(_ce, d) {
             <td><span class="epa-badge ${e.active ? 'ok' : 'miss'}">${e.active ? 'פעיל/ה' : 'לא פעיל/ה'}</span></td>
         </tr>`).join('');
     return `<div class="epa-page-head"><div><h2>עובדים</h2><p>פרופילים, הרשאות עבודה והכשרות</p></div></div>
+        ${renderStaffPanel(ce, d)}
         <section class="epa-panel">
             <div class="epa-panel-title"><h3>כל העובדים (${(d.employees || []).length})</h3></div>
             <div class="epa-table-wrap"><table class="epa-table"><thead><tr><th>שם</th><th>תפקיד</th><th>דירוג</th><th>מכסה</th><th>הכשרות</th><th>מצב</th></tr></thead><tbody>${rows}</tbody></table></div>
         </section>`;
+}
+
+function fmtDateTimeHe(iso) {
+    if (!iso) return '';
+    return new Intl.DateTimeFormat('he-IL', { timeZone: 'Asia/Jerusalem', hour: '2-digit', minute: '2-digit' }).format(new Date(iso));
+}
+
+function renderTeamTimePage(ce, d) {
+    const month = ce._teamTimeMonth;
+    const t = ce._teamTimeData;
+    const head = `<div class="epa-page-head"><div><h2>שעות צוות</h2><p>מעקב ועריכת שעות עבודה לפי עובד/ת</p></div></div>`;
+    const monthControls = `<div class="epa-toolbar" style="margin:0">
+        <div class="ep-cal-nav">
+            <button data-action="admin-teamtime-month-next" title="חודש הבא">&#8249;</button>
+            <button data-action="admin-teamtime-month-prev" title="חודש קודם">&#8250;</button>
+        </div>
+        <div class="epa-month">${monthTitle(month)}</div>
+        ${t ? `<button class="epa-btn primary" data-action="admin-teamtime-add">רישום חדש +</button>
+        <button class="epa-btn" data-action="admin-teamtime-export">ייצוא CSV</button>` : ''}
+    </div>`;
+
+    if (!t) {
+        return `${head}<section class="epa-panel">${monthControls}<div class="ep-loading"><div class="ep-spinner"></div>טוען נתוני שעות…</div></section>`;
+    }
+
+    const employees = (t.employees || []).slice().sort((a, b) => a.name.localeCompare(b.name, 'he'));
+    const selectedId = ce._teamTimeEmployee && employees.some(e => e.employeeId === ce._teamTimeEmployee)
+        ? ce._teamTimeEmployee
+        : employees[0]?.employeeId || null;
+    const selectedEmp = employees.find(e => e.employeeId === selectedId) || null;
+
+    const summaryRows = employees.map(emp => `
+        <tr class="epa-row-click ${emp.employeeId === selectedId ? 'active' : ''}" data-action="admin-teamtime-select" data-emp="${esc(emp.employeeId)}">
+            <td>${esc(emp.name)}</td>
+            <td>${emp.totals.total} ש׳</td>
+            <td><span class="epa-badge ${emp.approved ? 'ok' : 'miss'}">${emp.approved ? 'אושר' : 'לא אושר'}</span></td>
+        </tr>`).join('');
+
+    const entryRows = (selectedEmp?.entries || []).slice().sort((a, b) => a.dateKey.localeCompare(b.dateKey)).map(e => `
+        <tr>
+            <td>${fmtDate(e.dateKey)}</td>
+            <td>${esc(e.taskLabel)}</td>
+            <td>${fmtDateTimeHe(e.startTime)}</td>
+            <td>${e.endTime ? fmtDateTimeHe(e.endTime) : 'פתוח'}</td>
+            <td>${e.hours ?? '—'}</td>
+            <td>
+                <button class="epa-btn" data-action="admin-teamtime-edit" data-entry="${esc(e.id)}">עריכה</button>
+                <button class="epa-btn danger" data-action="admin-teamtime-delete" data-entry="${esc(e.id)}">מחיקה</button>
+            </td>
+        </tr>`).join('');
+
+    return `${head}
+        <section class="epa-panel">${monthControls}</section>
+        <div style="display:grid; grid-template-columns: minmax(0,1fr) minmax(0,1.5fr); gap:12px; align-items:start">
+            <section class="epa-panel">
+                <div class="epa-panel-title"><h3>עובדים (${employees.length})</h3></div>
+                <div class="epa-table-wrap"><table class="epa-table"><thead><tr><th>שם</th><th>סה"כ שעות</th><th>אישור</th></tr></thead>
+                    <tbody>${summaryRows || '<tr><td colspan="3" class="ep-empty">אין נתונים לחודש זה</td></tr>'}</tbody>
+                </table></div>
+            </section>
+            <section class="epa-panel">
+                <div class="epa-panel-title"><h3>${selectedEmp ? esc(selectedEmp.name) : 'בחרו עובד/ת'} — רישומי שעות</h3></div>
+                <div class="epa-table-wrap"><table class="epa-table"><thead><tr><th>תאריך</th><th>משימה</th><th>התחלה</th><th>סיום</th><th>שעות</th><th></th></tr></thead>
+                    <tbody>${entryRows || '<tr><td colspan="6" class="ep-empty">אין רישומים</td></tr>'}</tbody>
+                </table></div>
+            </section>
+        </div>`;
+}
+
+function toLocalDateTimeInput(iso) {
+    if (!iso) return '';
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return '';
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function renderTimeEntryForm(ce, d, entry) {
+    const t = ce._teamTimeData;
+    const employees = (t?.employees || []).map(e => ({ id: e.employeeId, name: e.name }));
+    const empOptions = (employees.length ? employees : (d.employees || []).map(e => ({ id: e.id, name: e.displayName })))
+        .map(e => `<option value="${esc(e.id)}" ${entry?.employeeId === e.id || (!entry && e.id === ce._teamTimeEmployee) ? 'selected' : ''}>${esc(e.name)}</option>`).join('');
+    const taskOptions = (t?.taskTypes || []).map(tt => `<option value="${esc(tt.value)}" ${entry?.taskType === tt.value ? 'selected' : ''}>${esc(tt.label)}</option>`).join('');
+    return `<div class="epa-form">
+            <div><label>עובד/ת</label><select id="epaTE_employeeId" ${entry ? 'disabled' : ''}>${empOptions}</select></div>
+            <div><label>סוג משימה</label><select id="epaTE_taskType">${taskOptions}</select></div>
+            <div><label>התחלה</label><input id="epaTE_start" type="datetime-local" value="${toLocalDateTimeInput(entry?.startTime)}"></div>
+            <div><label>סיום (השאירו ריק למשמרת פתוחה)</label><input id="epaTE_end" type="datetime-local" value="${toLocalDateTimeInput(entry?.endTime)}"></div>
+        </div>
+        <div class="epa-field" style="margin-top:8px"><label>הערות</label><input id="epaTE_notes" value="${esc(entry?.notes || '')}"></div>
+        <div class="epa-inline">
+            <button class="epa-btn primary" data-action="admin-teamtime-save" data-entry="${esc(entry?.id || '')}">שמירה</button>
+            <button class="epa-btn" data-action="admin-close-modal">ביטול</button>
+        </div>`;
+}
+
+function renderPermissionGroups(d, permissions) {
+    return (d.permissionGroups || []).map(g => `
+        <div style="margin-bottom:8px">
+            <b style="font-size:11.5px;color:#475569">${esc(g.label)}</b>
+            <div class="epa-skills" style="margin-top:4px">
+                ${g.keys.map(k => `<label><input type="checkbox" class="epaPerm" data-perm="${k}" ${permissions?.[k] ? 'checked' : ''}> ${esc(d.permissionLabels?.[k] || k)}</label>`).join('')}
+            </div>
+        </div>`).join('');
 }
 
 function renderEmployeeForm(e, d) {
@@ -471,6 +625,11 @@ function renderEmployeeForm(e, d) {
         <div><label>תעריף סטודיו</label><input id="epaF_rateStudio" type="number" value="${e.rateStudio ?? ''}"></div>
         <div><label>תעריף הדרכה</label><input id="epaF_rateInstruction" type="number" value="${e.rateInstruction ?? ''}"></div>
         <div><label>תעריף צמר</label><input id="epaF_rateWool" type="number" value="${e.rateWool ?? ''}"></div>` : '';
+    const permissionsSection = d.permissions.manageRoles ? `
+        <div class="epa-section">
+            <div class="epa-panel-title"><h3>הרשאות מפורטות</h3></div>
+            ${renderPermissionGroups(d, e.permissions)}
+        </div>` : '';
     return `<div class="epa-form">
             <div><label>שם תצוגה</label><input id="epaF_displayName" value="${esc(e.displayName)}"></div>
             <div><label>תפקיד</label><select id="epaF_roleType">${(d.roleTypes || []).map(r => `<option value="${r.value}" ${e.roleType === r.value ? 'selected' : ''}>${esc(r.label)}</option>`).join('')}</select></div>
@@ -485,8 +644,30 @@ function renderEmployeeForm(e, d) {
             ${rates}
             <div class="epa-skills"><label style="width:100%;font-weight:700">הכשרות:</label>${skillBoxes}</div>
         </div>
+        ${permissionsSection}
         <div class="epa-inline">
             <button class="epa-btn primary" data-action="admin-save-employee" data-emp="${e.id}">שמירה</button>
+            <button class="epa-btn" data-action="admin-close-modal">ביטול</button>
+        </div>`;
+}
+
+function renderConnectStaffForm(ce, d, staffId) {
+    const staff = (ce._staffData || []).find(s => s.staffId === staffId);
+    if (!staff) return '<div class="ep-empty">לא נמצאו פרטי עובד/ת.</div>';
+    return `<div class="epa-detail-grid" style="margin-bottom:10px">
+            <div class="epa-detail-item"><span>שם ב-Wix Bookings</span><b>${esc(staff.name || '—')}</b></div>
+            <div class="epa-detail-item"><span>אימייל</span><b>${esc(staff.email || '—')}</b></div>
+            <div class="epa-detail-item"><span>טלפון</span><b>${esc(staff.phone || '—')}</b></div>
+        </div>
+        <div class="epa-form">
+            <div><label>שם תצוגה בפורטל</label><input id="epaCS_displayName" value="${esc(staff.name || '')}"></div>
+            <div><label>תפקיד</label><select id="epaCS_roleType">${(d.roleTypes || []).map(r => `<option value="${r.value}" ${r.value === 'Employee' ? 'selected' : ''}>${esc(r.label)}</option>`).join('')}</select></div>
+            <div><label>טלפון</label><input id="epaCS_phone" value="${esc(staff.phone || '')}"></div>
+            <div><label>צבע</label><input id="epaCS_color" type="color" value="#2563eb"></div>
+        </div>
+        <div class="ep-empty" style="text-align:center;margin-top:8px">הרשאות ברירת המחדל יוחלו אוטומטית לפי סוג התפקיד שנבחר. ניתן לערוך הרשאות מפורטות בעריכת הפרופיל לאחר החיבור.</div>
+        <div class="epa-inline">
+            <button class="epa-btn primary" data-action="admin-save-connect-staff" data-staff="${esc(staff.staffId)}">חיבור עובד/ת</button>
             <button class="epa-btn" data-action="admin-close-modal">ביטול</button>
         </div>`;
 }
@@ -589,6 +770,17 @@ function renderModal(ce, d) {
         const template = modal.id ? (ce._templatesData || []).find(t => t.id === modal.id) : null;
         title = template ? `עריכת תבנית — ${template.title}` : 'תבנית חדשה';
         body = renderTemplateForm(template);
+    } else if (modal.type === 'connectStaff') {
+        const staff = (ce._staffData || []).find(s => s.staffId === modal.id);
+        if (!staff) return '';
+        title = `חיבור עובד/ת — ${staff.name || staff.email || staff.staffId}`;
+        body = renderConnectStaffForm(ce, d, modal.id);
+    } else if (modal.type === 'timeEntry') {
+        const entry = modal.id
+            ? (ce._teamTimeData?.employees || []).flatMap(e => e.entries).find(x => x.id === modal.id)
+            : null;
+        title = entry ? 'עריכת רישום שעות' : 'רישום שעות חדש';
+        body = renderTimeEntryForm(ce, d, entry);
     }
     return `<div class="epa-modal-backdrop">
         <div class="epa-modal" role="dialog" aria-modal="true" aria-label="${esc(title)}">
@@ -614,6 +806,12 @@ export function handleAdminClick(ce, action, target) {
             ce._adminModal = null;
             if (ce._adminPage === 'templates' && !ce._templatesData) {
                 ce._dispatch('adminTemplatesLoad');
+            }
+            if (ce._adminPage === 'employees' && !ce._staffData && d?.permissions?.manageEmployees) {
+                ce._dispatch('adminStaffLoad');
+            }
+            if (ce._adminPage === 'teamTime' && !ce._teamTimeData && d?.permissions?.editTimeEntries) {
+                ce._dispatch('adminTeamTimeLoad', { monthKey: ce._teamTimeMonth });
             }
             ce.render();
             return true;
@@ -707,8 +905,90 @@ export function handleAdminClick(ce, action, target) {
             ce._startBusy('שומר…');
             ce._adminModal = null;
             ce._dispatch('adminUpdateEmployee', { roleId: target.dataset.emp, patch });
+            const permCheckboxes = [...ce.querySelectorAll('.epaPerm')];
+            if (permCheckboxes.length) {
+                const permissions = {};
+                for (const cb of permCheckboxes) permissions[cb.dataset.perm] = cb.checked;
+                ce._dispatch('adminUpdateEmployeePermissions', { roleId: target.dataset.emp, permissions });
+            }
             return true;
         }
+        case 'admin-staff-refresh':
+            ce._staffData = null;
+            ce.render();
+            ce._dispatch('adminStaffLoad');
+            return true;
+        case 'admin-new-staff':
+            window.open(WIX_NEW_STAFF_URL, '_blank', 'noopener');
+            return true;
+        case 'admin-connect-staff':
+            ce._adminModal = { type: 'connectStaff', id: target.dataset.staff };
+            ce.render();
+            return true;
+        case 'admin-save-connect-staff': {
+            const val = (id) => ce.querySelector(`#${id}`)?.value;
+            const patch = {
+                displayName: val('epaCS_displayName') || undefined,
+                roleType: val('epaCS_roleType') || undefined,
+                phone: val('epaCS_phone') ?? undefined,
+                color: val('epaCS_color') || undefined,
+            };
+            ce._adminModal = null;
+            ce._startBusy('מחבר עובד/ת…');
+            ce._dispatch('adminLinkStaff', { staffId: target.dataset.staff, patch });
+            return true;
+        }
+        case 'admin-teamtime-month-prev':
+            ce._teamTimeMonth = shiftMonth(ce._teamTimeMonth, -1);
+            ce._teamTimeData = null;
+            ce.render();
+            ce._dispatch('adminTeamTimeLoad', { monthKey: ce._teamTimeMonth });
+            return true;
+        case 'admin-teamtime-month-next':
+            ce._teamTimeMonth = shiftMonth(ce._teamTimeMonth, 1);
+            ce._teamTimeData = null;
+            ce.render();
+            ce._dispatch('adminTeamTimeLoad', { monthKey: ce._teamTimeMonth });
+            return true;
+        case 'admin-teamtime-select':
+            ce._teamTimeEmployee = target.dataset.emp;
+            ce.render();
+            return true;
+        case 'admin-teamtime-add':
+            ce._adminModal = { type: 'timeEntry', id: null };
+            ce.render();
+            return true;
+        case 'admin-teamtime-edit':
+            ce._adminModal = { type: 'timeEntry', id: target.dataset.entry };
+            ce.render();
+            return true;
+        case 'admin-teamtime-delete':
+            ce._startBusy('מוחק רישום…');
+            ce._dispatch('adminTeamTimeDelete', { entryId: target.dataset.entry, monthKey: ce._teamTimeMonth });
+            return true;
+        case 'admin-teamtime-save': {
+            const val = (id) => ce.querySelector(`#${id}`)?.value;
+            const entry = {
+                id: target.dataset.entry || undefined,
+                employeeId: val('epaTE_employeeId') || undefined,
+                taskType: val('epaTE_taskType'),
+                startTime: val('epaTE_start') ? new Date(val('epaTE_start')).toISOString() : null,
+                endTime: val('epaTE_end') ? new Date(val('epaTE_end')).toISOString() : null,
+                notes: val('epaTE_notes') || '',
+            };
+            if (!entry.startTime) {
+                ce._toast('יש להזין שעת התחלה.', 'error');
+                return true;
+            }
+            ce._adminModal = null;
+            ce._startBusy('שומר רישום…');
+            ce._dispatch('adminTeamTimeUpsert', { entry, monthKey: ce._teamTimeMonth });
+            return true;
+        }
+        case 'admin-teamtime-export':
+            ce._startBusy('מייצא קובץ…');
+            ce._dispatch('adminTeamTimeExport', { monthKey: ce._teamTimeMonth });
+            return true;
         case 'admin-save-settings': {
             const value = id => ce.querySelector(`#${id}`)?.value;
             ce._startBusy('שומר הגדרות…');

@@ -27,13 +27,13 @@
 // ============================================================
 var __wdTemplateHtml = `
     <!-- Header -->
-    <header class="bg-white border-b border-gray-200 px-6 py-3 flex justify-between items-center shrink-0 shadow-sm z-10 relative">
+    <header class="wd-header bg-white border-b border-gray-200 px-6 py-3 flex justify-between items-center shrink-0 shadow-sm z-10 relative">
         <div class="flex items-center gap-3">
-            <div class="bg-primary text-white p-2 rounded-lg">
+            <div class="wd-header-logo bg-primary text-white p-2 rounded-lg">
                 <i class="ph ph-palette text-xl"></i>
             </div>
-            <h1 class="text-xl font-bold text-gray-900">ניהול סדנאות</h1>
-            <nav class="flex items-center gap-1 mr-4 bg-gray-100 p-1 rounded-lg" id="wdMainTabsNav">
+            <h1 class="wd-header-title text-xl font-bold text-gray-900">ניהול סדנאות</h1>
+            <nav class="wd-header-tabs flex items-center gap-1 mr-4 bg-gray-100 p-1 rounded-lg" id="wdMainTabsNav">
                 <button id="wdTabOrdersBtn" onclick="switchDashboardTab('orders')" class="px-3 py-1.5 rounded-md text-sm font-semibold bg-white text-primary shadow-sm">הזמנות</button>
                 <button id="wdTabStaffBtn" onclick="switchDashboardTab('staff')" class="hidden px-3 py-1.5 rounded-md text-sm font-semibold text-gray-600 hover:bg-white/60 transition-colors">צוות ומשמרות</button>
             </nav>
@@ -42,18 +42,18 @@ var __wdTemplateHtml = `
         <div class="flex items-center gap-4">
             <button id="templatesManagerBtn" onclick="openTemplatesManager()" class="text-sm font-medium text-gray-600 hover:text-primary transition-colors flex items-center gap-1.5 bg-gray-50 px-3 py-1.5 rounded-md border border-gray-200 hover:bg-white">
                 <i class="ph ph-whatsapp-logo text-lg text-green-500"></i>
-                תבניות הודעה
+                <span class="wd-header-btn-text">תבניות הודעה</span>
             </button>
-            <div class="h-6 w-px bg-gray-200"></div>
+            <div class="wd-header-divider h-6 w-px bg-gray-200"></div>
             <div class="flex items-center gap-2 cursor-pointer hover:bg-gray-50 p-1.5 rounded-lg transition-colors">
                 <div id="headerUserInitials" class="w-8 h-8 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-500 text-white flex items-center justify-center font-bold text-sm shadow-sm">
                     ?
                 </div>
-                <div class="text-right">
+                <div class="wd-header-user-text text-right">
                     <p id="headerUserName" class="text-sm font-semibold leading-tight">משתמש/ת</p>
                     <p id="headerUserRole" class="text-xs text-gray-500 leading-tight"></p>
                 </div>
-                <i class="ph ph-caret-down text-gray-400 text-xs"></i>
+                <i class="wd-header-user-text ph ph-caret-down text-gray-400 text-xs"></i>
             </div>
         </div>
     </header>
@@ -93,9 +93,13 @@ var __wdTemplateHtml = `
                     <button id="refreshDataBtn" onclick="refreshDashboard()" class="wd-refresh-button" title="רענן נתונים">
                         <i id="refreshDataIcon" class="ph ph-arrows-clockwise"></i>
                     </button>
+                    <button id="wdFiltersToggleBtn" onclick="toggleFiltersPanel()" class="wd-filters-toggle-button" title="הצג/הסתר סינון">
+                        <i class="ph ph-caret-down" id="wdFiltersToggleIcon"></i>
+                    </button>
                 </div>
             </div>
 
+            <div class="wd-filters-body" id="wdFiltersBody">
             <div class="wd-filters-grid">
                 <label class="wd-filter-field wd-filter-search">
                     <span>חיפוש</span>
@@ -159,12 +163,13 @@ var __wdTemplateHtml = `
                     <strong id="dateRangeLabel">—</strong>
                 </div>
             </div>
+            </div>
         </section>
 
         <!-- Workshops Table -->
         <div class="relative flex-1 min-h-0">
             <div class="h-full overflow-auto bg-white border border-gray-200 rounded-xl shadow-sm">
-                <table class="w-full text-right divide-y divide-gray-200">
+                <table class="wd-ws-table w-full text-right divide-y divide-gray-200">
                     <thead class="bg-gray-50 sticky top-0 z-10 shadow-sm">
                         <tr>
                             <th scope="col" class="px-6 py-4 text-sm font-semibold text-gray-600">תאריך ושעות</th>
@@ -201,11 +206,11 @@ var __wdTemplateHtml = `
     </main>
 
     <!-- Staff & Shifts tab (Phase 2, Module B core) -->
-    <section id="wdStaffAdminSection" class="hidden flex-1 overflow-hidden flex flex-col p-6 bg-gray-100 relative gap-4">
-        <div class="flex items-center justify-between shrink-0">
+    <section id="wdStaffAdminSection" class="wd-staff-section hidden flex-1 overflow-hidden flex flex-col p-6 bg-gray-100 relative gap-4">
+        <div class="wd-staff-toolbar flex items-center justify-between shrink-0">
             <div class="flex items-center gap-3">
                 <h2 class="text-lg font-bold text-gray-900">צוות ומשמרות</h2>
-                <div class="flex items-center gap-1 bg-gray-200/70 p-1 rounded-lg">
+                <div class="wd-staff-view-tabs flex items-center gap-1 bg-gray-200/70 p-1 rounded-lg">
                     <button id="saViewListBtn" onclick="setStaffAdminView('list')" class="px-3 py-1 rounded-md text-xs font-semibold bg-white shadow-sm text-primary">רשימה</button>
                     <button id="saViewHeatmapBtn" onclick="setStaffAdminView('heatmap')" class="px-3 py-1 rounded-md text-xs font-semibold text-gray-600 hover:bg-white/60">מפת חום</button>
                     <button id="saViewEmployeesBtn" onclick="setStaffAdminView('employees')" class="px-3 py-1 rounded-md text-xs font-semibold text-gray-600 hover:bg-white/60">עובדים</button>
@@ -214,7 +219,7 @@ var __wdTemplateHtml = `
             <div class="flex items-center gap-2">
                 <input type="month" id="saMonthPicker" onchange="onStaffAdminMonthChange()" class="compact-input bg-white text-sm">
                 <button onclick="refreshStaffAdminTab()" class="text-sm font-medium text-gray-600 hover:text-primary flex items-center gap-1.5 bg-white px-3 py-1.5 rounded-md border border-gray-200">
-                    <i class="ph ph-arrows-clockwise"></i> רענן
+                    <i class="ph ph-arrows-clockwise"></i> <span class="wd-header-btn-text">רענן</span>
                 </button>
             </div>
         </div>
@@ -277,16 +282,16 @@ var __wdTemplateHtml = `
     <div id="sidePanelOverlay" class="fixed inset-0 bg-gray-900/20 backdrop-blur-sm z-40 hidden opacity-0 transition-opacity duration-300" onclick="closeSidePanel()"></div>
 
     <!-- Side Panel -->
-    <div id="sidePanel" class="fixed top-0 left-0 h-full w-[1000px] bg-white shadow-2xl z-50 transform -translate-x-full transition-transform duration-300 flex flex-col border-r border-gray-200">
+    <div id="sidePanel" class="wd-side-panel fixed top-0 left-0 h-full w-[1000px] max-w-full bg-white shadow-2xl z-50 transform -translate-x-full transition-transform duration-300 flex flex-col border-r border-gray-200">
         
         <!-- Side Panel Header -->
-        <div class="px-8 py-6 border-b border-gray-100 flex justify-between items-start shrink-0 bg-gray-50/50">
+        <div class="wd-sp-header px-8 py-6 border-b border-gray-100 flex justify-between items-start shrink-0 bg-gray-50/50">
             <div class="flex flex-col gap-2">
                 <div class="flex items-center gap-3">
                     <h2 class="text-2xl font-bold text-gray-800" id="spTitle">סדנת טאפטינג בוקר</h2>
                     <span id="spTag" class="px-2.5 py-1 rounded-md text-xs font-semibold">טאפטינג</span>
                 </div>
-                <div class="flex items-center gap-5 text-sm text-gray-600 font-medium">
+                <div class="wd-sp-meta flex items-center gap-5 text-sm text-gray-600 font-medium">
                     <span class="flex items-center gap-1.5"><i class="ph ph-calendar-blank text-gray-400"></i> <span id="spDate">15/08/2026</span></span>
                     <span class="flex items-center gap-1.5"><i class="ph ph-clock text-gray-400"></i> <span id="spTime">10:00</span></span>
                     <span class="flex items-center gap-1.5"><i class="ph ph-users text-gray-400"></i> <span id="spCapacity">0/15 משתתפים</span></span>
@@ -299,7 +304,7 @@ var __wdTemplateHtml = `
 
         <!-- Side Panel Body (Orders List - Accordion Style) -->
         <div class="flex-1 overflow-y-auto overflow-x-hidden p-0 bg-white">
-            <table class="w-full divide-y divide-gray-200 table-fixed">
+            <table class="wd-orders-table w-full divide-y divide-gray-200 table-fixed">
                 <thead class="bg-white sticky top-0 shadow-sm z-10">
                     <tr>
                         <th scope="col" class="px-8 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider w-[40%]">לקוח ופרטים</th>
@@ -920,6 +925,262 @@ var __wdCustomCss = `
         color: #4B5563;
         margin: 0;
     }
+
+    /* ================================================================
+       תצוגת מובייל (מסכי טלפון קטנים) - max-width: 640px
+       הכל בבלוק הזה מכוון אך ורק למובייל: פונטים קומפקטיים, כרטיסים
+       במקום טבלאות, ריפוד/מרווחים מוקטנים ופאנלים במסך מלא.
+       ================================================================ */
+    @media (max-width: 640px) {
+        /* --- טיפוגרפיה קומפקטית --- */
+        ${__wdTagName} .text-\[10px\],
+        ${__wdTagName} .text-\[11px\],
+        ${__wdTagName} .text-xs {
+            font-size: 11px !important;
+            line-height: 1.35 !important;
+        }
+        ${__wdTagName} .text-sm {
+            font-size: 12.5px !important;
+            line-height: 1.4 !important;
+        }
+        ${__wdTagName} .text-base {
+            font-size: 13.5px !important;
+            line-height: 1.45 !important;
+        }
+        ${__wdTagName} .text-lg {
+            font-size: 14.5px !important;
+            line-height: 1.4 !important;
+        }
+        ${__wdTagName} .text-xl {
+            font-size: 15.5px !important;
+            line-height: 1.4 !important;
+        }
+        ${__wdTagName} .text-2xl {
+            font-size: 16.5px !important;
+            line-height: 1.35 !important;
+        }
+        ${__wdTagName} .compact-input,
+        ${__wdTagName} select.compact-input option {
+            font-size: 13px !important;
+            padding-top: 5px !important;
+            padding-bottom: 5px !important;
+        }
+        ${__wdTagName} .compact-input::placeholder {
+            font-size: 13px !important;
+        }
+        ${__wdTagName} .wd-filters-title h2 { font-size: 13px !important; }
+        ${__wdTagName} .wd-filters-title p { font-size: 10.5px !important; }
+        ${__wdTagName} .wd-filter-field > span,
+        ${__wdTagName} .wd-date-field > legend { font-size: 10.5px !important; }
+        ${__wdTagName} .wd-filter-field select,
+        ${__wdTagName} .wd-filter-control input { font-size: 12px !important; }
+        ${__wdTagName} .wd-date-controls input { font-size: 11px !important; }
+        ${__wdTagName} .wd-toggle { font-size: 11px !important; }
+        ${__wdTagName} .wd-selected-range,
+        ${__wdTagName} .wd-selected-range strong { font-size: 10.5px !important; }
+        ${__wdTagName} .wd-clear-filters { font-size: 11px !important; }
+        ${__wdTagName} .wd-refresh-label { font-size: 10.5px !important; }
+
+        /* --- Header --- */
+        ${__wdTagName} .wd-header {
+            padding: 8px 10px !important;
+            gap: 6px !important;
+        }
+        ${__wdTagName} .wd-header-logo {
+            padding: 6px !important;
+        }
+        ${__wdTagName} .wd-header-logo i { font-size: 15px !important; }
+        ${__wdTagName} .wd-header-title { font-size: 14px !important; }
+        ${__wdTagName} .wd-header-tabs { margin-right: 6px !important; }
+        ${__wdTagName} .wd-header-tabs button {
+            padding: 5px 8px !important;
+            font-size: 11px !important;
+        }
+        ${__wdTagName} #templatesManagerBtn {
+            padding: 6px 8px !important;
+            gap: 0 !important;
+        }
+        ${__wdTagName} .wd-header-btn-text,
+        ${__wdTagName} .wd-header-divider,
+        ${__wdTagName} .wd-header-user-text {
+            display: none !important;
+        }
+        ${__wdTagName} header .flex.items-center.gap-4 { gap: 8px !important; }
+
+        /* --- Filters panel: single column + collapsible body --- */
+        ${__wdTagName} .wd-filters-panel { margin-bottom: 10px !important; }
+        ${__wdTagName} .wd-filters-header { padding: 6px 10px !important; min-height: 40px !important; }
+        ${__wdTagName} .wd-filters-icon { width: 24px !important; height: 24px !important; font-size: 13px !important; }
+        ${__wdTagName} .wd-filters-actions { gap: 4px !important; }
+        ${__wdTagName} .wd-refresh-label { display: none !important; }
+        ${__wdTagName} .wd-refresh-button { width: 26px !important; height: 26px !important; font-size: 14px !important; }
+        ${__wdTagName} .wd-filters-toggle-button {
+            display: grid !important;
+            width: 26px;
+            height: 26px;
+            place-items: center;
+            border: 0;
+            border-radius: 7px;
+            background: #eef2ff;
+            color: #4f46e5;
+            font-size: 14px;
+            cursor: pointer;
+        }
+        ${__wdTagName} .wd-filters-body { display: none; }
+        ${__wdTagName} .wd-filters-body.wd-filters-open { display: block; }
+        ${__wdTagName} .wd-filters-grid {
+            grid-template-columns: 1fr !important;
+            gap: 8px !important;
+            padding: 8px 10px !important;
+        }
+        ${__wdTagName} .wd-date-controls { grid-template-columns: 1fr auto 1fr !important; }
+        ${__wdTagName} .wd-filters-footer {
+            flex-direction: column !important;
+            align-items: flex-start !important;
+            gap: 6px !important;
+            padding: 8px 10px !important;
+        }
+        ${__wdTagName} .wd-filter-toggles { gap: 10px !important; flex-wrap: wrap; }
+
+        /* --- Main layout / alerts --- */
+        ${__wdTagName} #wdOrdersMain,
+        ${__wdTagName} #wdStaffAdminSection {
+            padding: 8px !important;
+        }
+        ${__wdTagName} #alertsContainer { margin-bottom: 8px !important; }
+        ${__wdTagName} #alertsContainer > div {
+            flex-direction: column !important;
+            align-items: flex-start !important;
+            gap: 8px !important;
+            padding: 8px !important;
+        }
+        ${__wdTagName} #alertFilterBtn { align-self: flex-end; }
+
+        /* --- Workshops table -> cards --- */
+        ${__wdTagName} .wd-ws-table thead { display: none; }
+        ${__wdTagName} .wd-ws-table,
+        ${__wdTagName} .wd-ws-table tbody,
+        ${__wdTagName} .wd-ws-table tr,
+        ${__wdTagName} .wd-ws-table td {
+            display: block;
+            width: 100% !important;
+        }
+        ${__wdTagName} .wd-ws-row {
+            margin: 8px;
+            padding: 6px 4px;
+            border: 1px solid #e5e7eb;
+            border-radius: 10px;
+            box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+        }
+        ${__wdTagName} .wd-ws-row td {
+            padding: 6px 10px !important;
+            white-space: normal !important;
+            border-top: 1px dashed #f1f2f4;
+        }
+        ${__wdTagName} .wd-ws-row td:first-child { border-top: none; }
+        ${__wdTagName} .wd-ws-row td[data-label]::before {
+            content: attr(data-label);
+            display: block;
+            color: #9ca3af;
+            font-size: 10px !important;
+            font-weight: 600;
+            margin-bottom: 2px;
+        }
+        ${__wdTagName} .wd-ws-row .w-44 { width: 100% !important; }
+        ${__wdTagName} .wd-ws-row td[data-label="התקדמות סקיצות"] { text-align: right !important; }
+
+        /* --- Pagination --- */
+        ${__wdTagName} #workshopsPagination {
+            flex-direction: column !important;
+            align-items: stretch !important;
+            gap: 6px !important;
+        }
+        ${__wdTagName} #workshopsPagination > div {
+            justify-content: space-between !important;
+        }
+
+        /* --- Side panel: full-screen sheet + card-style orders --- */
+        ${__wdTagName} .wd-side-panel {
+            width: 100vw !important;
+        }
+        ${__wdTagName} .wd-sp-header {
+            padding: 12px 14px !important;
+            align-items: center !important;
+        }
+        ${__wdTagName} .wd-sp-header h2 { font-size: 15px !important; }
+        ${__wdTagName} .wd-sp-meta {
+            gap: 8px !important;
+            flex-wrap: wrap;
+        }
+
+        ${__wdTagName} .wd-orders-table thead { display: none; }
+        ${__wdTagName} .wd-orders-table,
+        ${__wdTagName} .wd-orders-table tbody,
+        ${__wdTagName} .wd-orders-table tr,
+        ${__wdTagName} .wd-orders-table td {
+            display: block;
+            width: 100% !important;
+        }
+        ${__wdTagName} .wd-order-row {
+            margin: 8px;
+            border: 1px solid #e5e7eb;
+            border-radius: 10px;
+            box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+        }
+        ${__wdTagName} .wd-order-row td {
+            padding: 8px 12px !important;
+            border-top: 1px dashed #f1f2f4;
+        }
+        ${__wdTagName} .wd-order-row td:first-child { border-top: none; }
+        ${__wdTagName} .wd-order-row td[data-label]::before {
+            content: attr(data-label);
+            display: block;
+            color: #9ca3af;
+            font-size: 10px !important;
+            font-weight: 600;
+            margin-bottom: 3px;
+        }
+        ${__wdTagName} .wd-order-row td[data-label="סקיצות"] .flex.items-center.justify-end {
+            justify-content: flex-start !important;
+        }
+
+        /* Expanded order detail content reuses px-8/px-6 etc. Tailwind utilities
+           extensively; scoping the override to the side panel keeps every other
+           screen's padding untouched. */
+        ${__wdTagName} .wd-side-panel .px-8 { padding-left: 12px !important; padding-right: 12px !important; }
+        ${__wdTagName} .wd-side-panel .px-6 { padding-left: 10px !important; padding-right: 10px !important; }
+        ${__wdTagName} .wd-side-panel .w-\[240px\] { width: 168px !important; }
+
+        /* --- Modals --- */
+        ${__wdTagName} .modal { padding: 8px !important; }
+        ${__wdTagName} .modal-content {
+            width: 100% !important;
+            max-width: 100% !important;
+            max-height: 92dvh !important;
+            overflow-y: auto !important;
+        }
+        ${__wdTagName} .modal-content [class*="p-6"] { padding: 14px !important; }
+        ${__wdTagName} .modal-content [class*="p-5"] { padding: 12px !important; }
+        ${__wdTagName} .modal-content [class*="px-6"] { padding-left: 14px !important; padding-right: 14px !important; }
+        ${__wdTagName} .modal-content [class*="px-5"] { padding-left: 12px !important; padding-right: 12px !important; }
+        ${__wdTagName} .modal-content [class*="py-4"] { padding-top: 10px !important; padding-bottom: 10px !important; }
+        ${__wdTagName} .modal-content [class*="py-3"] { padding-top: 8px !important; padding-bottom: 8px !important; }
+
+        /* --- Staff & shifts tab --- */
+        ${__wdTagName} .wd-staff-section { padding: 8px !important; }
+        ${__wdTagName} .wd-staff-toolbar {
+            flex-wrap: wrap !important;
+            gap: 8px !important;
+        }
+        ${__wdTagName} .wd-staff-view-tabs button {
+            padding: 4px 6px !important;
+            font-size: 10.5px !important;
+        }
+        ${__wdTagName} #saMonthPicker { max-width: 128px !important; }
+    }
+
+    /* Toggle button only exists for mobile; hide it above the breakpoint. */
+    ${__wdTagName} .wd-filters-toggle-button { display: none; }
 `;
 
 // ============================================================
@@ -1851,6 +2112,15 @@ function __wdInjectGlobalAssets() {
             renderWorkshopsTable(filtered);
         }
 
+        /** Expands/collapses the filters panel body on mobile (hidden by default there via CSS; no-op/invisible button on desktop). */
+        function toggleFiltersPanel() {
+            const body = document.getElementById('wdFiltersBody');
+            const icon = document.getElementById('wdFiltersToggleIcon');
+            if (!body) return;
+            const isOpen = body.classList.toggle('wd-filters-open');
+            if (icon) icon.className = isOpen ? 'ph ph-caret-up' : 'ph ph-caret-down';
+        }
+
         function clearFilters() {
             __wdCurrentPage = 1;
             document.getElementById('searchInput').value = '';
@@ -1969,26 +2239,26 @@ function __wdInjectGlobalAssets() {
                     : '';
 
                 const tr = document.createElement('tr');
-                tr.className = "hover:bg-gray-50/80 cursor-pointer transition-colors group";
+                tr.className = "wd-ws-row hover:bg-gray-50/80 cursor-pointer transition-colors group";
                 tr.onclick = () => openSidePanel(w.id);
                 
                 tr.innerHTML = `
-                    <td class="px-6 py-4 whitespace-nowrap">
+                    <td class="px-6 py-4 whitespace-nowrap" data-label="תאריך ושעות">
                         <div class="flex flex-col">
                             <span class="text-sm font-bold text-gray-900">${w.date}</span>
                             <span class="text-xs text-gray-500 flex items-center gap-1 mt-0.5"><i class="ph ph-clock"></i> ${w.time} - ${w.endTime}</span>
                         </div>
                     </td>
-                    <td class="px-6 py-4 whitespace-nowrap">
+                    <td class="px-6 py-4 whitespace-nowrap" data-label="סוג סדנה">
                         <div class="flex flex-col items-start gap-1">
                             <span class="px-2.5 py-1 rounded-md text-sm font-bold" style="${colorHexToBadgeStyle(typeInfo.colorHex)}">${typeInfo.title}</span>
                             ${alertHtml}
                         </div>
                     </td>
-                    <td class="px-6 py-4 whitespace-nowrap">
+                    <td class="px-6 py-4 whitespace-nowrap" data-label="צוות מדריכים">
                         <div class="flex items-center gap-1.5 flex-wrap w-44">${instructorsHtml}</div>
                     </td>
-                    <td class="px-6 py-4 whitespace-nowrap">
+                    <td class="px-6 py-4 whitespace-nowrap" data-label="תפוסה וקבוצות">
                         <div class="flex flex-col items-start">
                             <div class="flex items-center gap-1.5 text-sm ${capacityColor}">
                                 <i class="ph-fill ph-users"></i>
@@ -1997,7 +2267,7 @@ function __wdInjectGlobalAssets() {
                             ${groupsHtml}
                         </div>
                     </td>
-                    <td class="px-6 py-4 whitespace-nowrap text-center">
+                    <td class="px-6 py-4 whitespace-nowrap text-center" data-label="התקדמות סקיצות">
                         ${progressHtml}
                     </td>
                 `;
@@ -2273,10 +2543,10 @@ function __wdInjectGlobalAssets() {
                 }
 
                 const tr = document.createElement('tr');
-                tr.className = `hover:bg-gray-50 transition-colors cursor-pointer group ${opacityClass}`;
+                tr.className = `wd-order-row hover:bg-gray-50 transition-colors cursor-pointer group ${opacityClass}`;
                 tr.onclick = (e) => toggleOrderDetails(o.id, e);
                 tr.innerHTML = `
-                    <td class="px-8 py-4">
+                    <td class="px-8 py-4" data-label="לקוח ופרטים">
                         <div class="flex items-start gap-4">
                             <div class="text-gray-400 transition-transform duration-300 mt-0.5" id="icon-${o.id}"><i class="ph-bold ph-caret-left"></i></div>
                             <div class="flex flex-col">
@@ -2294,8 +2564,8 @@ function __wdInjectGlobalAssets() {
                             </div>
                         </div>
                     </td>
-                    <td class="px-6 py-4">${progressHtml}</td>
-                    <td class="px-8 py-4 text-left">
+                    <td class="px-6 py-4" data-label="התקדמות סקיצות">${progressHtml}</td>
+                    <td class="px-8 py-4 text-left" data-label="סקיצות">
                         <div class="flex items-center justify-end gap-3 ${isCancelled?'pointer-events-none opacity-50':''}">
                             <button onclick="openWaModal('${o.id}')" class="w-9 h-9 flex items-center justify-center rounded-full bg-green-50 text-green-600 hover:bg-green-500 hover:text-white transition-all shadow-sm border border-green-200 shrink-0 ${!canSendWhatsApp?'pointer-events-none opacity-40':''}" title="שלח הודעה ללקוח">
                                 <i class="ph-fill ph-whatsapp-logo text-xl"></i>
@@ -3391,6 +3661,7 @@ function __wdInjectGlobalAssets() {
 window.applyFilters = applyFilters;
 window.onFilterInputChange = onFilterInputChange;
 window.clearFilters = clearFilters;
+window.toggleFiltersPanel = toggleFiltersPanel;
 window.__wdGoToPage = __wdGoToPage;
 window.closeModal = closeModal;
 window.closeSidePanel = closeSidePanel;

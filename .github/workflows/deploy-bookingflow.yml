@@ -1,7 +1,6 @@
 name: Deploy bookingflow to GitHub Pages
 
-# After first run: Repo Settings → Pages → Source = "GitHub Actions"
-# (NOT "Deploy from branch: main" — main only has source, not the Vite build)
+# Repo Settings → Pages → Source = "GitHub Actions" (already enabled)
 
 on:
   push:

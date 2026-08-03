@@ -1,0 +1,75 @@
+.hero-grid-section {
+
+  background-color: #fefae0;
+  background-image: 
+    linear-gradient(rgba(200, 185, 160, 0.3) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(200, 185, 160, 0.3) 1px, transparent 1px);
+  background-size: 28px 28px;
+
+
+}
+
+
+.rotate {
+    transform: rotate(317deg);
+    
+}
+
+.rotate-path-txt {
+    transform: rotate(-16deg);
+    
+}
+
+.rotate-container{
+  transform: rotate(356deg);
+}
+
+
+.hero-grid-section-new {
+
+  background-color: #ffffff;
+  background-image: 
+    linear-gradient(rgba(219, 206, 183, 0.3) 1px, transparent 0px),
+    linear-gradient(90deg, rgba(219, 206, 183, 0.3) 1px, transparent 0px);
+  background-size: 28px 28px;
+
+
+}
+
+
+.hero-grid-section-purple {
+  background-color: #5E2F88;
+  background-image: 
+    linear-gradient(rgba(255, 255, 255, 0.1) 1px, transparent 0px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.1) 1px, transparent 0px);
+  background-size: 28px 28px;
+}
+
+
+.float-item-1 {
+  animation: floatEffect1 3.2s ease-in-out infinite;
+}
+@keyframes floatEffect1 {
+  0%, 100% { transform: translate(0, 0); }
+  50% { transform: translate(0, -10px); } 
+}
+
+.float-item-2 {
+  animation: floatEffect2 4.2s ease-in-out infinite;
+  animation-delay: -1.5s; 
+}
+@keyframes floatEffect2 {
+  0%, 100% { transform: translate(0, 0); }
+  50% { transform: translate(-4px, -18px); } 
+}
+
+.float-item-3 {
+  animation: floatEffect3 2.6s ease-in-out infinite;
+  animation-delay: -0.8s; 
+}
+@keyframes floatEffect3 {
+  0%, 100% { transform: translate(0, 0); }
+  50% { transform: translate(3px, -12px); } 
+}
+
+

@@ -168,7 +168,7 @@ var __wdTemplateHtml = `
 
         <!-- Workshops Table -->
         <div class="relative flex-1 min-h-0">
-            <div class="h-full overflow-auto bg-white border border-gray-200 rounded-xl shadow-sm">
+            <div class="wd-ws-table-wrap h-full overflow-auto bg-white border border-gray-200 rounded-xl shadow-sm">
                 <table class="wd-ws-table w-full text-right divide-y divide-gray-200">
                     <thead class="bg-gray-50 sticky top-0 z-10 shadow-sm">
                         <tr>
@@ -303,7 +303,7 @@ var __wdTemplateHtml = `
         </div>
 
         <!-- Side Panel Body (Orders List - Accordion Style) -->
-        <div class="flex-1 overflow-y-auto overflow-x-hidden p-0 bg-white">
+        <div class="wd-sp-body flex-1 overflow-y-auto overflow-x-hidden p-0 bg-white">
             <table class="wd-orders-table w-full divide-y divide-gray-200 table-fixed">
                 <thead class="bg-white sticky top-0 shadow-sm z-10">
                     <tr>
@@ -1056,38 +1056,18 @@ var __wdCustomCss = `
         }
         ${__wdTagName} #alertFilterBtn { align-self: flex-end; }
 
-        /* --- Workshops table -> cards --- */
-        ${__wdTagName} .wd-ws-table thead { display: none; }
-        ${__wdTagName} .wd-ws-table,
-        ${__wdTagName} .wd-ws-table tbody,
-        ${__wdTagName} .wd-ws-table tr,
+        /* --- Workshops table: horizontal scroll (preserve table layout) --- */
+        ${__wdTagName} .wd-ws-table-wrap {
+            overflow-x: auto !important;
+            -webkit-overflow-scrolling: touch;
+        }
+        ${__wdTagName} .wd-ws-table {
+            min-width: 620px;
+        }
+        ${__wdTagName} .wd-ws-table th,
         ${__wdTagName} .wd-ws-table td {
-            display: block;
-            width: 100% !important;
+            padding: 8px 10px !important;
         }
-        ${__wdTagName} .wd-ws-row {
-            margin: 8px;
-            padding: 6px 4px;
-            border: 1px solid #e5e7eb;
-            border-radius: 10px;
-            box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
-        }
-        ${__wdTagName} .wd-ws-row td {
-            padding: 6px 10px !important;
-            white-space: normal !important;
-            border-top: 1px dashed #f1f2f4;
-        }
-        ${__wdTagName} .wd-ws-row td:first-child { border-top: none; }
-        ${__wdTagName} .wd-ws-row td[data-label]::before {
-            content: attr(data-label);
-            display: block;
-            color: #9ca3af;
-            font-size: 10px !important;
-            font-weight: 600;
-            margin-bottom: 2px;
-        }
-        ${__wdTagName} .wd-ws-row .w-44 { width: 100% !important; }
-        ${__wdTagName} .wd-ws-row td[data-label="התקדמות סקיצות"] { text-align: right !important; }
 
         /* --- Pagination --- */
         ${__wdTagName} #workshopsPagination {
@@ -1113,35 +1093,20 @@ var __wdCustomCss = `
             flex-wrap: wrap;
         }
 
-        ${__wdTagName} .wd-orders-table thead { display: none; }
-        ${__wdTagName} .wd-orders-table,
-        ${__wdTagName} .wd-orders-table tbody,
-        ${__wdTagName} .wd-orders-table tr,
+        /* Side panel orders: keep table layout + horizontal scroll; detail rows stay collapsed until click */
+        ${__wdTagName} .wd-sp-body {
+            overflow-x: auto !important;
+            -webkit-overflow-scrolling: touch;
+        }
+        ${__wdTagName} .wd-orders-table {
+            min-width: 560px;
+        }
+        ${__wdTagName} .wd-orders-table th,
         ${__wdTagName} .wd-orders-table td {
-            display: block;
-            width: 100% !important;
+            padding: 8px 10px !important;
         }
-        ${__wdTagName} .wd-order-row {
-            margin: 8px;
-            border: 1px solid #e5e7eb;
-            border-radius: 10px;
-            box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
-        }
-        ${__wdTagName} .wd-order-row td {
-            padding: 8px 12px !important;
-            border-top: 1px dashed #f1f2f4;
-        }
-        ${__wdTagName} .wd-order-row td:first-child { border-top: none; }
-        ${__wdTagName} .wd-order-row td[data-label]::before {
-            content: attr(data-label);
-            display: block;
-            color: #9ca3af;
-            font-size: 10px !important;
-            font-weight: 600;
-            margin-bottom: 3px;
-        }
-        ${__wdTagName} .wd-order-row td[data-label="סקיצות"] .flex.items-center.justify-end {
-            justify-content: flex-start !important;
+        ${__wdTagName} .wd-orders-table tr.hidden {
+            display: none !important;
         }
 
         /* Expanded order detail content reuses px-8/px-6 etc. Tailwind utilities

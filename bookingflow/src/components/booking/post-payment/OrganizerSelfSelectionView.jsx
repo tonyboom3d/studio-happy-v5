@@ -679,12 +679,14 @@ export default function OrganizerSelfSelectionView({
           let aiCroppedImage = sketch.aiCroppedImage || null;
 
           if (sketch.source === 'ai' && sketch.pendingMediaUpload && onSaveApprovedSketch) {
+            console.warn('[SketchUpload] OrganizerSelfSelection deferred upload', { rugIndex: sketch.rugIndex, image: sketch.image?.slice?.(0, 80) });
             const saved = await onSaveApprovedSketch(
               sketch.aiOriginalImage || image,
               sketch.image,
               sketch.aiColors || 'AUTO',
               aiCroppedImage,
             );
+            console.warn('[SketchUpload] OrganizerSelfSelection deferred upload result', saved);
             if (saved?.sketchUrl) image = saved.sketchUrl;
             if (saved?.wixFileUrl) wixFileUrl = saved.wixFileUrl;
             if (saved?.originalUrl) aiOriginalImage = saved.originalUrl;

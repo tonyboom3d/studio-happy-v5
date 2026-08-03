@@ -848,7 +848,9 @@ export default function AISketchModal({
       }
 
       // Send only the sketch URL — no base64 payloads (avoids Wix timeout / 413).
+      console.warn('[SketchUpload] AISketchModal handleApprove start', { sketchUrl: sketchUrl?.slice?.(0, 80) });
       const saved = await onSaveApprovedSketch(null, sketchUrl, 'AUTO', null);
+      console.warn('[SketchUpload] AISketchModal handleApprove saved', saved);
 
       onApprove({
         source: 'ai',

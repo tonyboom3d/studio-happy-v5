@@ -234,7 +234,9 @@ function normalizeWixMediaUploadResult(upload) {
 }
 
 async function uploadBufferToWixMedia(buffer, folder, filename, mimeType) {
+    console.warn('[SketchUpload] uploadBufferToWixMedia start', { folder, filename, mimeType, bytes: buffer?.byteLength });
     if (!buffer || !buffer.byteLength) {
+        console.warn('[SketchUpload] uploadBufferToWixMedia abort — empty buffer');
         throw new Error('לא התקבל תוכן תקין להעלאה לשרת.');
     }
     const upload = await mediaManager.upload(
@@ -243,16 +245,24 @@ async function uploadBufferToWixMedia(buffer, folder, filename, mimeType) {
         filename,
         buildMediaUploadOptions(filename, mimeType),
     );
-    return normalizeWixMediaUploadResult(upload);
+    console.warn('[SketchUpload] uploadBufferToWixMedia mediaManager.upload done', { fileUrl: upload?.fileUrl, mimeType: upload?.mimeType });
+    const result = normalizeWixMediaUploadResult(upload);
+    console.warn('[SketchUpload] uploadBufferToWixMedia done', { fileUrl: result.fileUrl, publicUrl: result.publicUrl });
+    return result;
 }
 
 async function uploadBase64ToWixMedia(base64, folder, filename) {
-    if (!base64 || !base64.startsWith('data:')) return null;
+    console.warn('[SketchUpload] uploadBase64ToWixMedia start', { folder, filename, base64Len: base64?.length });
+    if (!base64 || !base64.startsWith('data:')) {
+        console.warn('[SketchUpload] uploadBase64ToWixMedia abort — invalid base64');
+        return null;
+    }
     const mimeMatch = base64.match(/^data:(image\/[^;]+);base64,/);
     const mimeType = mimeMatch?.[1] || inferImageMimeType(filename);
     const raw = base64.replace(/^data:image\/[^;]+;base64,/, '');
     const buffer = Buffer.from(raw, 'base64');
     const result = await uploadBufferToWixMedia(buffer, folder, filename, mimeType);
+    console.warn('[SketchUpload] uploadBase64ToWixMedia done', { wixUrl: result.fileUrl, publicUrl: result.publicUrl });
     return { wixUrl: result.fileUrl, publicUrl: result.publicUrl };
 }
 
@@ -3951,9 +3961,15 @@ function getSketchGenerationFriendlyError(err) {
 }
 
 async function persistSketchToWix(sketchUrl) {
-    if (!sketchUrl) return { sketchMediaUrl: null, sketchWixFileUrl: null };
+    const urlPreview = typeof sketchUrl === 'string' ? sketchUrl.slice(0, 80) : sketchUrl;
+    console.warn('[SketchUpload] persistSketchToWix start', { urlPreview, type: sketchUrl?.startsWith('data:') ? 'base64' : sketchUrl?.startsWith('wix:') ? 'wix' : 'url' });
+    if (!sketchUrl) {
+        console.warn('[SketchUpload] persistSketchToWix abort — no sketchUrl');
+        return { sketchMediaUrl: null, sketchWixFileUrl: null };
+    }
 
     if (sketchUrl.startsWith('wix:image://')) {
+        console.warn('[SketchUpload] persistSketchToWix path: already wix');
         return {
             sketchMediaUrl: wixMediaToPublicUrl(sketchUrl) || sketchUrl,
             sketchWixFileUrl: sketchUrl,
@@ -3961,24 +3977,30 @@ async function persistSketchToWix(sketchUrl) {
     }
 
     if (sketchUrl.startsWith('data:')) {
+        console.warn('[SketchUpload] persistSketchToWix path: base64 upload');
         const uploaded = await uploadBase64ToWixMedia(
             sketchUrl,
             '/ai-sketches/sketches',
             `sketch_${Date.now()}.png`
         );
-        return {
+        const out = {
             sketchMediaUrl: uploaded?.publicUrl || wixMediaToPublicUrl(uploaded?.wixUrl),
             sketchWixFileUrl: uploaded?.wixUrl || null,
         };
+        console.warn('[SketchUpload] persistSketchToWix base64 done', out);
+        return out;
     }
 
     const existingWix = wixFileUrlFromPublicUrl(sketchUrl);
     if (existingWix) {
+        console.warn('[SketchUpload] persistSketchToWix path: existing wix public url', { existingWix });
         return { sketchMediaUrl: sketchUrl, sketchWixFileUrl: existingWix };
     }
 
     // External URL (e.g. Replicate) — download then upload via mediaManager.upload.
+    console.warn('[SketchUpload] persistSketchToWix path: external url download', { url: sketchUrl.slice(0, 120) });
     const response = await fetch(sketchUrl, { method: 'get' });
+    console.warn('[SketchUpload] persistSketchToWix fetch response', { ok: response.ok, status: response.status, contentType: response.headers?.get?.('content-type') });
     if (!response.ok) {
         throw new Error(`שגיאה בהורדת הסקיצה לשמירה (HTTP ${response.status}). נסו שוב — ייתכן שקישור הסקיצה פג תוקף.`);
     }
@@ -3986,16 +4008,19 @@ async function persistSketchToWix(sketchUrl) {
     const mimeType = contentType.startsWith('image/') ? contentType : 'image/png';
     const ext = mimeType === 'image/jpeg' ? 'jpg' : mimeType === 'image/webp' ? 'webp' : 'png';
     const buffer = Buffer.from(await response.arrayBuffer());
+    console.warn('[SketchUpload] persistSketchToWix downloaded', { bytes: buffer.byteLength, mimeType, ext });
     const uploaded = await uploadBufferToWixMedia(
         buffer,
         '/ai-sketches/sketches',
         `sketch_${Date.now()}.${ext}`,
         mimeType,
     );
-    return {
+    const out = {
         sketchMediaUrl: uploaded.publicUrl || wixMediaToPublicUrl(uploaded.fileUrl),
         sketchWixFileUrl: uploaded.fileUrl,
     };
+    console.warn('[SketchUpload] persistSketchToWix external done', out);
+    return out;
 }
 
 async function executeSketchGeneration(jobId, { imageBase64, orderId }) {
@@ -4098,6 +4123,13 @@ export const getSketchJobStatus = webMethod(Permissions.Anyone, async (jobId) =>
  * Save approved AI sketch images to Wix Media Manager (permanent CMS URLs).
  */
 export const saveApprovedSketch = webMethod(Permissions.Anyone, async (originalInput, sketchUrl, colors, orderId, croppedInput) => {
+    console.warn('[SketchUpload] saveApprovedSketch start', {
+        orderId,
+        hasOriginal: !!originalInput,
+        hasCropped: !!croppedInput,
+        sketchUrlPreview: typeof sketchUrl === 'string' ? sketchUrl.slice(0, 80) : sketchUrl,
+        colors,
+    });
     let sketchMediaUrl = sketchUrl;
     let sketchWixFileUrl = null;
 
@@ -4111,7 +4143,7 @@ export const saveApprovedSketch = webMethod(Permissions.Anyone, async (originalI
             || sketchUrl;
 
         if (!sketchWixFileUrl?.startsWith('wix:')) {
-            console.error('[saveApprovedSketch] Missing fileUrl after persist:', {
+            console.warn('[SketchUpload] saveApprovedSketch FAIL — missing wix fileUrl', {
                 sketchMediaUrl,
                 sketchWixFileUrl,
                 inputType: sketchUrl?.slice(0, 40),
@@ -4123,7 +4155,7 @@ export const saveApprovedSketch = webMethod(Permissions.Anyone, async (originalI
     const colorStr = Array.isArray(colors) ? colors.join(',') : (colors || 'AUTO');
     const taskId = 'approved_' + Date.now();
 
-    return {
+    const result = {
         success: true,
         sketchUrl: sketchMediaUrl,
         wixFileUrl: sketchWixFileUrl,
@@ -4133,6 +4165,8 @@ export const saveApprovedSketch = webMethod(Permissions.Anyone, async (originalI
         colors: colorStr,
         taskId,
     };
+    console.warn('[SketchUpload] saveApprovedSketch done', result);
+    return result;
 });
 
 /**

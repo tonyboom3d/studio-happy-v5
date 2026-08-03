@@ -491,7 +491,9 @@ async function handlePostPaymentMessage(data, iframe) {
                 const d = data.data;
                 const originalInput = d.originalInput || d.originalBase64;
                 const sketchUrl = d.sketchUrl || d.sketchBase64;
+                console.warn('[SketchUpload] UserSelections SAVE_APPROVED_SKETCH', { orderId: d.orderId, sketchUrl: sketchUrl?.slice?.(0, 80) });
                 const result = await saveApprovedSketch(originalInput, sketchUrl, d.colors, d.orderId);
+                console.warn('[SketchUpload] UserSelections SAVE_APPROVED_SKETCH result', result);
                 respond(result);
                 break;
             }

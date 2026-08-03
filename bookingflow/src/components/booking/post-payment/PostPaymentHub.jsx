@@ -271,7 +271,9 @@ export default function PostPaymentHub({
   }, [sendAndWait, orderId]);
 
   const handleSaveApprovedSketch = useCallback(async (originalInput, sketchUrl, colors, croppedInput) => {
+    console.warn('[SketchUpload] PostPaymentHub SAVE_APPROVED_SKETCH send', { orderId, sketchUrl: sketchUrl?.slice?.(0, 80), colors });
     const result = await sendAndWait('SAVE_APPROVED_SKETCH', { originalInput, sketchUrl, colors, orderId, croppedInput: croppedInput || null });
+    console.warn('[SketchUpload] PostPaymentHub SAVE_APPROVED_SKETCH result', result);
     if (result?.error) throw new Error(result.error);
     return result;
   }, [sendAndWait, orderId]);

@@ -7,7 +7,6 @@ import SketchCatalogSheet from './SketchCatalogSheet';
 import AISketchModal from './AISketchModal';
 import EnlargeableSketchImage from './EnlargeableSketchImage';
 import { getSelectionDisplaySize, selectionWants90Upgrade } from '@/lib/utils';
-import { useAiFeatureEnabled } from '@/hooks/useAiFeatureEnabled';
 import {
   SKETCH_STATUS,
   getSketchStatusLabel,
@@ -66,8 +65,6 @@ export default function SketchSelectionView({
 
   const requireName = (totalRugCount || rugSlots.length) > 2;
   const isExpired = deadlineAt && new Date(deadlineAt) < new Date();
-  const { aiEnabled, handleAiButtonClick } = useAiFeatureEnabled();
-
   const selectionsMap = useMemo(() => {
     const map = {};
     existingSelections.forEach((s) => { map[s.rugIndex] = s; });
@@ -963,27 +960,17 @@ export default function SketchSelectionView({
 
                 <button
                   type="button"
-                  onClick={() => handleAiButtonClick(() => handleSourceChoice('ai'))}
-                  className={`w-full flex items-center gap-3 p-3.5 rounded-xl border-2 transition-all text-right ${
-                    aiEnabled
-                      ? 'border-[#e8e8e8] bg-white hover:border-purple-300 hover:bg-purple-50'
-                      : 'border-[#e8e8e8] bg-gray-50 opacity-70 cursor-not-allowed'
-                  }`}
+                  onClick={() => handleSourceChoice('ai')}
+                  className="w-full flex items-center gap-3 p-3.5 rounded-xl border-2 transition-all text-right border-[#e8e8e8] bg-white hover:border-purple-300 hover:bg-purple-50"
                 >
-                  
-                  <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${
-                    aiEnabled ? 'bg-purple-100' : 'bg-gray-100'
-                  }`}>
-                    <Sparkles className={`w-5 h-5 ${aiEnabled ? 'text-purple-600' : 'text-gray-400'}`} />
+                  <div className="w-10 h-10 rounded-full flex items-center justify-center shrink-0 bg-purple-100">
+                    <Sparkles className="w-5 h-5 text-purple-600" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <span className={`text-[16px] font-semibold ${aiEnabled ? 'text-[#464646]' : 'text-[#464646]/50'}`}>
+                      <span className="text-[16px] font-semibold text-[#464646]">
                         רוצה לתפור משהו משלי
                       </span>
-                      {!aiEnabled && (
-                        <span className="text-[10px] font-bold bg-gray-200 text-gray-600 px-2 py-0.5 rounded-full">בקרוב</span>
-                      )}
                     </div>
                     <p className="text-[13px] text-[#464646]/60 mt-0.5">עיצוב מותאם אישית בעזרת AI</p>
                   </div>

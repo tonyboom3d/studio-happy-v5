@@ -20,7 +20,7 @@ export function isAiTestModeEnabled() {
 }
 
 export function isAiFeatureEnabled() {
-  return isAiTestModeEnabled();
+  return true;
 }
 
 const CATALOG_CACHE_KEY = 'studio_happy_catalog_v1';

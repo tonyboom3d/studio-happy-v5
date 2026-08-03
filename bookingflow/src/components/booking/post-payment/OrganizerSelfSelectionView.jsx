@@ -8,7 +8,6 @@ import SketchCatalogSheet from './SketchCatalogSheet';
 import AISketchModal from './AISketchModal';
 import EnlargeableSketchImage from './EnlargeableSketchImage';
 import { getSelectionDisplaySize, selectionWants90Upgrade } from '@/lib/utils';
-import { useAiFeatureEnabled } from '@/hooks/useAiFeatureEnabled';
 import {
   SKETCH_STATUS,
   getSketchStatusShortLabel,
@@ -195,8 +194,6 @@ export default function OrganizerSelfSelectionView({
   const remainingChildren = Math.max(0, maxChildren - usedChildren);
 
   const totalSelectedSketches = cards.reduce((s, c) => s + c.sketches.length, 0);
-  const { aiEnabled, handleAiButtonClick } = useAiFeatureEnabled();
-
   // Bulk 90cm upgrade tracking — based on already-saved selections only, so
   // the banner appears only after the user confirms via "אישור ושמירה", not
   // while a size is merely being edited (unsaved) inside the review modal.
@@ -1265,26 +1262,17 @@ export default function OrganizerSelfSelectionView({
 
                 <button
                   type="button"
-                  onClick={() => handleAiButtonClick(() => chooseSource('ai'))}
-                  className={`w-full flex items-center gap-3 p-3.5 rounded-xl border-2 transition-all text-right relative ${
-                    aiEnabled
-                      ? 'border-[#e8e8e8] bg-white hover:border-purple-300 hover:bg-purple-50'
-                      : 'border-[#e8e8e8] bg-gray-50 opacity-70 cursor-not-allowed'
-                  }`}
+                  onClick={() => chooseSource('ai')}
+                  className="w-full flex items-center gap-3 p-3.5 rounded-xl border-2 transition-all text-right relative border-[#e8e8e8] bg-white hover:border-purple-300 hover:bg-purple-50"
                 >
-                  <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${
-                    aiEnabled ? 'bg-purple-100' : 'bg-gray-100'
-                  }`}>
-                    <Sparkles className={`w-5 h-5 ${aiEnabled ? 'text-purple-600' : 'text-gray-400'}`} />
+                  <div className="w-10 h-10 rounded-full flex items-center justify-center shrink-0 bg-purple-100">
+                    <Sparkles className="w-5 h-5 text-purple-600" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <span className={`text-[16px] font-semibold ${aiEnabled ? 'text-[#464646]' : 'text-[#464646]/50'}`}>
+                      <span className="text-[16px] font-semibold text-[#464646]">
                         רוצה לתפור משהו משלי
                       </span>
-                      {!aiEnabled && (
-                        <span className="text-[10px] font-bold bg-gray-200 text-gray-600 px-2 py-0.5 rounded-full">בקרוב</span>
-                      )}
                     </div>
                     <p className="text-[13px] text-[#464646]/60 mt-0.5">עיצוב מותאם אישית בעזרת AI</p>
                   </div>

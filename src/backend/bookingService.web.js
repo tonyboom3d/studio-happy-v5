@@ -233,6 +233,31 @@ function normalizeWixMediaUploadResult(upload) {
     };
 }
 
+/**
+ * wix-fetch's backend Response does NOT implement the browser-only .arrayBuffer()
+ * method — it's closer to node-fetch, which exposes .buffer() instead. Try every
+ * known method so this keeps working regardless of the underlying implementation.
+ */
+async function fetchResponseToBuffer(response) {
+    if (typeof response.arrayBuffer === 'function') {
+        console.warn('[SketchUpload] fetchResponseToBuffer using response.arrayBuffer()');
+        return Buffer.from(await response.arrayBuffer());
+    }
+    if (typeof response.buffer === 'function') {
+        console.warn('[SketchUpload] fetchResponseToBuffer using response.buffer()');
+        return await response.buffer();
+    }
+    if (typeof response.blob === 'function') {
+        console.warn('[SketchUpload] fetchResponseToBuffer using response.blob()');
+        const blob = await response.blob();
+        if (typeof blob.arrayBuffer === 'function') {
+            return Buffer.from(await blob.arrayBuffer());
+        }
+    }
+    console.warn('[SketchUpload] fetchResponseToBuffer FAIL — no known method on response', Object.keys(response || {}));
+    throw new Error('שגיאה בקריאת תוכן הסקיצה שהורדה מהשרת החיצוני.');
+}
+
 async function uploadBufferToWixMedia(buffer, folder, filename, mimeType) {
     console.warn('[SketchUpload] uploadBufferToWixMedia start', { folder, filename, mimeType, bytes: buffer?.byteLength });
     if (!buffer || !buffer.byteLength) {
@@ -4007,7 +4032,7 @@ async function persistSketchToWix(sketchUrl) {
     const contentType = (response.headers?.get?.('content-type') || 'image/png').split(';')[0].trim();
     const mimeType = contentType.startsWith('image/') ? contentType : 'image/png';
     const ext = mimeType === 'image/jpeg' ? 'jpg' : mimeType === 'image/webp' ? 'webp' : 'png';
-    const buffer = Buffer.from(await response.arrayBuffer());
+    const buffer = await fetchResponseToBuffer(response);
     console.warn('[SketchUpload] persistSketchToWix downloaded', { bytes: buffer.byteLength, mimeType, ext });
     const uploaded = await uploadBufferToWixMedia(
         buffer,

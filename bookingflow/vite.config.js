@@ -22,7 +22,7 @@ const copy404Plugin = () => {
 
 // https://vite.dev/config/
 export default defineConfig({
-  base: '/studio-happy-bookingflow/',
+  base: '/studio-happy-v5/',
   plugins: [
     react(),
     copy404Plugin(),

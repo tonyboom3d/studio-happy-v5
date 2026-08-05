@@ -5,6 +5,11 @@ import { getActiveWorkshops } from 'backend/home/workshopsData.jsw'
 $w.onReady(() => {
     const eyes = [$w('#leftEye'), $w('#rightEye')];
     const htmlElement = $w('#html1');
+
+    setTimeout(() => {
+        $w('#loading').collapse();
+    }, 5000);
+
     const blinkTimeline = timeline({ repeat: -1, repeatDelay: 4000 })
         .add(eyes, {
             "scaleY": 0.1,

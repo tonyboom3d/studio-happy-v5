@@ -1,7 +1,14 @@
 import { media } from '@wix/sdk';
 import { getPlainTextQuestionsByCategory } from 'backend/faqService.web.js';
+import wixLocation from 'wix-location';
 import wixLocationsFrontend from 'wix-location-frontend'
 $w.onReady(async function () {
+    const query = wixLocation.query;
+
+    if (query.buytickets === "true") {
+        $w('#section9').scrollTo();
+    }
+
     const htmlComp = $w('#htmlFAQ');
     $w('#button2').onClick(() => {
         $w('#section9').scrollTo()

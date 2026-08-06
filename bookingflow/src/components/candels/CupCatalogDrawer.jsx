@@ -231,7 +231,7 @@ export default function CupCatalogDrawer({
             </div>
           ) : (
             <>
-              <p className="mb-2 px-1 text-center text-[11px] leading-relaxed text-[#464646]/65 sm:text-xs">
+              <p className="mb-2 px-1 text-center text-sm leading-relaxed text-black sm:text-base">
                 מלאי הכוסות משתנה, ולכן לא נוכל להתחייב לכוס שבחרתם. התמונות מוצגות להמחשה בלבד.
               </p>
               <div className="grid grid-cols-2 gap-2 sm:gap-4">

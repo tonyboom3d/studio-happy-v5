@@ -384,6 +384,46 @@ function resolveSketchChildInfo(sel, participantsForOrder, order) {
     return { includesChild, childrenCount: includesChild ? 1 : 0 };
 }
 
+function parseDifficultyTags(raw) {
+    if (raw == null || raw === '') return '';
+    if (Array.isArray(raw)) {
+        const first = raw[0];
+        return typeof first === 'string' ? first.trim() : String(first ?? '').trim();
+    }
+    if (typeof raw !== 'string') return String(raw).trim();
+    const trimmed = raw.trim();
+    if (!trimmed) return '';
+    const tryParseArray = (value) => {
+        if (typeof value !== 'string' || !value.startsWith('[')) return '';
+        try {
+            const parsed = JSON.parse(value);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+                return String(parsed[0]).trim();
+            }
+        } catch {}
+        return '';
+    };
+    const fromJson = tryParseArray(trimmed);
+    if (fromJson) return fromJson;
+    if (trimmed.startsWith('"') && trimmed.endsWith('"')) {
+        try {
+            const unquoted = JSON.parse(trimmed);
+            if (typeof unquoted === 'string') {
+                const nested = tryParseArray(unquoted);
+                if (nested) return nested;
+                return unquoted.trim();
+            }
+        } catch {}
+    }
+    return trimmed;
+}
+
+function getProductWixImageFromMap(productsById, productId) {
+    const entry = productId ? productsById[productId] : null;
+    if (!entry) return null;
+    return typeof entry === 'string' ? entry : entry.image || null;
+}
+
 function resolveSketchWixFileUrl(sel, productWixImageById = {}) {
     const snapshot = parseProductSnapshot(sel?.productSnapshot);
     const candidates = [
@@ -391,7 +431,7 @@ function resolveSketchWixFileUrl(sel, productWixImageById = {}) {
         snapshot?.wixFileUrl,
         snapshot?.image,
         sel?.sketchImage,
-        sel?.productId ? productWixImageById[sel.productId] : null,
+        getProductWixImageFromMap(productWixImageById, sel?.productId),
     ];
     for (const url of candidates) {
         const trimmed = String(url || '').trim();
@@ -407,7 +447,7 @@ function resolveSketchDisplayImage(sel, productWixImageById = {}) {
         sel?.imageUrl,
         snapshot?.imageUrl,
         snapshot?.image,
-        sel?.productId ? productWixImageById[sel.productId] : null,
+        getProductWixImageFromMap(productWixImageById, sel?.productId),
     ];
     for (const url of candidates) {
         const converted = convertWixImageUrl(url, 400, 400, 75);
@@ -422,8 +462,11 @@ async function loadProductWixImagesById(productIds) {
     if (!uniqueIds.length) return map;
     const result = await wixData.query('bookingProducts').hasSome('_id', uniqueIds).find(SA);
     for (const product of (result.items || [])) {
-        const image = String(product?.image || '').trim();
-        if (image) map[product._id] = image;
+        map[product._id] = {
+            image: String(product?.image || '').trim() || null,
+            difficulty: parseDifficultyTags(product?.difficulty) || '',
+            price: parseFloat(product.productName) || 0,
+        };
     }
     return map;
 }
@@ -445,18 +488,22 @@ function parseSelectedProductsField(raw) {
 function mapSelectedProductsForOrder(order, productsById = {}) {
     const rawSelected = parseSelectedProductsField(order?.selectedProducts);
     return rawSelected.map((sel) => {
-        const product = productsById[sel.productId];
-        const wixImage = sel.image || product?.image || null;
+        const productMeta = productsById[sel.productId];
+        const wixImage = sel.image || getProductWixImageFromMap(productsById, sel.productId) || null;
         const image = sel.imageUrl
             || convertWixImageUrl(wixImage, 200, 200, 75);
         const price = sel.price != null
             ? Number(sel.price) || 0
-            : (product ? parseFloat(product.productName) || 0 : 0);
+            : (productMeta && typeof productMeta === 'object' && productMeta.price != null
+                ? Number(productMeta.price) || 0
+                : 0);
+        const difficulty = (typeof productMeta === 'object' && productMeta?.difficulty) || '';
         return {
             productId: sel.productId,
             quantity: Math.max(1, Number(sel.quantity) || 1),
             price,
             image: image || null,
+            difficulty,
         };
     });
 }
@@ -790,6 +837,11 @@ export const getInitialDashboardData = webMethod(Permissions.SiteMember, async (
                     childrenCount: p.childrenCount || 0,
                     hasChildren: !!p.hasChildren,
                 })),
+                ecomOrderId: order.ecomOrderId || null,
+                paidTotal: order.paidTotal || order.basePrice || 0,
+                paidDiscount: order.paidDiscount || 0,
+                couponCode: order.couponCode || null,
+                couponName: order.couponName || null,
             });
         }
 

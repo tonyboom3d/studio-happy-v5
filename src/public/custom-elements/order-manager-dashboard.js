@@ -1886,11 +1886,47 @@ function __wdInjectGlobalAssets() {
                     items.push({
                         img: cup.image || null,
                         productId: cup.productId,
+                        difficulty: cup.difficulty || '',
                         index: items.length,
                     });
                 }
             }
             return items;
+        }
+
+        function formatIls(amount) {
+            const n = Number(amount) || 0;
+            return `₪${n.toLocaleString('he-IL', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
+        }
+
+        function buildCupDifficultyBadgeHtml(difficulty) {
+            if (!difficulty) return '';
+            return `<span class="absolute -top-2 left-1/2 -translate-x-1/2 z-20 bg-amber-100 text-amber-800 border border-amber-300 px-1 py-0.5 rounded text-[8px] font-bold whitespace-nowrap shadow-sm max-w-[90%] truncate" title="רמת קושי">${difficulty}</span>`;
+        }
+
+        function buildPaymentSummaryHtml(order) {
+            if (order.isLegacyOrder) return '';
+            const total = Number(order.paidTotal) || 0;
+            const discount = Number(order.paidDiscount) || 0;
+            const hasCoupon = discount > 0 || order.couponCode;
+            const subtotal = total + discount;
+            if (!total && !discount) return '';
+            let html = '<div class="flex flex-wrap items-center gap-1.5 mt-1.5">';
+            if (hasCoupon) {
+                html += `<span class="bg-gray-50 text-gray-600 border border-gray-200 px-1.5 py-0.5 rounded text-[10px] font-medium" title="מחיר לפני הנחה">לפני הנחה: ${formatIls(subtotal)}</span>`;
+                html += `<span class="bg-rose-50 text-rose-700 border border-rose-200 px-1.5 py-0.5 rounded text-[10px] font-bold" title="הנחת קופון">הנחה: -${formatIls(discount)}${order.couponCode ? ` (${order.couponCode})` : ''}</span>`;
+            }
+            html += `<span class="bg-emerald-50 text-emerald-700 border border-emerald-200 px-1.5 py-0.5 rounded text-[10px] font-bold" title="סכום ששולם"><i class="ph ph-currency-circle-shekel"></i> שולם: ${formatIls(total)}</span>`;
+            html += '</div>';
+            return html;
+        }
+
+        const ECOM_ORDER_DASHBOARD_BASE = 'https://manage.wix.com/dashboard/f0548b42-7f52-447c-9076-45112f85765b/ecom-platform/order-details';
+
+        function buildEcomOrderLinkHtml(order) {
+            if (!order.ecomOrderId || order.isLegacyOrder) return '';
+            const url = `${ECOM_ORDER_DASHBOARD_BASE}/${order.ecomOrderId}`;
+            return `<a href="${url}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()" class="inline-flex items-center gap-1 text-[10px] font-bold text-indigo-600 hover:text-indigo-800 mt-1" title="פתיחת הזמנה בלוח הבקרה"><i class="ph ph-arrow-square-out"></i>הזמנה ב-Wix</a>`;
         }
 
         function buildCupProgressBarHtml(selected, total, opts) {
@@ -2494,8 +2530,11 @@ function __wdInjectGlobalAssets() {
                                     </div>`;
                             } else {
                                 stackedSketchesHtml += `
-                                    <div class="relative w-11 h-11 rounded-lg border-2 border-white shadow-sm overflow-hidden" style="z-index: ${10-idx}">
-                                        <img src="${imgSrc}" class="w-full h-full object-cover">
+                                    <div class="relative w-11 h-11 rounded-lg border-2 border-white shadow-sm overflow-visible" style="z-index: ${10-idx}">
+                                        ${buildCupDifficultyBadgeHtml(cup.difficulty)}
+                                        <div class="w-full h-full rounded-lg overflow-hidden">
+                                            <img src="${imgSrc}" class="w-full h-full object-cover">
+                                        </div>
                                     </div>`;
                             }
                         });
@@ -2525,6 +2564,8 @@ function __wdInjectGlobalAssets() {
                                     <span><i class="ph ph-envelope-simple mr-1"></i>${groupEmail}</span>
                                 </div>
                                 <div class="mt-1.5">${groupBreakdownHtml}</div>
+                                ${buildPaymentSummaryHtml(o)}
+                                ${buildEcomOrderLinkHtml(o)}
                                 ${orderAlertsHtml}
                             </div>
                         </div>
@@ -2680,8 +2721,11 @@ function __wdInjectGlobalAssets() {
                                     <div class="flex justify-between items-center z-10 gap-1 flex-wrap">
                                         <span class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200">כוס ${idx + 1}</span>
                                     </div>
-                                    <div class="relative w-full aspect-square rounded-lg overflow-hidden group cursor-pointer border border-gray-200 shadow-sm z-10">
-                                        ${imgHtml}
+                                    <div class="relative w-full aspect-square rounded-lg overflow-visible group cursor-pointer border border-gray-200 shadow-sm z-10">
+                                        ${buildCupDifficultyBadgeHtml(cup.difficulty)}
+                                        <div class="w-full h-full rounded-lg overflow-hidden">
+                                            ${imgHtml}
+                                        </div>
                                     </div>
                                 </div>`;
                         });

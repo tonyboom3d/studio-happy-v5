@@ -132,8 +132,9 @@ export async function expireStuckUpgradePayments() {
 }
 
 /**
- * Scheduled job (jobs.config) — safety net for the backend-first
- * WorkshopOrders reconciliation (see orderReconciliation.js).
+ * Scheduled job (hourly via jobs.config — Wix jobs minimum interval is 1h)
+ * — safety net for the backend-first WorkshopOrders reconciliation
+ * (see orderReconciliation.js).
  *
  * The wixEcom_onOrderPaymentStatusUpdated event (events.js) is the
  * authoritative, immediate trigger for writing paid status + buyer details

@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { Calendar, Clock, Users, Baby, ArrowLeft } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { format } from 'date-fns';
@@ -25,6 +25,25 @@ export default function CandelsOrderSummarySection({
 }) {
   const selectedCupCount = selectedCups.reduce((sum, c) => sum + (c.quantity || 1), 0);
   const cupsIncomplete = totalCups > 0 && selectedCupCount < totalCups;
+  const [cupSelectionError, setCupSelectionError] = useState(null);
+
+  useEffect(() => {
+    if (!cupsIncomplete) setCupSelectionError(null);
+  }, [cupsIncomplete]);
+
+  const handlePayClick = () => {
+    if (cupsIncomplete) {
+      const cupsWord = totalCups === 1 ? 'כוס' : 'כוסות';
+      setCupSelectionError(
+        selectedCupCount === 0
+          ? `יש לבחור ${cupsWord} לנרות לפני המשך לתשלום`
+          : `יש להשלים בחירת הכוסות (${selectedCupCount}/${totalCups} ${cupsWord}) לפני המשך לתשלום`
+      );
+      return;
+    }
+    setCupSelectionError(null);
+    onPay();
+  };
   const dateTimeInfo = useMemo(() => {
     if (!selectedSlot?.start?.timestamp) return null;
     const ld = getSlotLocalDate(selectedSlot);
@@ -111,15 +130,15 @@ export default function CandelsOrderSummarySection({
 
       {/* כפתור מעבר לתשלום */}
       <div className="pt-3">
-        {cupsIncomplete && (
+        {cupSelectionError && (
           <p className="mb-2 text-center text-sm font-medium text-red-600">
-            יש להשלים את בחירת הכוסות ({selectedCupCount}/{totalCups}) לפני התשלום
+            {cupSelectionError}
           </p>
         )}
         <motion.button
           type="button"
-          onClick={onPay}
-          disabled={isProcessing || totalPrice <= 0 || cupsIncomplete}
+          onClick={handlePayClick}
+          disabled={isProcessing || totalPrice <= 0}
           animate={isProcessing ? {} : {
             scale: [1, 1.02, 1],
             boxShadow: [

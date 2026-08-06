@@ -205,7 +205,12 @@ export default function CandelsBooking() {
     // backend with missing cups regardless of how it was triggered.
     const selectedCupCount = cupCart.reduce((sum, c) => sum + (c.quantity || 1), 0);
     if (totalCups > 0 && selectedCupCount < totalCups) {
-      setBookingError('יש להשלים את בחירת הכוסות לפני התשלום');
+      const cupsWord = totalCups === 1 ? 'כוס' : 'כוסות';
+      setBookingError(
+        selectedCupCount === 0
+          ? `יש לבחור ${cupsWord} לנרות לפני המשך לתשלום`
+          : `יש להשלים בחירת הכוסות (${selectedCupCount}/${totalCups} ${cupsWord}) לפני המשך לתשלום`
+      );
       addLog('[Candels] Submit blocked — cup selection incomplete', 'error');
       return;
     }

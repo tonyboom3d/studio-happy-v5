@@ -51,13 +51,6 @@ function isDayBlocked(slots, bookingBlockHours = DEFAULT_BOOKING_BLOCK_HOURS) {
   return slots.every((slot) => isSlotBlocked(slot, bookingBlockHours));
 }
 
-function isDayHasRedDot(slots, bookingBlockHours = DEFAULT_BOOKING_BLOCK_HOURS) {
-  if (!slots?.length) return false;
-  return slots.some(
-    (s) => isSlotBlocked(s, bookingBlockHours) || isSlotInUrgencyBuffer(s, bookingBlockHours)
-  );
-}
-
 // חגי ישראל 2024-2027
 const ISRAELI_HOLIDAYS = {
   '2024-04-22': 'פסח', '2024-04-23': 'פסח', '2024-04-28': 'פסח', '2024-04-29': 'פסח',
@@ -95,9 +88,15 @@ function isSlotClosingSoon(slot) {
   return hoursUntilStart > 0 && hoursUntilStart <= CLOSING_SOON_HOURS;
 }
 
-function isDayClosingSoon(slots) {
+function isSlotApproaching(slot, bookingBlockHours = DEFAULT_BOOKING_BLOCK_HOURS) {
+  return isSlotBlocked(slot, bookingBlockHours)
+    || isSlotInUrgencyBuffer(slot, bookingBlockHours)
+    || isSlotClosingSoon(slot);
+}
+
+function isDayHasRedDot(slots, bookingBlockHours = DEFAULT_BOOKING_BLOCK_HOURS) {
   if (!slots?.length) return false;
-  return slots.some(isSlotClosingSoon);
+  return slots.some((s) => isSlotApproaching(s, bookingBlockHours));
 }
 
 function getBookableSlots(slots, bookingBlockHours = DEFAULT_BOOKING_BLOCK_HOURS) {
@@ -154,7 +153,16 @@ function getMinPriceForDate(slots, servicePricing) {
 
 const TOOLTIP_EDGE_MARGIN = 8;
 
-function DayTooltip({ slots, servicePricing, holiday, closingSoon, allBlocked, isVisible, isMobile, stackTimes = false }) {
+function DayTooltip({
+  slots,
+  servicePricing,
+  holiday,
+  allBlocked,
+  isVisible,
+  isMobile,
+  stackTimes = false,
+  bookingBlockHours = DEFAULT_BOOKING_BLOCK_HOURS,
+}) {
   const wrapperRef = useRef(null);
   const [offsetX, setOffsetX] = useState(0);
 
@@ -182,9 +190,10 @@ function DayTooltip({ slots, servicePricing, holiday, closingSoon, allBlocked, i
   if (!isVisible || !slots?.length) return null;
 
   const minPrice = getMinPriceForDate(slots, servicePricing);
-  const times = slots.map(slot => getSlotTimeRange(slot)).sort();
-  const uniqueTimes = [...new Set(times)];
-  const displayTimes = stackTimes ? uniqueTimes : uniqueTimes.slice(0, 3);
+  const sortedSlots = [...slots].sort(sortSlotsByStartTime);
+  const hasMultipleSlots = sortedSlots.length > 1;
+  const showStackedTimes = stackTimes || hasMultipleSlots;
+  const closingSoonSingle = !hasMultipleSlots && isSlotClosingSoon(sortedSlots[0]);
 
   return (
     <div
@@ -211,7 +220,7 @@ function DayTooltip({ slots, servicePricing, holiday, closingSoon, allBlocked, i
               <span>הזמנה מקוונת סגורה</span>
             </div>
           )}
-          {!allBlocked && closingSoon && (
+          {!allBlocked && closingSoonSingle && (
             <div className="flex items-center gap-1.5 text-red-600 font-medium">
               <span>⏰</span>
               <span>ההרשמה נסגרת בקרוב!</span>
@@ -231,14 +240,26 @@ function DayTooltip({ slots, servicePricing, holiday, closingSoon, allBlocked, i
           )}
           <div className="flex items-start gap-1.5 text-[#464646]">
             <Clock className={cn('shrink-0', isMobile ? 'w-4 h-4 mt-0.5' : 'w-4 h-4')} />
-            {stackTimes ? (
+            {showStackedTimes ? (
               <div className="flex flex-col gap-0.5">
-                {displayTimes.map((time) => (
-                  <span key={time} className="break-words">{time}</span>
-                ))}
+                {sortedSlots.map((slot) => {
+                  const time = getSlotTimeRange(slot);
+                  const approaching = isSlotApproaching(slot, bookingBlockHours);
+                  return (
+                    <span
+                      key={slot.sessionId || `${time}-${slot.start?.timestamp}`}
+                      className="flex items-center gap-1.5 break-words"
+                    >
+                      {approaching && (
+                        <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse shrink-0" />
+                      )}
+                      <span>{time}</span>
+                    </span>
+                  );
+                })}
               </div>
             ) : (
-              <span className="break-words">{displayTimes.join(' | ')}</span>
+              <span className="break-words">{getSlotTimeRange(sortedSlots[0])}</span>
             )}
           </div>
         </div>
@@ -403,7 +424,6 @@ export default function TimeSlotsSection({
             const isDisabled = !isCurrentMonth || isPast || !hasSlot;
             const isHoliday = ISRAELI_HOLIDAYS[dateStr];
             const hasMultipleSlots = daySlots.length > 1;
-            const closingSoon = hasSlot && isDayClosingSoon(daySlots);
             const showRedDot = hasSlot && isDayHasRedDot(daySlots, bookingBlockHours);
             const allBlocked = hasSlot && isDayBlocked(daySlots, bookingBlockHours);
             const isHovered = hoveredDate === dateStr && hasSlot;
@@ -446,7 +466,7 @@ export default function TimeSlotsSection({
                     <span className="absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-[#DA9BFF]" />
                   )}
                   {/* נקודה אדומה — חסום / נסגר בקרוב */}
-                  {(showRedDot || closingSoon) && !isSelected && (
+                  {showRedDot && !isSelected && (
                     <span className="absolute bottom-0.5 left-1/2 -translate-x-1/2 w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
                   )}
                   {/* עיגול למספר שעות */}
@@ -462,11 +482,11 @@ export default function TimeSlotsSection({
                       slots={daySlots}
                       servicePricing={servicePricing}
                       holiday={isHoliday}
-                      closingSoon={closingSoon}
                       allBlocked={allBlocked}
                       isVisible={true}
                       isMobile={isMobile}
                       stackTimes={stackTimeSlots}
+                      bookingBlockHours={bookingBlockHours}
                     />
                   )}
                 </AnimatePresence>
@@ -529,7 +549,7 @@ export default function TimeSlotsSection({
                 {timePickerSlots.map((slot, idx) => {
                   const isThisSlotSelected = selectedSlot?.sessionId === slot.sessionId;
                   const blocked = isSlotBlocked(slot, bookingBlockHours);
-                  const urgency = isSlotInUrgencyBuffer(slot, bookingBlockHours);
+                  const approaching = isSlotApproaching(slot, bookingBlockHours);
                   return (
                     <button
                       key={idx}
@@ -546,7 +566,7 @@ export default function TimeSlotsSection({
                       )}
                     >
                       <span className="text-[18px]">{getSlotTimeRange(slot)}</span>
-                      {(blocked || urgency) && (
+                      {approaching && (
                         <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse border border-white" />
                       )}
                     </button>

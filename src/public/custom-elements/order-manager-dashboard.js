@@ -1901,7 +1901,7 @@ function __wdInjectGlobalAssets() {
 
         function buildCupDifficultyBadgeHtml(difficulty) {
             if (!difficulty) return '';
-            return `<span class="absolute -top-2 left-1/2 -translate-x-1/2 z-20 bg-amber-100 text-amber-800 border border-amber-300 px-1 py-0.5 rounded text-[8px] font-bold whitespace-nowrap shadow-sm max-w-[90%] truncate" title="רמת קושי">${difficulty}</span>`;
+            return `<span class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-300" title="רמת קושי">${difficulty}</span>`;
         }
 
         function buildPaymentSummaryHtml(order) {
@@ -2530,11 +2530,8 @@ function __wdInjectGlobalAssets() {
                                     </div>`;
                             } else {
                                 stackedSketchesHtml += `
-                                    <div class="relative w-11 h-11 rounded-lg border-2 border-white shadow-sm overflow-visible" style="z-index: ${10-idx}">
-                                        ${buildCupDifficultyBadgeHtml(cup.difficulty)}
-                                        <div class="w-full h-full rounded-lg overflow-hidden">
-                                            <img src="${imgSrc}" class="w-full h-full object-cover">
-                                        </div>
+                                    <div class="relative w-11 h-11 rounded-lg border-2 border-white shadow-sm overflow-hidden" style="z-index: ${10-idx}">
+                                        <img src="${imgSrc}" class="w-full h-full object-cover">
                                     </div>`;
                             }
                         });
@@ -2718,14 +2715,12 @@ function __wdInjectGlobalAssets() {
                                    </div>`;
                             sketchesHtml += `
                                 <div class="bg-white border border-gray-200 rounded-xl p-3 shadow-sm flex flex-col gap-3 w-[240px] shrink-0 snap-start relative overflow-hidden transition-shadow hover:shadow-md">
-                                    <div class="flex justify-between items-center z-10 gap-1 flex-wrap">
+                                    <div class="flex items-center gap-1 flex-wrap z-10">
                                         <span class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200">כוס ${idx + 1}</span>
-                                    </div>
-                                    <div class="relative w-full aspect-square rounded-lg overflow-visible group cursor-pointer border border-gray-200 shadow-sm z-10">
                                         ${buildCupDifficultyBadgeHtml(cup.difficulty)}
-                                        <div class="w-full h-full rounded-lg overflow-hidden">
-                                            ${imgHtml}
-                                        </div>
+                                    </div>
+                                    <div class="relative w-full aspect-square rounded-lg overflow-hidden group cursor-pointer border border-gray-200 shadow-sm z-10">
+                                        ${imgHtml}
                                     </div>
                                 </div>`;
                         });

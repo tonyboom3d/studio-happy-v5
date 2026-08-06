@@ -1,6 +1,7 @@
 import wixData from 'wix-data';
 import { staffMembers } from '@wix/bookings';
 import { computeSketchEditingDeadline } from 'backend/sketchEditingPolicy.js';
+import { reconcileEcomOrder } from 'backend/orderReconciliation.js';
 
 const SA = { suppressAuth: true, suppressHooks: true };
 
@@ -343,5 +344,38 @@ export function wixBookings_onBookingRescheduled(event) {
         })
         .catch((err) => {
             console.error('[events] wixBookings_onBookingRescheduled error:', err?.message || err);
+        });
+}
+
+/**
+ * Wix eCommerce backend event — fires server-side the instant an order's
+ * payment status changes, completely independent of the customer's browser.
+ * This is the authoritative, backend-first trigger for writing paid status +
+ * buyer details + cup selections onto WorkshopOrders (see
+ * orderReconciliation.js) — it guarantees the data is captured even if the
+ * customer refreshes, loses connection, or closes the tab right after
+ * paying, before the Thank You page ever runs.
+ *
+ * This fires for EVERY completed eCom order on the site, not just workshop
+ * orders — reconcileEcomOrder() simply finds no match and no-ops for
+ * anything else, which is expected and not logged as an error.
+ */
+export function wixEcom_onOrderPaymentStatusUpdated(event) {
+    const order = event?.data?.order;
+    if (!order?._id) {
+        console.warn('[events] wixEcom_onOrderPaymentStatusUpdated: no order on event, skipping.');
+        return;
+    }
+
+    return reconcileEcomOrder(order)
+        .then((result) => {
+            if (result.reconciled) {
+                console.log(`[events] wixEcom_onOrderPaymentStatusUpdated: reconciled WorkshopOrder ${result.workshopOrder?._id} from ecomOrder ${order._id} (matchedBy=${result.matchedBy}).`);
+            } else if (result.reason && result.reason !== 'not_paid' && result.reason !== 'no_match') {
+                console.log(`[events] wixEcom_onOrderPaymentStatusUpdated: ecomOrder ${order._id} — ${result.reason}.`);
+            }
+        })
+        .catch((err) => {
+            console.error('[events] wixEcom_onOrderPaymentStatusUpdated error:', err?.message || err);
         });
 }

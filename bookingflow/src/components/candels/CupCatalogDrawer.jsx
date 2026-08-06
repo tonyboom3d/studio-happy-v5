@@ -10,8 +10,14 @@ import { cn, getDifficultyLabel } from '@/lib/utils';
 // Cup catalog for the candles workshop ("סדנת נרות"). Same visual language
 // as the sketches catalog (ProductCatalogDrawer). Shows image, price, and the
 // cup description from the CMS difficulty (tags) field below the price.
+//
+// FALLBACK_PRODUCTS is a loading placeholder only — it never has a real
+// bookingProducts _id, so it must NEVER be selectable. A previous version
+// let this be added to the cart like a real cup; the id ('fallback-1')
+// doesn't exist in the CMS, so the server silently dropped it from the
+// order, making it look like the customer's cup choice vanished.
 const FALLBACK_PRODUCTS = [
-  { id: 'fallback-1', title: 'טוען כוסות...', image: null, price: 0 }
+  { id: 'fallback-1', title: 'טוען כוסות...', image: null, price: 0, isLoadingPlaceholder: true }
 ];
 
 function formatCupPrice(price) {
@@ -139,6 +145,7 @@ export default function CupCatalogDrawer({
   const totalItems = cart.reduce((sum, p) => sum + (p.quantity || 1), 0);
 
   const toggleProduct = (product) => {
+    if (product.isLoadingPlaceholder) return;
     const productId = product._id || product.id;
     const isSelected = cart.some(p => (p._id || p.id) === productId);
     if (isSelected) {
@@ -240,16 +247,17 @@ export default function CupCatalogDrawer({
                 const cartItem = cart.find(p => (p._id || p.id) === productId);
                 const isSelected = !!cartItem;
                 const canAddMore = totalItems < totalCups;
+                const isDisabled = product.isLoadingPlaceholder || (!isSelected && !canAddMore);
                 return (
                   <div
                     key={productId}
                     data-product-card
                     onClick={() => {
-                      if (!isSelected && !canAddMore) return;
+                      if (isDisabled) return;
                       toggleProduct(product);
                     }}
-                    className={!isSelected && !canAddMore ? 'opacity-40 cursor-not-allowed' : ''}
-                    title={!isSelected && !canAddMore ? `כבר בחרת ${totalCups} כוסות` : ''}
+                    className={isDisabled ? 'opacity-40 cursor-not-allowed' : ''}
+                    title={product.isLoadingPlaceholder ? '' : (!isSelected && !canAddMore ? `כבר בחרת ${totalCups} כוסות` : '')}
                   >
                     <CupGridCard
                       product={product}

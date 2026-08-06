@@ -3,7 +3,7 @@ import { availabilityCalendar } from 'wix-bookings.v2';
 import { auth } from "@wix/essentials";
 import wixData from 'wix-data';
 import wixPayBackend from 'wix-pay-backend'; // DEPRECATED — used only by createWorkshopPayment (legacy Wix Pay flow)
-import { checkout, orders as ecomOrders } from '@wix/ecom';
+import { checkout } from '@wix/ecom';
 import { Permissions, webMethod } from 'wix-web-module';
 import wixSecretsBackend from 'wix-secrets-backend';
 import { fetch } from 'wix-fetch';
@@ -19,6 +19,8 @@ import {
     FORTY_EIGHT_HOURS_MS,
     isTuftingServiceId,
 } from 'backend/sketchEditingPolicy.js';
+import { normalizeIsraeliPhone, getPhoneLookupVariants, extractBookingIdsFromEcomOrder } from 'backend/orderUtils.js';
+import * as orderReconciliation from 'backend/orderReconciliation.js';
 
 const WORKSHOP_ACCESS_TOKEN_SECRET_NAME = 'WorkshopAccessTokens';
 
@@ -129,22 +131,6 @@ function toIsraelLocalDateTime(dateObj) {
         hourOfDay: Number(get('hour')),
         minutesOfHour: Number(get('minute')),
     };
-}
-
-function normalizeIsraeliPhone(phone) {
-    if (!phone) return '';
-    let digits = String(phone).replace(/\D/g, '');
-    if (!digits) return '';
-
-    if (digits.startsWith('0')) {
-        digits = digits.slice(1);
-    }
-
-    if (!digits.startsWith('972')) {
-        digits = '972' + digits;
-    }
-
-    return '+' + digits;
 }
 
 /**
@@ -702,6 +688,10 @@ export const createAndCheckout = webMethod(Permissions.Anyone, async (orderData)
     const { deadline: deadlineAt } = computeSketchEditingDeadline(workshopStart, orderCreatedAt);
 
     // --- מוצרים נבחרים (כוסות לנרות) — נטענים מה-CMS לפי id בלבד, כדי שהמחיר/התמונה יגיעו מהשרת ולא מהלקוח ---
+    // NOTE: any id the client sent that isn't found in the CMS throws
+    // (INVALID_PRODUCT) instead of being silently dropped — a silent drop
+    // here is exactly how a customer's real cup selection used to vanish
+    // from the order without anyone (customer or staff) ever finding out.
     const selectedProductSelections = Array.isArray(rawProducts) ? rawProducts.filter((p) => p && (p.id || p._id)) : [];
     let cupCustomLineItems = [];
     let selectedCupsForOrder = [];
@@ -712,10 +702,15 @@ export const createAndCheckout = webMethod(Permissions.Anyone, async (orderData)
             .find({ suppressAuth: true, omitTotalCount: true });
         const productsById = new Map(productsResult.items.map((p) => [p._id, p]));
 
+        const missingProductIds = productIds.filter((id) => !productsById.has(id));
+        if (missingProductIds.length > 0) {
+            console.error('[createAndCheckout] INVALID_PRODUCT: unknown bookingProducts id(s):', missingProductIds);
+            throw new Error('INVALID_PRODUCT: one or more selected cups are no longer available. Please reselect and try again.');
+        }
+
         cupCustomLineItems = selectedProductSelections.map((sel) => {
             const productId = sel.id || sel._id;
             const product = productsById.get(productId);
-            if (!product) return null;
             const quantity = Math.max(1, Number(sel.quantity) || 1);
             const price = parseFloat(product.productName) || 0;
             return {
@@ -724,11 +719,16 @@ export const createAndCheckout = webMethod(Permissions.Anyone, async (orderData)
                 productName: { original: 'כוס לנר' },
                 itemType: { preset: 'PHYSICAL' },
                 media: product.image || undefined,
+                // Preserves the CMS productId on the eCom order itself (max 40
+                // chars — Wix Data ids are 36-char UUIDs) so a post-payment
+                // reconciliation pass can reconstruct selectedProducts even if
+                // the pre-payment CMS write below never happened.
+                physicalProperties: { sku: productId },
                 _productId: productId,
                 _price: price,
                 _product: product,
             };
-        }).filter(Boolean);
+        });
 
         selectedCupsForOrder = cupCustomLineItems.map((item) => ({
             productId: item._productId,
@@ -760,7 +760,9 @@ export const createAndCheckout = webMethod(Permissions.Anyone, async (orderData)
         notifyOnSelection: false,
         selectionMode: null,
         workshopType: isCandles ? 'candles' : 'tufting',
-        ...(selectedCupsForOrder.length > 0 ? { selectedProducts: selectedCupsForOrder } : {}),
+        // Always written (even as []) so "no cups selected" is explicit in the
+        // CMS row rather than looking identical to "cups field never written".
+        selectedProducts: selectedCupsForOrder,
     }, { suppressAuth: true });
 
     console.log('[createAndCheckout] WorkshopOrder created:', workshopOrder._id);
@@ -2046,62 +2048,27 @@ const SA_CONSISTENT = { suppressAuth: true, consistentRead: true };
  * does not exist" rejection), tags failures with the calling flow so they're
  * traceable in the logs, and retries once after 4s with consistentRead:true
  * before giving up.
+ *
+ * Delegates to orderReconciliation.js, which is also called directly (no
+ * webMethod/RPC hop) from events.js and jobs.js — see that module for the
+ * full backend-first reconciliation design.
  */
 async function getWorkshopOrderSafe(orderId, callerLabel = 'getWorkshopOrderSafe') {
-    return getItemWithRetry('WorkshopOrders', orderId, { callerLabel });
+    return orderReconciliation.getWorkshopOrderSafe(orderId, callerLabel);
 }
 
 export const getOrderByToken = webMethod(Permissions.Anyone, async (token) => {
-    if (!token) throw new Error('Token is required');
-    const result = await wixData.query('WorkshopOrders')
-        .eq('orderToken', token)
-        .find(SA);
-    if (result.items.length === 0) return null;
-    return result.items[0];
+    return orderReconciliation.getOrderByToken(token);
 });
 
 export const getOrderByCheckoutId = webMethod(Permissions.Anyone, async (checkoutId) => {
     if (!checkoutId) throw new Error('checkoutId is required');
-    const result = await wixData.query('WorkshopOrders')
-        .eq('checkoutId', checkoutId)
-        .find(SA_CONSISTENT);
-    if (result.items.length === 0) return null;
-    return result.items[0];
+    return orderReconciliation.getOrderByCheckoutId(checkoutId);
 });
 
 export const getOrderByEcomOrderId = webMethod(Permissions.Anyone, async (ecomOrderId) => {
-    if (!ecomOrderId) return null;
-    const result = await wixData.query('WorkshopOrders')
-        .eq('ecomOrderId', ecomOrderId)
-        .find(SA_CONSISTENT);
-    if (result.items.length === 0) return null;
-    return result.items[0];
+    return orderReconciliation.getOrderByEcomOrderId(ecomOrderId);
 });
-
-function getPhoneLookupVariants(phone) {
-    if (!phone) return [];
-    const raw = String(phone).trim();
-    const digits = raw.replace(/\D/g, '');
-    const variants = new Set([raw, digits]);
-    if (digits.startsWith('972') && digits.length > 3) {
-        variants.add('0' + digits.slice(3));
-        variants.add('+' + digits);
-    }
-    if (digits.startsWith('0') && digits.length > 1) {
-        variants.add('+972' + digits.slice(1));
-        variants.add('972' + digits.slice(1));
-    }
-    return [...variants].filter(Boolean);
-}
-
-function orderContainsBookingId(order, bookingId) {
-    if (!order || !bookingId) return false;
-    const ids = order.bookingIds;
-    if (Array.isArray(ids)) return ids.includes(bookingId);
-    if (typeof ids === 'string') return ids === bookingId || ids.includes(bookingId);
-    if (order.bookingId === bookingId) return true;
-    return false;
-}
 
 function phonesMatch(storedPhone, inputPhone) {
     if (!inputPhone) return true;
@@ -2115,24 +2082,7 @@ function phonesMatch(storedPhone, inputPhone) {
 }
 
 export const getWorkshopOrderByBookingId = webMethod(Permissions.Anyone, async (bookingId) => {
-    if (!bookingId) return null;
-
-    try {
-        const byArray = await wixData.query('WorkshopOrders')
-            .hasSome('bookingIds', [bookingId])
-            .descending('_createdDate')
-            .limit(1)
-            .find(SA_CONSISTENT);
-        if (byArray.items.length > 0) return byArray.items[0];
-    } catch (err) {
-        console.warn('[getWorkshopOrderByBookingId] hasSome query failed, falling back:', err?.message);
-    }
-
-    const recent = await wixData.query('WorkshopOrders')
-        .descending('_createdDate')
-        .limit(100)
-        .find(SA_CONSISTENT);
-    return recent.items.find((item) => orderContainsBookingId(item, bookingId)) || null;
+    return orderReconciliation.getWorkshopOrderByBookingId(bookingId);
 });
 
 /**
@@ -2189,193 +2139,69 @@ export const getOrderHistoryForBuyer = webMethod(Permissions.Anyone, async (phon
 // their own) gets wrongly matched to their OLD already-paid workshop order
 // by phone/email alone, incorrectly showing them the post-payment iframe hub.
 export const getWorkshopOrderByBuyerInfo = webMethod(Permissions.Anyone, async (phone, email) => {
-    if (!phone && !email) return null;
-
-    if (phone) {
-        for (const variant of getPhoneLookupVariants(phone)) {
-            const byPhone = await wixData.query('WorkshopOrders')
-                .eq('organizerPhone', variant)
-                .isEmpty('ecomOrderId')
-                .descending('_createdDate')
-                .limit(1)
-                .find(SA_CONSISTENT);
-            if (byPhone.items.length > 0) return byPhone.items[0];
-        }
-    }
-
-    if (email) {
-        const byEmail = await wixData.query('WorkshopOrders')
-            .eq('organizerEmail', email)
-            .isEmpty('ecomOrderId')
-            .descending('_createdDate')
-            .limit(1)
-            .find(SA_CONSISTENT);
-        if (byEmail.items.length > 0) return byEmail.items[0];
-    }
-
-    return null;
+    return orderReconciliation.getWorkshopOrderByBuyerInfo(phone, email);
 });
-
-// Candidate titles for the custom "organizer notes" checkout field, matched
-// case-insensitively against order.customFields[].title. Titles are
-// configured by the business owner in Checkout settings (Info Collection >
-// Custom Fields), so we match on a few likely variants rather than a fixed
-// key — customFields has no stable id, only a free-text title.
-const ORGANIZER_NOTES_TITLE_CANDIDATES = [
-    'organizer_notes',
-    'organizer notes',
-    'הוסיפו הודעה אישית',
-    'הודעה אישית',
-    'הערות',
-    'הערה',
-];
-
-// NOTE: intentionally NOT exported as a webMethod — plain exports from a
-// .web.js module aren't proxied to the frontend (only webMethod-wrapped ones
-// are), and this is a pure/sync helper with no need for backend privileges.
-// Thank You Page.gyyib.js keeps its own local copy of this logic.
-function extractOrganizerNotesFromEcomOrder(ecomOrder) {
-    const fields = ecomOrder?.customFields;
-    if (!Array.isArray(fields) || fields.length === 0) return '';
-
-    console.log('[extractOrganizerNotesFromEcomOrder] raw customFields:', JSON.stringify(fields));
-
-    const match = fields.find((f) => {
-        const title = (f?.title || '').trim().toLowerCase();
-        return ORGANIZER_NOTES_TITLE_CANDIDATES.some((c) => title === c.toLowerCase());
-    }) || fields[0]; // fall back to the first custom field if no title matches
-
-    const value = match?.value;
-    if (value == null) return '';
-    return typeof value === 'string' ? value : String(value);
-}
-
-function extractBookingIdsFromEcomOrder(ecomOrder) {
-    const ids = new Set();
-    for (const item of ecomOrder?.lineItems || []) {
-        if (item.productId) ids.add(item.productId);
-        if (item.catalogReference?.catalogItemId) ids.add(item.catalogReference.catalogItemId);
-    }
-    return [...ids];
-}
-
-const elevatedGetEcomOrder = auth.elevate(ecomOrders.getOrder);
 
 /**
- * The Thank You page's getOrder() sometimes returns customFields empty due to a
- * timing/consistency gap right after checkout. If so, re-fetch the full order via
- * the elevated eCom Orders API (which is authoritative) before extracting notes.
+ * Kept as a webMethod purely for the Thank You page's optimistic UI path —
+ * the actual authoritative write now happens in orderReconciliation.js,
+ * triggered independently by the eCom payment event (events.js) and the
+ * scheduled sweep job (jobs.js). This call is best-effort acceleration
+ * only: if the customer never reaches the Thank You page (refresh, dropped
+ * connection, closed tab), the order is still reconciled server-side.
  */
-async function ensureCustomFields(ecomOrder) {
-    if (!ecomOrder?._id) return ecomOrder;
-    if (Array.isArray(ecomOrder.customFields) && ecomOrder.customFields.length > 0) return ecomOrder;
-    try {
-        const fullOrder = await elevatedGetEcomOrder(ecomOrder._id);
-        if (Array.isArray(fullOrder?.customFields) && fullOrder.customFields.length > 0) {
-            return { ...ecomOrder, customFields: fullOrder.customFields };
-        }
-    } catch (err) {
-        console.warn('[ensureCustomFields] elevated getOrder fallback failed:', err?.message || err);
-    }
-    return ecomOrder;
-}
-
-async function linkWorkshopOrderToEcom(workshopOrder, ecomOrderInput) {
-    const ecomOrder = await ensureCustomFields(ecomOrderInput);
-    const buyer = ecomOrder?.buyerInfo || ecomOrder?.billingInfo || {};
-    const buyerName = `${buyer.firstName || ''} ${buyer.lastName || ''}`.trim();
-
-    // Support both Thank You page format (totals) and orders API format (priceSummary)
-    const totals = ecomOrder?.totals || ecomOrder?.priceSummary || {};
-    const totalAmount = totals.total?.amount ? parseFloat(totals.total.amount) : (totals.total || 0);
-    const discountAmount = totals.discount?.amount ? parseFloat(totals.discount.amount) : (totals.discount || 0);
-
-    // Support both formats for coupon
-    const coupon = ecomOrder?.discount?.appliedCoupon ||
-        ecomOrder?.appliedDiscounts?.find(d => d.coupon)?.coupon || null;
-
-    const updates = {
-        ...workshopOrder,
-        ecomOrderId: ecomOrder._id,
-        ecomOrderNumber: ecomOrder.number || null,
-        status: 'paid',
-        paidTotal: totalAmount || workshopOrder.basePrice || 0,
-        paidDiscount: discountAmount,
-        couponCode: coupon?.code || null,
-        couponName: coupon?.name || null,
-    };
-    if (!workshopOrder.organizerPhone && buyer.phone) updates.organizerPhone = buyer.phone;
-    if (!workshopOrder.organizerEmail && buyer.email) updates.organizerEmail = buyer.email;
-    if (!workshopOrder.organizerName && buyerName) updates.organizerName = buyerName;
-
-    const customerNotes = extractOrganizerNotesFromEcomOrder(ecomOrder);
-    if (customerNotes) updates.customerNotes = customerNotes;
-
-    return wixData.update('WorkshopOrders', updates, SA);
-}
-
 export const resolveWorkshopOrderFromEcom = webMethod(Permissions.Anyone, async (ecomOrder) => {
-    if (!ecomOrder?._id) return { workshopOrder: null, matchedBy: null };
-
-    const buyer = ecomOrder.buyerInfo || ecomOrder.billingInfo || {};
-    let workshopOrder = null;
-    let matchedBy = null;
-
-    workshopOrder = await getOrderByEcomOrderId(ecomOrder._id);
-    if (workshopOrder) matchedBy = 'ecomOrderId';
-
-    if (!workshopOrder) {
-        workshopOrder = await getOrderByCheckoutId(ecomOrder._id);
-        if (workshopOrder) matchedBy = 'checkoutId';
-    }
-
-    const bookingIds = extractBookingIdsFromEcomOrder(ecomOrder);
-    if (!workshopOrder) {
-        for (const bookingId of bookingIds) {
-            workshopOrder = await getWorkshopOrderByBookingId(bookingId);
-            if (workshopOrder) {
-                matchedBy = 'bookingId';
-                break;
-            }
-        }
-    }
-
-    if (!workshopOrder && (buyer.phone || buyer.email)) {
-        workshopOrder = await getWorkshopOrderByBuyerInfo(buyer.phone, buyer.email);
-        if (workshopOrder) matchedBy = 'buyerInfo';
-    }
-
-    if (!workshopOrder) {
-        return { workshopOrder: null, matchedBy: null, bookingIds };
-    }
-
-    const missingNotes = !workshopOrder.customerNotes && !!extractOrganizerNotesFromEcomOrder(ecomOrder);
-    if (workshopOrder.status !== 'paid' || workshopOrder.ecomOrderId !== ecomOrder._id || missingNotes) {
-        workshopOrder = await linkWorkshopOrderToEcom(workshopOrder, ecomOrder);
-    }
-
-    return { workshopOrder, matchedBy, bookingIds };
+    const result = await orderReconciliation.reconcileEcomOrder(ecomOrder, { requirePaid: false });
+    return {
+        workshopOrder: result.workshopOrder,
+        matchedBy: result.matchedBy,
+        bookingIds: result.bookingIds || [],
+    };
 });
 
-export const confirmOrderPayment = webMethod(Permissions.Anyone, async (orderId, ecomOrder) => {
+/**
+ * Also best-effort/UI-acceleration only (see resolveWorkshopOrderFromEcom
+ * above) — never trusts field values on a client-supplied `ecomOrderHint`
+ * object, only its `_id` (as a hint of which order to re-fetch). The actual
+ * buyer/paid/cup data always comes from a fresh, elevated, server-side
+ * fetch of the real eCom order, and is only applied once verified to
+ * actually correlate with this WorkshopOrder (matching checkoutId,
+ * ecomOrderId, or a shared bookingId) — this guards against a forged or
+ * mismatched orderId/ecomOrder pairing from the client.
+ */
+export const confirmOrderPayment = webMethod(Permissions.Anyone, async (orderId, ecomOrderHint) => {
     const order = await getWorkshopOrderSafe(orderId, 'confirmOrderPayment');
     if (!order) throw new Error('Order not found');
 
-    // Prefer the full linking path (organizer info, coupon, totals, order number)
-    // whenever we have the full eCom order — this is the common path since the
-    // frontend caches workshopOrderId in local storage before checkout, so this
-    // is normally the ONLY place those fields get written.
-    const updated = (ecomOrder && ecomOrder._id) ?
-        await linkWorkshopOrderToEcom(order, ecomOrder) :
+    const candidateEcomOrderId = order.ecomOrderId || ecomOrderHint?._id || null;
+    let fullEcomOrder = candidateEcomOrderId ?
+        await orderReconciliation.fetchFullEcomOrder(candidateEcomOrderId) :
+        null;
+
+    // Safety net: ecomOrderId was never written (e.g. an interrupted
+    // checkout) but we do know the checkoutId — look the eCom order up by
+    // that instead.
+    if (!fullEcomOrder && order.checkoutId) {
+        fullEcomOrder = await orderReconciliation.fetchEcomOrderByCheckoutId(order.checkoutId);
+    }
+
+    const correlated = !!fullEcomOrder && (
+        fullEcomOrder.checkoutId === order.checkoutId ||
+        fullEcomOrder._id === order.ecomOrderId ||
+        (order.bookingIds || []).some((id) => extractBookingIdsFromEcomOrder(fullEcomOrder).includes(id))
+    );
+
+    const updated = correlated ?
+        await orderReconciliation.linkWorkshopOrderToEcom(order, fullEcomOrder) :
         await wixData.update('WorkshopOrders', {
             ...order,
-            ecomOrderId: (ecomOrder && ecomOrder._id) || order.ecomOrderId || null,
             status: 'paid',
+            ecomOrderId: order.ecomOrderId || candidateEcomOrderId || null,
         }, SA);
 
     // WhatsApp is now sent automatically by the WorkshopOrders_afterUpdate
     // data hook in data.js when status changes to 'paid'.
-    console.log('[confirmOrderPayment] order updated to paid. orderId:', orderId);
+    console.log('[confirmOrderPayment] order updated to paid. orderId:', orderId, 'source:', correlated ? 'ecom-verified' : 'degraded-fallback');
 
     return updated;
 });

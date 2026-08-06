@@ -18,10 +18,13 @@ export default function CandelsOrderSummarySection({
   servicePricing,
   selectedCups = [],
   cupsExtraTotal = 0,
+  totalCups = 0,
   totalPrice,
   onPay,
   isProcessing
 }) {
+  const selectedCupCount = selectedCups.reduce((sum, c) => sum + (c.quantity || 1), 0);
+  const cupsIncomplete = totalCups > 0 && selectedCupCount < totalCups;
   const dateTimeInfo = useMemo(() => {
     if (!selectedSlot?.start?.timestamp) return null;
     const ld = getSlotLocalDate(selectedSlot);
@@ -108,10 +111,15 @@ export default function CandelsOrderSummarySection({
 
       {/* כפתור מעבר לתשלום */}
       <div className="pt-3">
+        {cupsIncomplete && (
+          <p className="mb-2 text-center text-sm font-medium text-red-600">
+            יש להשלים את בחירת הכוסות ({selectedCupCount}/{totalCups}) לפני התשלום
+          </p>
+        )}
         <motion.button
           type="button"
           onClick={onPay}
-          disabled={isProcessing || totalPrice <= 0}
+          disabled={isProcessing || totalPrice <= 0 || cupsIncomplete}
           animate={isProcessing ? {} : {
             scale: [1, 1.02, 1],
             boxShadow: [

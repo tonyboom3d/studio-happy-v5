@@ -199,6 +199,17 @@ export default function CandelsBooking() {
   // שליחת ההזמנה (כולל הכוסות שנבחרו)
   const handleSubmit = async () => {
     if (submittingRef.current) return;
+
+    // Defense-in-depth: the pay button is already disabled while cup
+    // selection is incomplete, but never allow a submit to reach the
+    // backend with missing cups regardless of how it was triggered.
+    const selectedCupCount = cupCart.reduce((sum, c) => sum + (c.quantity || 1), 0);
+    if (totalCups > 0 && selectedCupCount < totalCups) {
+      setBookingError('יש להשלים את בחירת הכוסות לפני התשלום');
+      addLog('[Candels] Submit blocked — cup selection incomplete', 'error');
+      return;
+    }
+
     submittingRef.current = true;
     setBookingError(null);
     addLog('[Candels] Starting booking submission...', 'info');
@@ -442,6 +453,7 @@ export default function CandelsBooking() {
                     servicePricing={servicePricing}
                     selectedCups={cupCart}
                     cupsExtraTotal={cupsExtraTotal}
+                    totalCups={totalCups}
                     totalPrice={orderTotalPreview}
                     onPay={handleSubmit}
                     isProcessing={isProcessing}

@@ -2,11 +2,14 @@ import wixData from 'wix-data';
 import { toDateKey } from 'backend/availabilityRules.js';
 import { runScheduling, processOfferEscalation } from 'backend/schedulingEngine.js';
 import { processDeadlineReminders, processConfirmations } from 'backend/shiftConfirmations.js';
+import { fetchEcomOrderByCheckoutId, reconcileEcomOrder } from 'backend/orderReconciliation.js';
 
 const SA = { suppressAuth: true, suppressHooks: true };
 
 const SCHEDULING_HORIZON_DAYS = 60;
 const TIME_ENTRY_MAX_OPEN_HOURS = 12;
+const STUCK_ORDER_MIN_AGE_MS = 20 * 60 * 1000; // 20 minutes
+const STUCK_ORDER_ABANDONED_AGE_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 /**
  * Scheduled job (hourly, jobs.config): keeps the scheduling pipeline moving —
@@ -126,4 +129,74 @@ export async function expireStuckUpgradePayments() {
         console.log(`[jobs] expireStuckUpgradePayments: reverted ${reverted} stuck upgrade(s) to 60x60`);
     }
     return { reverted };
+}
+
+/**
+ * Scheduled job (jobs.config) — safety net for the backend-first
+ * WorkshopOrders reconciliation (see orderReconciliation.js).
+ *
+ * The wixEcom_onOrderPaymentStatusUpdated event (events.js) is the
+ * authoritative, immediate trigger for writing paid status + buyer details
+ * + cups onto WorkshopOrders. This job exists purely to catch the rare case
+ * where that event was missed or failed (e.g. a transient error): it
+ * re-checks orders stuck in 'pending_payment'/'checkout_created' for more
+ * than STUCK_ORDER_MIN_AGE_MS, looks up the matching eCom order by
+ * checkoutId, and reconciles it if paid — or marks it 'abandoned' after
+ * STUCK_ORDER_ABANDONED_AGE_MS so genuinely dropped checkouts don't linger
+ * forever as "pending" on the order-management dashboard.
+ */
+export async function reconcileStuckWorkshopOrders() {
+    const cutoff = new Date(Date.now() - STUCK_ORDER_MIN_AGE_MS);
+    const abandonedCutoff = new Date(Date.now() - STUCK_ORDER_ABANDONED_AGE_MS);
+
+    const stuck = await wixData.query('WorkshopOrders')
+        .hasSome('status', ['pending_payment', 'checkout_created'])
+        .lt('_createdDate', cutoff)
+        .limit(200)
+        .find(SA)
+        .catch((err) => {
+            console.error('[jobs] reconcileStuckWorkshopOrders query failed:', err?.message || err);
+            return { items: [] };
+        });
+
+    let reconciled = 0;
+    let abandoned = 0;
+    let stillPending = 0;
+
+    for (const order of stuck.items || []) {
+        if (!order.checkoutId) {
+            stillPending++;
+            continue;
+        }
+
+        const ecomOrder = await fetchEcomOrderByCheckoutId(order.checkoutId).catch((err) => {
+            console.warn('[jobs] reconcileStuckWorkshopOrders: lookup failed for order', order._id, err?.message);
+            return null;
+        });
+
+        if (ecomOrder) {
+            const result = await reconcileEcomOrder(ecomOrder).catch((err) => {
+                console.error('[jobs] reconcileStuckWorkshopOrders: reconcile failed for order', order._id, err?.message);
+                return { reconciled: false };
+            });
+            if (result.reconciled) {
+                reconciled++;
+                continue;
+            }
+        }
+
+        if (new Date(order._createdDate) < abandonedCutoff) {
+            await wixData.update('WorkshopOrders', { ...order, status: 'abandoned' }, SA).catch((err) => {
+                console.error('[jobs] reconcileStuckWorkshopOrders: failed to mark order abandoned', order._id, err?.message);
+            });
+            abandoned++;
+        } else {
+            stillPending++;
+        }
+    }
+
+    if (reconciled || abandoned) {
+        console.log(`[jobs] reconcileStuckWorkshopOrders: reconciled=${reconciled} abandoned=${abandoned} stillPending=${stillPending}`);
+    }
+    return { reconciled, abandoned, stillPending };
 }

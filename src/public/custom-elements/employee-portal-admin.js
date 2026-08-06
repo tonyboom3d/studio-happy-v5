@@ -225,7 +225,7 @@ export function renderAdminTab(ce) {
     }
     const allowedPages = ['board', 'tracker', 'employees'];
     if (d.permissions.editTimeEntries) allowedPages.push('teamTime');
-    if (d.permissions.manageEmployees) allowedPages.push('messages');
+    if (d.permissions.manageEmployees) allowedPages.push('messages', 'vacations');
     if (d.permissions.manageRules) allowedPages.push('settings');
     if (d.permissions.manageTemplates) allowedPages.push('templates');
     if (!allowedPages.includes(ce._adminPage)) ce._adminPage = 'board';
@@ -246,6 +246,7 @@ function icon(name) {
         employees: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>',
         teamTime: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/>',
         messages: '<path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>',
+        vacations: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M8 3v4M16 3v4M3 11h18"/><path d="M8 15h.01M12 15h.01M16 15h.01"/>',
         settings: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.83 2.83-.06-.06a1.7 1.7 0 0 0-1.88-.34 1.7 1.7 0 0 0-1.03 1.56V21h-4v-.08A1.7 1.7 0 0 0 9 19.37a1.7 1.7 0 0 0-1.88.34l-.06.06-2.83-2.83.06-.06A1.7 1.7 0 0 0 4.63 15 1.7 1.7 0 0 0 3.08 14H3v-4h.08A1.7 1.7 0 0 0 4.63 9a1.7 1.7 0 0 0-.34-1.88l-.06-.06 2.83-2.83.06.06A1.7 1.7 0 0 0 9 4.63h.01A1.7 1.7 0 0 0 10 3.08V3h4v.08A1.7 1.7 0 0 0 15 4.63a1.7 1.7 0 0 0 1.88-.34l.06-.06 2.83 2.83-.06.06A1.7 1.7 0 0 0 19.37 9v.01A1.7 1.7 0 0 0 20.92 10H21v4h-.08A1.7 1.7 0 0 0 19.4 15z"/>',
         templates: '<path d="M4 4h16v16H4z"/><path d="M8 8h8M8 12h8M8 16h5"/>',
     };
@@ -261,6 +262,7 @@ function renderSidebar(ce, d) {
         { page: 'employees', label: 'עובדים', show: d.permissions.viewTeamSchedule !== false },
         { page: 'teamTime', label: 'שעות צוות', show: d.permissions.editTimeEntries },
         { page: 'messages', label: 'הודעות', show: d.permissions.manageEmployees },
+        { page: 'vacations', label: 'חופשות', show: d.permissions.manageEmployees },
         { page: 'settings', label: 'הגדרות', show: d.permissions.manageRules },
         { page: 'templates', label: 'תבניות', show: d.permissions.manageTemplates },
     ].filter(x => x.show);
@@ -284,6 +286,7 @@ function renderAdminPage(ce, d) {
         case 'employees': return renderEmployeesPage(ce, d);
         case 'teamTime': return renderTeamTimePage(ce, d);
         case 'messages': return renderMessagesPage(ce, d);
+        case 'vacations': return renderVacationsPage(ce, d);
         case 'settings': return renderSettingsPage(ce, d);
         case 'templates': return renderTemplatesPage(ce, d);
         default: return renderBoardPage(ce, d);
@@ -509,11 +512,20 @@ function renderMonthControls(d) {
 function renderTrackerPage(ce, d) {
     const trackerRows = (d.tracker || []).map(t => {
         const employee = (d.employees || []).find(e => e.id === t.employeeId);
+        const unmetWeeks = (t.weeks || []).filter(w => !w.met);
+        const weeksNote = unmetWeeks.length
+            ? `<div style="font-size:10.5px;color:#991b1b;margin-top:2px">שבועות חסרים: ${unmetWeeks.map(w => `${fmtDate(w.weekStart)}–${fmtDate(w.weekEnd)}`).join(', ')}</div>`
+            : '';
+        const weekend = t.weekend || {};
+        const weekendBadge = weekend.met
+            ? `<span class="epa-badge ok">שישי ${weekend.fridays?.submitted ?? 0}/${weekend.fridays?.required ?? 0} · שבת ${weekend.saturdays?.submitted ?? 0}/${weekend.saturdays?.required ?? 0}</span>`
+            : `<span class="epa-badge miss">שישי ${weekend.fridays?.submitted ?? 0}/${weekend.fridays?.required ?? 0} · שבת ${weekend.saturdays?.submitted ?? 0}/${weekend.saturdays?.required ?? 0}</span>`;
         return `<tr>
             <td><span class="epa-dot-lg" style="background:${esc(employee?.color || '#2563eb')}"></span>${esc(t.name)}</td>
-            <td>${t.submitted}/${t.required}</td>
+            <td>${t.submitted}/${t.required}${weeksNote}</td>
             <td><span class="epa-badge ${t.met ? 'ok' : 'miss'}">${t.met ? 'הושלם' : 'חסר'}</span></td>
-            <td>${!t.met && d.permissions.manageScheduling ? `<button class="epa-btn" data-action="admin-nudge" data-emp="${t.employeeId}">שליחת תזכורת</button>` : ''}</td>
+            <td>${weekendBadge}</td>
+            <td>${(!t.met || !weekend.met) && d.permissions.manageScheduling ? `<button class="epa-btn" data-action="admin-nudge" data-emp="${t.employeeId}">שליחת תזכורת</button>` : ''}</td>
         </tr>`;
     }).join('');
     const statusLabel = { SUBMITTED: 'הוגש', STANDBY: 'בהמתנה', SCHEDULED: 'משובץ', REJECTED: 'נדחה' };
@@ -564,8 +576,8 @@ function renderTrackerPage(ce, d) {
             <div class="epa-stat"><b>${complete}/${(d.tracker || []).length}</b><span>עובדים שהשלימו מכסה</span></div>
         </div>
         <section class="epa-panel">
-            <div class="epa-panel-title"><h3>מצב מכסות</h3></div>
-            <div class="epa-table-wrap"><table class="epa-table"><thead><tr><th>עובד/ת</th><th>הוגשו</th><th>סטטוס</th><th></th></tr></thead><tbody>${trackerRows}</tbody></table></div>
+            <div class="epa-panel-title"><h3>מצב מכסות שבועיות ושישי/שבת</h3></div>
+            <div class="epa-table-wrap"><table class="epa-table"><thead><tr><th>עובד/ת</th><th>הוגשו (שבועי)</th><th>סטטוס</th><th>שישי/שבת בחודש</th><th></th></tr></thead><tbody>${trackerRows}</tbody></table></div>
         </section>
         <section class="epa-panel">
             <div class="epa-panel-title">
@@ -625,7 +637,7 @@ function renderEmployeesPage(ce, d) {
             <td><span class="epa-dot-lg" style="background:${esc(e.color || '#2563eb')}"></span>${esc(e.displayName)}${e.isTrainee ? ' <span class="ep-tag">חניכה</span>' : ''}</td>
             <td>${esc(e.roleLabel)}</td>
             <td>${e.priorityRank ?? '—'}</td>
-            <td>${e.minShiftsPerMonth ?? 'ברירת מחדל'}</td>
+            <td>${e.minShiftsPerWeek ?? 'ברירת מחדל'}</td>
             <td>${(e.skillIds || []).map(id => esc((d.workshopTypes.find(w => w.id === id) || {}).name || '')).filter(Boolean).join(', ') || '—'}</td>
             <td><span class="epa-badge ${e.active ? 'ok' : 'miss'}">${e.active ? 'פעיל/ה' : 'לא פעיל/ה'}</span></td>
         </tr>`).join('');
@@ -761,7 +773,7 @@ function renderEmployeeForm(e, d) {
             <div><label>צבע</label><input id="epaF_color" type="color" value="${esc(e.color || '#2563eb')}"></div>
             <div><label>ותק</label><input id="epaF_seniority" value="${esc(e.seniority)}"></div>
             <div><label>דירוג עדיפות (נסתר)</label><input id="epaF_priorityRank" type="number" value="${e.priorityRank ?? ''}"></div>
-            <div><label>מכסת משמרות חודשית</label><input id="epaF_minShiftsPerMonth" type="number" value="${e.minShiftsPerMonth ?? ''}"></div>
+            <div><label>מכסת משמרות שבועית (ריק = ברירת מחדל)</label><input id="epaF_minShiftsPerWeek" type="number" value="${e.minShiftsPerWeek ?? ''}"></div>
             <div><label>אורך משמרת מינימלי (שעות)</label><input id="epaF_minShiftHours" type="number" value="${e.minShiftHours ?? ''}"></div>
             <div><label>חניכה</label><select id="epaF_isTrainee"><option value="0" ${!e.isTrainee ? 'selected' : ''}>לא</option><option value="1" ${e.isTrainee ? 'selected' : ''}>כן</option></select></div>
             <div><label>פעיל/ה</label><select id="epaF_active"><option value="1" ${e.active ? 'selected' : ''}>כן</option><option value="0" ${!e.active ? 'selected' : ''}>לא</option></select></div>
@@ -821,11 +833,13 @@ function renderSettingsPage(_ce, d) {
             <div class="epa-settings-grid">
                 <div class="epa-field"><label>ימים לפני סוף החודש לסגירת הגשות</label><input id="epaS_deadline" type="number" min="1" value="${s.deadlineDaysBeforeMonthEnd ?? 4}"></div>
                 <div class="epa-field"><label>מספר חודשים קדימה</label><input id="epaS_monthsAhead" type="number" min="1" value="${s.monthsAheadAllowed ?? 1}"></div>
-                <div class="epa-field"><label>מכסת משמרות חודשית</label><input id="epaS_minShifts" type="number" min="1" value="${s.defaultMinShiftsPerMonth ?? 3}"></div>
+                <div class="epa-field"><label>מכסת משמרות שבועית</label><input id="epaS_minShifts" type="number" min="1" value="${s.defaultMinShiftsPerWeek ?? 1}"></div>
                 <div class="epa-field"><label>אורך משמרת מינימלי</label><input id="epaS_minHours" type="number" min="0.5" step="0.5" value="${s.defaultMinShiftHours ?? 4}"></div>
                 <div class="epa-field"><label>שעת התחלה ברירת מחדל</label><input id="epaS_start" type="time" value="${esc(s.defaultShiftStart || '10:00')}"></div>
                 <div class="epa-field"><label>שעת סיום ברירת מחדל</label><input id="epaS_end" type="time" value="${esc(s.defaultShiftEnd || '16:00')}"></div>
-                <label class="epa-toggle"><input id="epaS_bonus" type="checkbox" ${s.bonusUnlockEnabled !== false ? 'checked' : ''}> פתיחת משמרות נוספות לאחר השלמת מכסה</label>
+                <div class="epa-field" title="מספר ימי שישי שיש להגיש לחודש (חופשה מאושרת על יום שישי מקטינה את הדרישה)"><label>ימי שישי נדרשים בחודש</label><input id="epaS_reqFri" type="number" min="0" value="${s.requiredFridaysPerMonth ?? 2}"></div>
+                <div class="epa-field" title="מספר ימי שבת שיש להגיש לחודש (חופשה מאושרת על יום שבת מקטינה את הדרישה)"><label>ימי שבת נדרשים בחודש</label><input id="epaS_reqSat" type="number" min="0" value="${s.requiredSaturdaysPerMonth ?? 2}"></div>
+                <label class="epa-toggle"><input id="epaS_bonus" type="checkbox" ${s.bonusUnlockEnabled !== false ? 'checked' : ''}> פתיחת משמרות נוספות לאחר השלמת מכסה השבועית</label>
                 <label class="epa-toggle" title="כשמופעל: הגשה ביום עם הזמנות פעילות משבצת אוטומטית עובדים עם ההכשרה המתאימה. כשכבוי: כל ההגשות ממתינות לאישור ידני של מנהל/ת."><input id="epaS_autoApprove" type="checkbox" ${s.autoApproveShifts !== false ? 'checked' : ''}> אישור אוטומטי של משמרות</label>
             </div>
             <div class="epa-inline"><button class="epa-btn primary" data-action="admin-save-settings">שמירת הגדרות</button></div>
@@ -911,6 +925,44 @@ function renderMessageForm(ce, d, message) {
         </div>`;
 }
 
+function renderVacationsPage(ce, d) {
+    const head = `<div class="epa-page-head"><div><h2>חופשות</h2><p>חופשות מאושרות לעובדים — פוטרות מדרישת הגשת שישי/שבת החודשית לתאריכים החופפים</p></div>
+        ${ce._vacationsData ? `<button class="epa-btn primary" data-action="admin-new-vacation">חופשה חדשה +</button>` : ''}</div>`;
+    if (!ce._vacationsData) {
+        return `${head}<section class="epa-panel"><div class="ep-loading"><div class="ep-spinner"></div>טוען חופשות…</div></section>`;
+    }
+    const rows = ce._vacationsData.slice().sort((a, b) => b.startDate.localeCompare(a.startDate)).map(v => `
+        <tr class="epa-row-click" data-action="admin-edit-vacation" data-vacation="${esc(v.id)}">
+            <td>${esc(v.employeeName)}</td>
+            <td>${fmtDate(v.startDate)} – ${fmtDate(v.endDate)}</td>
+            <td>${esc(v.notes || '—')}</td>
+            <td><button class="epa-btn danger" data-action="admin-delete-vacation" data-vacation="${esc(v.id)}">מחיקה</button></td>
+        </tr>`).join('');
+    return `${head}
+        <section class="epa-panel">
+            <div class="epa-panel-title"><h3>כל החופשות (${ce._vacationsData.length})</h3></div>
+            <div class="epa-table-wrap"><table class="epa-table"><thead><tr><th>עובד/ת</th><th>טווח תאריכים</th><th>הערות</th><th></th></tr></thead>
+                <tbody>${rows || '<tr><td colspan="4" class="ep-empty">אין חופשות מוגדרות</td></tr>'}</tbody>
+            </table></div>
+        </section>`;
+}
+
+function renderVacationForm(ce, d, vacation) {
+    const employees = (d.employees || []).slice().sort((a, b) => a.displayName.localeCompare(b.displayName, 'he'));
+    const empOptions = employees.map(e => `<option value="${esc(e.id)}" ${vacation?.employeeId === e.id ? 'selected' : ''}>${esc(e.displayName)}</option>`).join('');
+    return `<div class="epa-form">
+            <div><label>עובד/ת</label><select id="epaV_employeeId" ${vacation ? 'disabled' : ''}>${empOptions}</select></div>
+            <div><label>מתאריך</label><input id="epaV_start" type="date" value="${esc(vacation?.startDate || '')}"></div>
+            <div><label>עד תאריך</label><input id="epaV_end" type="date" value="${esc(vacation?.endDate || '')}"></div>
+        </div>
+        <div class="epa-field" style="margin-top:8px"><label>הערות</label><input id="epaV_notes" value="${esc(vacation?.notes || '')}"></div>
+        <div class="epa-inline">
+            <button class="epa-btn primary" data-action="admin-save-vacation" data-vacation="${esc(vacation?.id || '')}">שמירה</button>
+            ${vacation?.id ? `<button class="epa-btn danger" data-action="admin-delete-vacation" data-vacation="${esc(vacation.id)}">מחיקה</button>` : ''}
+            <button class="epa-btn" data-action="admin-close-modal">ביטול</button>
+        </div>`;
+}
+
 function renderModal(ce, d) {
     const modal = ce._adminModal;
     if (!modal) return '';
@@ -965,6 +1017,10 @@ function renderModal(ce, d) {
         const message = modal.id ? (ce._adminMessagesData || []).find(m => m.id === modal.id) : null;
         title = message ? 'עריכת הודעה' : 'הודעה חדשה';
         body = renderMessageForm(ce, d, message);
+    } else if (modal.type === 'vacation') {
+        const vacation = modal.id ? (ce._vacationsData || []).find(v => v.id === modal.id) : null;
+        title = vacation ? `עריכת חופשה — ${vacation.employeeName}` : 'חופשה חדשה';
+        body = renderVacationForm(ce, d, vacation);
     }
     return `<div class="epa-modal-backdrop">
         <div class="epa-modal" role="dialog" aria-modal="true" aria-label="${esc(title)}">
@@ -1019,6 +1075,9 @@ export function handleAdminClick(ce, action, target) {
             }
             if (ce._adminPage === 'messages' && !ce._adminMessagesData && d?.permissions?.manageEmployees) {
                 ce._dispatch('adminMessagesLoad');
+            }
+            if (ce._adminPage === 'vacations' && !ce._vacationsData && d?.permissions?.manageEmployees) {
+                ce._dispatch('adminVacationsLoad');
             }
             ce.render();
             return true;
@@ -1141,7 +1200,7 @@ export function handleAdminClick(ce, action, target) {
                 color: val('epaF_color') || undefined,
                 seniority: val('epaF_seniority') ?? undefined,
                 priorityRank: num('epaF_priorityRank'),
-                minShiftsPerMonth: num('epaF_minShiftsPerMonth'),
+                minShiftsPerWeek: num('epaF_minShiftsPerWeek'),
                 minShiftHours: num('epaF_minShiftHours'),
                 isTrainee: val('epaF_isTrainee') === '1',
                 active: val('epaF_active') === '1',
@@ -1246,10 +1305,12 @@ export function handleAdminClick(ce, action, target) {
                 patch: {
                     deadlineDaysBeforeMonthEnd: Number(value('epaS_deadline')),
                     monthsAheadAllowed: Number(value('epaS_monthsAhead')),
-                    defaultMinShiftsPerMonth: Number(value('epaS_minShifts')),
+                    defaultMinShiftsPerWeek: Number(value('epaS_minShifts')),
                     defaultMinShiftHours: Number(value('epaS_minHours')),
                     defaultShiftStart: value('epaS_start'),
                     defaultShiftEnd: value('epaS_end'),
+                    requiredFridaysPerMonth: Number(value('epaS_reqFri')),
+                    requiredSaturdaysPerMonth: Number(value('epaS_reqSat')),
                     bonusUnlockEnabled: !!ce.querySelector('#epaS_bonus')?.checked,
                     autoApproveShifts: !!ce.querySelector('#epaS_autoApprove')?.checked,
                 },
@@ -1344,6 +1405,40 @@ export function handleAdminClick(ce, action, target) {
             ce._adminModal = null;
             ce._startBusy('מוחק הודעה…');
             ce._dispatch('adminMessageDelete', { messageId: target.dataset.message });
+            return true;
+        case 'admin-new-vacation':
+            ce._adminModal = { type: 'vacation', id: null };
+            ce.render();
+            return true;
+        case 'admin-edit-vacation':
+            ce._adminModal = { type: 'vacation', id: target.dataset.vacation };
+            ce.render();
+            return true;
+        case 'admin-save-vacation': {
+            const val = (id) => ce.querySelector(`#${id}`)?.value;
+            const employeeId = target.dataset.vacation
+                ? (ce._vacationsData || []).find(v => v.id === target.dataset.vacation)?.employeeId
+                : val('epaV_employeeId');
+            const vacation = {
+                id: target.dataset.vacation || undefined,
+                employeeId,
+                startDate: val('epaV_start'),
+                endDate: val('epaV_end'),
+                notes: val('epaV_notes') || '',
+            };
+            if (!vacation.employeeId || !vacation.startDate || !vacation.endDate) {
+                ce._toast('יש לבחור עובד/ת ותאריכי התחלה וסיום.', 'error');
+                return true;
+            }
+            ce._adminModal = null;
+            ce._startBusy('שומר חופשה…');
+            ce._dispatch('adminSaveVacation', { vacation });
+            return true;
+        }
+        case 'admin-delete-vacation':
+            ce._adminModal = null;
+            ce._startBusy('מוחק חופשה…');
+            ce._dispatch('adminDeleteVacation', { vacationId: target.dataset.vacation });
             return true;
         case 'admin-save-rule': {
             const row = target.closest('tr');

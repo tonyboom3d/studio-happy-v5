@@ -39,7 +39,12 @@ export function normalizeWorkType(value) {
 export const DEFAULT_SETTINGS = {
     deadlineDaysBeforeMonthEnd: 4,
     monthsAheadAllowed: 1,
+    // Legacy monthly quota — kept only so old rows/imports don't break; the
+    // quota itself is now weekly (see defaultMinShiftsPerWeek below).
     defaultMinShiftsPerMonth: 3,
+    defaultMinShiftsPerWeek: 1,
+    requiredFridaysPerMonth: 2,
+    requiredSaturdaysPerMonth: 2,
     defaultMinShiftHours: 4,
     defaultShiftStart: '10:00',
     defaultShiftEnd: '16:00',
@@ -51,6 +56,10 @@ export const DEFAULT_SETTINGS = {
     autoApproveShifts: true,
 };
 
+/** Business hours enforced across all shift start/end time pickers. */
+export const SHIFT_MIN_TIME = '08:00';
+export const SHIFT_MAX_TIME = '23:59';
+
 /** Normalizes a raw AvailabilitySettings CMS row (JSON strings → arrays). */
 export function normalizeSettings(raw) {
     const s = { ...DEFAULT_SETTINGS };
@@ -60,6 +69,9 @@ export function normalizeSettings(raw) {
     s.deadlineDaysBeforeMonthEnd = num(raw.deadlineDaysBeforeMonthEnd, s.deadlineDaysBeforeMonthEnd);
     s.monthsAheadAllowed = Math.max(1, num(raw.monthsAheadAllowed, s.monthsAheadAllowed));
     s.defaultMinShiftsPerMonth = num(raw.defaultMinShiftsPerMonth, s.defaultMinShiftsPerMonth);
+    s.defaultMinShiftsPerWeek = num(raw.defaultMinShiftsPerWeek, s.defaultMinShiftsPerWeek);
+    s.requiredFridaysPerMonth = num(raw.requiredFridaysPerMonth, s.requiredFridaysPerMonth);
+    s.requiredSaturdaysPerMonth = num(raw.requiredSaturdaysPerMonth, s.requiredSaturdaysPerMonth);
     s.defaultMinShiftHours = num(raw.defaultMinShiftHours, s.defaultMinShiftHours);
     if (typeof raw.defaultShiftStart === 'string' && raw.defaultShiftStart.trim()) s.defaultShiftStart = raw.defaultShiftStart.trim();
     if (typeof raw.defaultShiftEnd === 'string' && raw.defaultShiftEnd.trim()) s.defaultShiftEnd = raw.defaultShiftEnd.trim();
@@ -95,6 +107,35 @@ export function toMonthKey(dateInput) {
         ? dateInput
         : toDateKey(dateInput);
     return key ? key.slice(0, 7) : null;
+}
+
+/** Sunday ('YYYY-MM-DD') that starts the Sun–Sat work week containing `dateKey`. */
+export function getWeekStart(dateKey) {
+    const [y, m, d] = String(dateKey).split('-').map(Number);
+    const date = new Date(Date.UTC(y, m - 1, d));
+    date.setUTCDate(date.getUTCDate() - date.getUTCDay());
+    return date.toISOString().slice(0, 10);
+}
+
+/** Saturday ('YYYY-MM-DD') that ends the work week starting on `weekStartKey`. */
+export function getWeekEnd(weekStartKey) {
+    const [y, m, d] = weekStartKey.split('-').map(Number);
+    return new Date(Date.UTC(y, m - 1, d + 6)).toISOString().slice(0, 10);
+}
+
+/** Ordered Sunday week-start keys for every Sun–Sat week overlapping `monthKey`. */
+export function getWeeksInMonth(monthKey) {
+    const [y, m] = monthKey.split('-').map(Number);
+    const lastDay = new Date(Date.UTC(y, m, 0)).getUTCDate();
+    const lastOfMonth = `${monthKey}-${String(lastDay).padStart(2, '0')}`;
+    const weeks = [];
+    let cursor = getWeekStart(`${monthKey}-01`);
+    while (cursor <= lastOfMonth) {
+        weeks.push(cursor);
+        const [wy, wm, wd] = cursor.split('-').map(Number);
+        cursor = new Date(Date.UTC(wy, wm - 1, wd + 7)).toISOString().slice(0, 10);
+    }
+    return weeks;
 }
 
 function addMonths(monthKey, n) {
@@ -163,24 +204,77 @@ export function getMinShiftHours(profile, settings) {
     return Number.isFinite(v) && v > 0 ? v : settings.defaultMinShiftHours;
 }
 
-export function getRequiredShifts(profile, settings) {
-    const v = Number(profile?.minShiftsPerMonth);
-    return Number.isFinite(v) && v > 0 ? v : settings.defaultMinShiftsPerMonth;
+/** Required shifts for a single Sun–Sat week (per-employee override or site default). */
+export function getRequiredShiftsPerWeek(profile, settings) {
+    const v = Number(profile?.minShiftsPerWeek);
+    return Number.isFinite(v) && v > 0 ? v : settings.defaultMinShiftsPerWeek;
+}
+
+/** Total required shifts across every week overlapping `monthKey` (for single-number displays). */
+export function getRequiredShiftsForMonth(profile, settings, monthKey) {
+    return getRequiredShiftsPerWeek(profile, settings) * getWeeksInMonth(monthKey).length;
 }
 
 /**
- * Quota status for one month.
- * `submissions` = this employee's non-rejected rows for that month.
+ * Weekly quota status for every Sun–Sat week overlapping `monthKey`.
+ * `allSubmissions` should be the employee's non-rejected rows across the
+ * whole open range (not just this month) so weeks straddling a month
+ * boundary are still counted correctly.
  */
-export function evaluateQuota(profile, settings, submissions) {
-    const required = getRequiredShifts(profile, settings);
-    const submitted = (submissions || []).filter(s => s.status !== SUBMISSION_STATUS.REJECTED).length;
-    return {
-        required,
-        submitted,
-        met: submitted >= required,
-        bonusUnlocked: settings.bonusUnlockEnabled && submitted >= required,
-    };
+export function evaluateQuota(profile, settings, monthKey, allSubmissions) {
+    const requiredPerWeek = getRequiredShiftsPerWeek(profile, settings);
+    const countByWeek = {};
+    for (const s of (allSubmissions || [])) {
+        if (s.status === SUBMISSION_STATUS.REJECTED) continue;
+        const dateKey = s.dateKey || toDateKey(s.date);
+        if (!dateKey) continue;
+        const weekStart = getWeekStart(dateKey);
+        countByWeek[weekStart] = (countByWeek[weekStart] || 0) + 1;
+    }
+    const weeks = getWeeksInMonth(monthKey).map(weekStart => {
+        const submitted = countByWeek[weekStart] || 0;
+        return { weekStart, weekEnd: getWeekEnd(weekStart), submitted, required: requiredPerWeek, met: submitted >= requiredPerWeek };
+    });
+    const submitted = weeks.reduce((sum, w) => sum + w.submitted, 0);
+    const required = requiredPerWeek * weeks.length;
+    const met = weeks.every(w => w.met);
+    return { requiredPerWeek, required, submitted, met, bonusUnlocked: settings.bonusUnlockEnabled && met, weeks };
+}
+
+/**
+ * Friday/Saturday submission compliance for one month: employees must submit
+ * `requiredFridaysPerMonth`/`requiredSaturdaysPerMonth` such days; an approved
+ * vacation covering a given Friday/Saturday exempts that occurrence.
+ * `vacations` = [{ startDate, endDate }] ('YYYY-MM-DD', inclusive).
+ */
+export function evaluateWeekendCompliance(profile, settings, monthKey, allSubmissions, vacations) {
+    const [y, m] = monthKey.split('-').map(Number);
+    const daysInMonth = new Date(Date.UTC(y, m, 0)).getUTCDate();
+    const onVacation = (dateKey) => (vacations || []).some(v => v.startDate <= dateKey && dateKey <= v.endDate);
+    const submittedDates = new Set((allSubmissions || [])
+        .filter(s => s.status !== SUBMISSION_STATUS.REJECTED)
+        .map(s => s.dateKey || toDateKey(s.date)));
+
+    let fridaySubmitted = 0, saturdaySubmitted = 0, fridayExempt = 0, saturdayExempt = 0;
+    for (let day = 1; day <= daysInMonth; day++) {
+        const dateKey = `${monthKey}-${String(day).padStart(2, '0')}`;
+        const dow = new Date(Date.UTC(y, m - 1, day)).getUTCDay(); // 5=Friday, 6=Saturday
+        if (dow !== 5 && dow !== 6) continue;
+        const exempt = onVacation(dateKey);
+        if (dow === 5) {
+            if (exempt) fridayExempt++;
+            else if (submittedDates.has(dateKey)) fridaySubmitted++;
+        } else {
+            if (exempt) saturdayExempt++;
+            else if (submittedDates.has(dateKey)) saturdaySubmitted++;
+        }
+    }
+
+    const requiredFridays = Math.max(0, (settings.requiredFridaysPerMonth ?? 0) - fridayExempt);
+    const requiredSaturdays = Math.max(0, (settings.requiredSaturdaysPerMonth ?? 0) - saturdayExempt);
+    const fridays = { submitted: fridaySubmitted, required: requiredFridays, met: fridaySubmitted >= requiredFridays };
+    const saturdays = { submitted: saturdaySubmitted, required: requiredSaturdays, met: saturdaySubmitted >= requiredSaturdays };
+    return { fridays, saturdays, met: fridays.met && saturdays.met };
 }
 
 /**
@@ -209,14 +303,17 @@ export function validateSubmission(shifts, profile, settings, existing, opts = {
         .filter(s => s.status !== SUBMISSION_STATUS.REJECTED)
         .map(s => s.dateKey || toDateKey(s.date)));
 
-    // Quota per target month must account for shifts already submitted plus
-    // the new batch, so bonus/full-day gating is evaluated against the final state.
-    const existingByMonth = {};
+    // Quota per week must account for shifts already submitted, so
+    // bonus/full-day gating is evaluated per the specific week of each shift.
+    const existingByWeek = {};
     for (const s of (existing || [])) {
         if (s.status === SUBMISSION_STATUS.REJECTED) continue;
-        const mk = s.monthKey || toMonthKey(s.date);
-        existingByMonth[mk] = (existingByMonth[mk] || 0) + 1;
+        const dk = s.dateKey || toDateKey(s.date);
+        if (!dk) continue;
+        const weekStart = getWeekStart(dk);
+        existingByWeek[weekStart] = (existingByWeek[weekStart] || 0) + 1;
     }
+    const requiredPerWeek = getRequiredShiftsPerWeek(profile, settings);
 
     const seenInBatch = new Set();
 
@@ -254,6 +351,14 @@ export function validateSubmission(shifts, profile, settings, existing, opts = {
             errors.push({ date: dateKey, code: 'BAD_TIME', message: `שעות משמרת לא תקינות בתאריך ${dateKey}.` });
             continue;
         }
+        if (shift.startTime < SHIFT_MIN_TIME || shift.startTime > SHIFT_MAX_TIME
+            || shift.endTime < SHIFT_MIN_TIME || shift.endTime > SHIFT_MAX_TIME) {
+            errors.push({
+                date: dateKey, code: 'OUT_OF_HOURS',
+                message: `שעות המשמרת בתאריך ${dateKey} חייבות להיות בין ${SHIFT_MIN_TIME} ל-${SHIFT_MAX_TIME}.`,
+            });
+            continue;
+        }
         if (!managerOverride && hours < minHours) {
             errors.push({
                 date: dateKey, code: 'SHIFT_TOO_SHORT',
@@ -277,16 +382,17 @@ export function validateSubmission(shifts, profile, settings, existing, opts = {
         }
 
         // Current-month additions are a bonus perk: allowed only once the
-        // employee met the quota for that month (incentivization rule).
-        const quotaBefore = evaluateQuota(profile, settings, new Array(existingByMonth[monthKey] || 0).fill({ status: SUBMISSION_STATUS.SUBMITTED }));
-        if (monthKey === currentMonth && !quotaBefore.bonusUnlocked) {
-            errors.push({ date: dateKey, code: 'BONUS_LOCKED', message: 'הגשת משמרות נוספות לחודש הנוכחי נפתחת רק לאחר עמידה במכסה החודשית.' });
+        // employee met the quota for that shift's own week (incentivization rule).
+        const weekStart = getWeekStart(dateKey);
+        const weekBonusUnlocked = settings.bonusUnlockEnabled && (existingByWeek[weekStart] || 0) >= requiredPerWeek;
+        if (monthKey === currentMonth && !weekBonusUnlocked) {
+            errors.push({ date: dateKey, code: 'BONUS_LOCKED', message: 'הגשת משמרות נוספות לשבוע זה בחודש הנוכחי נפתחת רק לאחר עמידה במכסה השבועית.' });
             continue;
         }
 
-        // "Full" days: open only to employees who met their quota.
-        if (settings.fullDates.includes(dateKey) && !quotaBefore.bonusUnlocked) {
-            errors.push({ date: dateKey, code: 'DAY_FULL', message: `תאריך ${dateKey} מאויש — פתוח רק לעובדים שהשלימו את המכסה.` });
+        // "Full" days: open only to employees who met their week's quota.
+        if (settings.fullDates.includes(dateKey) && !weekBonusUnlocked) {
+            errors.push({ date: dateKey, code: 'DAY_FULL', message: `תאריך ${dateKey} מאויש — פתוח רק לעובדים שעמדו במכסה השבועית.` });
             continue;
         }
     }

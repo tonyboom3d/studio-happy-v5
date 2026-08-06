@@ -17,6 +17,8 @@ import {
     toDateKey,
     shiftHours,
     getMinShiftHours,
+    SHIFT_MIN_TIME,
+    SHIFT_MAX_TIME,
 } from 'backend/availabilityRules.js';
 import { notifyManagers, publishSchedulingUpdate, loadSettings } from 'backend/schedulingEngine.js';
 
@@ -25,9 +27,16 @@ const SAC = { suppressAuth: true, consistentRead: true };
 const REVIEW_URL = 'https://www.studiohappy.art/shift-request-review';
 const REQUEST_TYPE = { EDIT: 'EDIT', DELETE: 'DELETE' };
 const REQUEST_STATUS = { PENDING: 'PENDING', APPROVED: 'APPROVED', DECLINED: 'DECLINED' };
-// Business hours enforced across the portal's shift time pickers.
-const SHIFT_MIN_TIME = '07:00';
-const SHIFT_MAX_TIME = '23:59';
+// Mirrors EDIT_WINDOW_MS in employeeService.web.js — a SUBMITTED row past its
+// free-edit window falls back to this manager-approval flow just like
+// SCHEDULED/STANDBY rows.
+const EDIT_WINDOW_MS = 30 * 60 * 1000;
+
+function isWithinEditWindow(item, now = new Date()) {
+    const createdAt = item?._createdDate ? new Date(item._createdDate) : null;
+    if (!createdAt || Number.isNaN(createdAt.getTime())) return false;
+    return now.getTime() - createdAt.getTime() < EDIT_WINDOW_MS;
+}
 
 function randomToken() {
     let out = '';
@@ -75,8 +84,11 @@ export async function createShiftChangeRequest(role, submissionId, payload) {
     if (!submission || submission.employeeId !== role._id) {
         throw new Error('NOT_FOUND: המשמרת לא נמצאה.');
     }
-    if (submission.status !== SUBMISSION_STATUS.SCHEDULED && submission.status !== SUBMISSION_STATUS.STANDBY) {
-        throw new Error('BAD_REQUEST: ניתן לבקש שינוי רק למשמרות משובצות או בהמתנה — משמרות שטרם אושרו ניתן לערוך ישירות.');
+    const isPastWindowSubmitted = submission.status === SUBMISSION_STATUS.SUBMITTED && !isWithinEditWindow(submission);
+    if (submission.status !== SUBMISSION_STATUS.SCHEDULED
+        && submission.status !== SUBMISSION_STATUS.STANDBY
+        && !isPastWindowSubmitted) {
+        throw new Error('BAD_REQUEST: ניתן לבקש שינוי רק למשמרות משובצות, בהמתנה, או הגשות שחלף חלון העריכה שלהן — משמרות שהוגשו לאחרונה ניתן לערוך ישירות.');
     }
 
     const existing = await wixData.query('ShiftChangeRequests')

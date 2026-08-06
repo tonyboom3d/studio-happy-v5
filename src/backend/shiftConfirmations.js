@@ -17,7 +17,7 @@ import {
     toDateKey,
     toMonthKey,
     computeSubmissionDeadline,
-    getRequiredShifts,
+    getRequiredShiftsForMonth,
 } from 'backend/availabilityRules.js';
 import {
     ASSIGNMENT_STATUS,
@@ -133,7 +133,7 @@ export async function processDeadlineReminders(now = new Date()) {
 
     let sent = 0;
     for (const role of roles) {
-        const required = getRequiredShifts(role, settings);
+        const required = getRequiredShiftsForMonth(role, settings, nextMonth);
         const submitted = countByEmployee[role._id] || 0;
         if (submitted >= required || !role.phone) continue;
         const msg = [

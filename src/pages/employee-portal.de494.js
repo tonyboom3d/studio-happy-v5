@@ -31,6 +31,11 @@ import {
     acknowledgeShiftRequest,
 } from 'backend/shiftChangeRequests.web.js';
 import {
+    loadSwapCandidates,
+    requestShiftSwap,
+    acknowledgeShiftSwap,
+} from 'backend/shiftSwaps.web.js';
+import {
     getStaffAdminData,
     updateEmployeeProfile,
     updateEmployeePermissions,
@@ -49,6 +54,9 @@ import {
     updateSubmissionWorkType,
     listBookingStaff,
     linkEmployeeStaff,
+    listVacations,
+    saveEmployeeVacation,
+    deleteEmployeeVacation,
 } from 'backend/staffAdminService.web.js';
 import {
     runSchedulingNow,
@@ -259,6 +267,16 @@ async function loadAndPushMessages(portalEl) {
     }
 }
 
+async function loadAndPushVacations(portalEl) {
+    try {
+        const vacations = await listVacations();
+        portalEl.setAttribute('vacations-data', JSON.stringify(vacations));
+    } catch (err) {
+        console.error('[employee-portal] Failed to load vacations:', err?.message || err);
+        pushActionResult(portalEl, { type: 'adminVacationsLoad', error: true, message: friendlyError(err) });
+    }
+}
+
 async function loadAndPushAdminMessages(portalEl) {
     try {
         const messages = await listAllMessages();
@@ -314,6 +332,26 @@ async function handlePortalAction(portalEl, detail) {
 
         case 'acknowledgeShiftRequest': {
             const result = await acknowledgeShiftRequest(payload?.requestId);
+            pushActionResult(portalEl, { type, ...result });
+            break;
+        }
+
+        case 'loadSwapCandidates': {
+            const result = await loadSwapCandidates(payload?.submissionId);
+            pushActionResult(portalEl, { type, ...result });
+            refreshPortal = false;
+            refreshAdmin = false;
+            return;
+        }
+
+        case 'createSwapRequest': {
+            const result = await requestShiftSwap(payload?.submissionId, payload?.targetEmployeeId);
+            pushActionResult(portalEl, { type, ...result });
+            break;
+        }
+
+        case 'acknowledgeShiftSwap': {
+            const result = await acknowledgeShiftSwap(payload?.swapId);
             pushActionResult(portalEl, { type, ...result });
             break;
         }
@@ -376,6 +414,30 @@ async function handlePortalAction(portalEl, detail) {
             refreshPortal = false;
             refreshAdmin = false;
             await loadAndPushAdminMessages(portalEl);
+            break;
+        }
+
+        case 'adminVacationsLoad':
+            refreshPortal = false;
+            refreshAdmin = false;
+            await loadAndPushVacations(portalEl);
+            return;
+
+        case 'adminSaveVacation': {
+            const result = await saveEmployeeVacation(payload?.vacation);
+            pushActionResult(portalEl, { type, ...result });
+            refreshPortal = false;
+            refreshAdmin = false;
+            await loadAndPushVacations(portalEl);
+            break;
+        }
+
+        case 'adminDeleteVacation': {
+            const result = await deleteEmployeeVacation(payload?.vacationId);
+            pushActionResult(portalEl, { type, ...result });
+            refreshPortal = false;
+            refreshAdmin = false;
+            await loadAndPushVacations(portalEl);
             break;
         }
 

@@ -200,6 +200,7 @@ export async function buildBoard(fromKey, toKey, { consistent = false, includeOf
                 adults: 0, children: 0, required: 0,
                 activeCount: 0, standbyQueue: [],
                 assignedCount: 0, assignedEmployeeIds: [],
+                sessions: [], // distinct workshopStart ISO timestamps that day (calendar display)
             };
         }
         return days[dateKey].types[typeId];
@@ -212,6 +213,8 @@ export async function buildBoard(fromKey, toKey, { consistent = false, includeOf
         const t = dayType(dateKey, typeId);
         t.adults += order.adults || 0;
         t.children += order.children || 0;
+        const startIso = order.workshopStart instanceof Date ? order.workshopStart.toISOString() : new Date(order.workshopStart).toISOString();
+        if (!t.sessions.includes(startIso)) t.sessions.push(startIso);
         days[dateKey].hasWorkshops = true;
     }
     for (const dateKey of Object.keys(days)) {

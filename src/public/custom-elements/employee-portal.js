@@ -68,6 +68,14 @@ employee-portal * { box-sizing: border-box; }
 .ep-day-num { font-weight: 700; }
 .ep-day-ws { margin-top: 3px; display: flex; flex-direction: column; gap: 2px; }
 .ep-day-ws span { display: block; font-size: 8.5px; line-height: 1.25; color: #1d4ed8; background: #eff6ff; border-radius: 4px; padding: 1px 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ep-day.ep-day-filtered { opacity: .28; filter: grayscale(.4); }
+.ep-ws-filter { position: relative; margin-bottom: 10px; }
+.ep-ws-filter-btn { border: 1px solid #dbeafe; background: #fff; color: #1d4ed8; border-radius: 9px; padding: 6px 12px; font-size: 12px; font-weight: 600; cursor: pointer; }
+.ep-ws-filter-btn.active { background: #eff6ff; border-color: #93c5fd; }
+.ep-ws-filter-menu { position: absolute; z-index: 5; top: calc(100% + 4px); inset-inline-start: 0; background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; box-shadow: 0 10px 26px rgba(15,23,42,.12); padding: 8px; min-width: 220px; max-height: 260px; overflow-y: auto; }
+.ep-ws-filter-opt { display: flex; align-items: center; gap: 8px; font-size: 12.5px; padding: 5px 6px; border-radius: 7px; cursor: pointer; }
+.ep-ws-filter-opt:hover { background: #f8fafc; }
+.ep-ws-filter-clear { width: 100%; margin-top: 6px; border: none; background: #fef2f2; color: #b91c1c; border-radius: 7px; padding: 6px; font-size: 12px; font-weight: 600; cursor: pointer; }
 .ep-day-badge { position: absolute; bottom: 4px; inset-inline-start: 5px; font-size: 9.5px; font-weight: 600; padding: 1px 5px; border-radius: 999px; }
 .ep-badge-standby { background: #e0e7ff; color: #3730a3; }
 .ep-badge-scheduled { background: #d1fae5; color: #065f46; }
@@ -104,9 +112,18 @@ employee-portal * { box-sizing: border-box; }
 .ep-worktype { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: #f3f4f6; color: #4b5563; white-space: nowrap; }
 .ep-status-guide { font-size: 11.5px; color: #6b7280; background: #f8fafc; border: 1px solid #e5e7eb; border-radius: 10px; padding: 10px 12px; margin-bottom: 12px; line-height: 1.55; }
 .ep-status-guide b { color: #374151; font-weight: 700; }
+.ep-edit-window-banner { margin-bottom: 12px; border-radius: 12px; padding: 10px 14px; font-size: 13px; background: #eff6ff; border: 1px solid #93c5fd; color: #1e3a8a; text-align: center; }
+.ep-edit-window-banner b { font-variant-numeric: tabular-nums; color: #1d4ed8; font-size: 14.5px; }
+.ep-board-item.auto-approved { border-color: #f59e0b; background: #fffbeb; box-shadow: 0 0 0 1px #f59e0b inset; }
+.ep-lock-badge { font-size: 10.5px; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: #fef3c7; color: #92400e; white-space: nowrap; }
+.ep-aa-item { border: 1px solid #fde68a; background: #fffbeb; border-radius: 10px; padding: 9px 11px; margin-bottom: 8px; font-size: 13px; display: flex; justify-content: space-between; gap: 8px; align-items: center; }
+.ep-aa-note { font-size: 12.5px; color: #92400e; background: #fffbeb; border: 1px solid #fde68a; border-radius: 10px; padding: 10px 12px; margin-bottom: 4px; }
 .ep-msg-card-title { margin: 0 0 10px; font-size: 15px; font-weight: 700; }
 .ep-withdraw { border: 1px solid #fecaca; background: #fff; color: #b91c1c; border-radius: 8px; font-size: 11px; padding: 3px 9px; cursor: pointer; font-family: inherit; }
 .ep-withdraw:hover { background: #fef2f2; }
+.ep-swap-btn { border: 1px solid #c4b5fd; background: #f5f3ff; color: #5b21b6; border-radius: 8px; font-size: 11px; padding: 3px 9px; cursor: pointer; font-family: inherit; }
+.ep-swap-btn:hover { background: #ede9fe; }
+.ep-swap-pending { font-size: 11px; font-weight: 700; padding: 2px 9px; border-radius: 999px; background: #ede9fe; color: #5b21b6; white-space: nowrap; }
 .ep-ws-card { border: 1px solid #d1fae5; background: #f0fdf9; border-radius: 12px; padding: 11px 13px; margin-bottom: 10px; font-size: 12.5px; }
 .ep-ws-head { display: flex; justify-content: space-between; font-weight: 700; margin-bottom: 4px; }
 .ep-ws-meta { color: #374151; margin-bottom: 4px; }
@@ -157,8 +174,8 @@ ${ADMIN_STYLE}
 `;
 
 const HEBREW_DOW = ['א׳', 'ב׳', 'ג׳', 'ד׳', 'ה׳', 'ו׳', 'ש׳'];
-// Business hours for shift start/end pickers: 07:00 through midnight.
-const SHIFT_MIN_TIME = '07:00';
+// Business hours for shift start/end pickers (mirrors backend/availabilityRules.js).
+const SHIFT_MIN_TIME = '08:00';
 const SHIFT_MAX_TIME = '23:59';
 const STATUS_LABELS = {
     SUBMITTED: 'הוגש',
@@ -206,7 +223,7 @@ function escapeHtml(str) {
 }
 
 class EmployeePortal extends HTMLElement {
-    static get observedAttributes() { return ['portal-data', 'action-result', 'admin-data', 'hours-data', 'templates-data', 'staff-data', 'team-time-data', 'messages-data', 'messages-admin-data']; }
+    static get observedAttributes() { return ['portal-data', 'action-result', 'admin-data', 'hours-data', 'templates-data', 'staff-data', 'team-time-data', 'messages-data', 'messages-admin-data', 'vacations-data']; }
 
     constructor() {
         super();
@@ -237,9 +254,15 @@ class EmployeePortal extends HTMLElement {
         this._msgCarTimer = null;               // auto-rotate interval
         this._msgCarTouchX = null;              // swipe start X
         this._adminMessagesData = null;         // admin messages management list
+        this._vacationsData = null;             // admin vacations management list
+        this._workshopFilter = new Set();       // selected workshop-type ids for calendar filtering
+        this._workshopFilterOpen = false;
         this._shiftSubTab = 'myShifts';         // 'myShifts' | 'mySubmissions' — internal sub-tab
-        this._shiftModal = null;                // { type: 'edit'|'requestEdit'|'requestDelete', submissionId }
+        this._shiftModal = null;                // { type: 'edit'|'requestEdit'|'requestDelete'|'swap', submissionId }
         this._busy = null;                      // busy-overlay message while a mutation is in flight
+        this._editWindowTimer = null;           // 1s ticker for the 30-min free-edit countdown
+        this._autoApprovedPopup = null;         // shifts array shown right after an instant auto-approve
+        this._swapCandidates = null;            // { submissionId, candidates: [{id,name}] } for the swap modal
         // Hours tab state (Module E)
         this._hoursData = null;
         this._hoursMonth = todayKey().slice(0, 7);
@@ -278,6 +301,7 @@ class EmployeePortal extends HTMLElement {
 
     disconnectedCallback() {
         clearInterval(this._msgCarTimer);
+        clearInterval(this._editWindowTimer);
     }
 
     attributeChangedCallback(name, _oldVal, newVal) {
@@ -403,6 +427,16 @@ class EmployeePortal extends HTMLElement {
             this._busy = null;
             this.render();
         }
+        if (name === 'vacations-data') {
+            try {
+                this._vacationsData = JSON.parse(newVal);
+            } catch (err) {
+                console.error('[employee-portal] bad vacations-data JSON:', err);
+                return;
+            }
+            this._busy = null;
+            this.render();
+        }
         if (name === 'action-result') {
             try {
                 const result = JSON.parse(newVal);
@@ -445,8 +479,17 @@ class EmployeePortal extends HTMLElement {
             if (result.type === 'adminTeamTimeLoad') this._teamTimeData = { employees: [], monthKey: this._teamTimeMonth };
             if (result.type === 'loadMyMessages') this._messagesData = { personal: [], system: [] };
             if (result.type === 'adminMessagesLoad') this._adminMessagesData = [];
+            if (result.type === 'adminVacationsLoad') this._vacationsData = [];
+            if (result.type === 'loadSwapCandidates') { this._shiftModal = null; this._swapCandidates = null; }
             this._toast(result.message || 'אירעה שגיאה. נסו שוב.', 'error');
             this.render();
+            return;
+        }
+        if (result.type === 'loadSwapCandidates') {
+            if (this._shiftModal?.type === 'swap') {
+                this._swapCandidates = result.candidates || [];
+                this.render();
+            }
             return;
         }
         if (result.type === 'adminTeamTimeExport' && result.csv) {
@@ -466,7 +509,13 @@ class EmployeePortal extends HTMLElement {
                 const standbyNote = result.standby
                     ? ` ${result.standby} מהן נכנסו לרשימת המתנה (הימים מאוישים).`
                     : '';
-                this._toast(`הזמינות הוגשה בהצלחה (${result.inserted} משמרות).${standbyNote}`, 'success');
+                const autoNote = result.autoApproved?.length
+                    ? ` ${result.autoApproved.length} מהן אושרו אוטומטית מול הזמנת לקוח קיימת! 🎉`
+                    : '';
+                this._toast(`הזמינות הוגשה בהצלחה (${result.inserted} משמרות).${standbyNote}${autoNote}`, 'success');
+                if (result.autoApproved?.length) {
+                    this._autoApprovedPopup = result.autoApproved;
+                }
             } else {
                 const msgs = (result.errors || []).map(e => e.message).filter(Boolean);
                 this._toast(msgs[0] || 'ההגשה נדחתה — בדקו את הכללים.', 'error');
@@ -483,6 +532,14 @@ class EmployeePortal extends HTMLElement {
             this._toast('הבקשה נשלחה למנהל/ת ותטופל בקרוב.', 'success');
         }
         if (result.type === 'acknowledgeShiftRequest' && result.ok) {
+            this._toast('הבנתי.', 'success');
+        }
+        if (result.type === 'createSwapRequest' && result.ok) {
+            this._shiftModal = null;
+            this._swapCandidates = null;
+            this._toast('בקשת ההחלפה נשלחה — ממתינים לאישור העובד/ת שנבחר/ה.', 'success');
+        }
+        if (result.type === 'acknowledgeShiftSwap' && result.ok) {
             this._toast('הבנתי.', 'success');
         }
         if (result.type === 'respondToOffer' && result.ok) {
@@ -564,10 +621,12 @@ class EmployeePortal extends HTMLElement {
             </div>
             ${this._busy ? `<div class="ep-busy"><div class="ep-spinner"></div>${escapeHtml(this._busy)}</div>` : ''}
             ${this._shiftModal ? this._renderShiftModal() : ''}
+            ${this._autoApprovedPopup ? this._renderAutoApprovedPopup() : ''}
             <div class="ep-toast" id="epToast"></div>
         `;
         this._restoreToast();
         this._setupMsgCarousel();
+        this._setupEditWindowTimer();
     }
 
     /** "השעות שלי" — monthly time-clock history + approval (Module E). */
@@ -744,12 +803,17 @@ class EmployeePortal extends HTMLElement {
         const u = this._data.user;
         const initials = (u.name || '?').trim().split(/\s+/).map(w => w[0]).slice(0, 2).join('');
         const avatarStyle = u.color ? `style="background:${escapeHtml(u.color)}"` : '';
-        const chips = (this._data.months || []).map(m => `
-            <div class="ep-quota-chip ${m.quota.met ? 'met' : 'pending'}">
+        const chips = (this._data.months || []).map(m => {
+            const weeksTitle = (m.quota.weeks || [])
+                .map((w, i) => `שבוע ${i + 1}: ${w.submitted}/${w.required}${w.met ? ' ✓' : ''}`)
+                .join(' · ');
+            return `
+            <div class="ep-quota-chip ${m.quota.met ? 'met' : 'pending'}" title="${escapeHtml(weeksTitle)}">
                 ${monthTitle(m.monthKey)}
                 <b>${m.quota.submitted}/${m.quota.required}</b>
-                ${m.quota.met ? 'המכסה הושלמה ✓' : 'משמרות שהוגשו'}
-            </div>`).join('');
+                ${m.quota.met ? 'המכסה השבועית הושלמה ✓' : 'משמרות שהוגשו (שבועי)'}
+            </div>`;
+        }).join('');
         return `
             <div class="ep-header">
                 <div class="ep-user">
@@ -781,10 +845,23 @@ class EmployeePortal extends HTMLElement {
         }
         if (viewInfo && viewInfo.isCurrentMonth) {
             banners.push(viewInfo.quota.bonusUnlocked
-                ? `<div class="ep-banner info">🎉 השלמת את המכסה — ניתן להגיש משמרות נוספות לחודש הנוכחי.</div>`
-                : `<div class="ep-banner warn">הגשת משמרות לחודש הנוכחי נפתחת לאחר השלמת המכסה החודשית.</div>`);
+                ? `<div class="ep-banner info">🎉 השלמת את המכסה השבועית — ניתן להגיש משמרות נוספות לחודש הנוכחי.</div>`
+                : `<div class="ep-banner warn">הגשת משמרות נוספות לחודש הנוכחי נפתחת לאחר השלמת המכסה השבועית של אותו שבוע.</div>`);
         }
-        banners.push(`<div class="ep-banner info">📋 מינימום ${rules.requiredShiftsPerMonth} משמרות בחודש, אורך משמרת מינימלי ${rules.minShiftHours} שעות.</div>`);
+        if (viewInfo && !viewInfo.quota.met) {
+            const unmetWeeks = (viewInfo.quota.weeks || []).filter(w => !w.met);
+            if (unmetWeeks.length) {
+                const list = unmetWeeks.map(w => `${formatDateHe(w.weekStart)}–${formatDateHe(w.weekEnd)} (${w.submitted}/${w.required})`).join(', ');
+                banners.push(`<div class="ep-banner warn">⚠️ לא עמדת במכסה השבועית עבור: ${list}.</div>`);
+            }
+        }
+        if (viewInfo && viewInfo.weekend && !viewInfo.weekend.met) {
+            const parts = [];
+            if (!viewInfo.weekend.fridays.met) parts.push(`ימי שישי: ${viewInfo.weekend.fridays.submitted}/${viewInfo.weekend.fridays.required}`);
+            if (!viewInfo.weekend.saturdays.met) parts.push(`ימי שבת: ${viewInfo.weekend.saturdays.submitted}/${viewInfo.weekend.saturdays.required}`);
+            banners.push(`<div class="ep-banner warn">⚠️ טרם מולאה דרישת סופ"ש ל${monthTitle(viewInfo.monthKey)} — ${parts.join(', ')}.</div>`);
+        }
+        banners.push(`<div class="ep-banner info">📋 מינימום ${rules.requiredShiftsPerWeek} משמרות בשבוע, אורך משמרת מינימלי ${rules.minShiftHours} שעות. שעות פעילות: ${rules.shiftMinTime}–${rules.shiftMaxTime}.</div>`);
         return banners.join('');
     }
 
@@ -796,6 +873,30 @@ class EmployeePortal extends HTMLElement {
         const map = {};
         for (const s of (this._data.submissions || [])) map[s.date] = s;
         return map;
+    }
+
+    _renderWorkshopFilter() {
+        const types = this._data.allWorkshopTypes || [];
+        if (!types.length) return '';
+        const filter = this._workshopFilter || new Set();
+        const activeCount = filter.size;
+        const label = activeCount ? `סינון סדנאות (${activeCount})` : 'סינון סדנאות';
+        const options = types.map(t => `
+            <label class="ep-ws-filter-opt">
+                <input type="checkbox" data-action="toggle-ws-filter" data-ws-id="${escapeHtml(t.id)}" ${filter.has(t.id) ? 'checked' : ''}>
+                <span>${escapeHtml(t.name)}</span>
+            </label>`).join('');
+        return `
+            <div class="ep-ws-filter">
+                <button type="button" class="ep-ws-filter-btn ${activeCount ? 'active' : ''}" data-action="toggle-ws-filter-menu">
+                    ${label} ${this._workshopFilterOpen ? '▲' : '▼'}
+                </button>
+                ${this._workshopFilterOpen ? `
+                    <div class="ep-ws-filter-menu">
+                        ${options}
+                        ${activeCount ? `<button type="button" class="ep-ws-filter-clear" data-action="clear-ws-filter">נקה סינון</button>` : ''}
+                    </div>` : ''}
+            </div>`;
     }
 
     _renderCalendar() {
@@ -866,8 +967,15 @@ class EmployeePortal extends HTMLElement {
 
             const dayWorkshops = this._data.dayStates?.[dateKey]?.workshops || [];
             const wsList = dayWorkshops.length
-                ? `<div class="ep-day-ws">${dayWorkshops.map(w => `<span>${escapeHtml(w)}</span>`).join('')}</div>`
+                ? `<div class="ep-day-ws">${dayWorkshops.map(w => {
+                    const times = (w.times || []).map(t => formatTimeHe(t)).filter(Boolean);
+                    const countLabel = times.length > 1 ? ` ×${times.length}` : '';
+                    const timesLabel = times.length ? ` — ${times.join(', ')}` : '';
+                    return `<span>${escapeHtml(w.name)}${countLabel}${timesLabel}</span>`;
+                }).join('')}</div>`
                 : '';
+            const filterActive = this._workshopFilter && this._workshopFilter.size > 0;
+            if (filterActive && !dayWorkshops.some(w => this._workshopFilter.has(w.id))) cls += ' ep-day-filtered';
 
             cells += `<div class="${cls}" ${clickable ? `data-action="toggle-day" data-date="${dateKey}"` : ''}>
                 <span class="ep-day-num">${day}</span>
@@ -885,6 +993,7 @@ class EmployeePortal extends HTMLElement {
                     <button data-action="month-prev" ${idx <= 0 ? 'disabled' : ''} title="חודש קודם">&#8250;</button>
                 </div>
             </div>
+            ${this._renderWorkshopFilter()}
             <div class="ep-cal-grid">${cells}</div>
             <div class="ep-legend">
                 <span><span class="ep-dot" style="background:#eff6ff;border:1px solid #2563eb"></span>נבחר</span>
@@ -948,8 +1057,18 @@ class EmployeePortal extends HTMLElement {
         }
         const decided = (this._data.changeRequests || []).filter(r => r.status !== 'PENDING');
 
+        const pendingSwapBySubmission = {};
+        const decidedSwaps = [];
+        for (const sw of (this._data.mySwapRequests || [])) {
+            if (sw.status === 'PENDING_EMPLOYEE' || sw.status === 'PENDING_MANAGER') {
+                pendingSwapBySubmission[sw.submissionId] = sw;
+            } else {
+                decidedSwaps.push(sw);
+            }
+        }
+
         const rows = list.length
-            ? list.map(s => this._renderShiftRow(s, pendingBySubmission[s.id])).join('')
+            ? list.map(s => this._renderShiftRow(s, pendingBySubmission[s.id], pendingSwapBySubmission[s.id])).join('')
             : `<div class="ep-empty">${subTab === 'mySubmissions' ? 'אין הגשות בהמתנה לאישור' : 'אין משמרות משובצות'}</div>`;
 
         const decidedBanners = decided.map(r => `
@@ -959,6 +1078,15 @@ class EmployeePortal extends HTMLElement {
                     ${r.managerComment ? `<div style="margin-top:4px;font-weight:600">הערת מנהל/ת: ${escapeHtml(r.managerComment)}</div>` : ''}
                 </div>
                 <button class="ep-withdraw" data-action="ack-request" data-id="${escapeHtml(r.id)}">הבנתי</button>
+            </div>`).join('')
+            + decidedSwaps.map(sw => `
+            <div class="ep-banner ${sw.status === 'APPROVED' ? 'info' : 'closed'}" style="align-items:flex-start">
+                <div style="flex:1">
+                    בקשת ההחלפה שלך עם ${escapeHtml(sw.targetEmployeeName || 'עובד/ת')} למשמרת בתאריך ${formatDateHe(sw.dateKey)}
+                    ${sw.status === 'APPROVED' ? 'אושרה ובוצעה ✔' : sw.status === 'EMPLOYEE_DECLINED' ? `נדחתה על ידי ${escapeHtml(sw.targetEmployeeName || 'העובד/ת')} ✕` : 'נדחתה ✕'}.
+                    ${sw.managerComment ? `<div style="margin-top:4px;font-weight:600">הערת מנהל/ת: ${escapeHtml(sw.managerComment)}</div>` : ''}
+                </div>
+                <button class="ep-withdraw" data-action="ack-swap" data-id="${escapeHtml(sw.id)}">הבנתי</button>
             </div>`).join('');
 
         return `
@@ -966,6 +1094,7 @@ class EmployeePortal extends HTMLElement {
                 <button class="ep-tabbtn ${subTab === 'myShifts' ? 'active' : ''}" data-action="subtab-myshifts">המשמרות שלי (${myShifts.length})</button>
                 <button class="ep-tabbtn ${subTab === 'mySubmissions' ? 'active' : ''}" data-action="subtab-mysubmissions">ההגשות שלי (${mySubmissions.length})</button>
             </div>
+            ${this._renderEditWindowBanner()}
             ${this._renderStatusGuide()}
             <div style="margin-top:12px">
                 ${decidedBanners}
@@ -973,21 +1102,93 @@ class EmployeePortal extends HTMLElement {
             </div>`;
     }
 
-    /** One shift row: free edit/delete (SUBMITTED) or request-change/delete (SCHEDULED/STANDBY). */
-    _renderShiftRow(s, pendingReq) {
+    /** Live 30-minute countdown for freshly-submitted (SUBMITTED) shifts still in their free-edit window. */
+    _renderEditWindowBanner() {
+        const now = Date.now();
+        const editable = (this._data.submissions || [])
+            .filter(s => s.status === 'SUBMITTED' && s.editableUntil && new Date(s.editableUntil).getTime() > now)
+            .sort((a, b) => new Date(a.editableUntil) - new Date(b.editableUntil));
+        if (!editable.length) return '';
+
+        const soonest = new Date(editable[0].editableUntil).getTime();
+        const clock = this._formatCountdown(soonest - now);
+        const countNote = editable.length > 1 ? ` (${editable.length} הגשות חדשות)` : '';
+        return `
+            <div class="ep-edit-window-banner" id="epEditWindowBanner" data-until="${soonest}">
+                ⏱️ ניתן לערוך או למחוק בחינם את ההגשה החדשה${countNote} — נותרו <b id="epEditWindowClock">${clock}</b> דקות לעריכה חופשית. לאחר מכן כל שינוי יצריך אישור מנהל/ת.
+            </div>`;
+    }
+
+    _formatCountdown(remainMs) {
+        const clamped = Math.max(0, remainMs);
+        const mm = Math.floor(clamped / 60000);
+        const ss = Math.floor((clamped % 60000) / 1000);
+        return `${pad2(mm)}:${pad2(ss)}`;
+    }
+
+    /** 1s ticker that updates the countdown text in place; re-renders once the window actually expires. */
+    _setupEditWindowTimer() {
+        clearInterval(this._editWindowTimer);
+        if (!this.querySelector('#epEditWindowBanner')) return;
+        this._editWindowTimer = setInterval(() => {
+            const banner = this.querySelector('#epEditWindowBanner');
+            if (!banner) { clearInterval(this._editWindowTimer); return; }
+            const until = Number(banner.dataset.until);
+            const remainMs = until - Date.now();
+            if (remainMs <= 0) {
+                clearInterval(this._editWindowTimer);
+                this.render(); // recompute banner + row actions now that the window closed
+                return;
+            }
+            const clockEl = this.querySelector('#epEditWindowClock');
+            if (clockEl) clockEl.textContent = this._formatCountdown(remainMs);
+        }, 1000);
+    }
+
+    /** Popup shown right after submitAvailability when one or more shifts instantly auto-approved. */
+    _renderAutoApprovedPopup() {
+        const list = this._autoApprovedPopup || [];
+        const items = list.map(a => `
+            <div class="ep-aa-item">
+                <span>${formatDateHe(a.date)} · ${escapeHtml(a.workshopName)}</span>
+                <span class="ep-lock-badge">🔒 אושר אוטומטית</span>
+            </div>`).join('');
+        return `<div class="epa-modal-backdrop">
+            <div class="epa-modal" role="dialog" aria-modal="true" aria-label="שיבוץ אוטומטי">
+                <div class="epa-modal-head"><h2>🎉 שיבוץ אוטומטי!</h2><button class="epa-modal-close" data-action="dismiss-auto-approved" aria-label="סגירה">×</button></div>
+                <div class="ep-empty" style="text-align:right;margin-bottom:8px">המשמרות הבאות תואמות באופן מיידי הזמנת לקוח פעילה ואושרו אוטומטית:</div>
+                ${items}
+                <div class="ep-aa-note">⚠️ משמרות אלו משובצות ונעולות — לא ניתן לערוך או למחוק אותן ישירות (גם בתוך 30 הדקות), ויש לשלוח בקשת שינוי/מחיקה לאישור מנהל/ת.</div>
+                <div class="epa-inline">
+                    <button class="epa-btn primary" data-action="dismiss-auto-approved">הבנתי</button>
+                </div>
+            </div>
+        </div>`;
+    }
+
+    /** One shift row: free edit/delete (SUBMITTED, within 30-min window) or request-change/delete otherwise. */
+    _renderShiftRow(s, pendingReq, pendingSwap) {
         const tKey = todayKey();
+        const withinEditWindow = s.status === 'SUBMITTED' && s.editableUntil && new Date(s.editableUntil).getTime() > Date.now();
         let actions = '';
         if (pendingReq) {
             actions = `<span class="ep-status PENDING">🕐 בקשת ${pendingReq.type === 'DELETE' ? 'מחיקה' : 'שינוי'} בטיפול</span>`;
+        } else if (pendingSwap) {
+            actions = `<span class="ep-swap-pending">🔄 החלפה עם ${escapeHtml(pendingSwap.targetEmployeeName || 'עובד/ת')} בטיפול</span>`;
         } else if (s.date > tKey) {
-            if (s.status === 'SUBMITTED') {
+            if (s.status === 'SUBMITTED' && withinEditWindow) {
                 actions = `
                     <button class="ep-withdraw" data-action="shift-edit" data-id="${escapeHtml(s.id)}">ערוך</button>
                     <button class="ep-withdraw" data-action="shift-delete" data-id="${escapeHtml(s.id)}">מחיקה</button>`;
-            } else if (s.status === 'SCHEDULED' || s.status === 'STANDBY') {
+            } else if (s.status === 'SUBMITTED' && !withinEditWindow) {
                 actions = `
                     <button class="ep-withdraw" data-action="shift-request-edit" data-id="${escapeHtml(s.id)}">בקשת שינוי</button>
                     <button class="ep-withdraw" data-action="shift-request-delete" data-id="${escapeHtml(s.id)}">בקשת מחיקה</button>`;
+            } else if (s.status === 'SCHEDULED' || s.status === 'STANDBY') {
+                actions = `
+                    <button class="ep-withdraw" data-action="shift-request-edit" data-id="${escapeHtml(s.id)}">בקשת שינוי</button>
+                    <button class="ep-withdraw" data-action="shift-request-delete" data-id="${escapeHtml(s.id)}">בקשת מחיקה</button>
+                    <button class="ep-swap-btn" data-action="shift-swap-open" data-id="${escapeHtml(s.id)}">בקשת החלפה</button>`;
             }
         }
         const workTypeLabel = (s.status === 'SCHEDULED' || s.status === 'STANDBY')
@@ -996,14 +1197,18 @@ class EmployeePortal extends HTMLElement {
         const workTypeChip = workTypeLabel
             ? `<span class="ep-worktype" title="סוג העבודה שהוגדר לך">${escapeHtml(workTypeLabel)}</span>`
             : '';
+        const lockBadge = s.autoApproved
+            ? `<span class="ep-lock-badge" title="אושר אוטומטית מול הזמנת לקוח — נעול לשינוי ישיר">🔒 אושר אוטומטית</span>`
+            : '';
         return `
-            <div class="ep-board-item">
+            <div class="ep-board-item ${s.autoApproved ? 'auto-approved' : ''}">
                 <div>
                     <div class="ep-b-date">${formatDateHe(s.date)}</div>
                     <div class="ep-b-time">${escapeHtml(s.startTime)}–${escapeHtml(s.endTime)}${s.hours ? ` · ${s.hours} ש׳` : ''}</div>
                 </div>
                 <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;justify-content:flex-end">
                     ${workTypeChip}
+                    ${lockBadge}
                     <span class="ep-status ${escapeHtml(s.status)}" title="${escapeHtml(STATUS_HINTS[s.status] || '')}">${STATUS_LABELS[s.status] || s.status}</span>
                     ${actions}
                 </div>
@@ -1052,7 +1257,7 @@ class EmployeePortal extends HTMLElement {
                     <button class="epa-btn primary" data-action="shift-modal-save-request-edit" data-id="${escapeHtml(s.id)}">שליחת בקשה</button>
                     <button class="epa-btn" data-action="shift-modal-cancel">ביטול</button>
                 </div>`;
-        } else {
+        } else if (modal.type === 'requestDelete') {
             title = 'בקשת מחיקת משמרת';
             body = `
                 <div class="ep-empty" style="text-align:right;margin-bottom:8px">המשמרת הזו כבר משובצת/בהמתנה — הבקשה תישלח למנהל/ת לאישור.</div>
@@ -1061,6 +1266,25 @@ class EmployeePortal extends HTMLElement {
                     <button class="epa-btn danger" data-action="shift-modal-save-request-delete" data-id="${escapeHtml(s.id)}">שליחת בקשת מחיקה</button>
                     <button class="epa-btn" data-action="shift-modal-cancel">ביטול</button>
                 </div>`;
+        } else {
+            title = 'בקשת החלפת משמרת';
+            const candidates = this._swapCandidates;
+            if (candidates === null) {
+                body = `<div class="ep-loading"><div class="ep-spinner"></div>טוען עובדים עם הכשרה מתאימה…</div>`;
+            } else if (!candidates.length) {
+                body = `
+                    <div class="ep-empty">לא נמצאו עובדים עם הכשרה מתאימה למשמרת זו.</div>
+                    <div class="epa-inline"><button class="epa-btn" data-action="shift-modal-cancel">סגירה</button></div>`;
+            } else {
+                const options = candidates.map(c => `<option value="${escapeHtml(c.id)}">${escapeHtml(c.name)}</option>`).join('');
+                body = `
+                    <div class="ep-empty" style="text-align:right;margin-bottom:8px">בחרו עובד/ת בעל/ת הכשרה מתאימה — תישלח אליו/ה הודעת וואטסאפ עם קישור לאישור/דחייה. לאחר אישורו/ה תישלח הבקשה לאישור מנהל/ת.</div>
+                    <div class="epa-field"><label>עובד/ת להחלפה</label><select id="epSwapTarget">${options}</select></div>
+                    <div class="epa-inline">
+                        <button class="epa-btn primary" data-action="shift-modal-confirm-swap" data-id="${escapeHtml(s.id)}">שליחת בקשת החלפה</button>
+                        <button class="epa-btn" data-action="shift-modal-cancel">ביטול</button>
+                    </div>`;
+            }
         }
 
         return `<div class="epa-modal-backdrop">
@@ -1097,6 +1321,10 @@ class EmployeePortal extends HTMLElement {
     // -----------------------------------------------------------------
 
     _onClick(e) {
+        // Clicking anywhere on a time field (not just its native icon) opens the picker.
+        if (e.target instanceof HTMLInputElement && e.target.type === 'time' && typeof e.target.showPicker === 'function') {
+            try { e.target.showPicker(); } catch (_) { /* unsupported/blocked — native click behavior still works */ }
+        }
         const target = e.target.closest('[data-action]');
         if (!target) return;
         const action = target.dataset.action;
@@ -1168,6 +1396,24 @@ class EmployeePortal extends HTMLElement {
                 this._shiftModal = { type: 'requestDelete', submissionId: target.dataset.id };
                 this.render();
                 return;
+            case 'shift-swap-open':
+                this._shiftModal = { type: 'swap', submissionId: target.dataset.id };
+                this._swapCandidates = null;
+                this.render();
+                this._dispatch('loadSwapCandidates', { submissionId: target.dataset.id });
+                return;
+            case 'shift-modal-confirm-swap': {
+                const targetEmployeeId = this.querySelector('#epSwapTarget')?.value;
+                if (!targetEmployeeId) return;
+                this._shiftModal = null;
+                this._swapCandidates = null;
+                this._startBusy('שולח בקשת החלפה…');
+                this._dispatch('createSwapRequest', { submissionId: target.dataset.id, targetEmployeeId });
+                return;
+            }
+            case 'ack-swap':
+                this._dispatch('acknowledgeShiftSwap', { swapId: target.dataset.id });
+                return;
             case 'shift-modal-cancel':
                 this._shiftModal = null;
                 this.render();
@@ -1205,6 +1451,10 @@ class EmployeePortal extends HTMLElement {
             case 'ack-request':
                 this._dispatch('acknowledgeShiftRequest', { requestId: target.dataset.id });
                 return;
+            case 'dismiss-auto-approved':
+                this._autoApprovedPopup = null;
+                this.render();
+                return;
             case 'hours-month-prev':
             case 'hours-month-next': {
                 const [hy, hm] = this._hoursMonth.split('-').map(Number);
@@ -1239,6 +1489,14 @@ class EmployeePortal extends HTMLElement {
             case 'month-next':
                 if (idx >= 0 && idx < months.length - 1) { this._viewMonth = months[idx + 1]; this.render(); }
                 break;
+            case 'toggle-ws-filter-menu':
+                this._workshopFilterOpen = !this._workshopFilterOpen;
+                this.render();
+                break;
+            case 'clear-ws-filter':
+                this._workshopFilter.clear();
+                this.render();
+                break;
             case 'toggle-day': {
                 const dateKey = target.dataset.date;
                 if (this._selected.has(dateKey)) this._selected.delete(dateKey);
@@ -1255,6 +1513,20 @@ class EmployeePortal extends HTMLElement {
                 break;
             case 'submit': {
                 if (this._submitting || !this._selected.size) return;
+                for (const [date, t] of this._selected.entries()) {
+                    if (!t.startTime || !t.endTime) {
+                        this._toast(`יש להזין שעת התחלה וסיום עבור ${formatDateHe(date)}.`, 'error');
+                        return;
+                    }
+                    if (t.startTime < SHIFT_MIN_TIME || t.endTime > SHIFT_MAX_TIME) {
+                        this._toast(`שעות המשמרת חייבות להיות בטווח שעות הפעילות (${SHIFT_MIN_TIME}–${SHIFT_MAX_TIME}).`, 'error');
+                        return;
+                    }
+                    if (t.startTime >= t.endTime) {
+                        this._toast(`שעת ההתחלה חייבת להיות לפני שעת הסיום (${formatDateHe(date)}).`, 'error');
+                        return;
+                    }
+                }
                 this._submitting = true;
                 this._busy = 'שולח את ההגשה ובודק זמינות מול המערכת…';
                 const shifts = [...this._selected.entries()].map(([date, t]) => ({
@@ -1273,6 +1545,13 @@ class EmployeePortal extends HTMLElement {
     _onChange(e) {
         const input = e.target;
         if (input?.dataset?.action?.startsWith('admin-') && handleAdminChange(this, input)) return;
+        if (input?.dataset?.action === 'toggle-ws-filter') {
+            const wsId = input.dataset.wsId;
+            if (input.checked) this._workshopFilter.add(wsId);
+            else this._workshopFilter.delete(wsId);
+            this.render();
+            return;
+        }
         if (input.id === 'epaStaffSearch') {
             this._staffSearch = input.value;
             this.render();

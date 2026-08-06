@@ -22,7 +22,16 @@ import {
     ROLE_TYPE_LABELS,
     ROLE_TYPES,
 } from 'backend/staffRoles.js';
-import { SUBMISSION_STATUS, toDateKey, getRequiredShifts, WORK_TYPES, WORK_TYPE_LABELS, DEFAULT_WORK_TYPE, normalizeWorkType } from 'backend/availabilityRules.js';
+import {
+    SUBMISSION_STATUS,
+    toDateKey,
+    evaluateQuota,
+    evaluateWeekendCompliance,
+    WORK_TYPES,
+    WORK_TYPE_LABELS,
+    DEFAULT_WORK_TYPE,
+    normalizeWorkType,
+} from 'backend/availabilityRules.js';
 import {
     buildBoard,
     typeFilledCount,
@@ -35,6 +44,12 @@ import {
     ASSIGNMENT_STATUS,
 } from 'backend/schedulingEngine.js';
 import { sendGreenApiWhatsApp } from 'backend/whatsappService.jsw';
+import {
+    loadVacationsOverlappingRangeByEmployee,
+    listAllVacations,
+    saveVacation as saveVacationRow,
+    deleteVacation as deleteVacationRow,
+} from 'backend/vacations.js';
 
 const SA = { suppressAuth: true };
 
@@ -54,6 +69,12 @@ function monthRange(monthKey) {
     return { fromKey: `${monthKey}-01`, toKey: `${monthKey}-${String(lastDay).padStart(2, '0')}` };
 }
 
+/** Adds/subtracts days from a 'YYYY-MM-DD' key (plain calendar arithmetic, UTC). */
+function shiftDateKey(dateKey, days) {
+    const [y, m, d] = dateKey.split('-').map(Number);
+    return new Date(Date.UTC(y, m - 1, d + days)).toISOString().slice(0, 10);
+}
+
 function mapEmployeeForAdmin(role, canSeeRates, canManageRoles) {
     return {
         id: role._id,
@@ -66,7 +87,7 @@ function mapEmployeeForAdmin(role, canSeeRates, canManageRoles) {
         color: role.color || null,
         seniority: role.seniority || '',
         priorityRank: role.priorityRank ?? null,
-        minShiftsPerMonth: role.minShiftsPerMonth ?? null,
+        minShiftsPerWeek: role.minShiftsPerWeek ?? null,
         minShiftHours: role.minShiftHours ?? null,
         skillIds: refIds(role.skills),
         staffId: refId(role.connectedStaff),
@@ -90,8 +111,12 @@ export const getStaffAdminData = webMethod(Permissions.SiteMember, async (monthK
     const canSeeRates = getRolePermissionValue(role, 'manageRates');
     const canManageRoles = getRolePermissionValue(role, 'manageRoles');
     const { fromKey, toKey } = monthRange(monthKey);
+    // Padded ±6 days so Sun–Sat weeks straddling the month boundary are
+    // still counted correctly for the weekly-quota tracker below.
+    const paddedFromKey = shiftDateKey(fromKey, -6);
+    const paddedToKey = shiftDateKey(toKey, 6);
 
-    const [board, settings, submissionsRaw] = await Promise.all([
+    const [board, settings, submissionsRaw, weeklySubsRaw, vacationsByEmployee] = await Promise.all([
         buildBoard(fromKey, toKey, { includeOffers: true }),
         loadSettings(),
         // All statuses (incl. REJECTED) so the tracker page shows the full picture;
@@ -99,7 +124,19 @@ export const getStaffAdminData = webMethod(Permissions.SiteMember, async (monthK
         wixData.query('AvailabilitySubmissions')
             .eq('monthKey', monthKey)
             .limit(1000).find(SA).catch(() => ({ items: [] })),
+        wixData.query('AvailabilitySubmissions')
+            .ge('date', new Date(`${paddedFromKey}T00:00:00Z`))
+            .le('date', new Date(`${paddedToKey}T23:59:59Z`))
+            .ne('status', SUBMISSION_STATUS.REJECTED)
+            .limit(1000).find(SA).catch(() => ({ items: [] })),
+        loadVacationsOverlappingRangeByEmployee(fromKey, toKey),
     ]);
+
+    const weeklySubsByEmployee = {};
+    for (const s of (weeklySubsRaw.items || [])) {
+        if (!weeklySubsByEmployee[s.employeeId]) weeklySubsByEmployee[s.employeeId] = [];
+        weeklySubsByEmployee[s.employeeId].push({ status: s.status, dateKey: toDateKey(s.date) });
+    }
 
     const employees = Object.values(board.rolesById)
         .filter(r => getRolePermissionValue(r, 'submitAvailability'))
@@ -143,16 +180,21 @@ export const getStaffAdminData = webMethod(Permissions.SiteMember, async (monthK
         };
     }
 
-    // Submission tracker: submitted vs required per employee for this month.
-    const countByEmployee = {};
-    for (const s of submissions) {
-        if (s.status === SUBMISSION_STATUS.REJECTED) continue;
-        countByEmployee[s.employeeId] = (countByEmployee[s.employeeId] || 0) + 1;
-    }
+    // Submission tracker: weekly quota + Friday/Saturday compliance per employee.
     const tracker = employees.filter(e => e.active).map(e => {
-        const required = getRequiredShifts(board.rolesById[e.id], settings);
-        const submitted = countByEmployee[e.id] || 0;
-        return { employeeId: e.id, name: e.displayName, phone: e.phone, required, submitted, met: submitted >= required };
+        const empSubs = weeklySubsByEmployee[e.id] || [];
+        const quota = evaluateQuota(board.rolesById[e.id], settings, monthKey, empSubs);
+        const weekend = evaluateWeekendCompliance(board.rolesById[e.id], settings, monthKey, empSubs, vacationsByEmployee[e.id] || []);
+        return {
+            employeeId: e.id,
+            name: e.displayName,
+            phone: e.phone,
+            required: quota.required,
+            submitted: quota.submitted,
+            met: quota.met,
+            weeks: quota.weeks,
+            weekend,
+        };
     });
 
     const openOffers = (board.offers || [])
@@ -204,7 +246,9 @@ export const getStaffAdminData = webMethod(Permissions.SiteMember, async (monthK
         settings: {
             deadlineDaysBeforeMonthEnd: settings.deadlineDaysBeforeMonthEnd,
             monthsAheadAllowed: settings.monthsAheadAllowed,
-            defaultMinShiftsPerMonth: settings.defaultMinShiftsPerMonth,
+            defaultMinShiftsPerWeek: settings.defaultMinShiftsPerWeek,
+            requiredFridaysPerMonth: settings.requiredFridaysPerMonth,
+            requiredSaturdaysPerMonth: settings.requiredSaturdaysPerMonth,
             defaultMinShiftHours: settings.defaultMinShiftHours,
             defaultShiftStart: settings.defaultShiftStart,
             defaultShiftEnd: settings.defaultShiftEnd,
@@ -222,7 +266,7 @@ export const getStaffAdminData = webMethod(Permissions.SiteMember, async (monthK
 // Employee profile management
 // ---------------------------------------------------------------------------
 
-const PROFILE_FIELDS = ['displayName', 'phone', 'color', 'seniority', 'isTrainee', 'active', 'minShiftsPerMonth', 'minShiftHours', 'priorityRank', 'roleType'];
+const PROFILE_FIELDS = ['displayName', 'phone', 'color', 'seniority', 'isTrainee', 'active', 'minShiftsPerWeek', 'minShiftHours', 'priorityRank', 'roleType'];
 const RATE_FIELDS = ['rateStudio', 'rateInstruction', 'rateWool'];
 
 export const updateEmployeeProfile = webMethod(Permissions.SiteMember, async (roleId, patch) => {
@@ -381,7 +425,7 @@ export const linkEmployeeStaff = webMethod(Permissions.SiteMember, async (staffI
         color: patch?.color || baseRow.color || null,
         seniority: patch?.seniority || baseRow.seniority || '',
         priorityRank: patch?.priorityRank ?? baseRow.priorityRank ?? null,
-        minShiftsPerMonth: patch?.minShiftsPerMonth ?? baseRow.minShiftsPerMonth ?? null,
+        minShiftsPerWeek: patch?.minShiftsPerWeek ?? baseRow.minShiftsPerWeek ?? null,
         minShiftHours: patch?.minShiftHours ?? baseRow.minShiftHours ?? null,
         ...permissions,
     };
@@ -493,13 +537,20 @@ export const updateAvailabilitySettings = webMethod(Permissions.SiteMember, asyn
     const positiveNumberFields = [
         'deadlineDaysBeforeMonthEnd',
         'monthsAheadAllowed',
-        'defaultMinShiftsPerMonth',
+        'defaultMinShiftsPerWeek',
         'defaultMinShiftHours',
     ];
     for (const field of positiveNumberFields) {
         if (patch[field] === undefined) continue;
         const value = Number(patch[field]);
         if (!Number.isFinite(value) || value <= 0) throw new Error('BAD_REQUEST: ערך מספרי לא תקין.');
+        updated[field] = value;
+    }
+    const nonNegativeNumberFields = ['requiredFridaysPerMonth', 'requiredSaturdaysPerMonth'];
+    for (const field of nonNegativeNumberFields) {
+        if (patch[field] === undefined) continue;
+        const value = Number(patch[field]);
+        if (!Number.isFinite(value) || value < 0) throw new Error('BAD_REQUEST: ערך מספרי לא תקין.');
         updated[field] = value;
     }
     for (const field of ['defaultShiftStart', 'defaultShiftEnd']) {
@@ -514,6 +565,37 @@ export const updateAvailabilitySettings = webMethod(Permissions.SiteMember, asyn
     await wixData.update('AvailabilitySettings', updated, SA);
     await publishSchedulingUpdate('settings-updated', {});
     console.log(`[staffAdminService] updateAvailabilitySettings by ${role._id}`);
+    return { ok: true };
+});
+
+// ---------------------------------------------------------------------------
+// Employee vacations (Friday/Saturday requirement exemptions)
+// ---------------------------------------------------------------------------
+
+export const listVacations = webMethod(Permissions.SiteMember, async () => {
+    await assertEmployeeAccess('manageEmployees');
+    const [vacations, rolesResult] = await Promise.all([
+        listAllVacations(),
+        wixData.query('Dashboard_Roles').limit(1000).find(SA).catch(() => ({ items: [] })),
+    ]);
+    const nameById = {};
+    for (const r of (rolesResult.items || [])) nameById[r._id] = r.displayName || '(ללא שם)';
+    return vacations.map(v => ({ ...v, employeeName: nameById[v.employeeId] || '—' }));
+});
+
+export const saveEmployeeVacation = webMethod(Permissions.SiteMember, async (vacation) => {
+    const { role } = await assertEmployeeAccess('manageEmployees');
+    const saved = await saveVacationRow(vacation);
+    await publishSchedulingUpdate('vacation-updated', { employeeId: saved.employeeId });
+    console.log(`[staffAdminService] saveEmployeeVacation: ${saved.id} by ${role._id}`);
+    return { ok: true, vacation: saved };
+});
+
+export const deleteEmployeeVacation = webMethod(Permissions.SiteMember, async (vacationId) => {
+    const { role } = await assertEmployeeAccess('manageEmployees');
+    await deleteVacationRow(vacationId);
+    await publishSchedulingUpdate('vacation-updated', {});
+    console.log(`[staffAdminService] deleteEmployeeVacation: ${vacationId} by ${role._id}`);
     return { ok: true };
 });
 

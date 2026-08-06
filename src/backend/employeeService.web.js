@@ -28,11 +28,14 @@ import {
     isSubmissionOpenForMonth,
     shiftHours,
     getMinShiftHours,
-    getRequiredShifts,
+    getRequiredShiftsPerWeek,
     evaluateQuota,
+    evaluateWeekendCompliance,
     validateSubmission,
     normalizeWorkType,
     WORK_TYPE_LABELS,
+    SHIFT_MIN_TIME,
+    SHIFT_MAX_TIME,
 } from 'backend/availabilityRules.js';
 import {
     buildBoard,
@@ -40,17 +43,27 @@ import {
     resolvePlacement,
     publishSchedulingUpdate,
     loadSettings as loadEngineSettings,
+    loadWorkshopTypeMap,
     runScheduling,
     OFFER_KIND,
     OFFER_STATUS,
 } from 'backend/schedulingEngine.js';
 import { getRoleSkillWorkshopIds } from 'backend/staffRoles.js';
 import { loadMyChangeRequests } from 'backend/shiftChangeRequests.js';
+import { loadMySwapRequests } from 'backend/shiftSwaps.js';
+import { loadVacationsForEmployee } from 'backend/vacations.js';
 
 const SA = { suppressAuth: true };
-// Business hours enforced across the portal's shift time pickers.
-const SHIFT_MIN_TIME = '07:00';
-const SHIFT_MAX_TIME = '23:59';
+// Free edit/delete window for a just-submitted (SUBMITTED) shift. After this,
+// changes must go through the manager-approval request flow (shiftChangeRequests.js).
+const EDIT_WINDOW_MS = 30 * 60 * 1000;
+
+/** True while a SUBMITTED row is still inside its free-edit window. */
+function isWithinEditWindow(item, now = new Date()) {
+    const createdAt = item?._createdDate ? new Date(item._createdDate) : null;
+    if (!createdAt || Number.isNaN(createdAt.getTime())) return false;
+    return now.getTime() - createdAt.getTime() < EDIT_WINDOW_MS;
+}
 
 // ---------------------------------------------------------------------------
 // Data helpers
@@ -103,6 +116,8 @@ async function loadMySubmissions(roleId, now = new Date()) {
 }
 
 function mapSubmission(item) {
+    const createdAt = item._createdDate ? new Date(item._createdDate) : null;
+    const editableUntil = createdAt ? new Date(createdAt.getTime() + EDIT_WINDOW_MS) : null;
     return {
         id: item._id,
         date: toDateKey(item.date),
@@ -115,6 +130,11 @@ function mapSubmission(item) {
         notes: item.notes || '',
         workType: normalizeWorkType(item.workType),
         workTypeLabel: WORK_TYPE_LABELS[normalizeWorkType(item.workType)],
+        createdAt: createdAt ? createdAt.toISOString() : null,
+        // Free-edit deadline for SUBMITTED rows (30 min from submission); the
+        // instant-auto-approve flag locks a row regardless of this window.
+        editableUntil: item.status === SUBMISSION_STATUS.SUBMITTED && editableUntil ? editableUntil.toISOString() : null,
+        autoApproved: !!item.autoApproved,
     };
 }
 
@@ -195,11 +215,13 @@ async function loadScheduledWorkshopDetails(scheduledSubmissions) {
     })).sort((a, b) => new Date(a.workshopStart) - new Date(b.workshopStart));
 }
 
-function buildMonthsSummary(role, settings, submissions, now) {
+function buildMonthsSummary(role, settings, submissions, now, vacations) {
     const openMonths = getOpenMonthKeys(settings, now);
+    // evaluateQuota/evaluateWeekendCompliance expect { status, date|dateKey }.
+    const subsForRules = submissions.map(s => ({ status: s.status, dateKey: s.date }));
     return openMonths.map(monthKey => {
-        const monthSubs = submissions.filter(s => (s.monthKey || toMonthKey(s.date)) === monthKey);
-        const quota = evaluateQuota(role, settings, monthSubs);
+        const quota = evaluateQuota(role, settings, monthKey, subsForRules);
+        const weekend = evaluateWeekendCompliance(role, settings, monthKey, subsForRules, vacations);
         const isCurrent = monthKey === toMonthKey(now);
         return {
             monthKey,
@@ -207,6 +229,7 @@ function buildMonthsSummary(role, settings, submissions, now) {
             deadline: isCurrent ? null : computeSubmissionDeadline(monthKey, settings).toISOString(),
             open: isCurrent ? quota.bonusUnlocked : isSubmissionOpenForMonth(monthKey, settings, now),
             quota,
+            weekend,
         };
     });
 }
@@ -228,9 +251,11 @@ export const getMyPortalData = webMethod(Permissions.Anyone, async () => {
         throw new Error('ACCESS_DENIED: Employee profile is inactive.');
     }
 
-    const [rawSubmissions, changeRequests] = await Promise.all([
+    const [rawSubmissions, changeRequests, mySwapRequests, vacations] = await Promise.all([
         loadMySubmissions(roleRow._id, now),
         loadMyChangeRequests(roleRow._id),
+        loadMySwapRequests(roleRow._id),
+        loadVacationsForEmployee(roleRow._id),
     ]);
     const submissions = rawSubmissions.map(mapSubmission);
     const scheduled = submissions.filter(s => s.status === SUBMISSION_STATUS.SCHEDULED);
@@ -242,7 +267,10 @@ export const getMyPortalData = webMethod(Permissions.Anyone, async () => {
     const [ly, lm] = lastMonth.split('-').map(Number);
     const rangeFrom = toDateKey(now);
     const rangeTo = `${lastMonth}-${String(new Date(Date.UTC(ly, lm, 0)).getUTCDate()).padStart(2, '0')}`;
-    const board = await buildBoard(rangeFrom, rangeTo, { includeOffers: true });
+    const [board, { typesById }] = await Promise.all([
+        buildBoard(rangeFrom, rangeTo, { includeOffers: true }),
+        loadWorkshopTypeMap(),
+    ]);
     const mySkills = getRoleSkillWorkshopIds(roleRow);
 
     const dayStates = {};
@@ -250,7 +278,13 @@ export const getMyPortalData = webMethod(Permissions.Anyone, async () => {
         if (dateKey <= rangeFrom) continue;
         dayStates[dateKey] = {
             state: personalDayState(day, mySkills),
-            workshops: Object.values(day.types).map(t => t.name),
+            // Times let the calendar show every session (incl. several of the
+            // same workshop type on one day) instead of just its name.
+            workshops: Object.values(day.types).map(t => ({
+                id: t.typeId,
+                name: t.name,
+                times: [...t.sessions].sort(),
+            })),
         };
     }
 
@@ -278,6 +312,7 @@ export const getMyPortalData = webMethod(Permissions.Anyone, async () => {
 
     return {
         dayStates,
+        allWorkshopTypes: Object.values(typesById),
         myOffers,
         openCalls,
         holidays: settings.holidays || [],
@@ -291,7 +326,7 @@ export const getMyPortalData = webMethod(Permissions.Anyone, async () => {
         },
         rules: {
             minShiftHours: getMinShiftHours(roleRow, settings),
-            requiredShiftsPerMonth: getRequiredShifts(roleRow, settings),
+            requiredShiftsPerWeek: getRequiredShiftsPerWeek(roleRow, settings),
             deadlineDaysBeforeMonthEnd: settings.deadlineDaysBeforeMonthEnd,
             monthsAheadAllowed: settings.monthsAheadAllowed,
             defaultShiftStart: settings.defaultShiftStart,
@@ -300,11 +335,14 @@ export const getMyPortalData = webMethod(Permissions.Anyone, async () => {
             fullDates: settings.fullDates,
             promotedDates: settings.promotedDates,
             bonusUnlockEnabled: settings.bonusUnlockEnabled,
+            shiftMinTime: SHIFT_MIN_TIME,
+            shiftMaxTime: SHIFT_MAX_TIME,
         },
-        months: buildMonthsSummary(roleRow, settings, submissions, now),
+        months: buildMonthsSummary(roleRow, settings, submissions, now, vacations),
         submissions,
         scheduledWorkshops,
         changeRequests,
+        mySwapRequests,
         serverNow: now.toISOString(),
     };
 });
@@ -371,9 +409,10 @@ export const submitAvailability = webMethod(Permissions.Anyone, async (shifts) =
     const staffId = refId(roleRow.connectedStaff);
     let inserted = 0;
     let standby = 0;
+    const insertedIds = [];
     for (const shift of cleanShifts) {
         // Stored at UTC noon so the calendar day is stable in Israel time.
-        await wixData.insert('AvailabilitySubmissions', {
+        const row = await wixData.insert('AvailabilitySubmissions', {
             employeeId: roleRow._id,
             staffId,
             date: new Date(`${shift.date}T12:00:00Z`),
@@ -385,7 +424,9 @@ export const submitAvailability = webMethod(Permissions.Anyone, async (shifts) =
             managerOverride: false,
             workType: 'WORKSHOP',
             notes: shift.notes,
+            autoApproved: false,
         }, SA);
+        insertedIds.push({ id: row._id, date: shift.date });
         inserted++;
         if (placements[shift.date] === SUBMISSION_STATUS.STANDBY) standby++;
     }
@@ -394,14 +435,40 @@ export const submitAvailability = webMethod(Permissions.Anyone, async (shifts) =
     // customer bookings assign the employee on the spot (skill-matched);
     // days without bookings simply stay pending. Manual mode: no-op
     // (runScheduling is gated internally on the same setting).
+    let autoApproved = [];
     if (settings.autoApproveShifts !== false) {
         await runScheduling(batchDates[0], batchDates[batchDates.length - 1]).catch(err =>
             console.error('[employeeService] post-submit runScheduling failed:', err?.message || err));
+
+        // Any of this batch's rows the engine flipped straight to SCHEDULED
+        // matched an open customer booking instantly — flag + surface them so
+        // the UI can highlight the bypass of the 30-min free-edit window.
+        const ids = insertedIds.map(x => x.id);
+        const refreshed = await wixData.query('AvailabilitySubmissions')
+            .hasSome('_id', ids)
+            .eq('status', SUBMISSION_STATUS.SCHEDULED)
+            .find(SA).catch(() => ({ items: [] }));
+        if (refreshed.items?.length) {
+            const assignments = await wixData.query('ShiftAssignments')
+                .hasSome('submissionId', refreshed.items.map(r => r._id))
+                .find(SA).catch(() => ({ items: [] }));
+            const workshopBySubmissionId = {};
+            for (const a of (assignments.items || [])) workshopBySubmissionId[a.submissionId] = a.workshopName;
+
+            for (const row of refreshed.items) {
+                await wixData.update('AvailabilitySubmissions', { ...row, autoApproved: true }, SA).catch(() => null);
+                autoApproved.push({
+                    id: row._id,
+                    date: toDateKey(row.date),
+                    workshopName: workshopBySubmissionId[row._id] || 'סדנה',
+                });
+            }
+        }
     }
 
     await publishSchedulingUpdate('submission', { dates: batchDates });
-    console.log(`[employeeService] submitAvailability: role=${roleRow._id} inserted=${inserted} standby=${standby}`);
-    return { ok: true, errors: [], inserted, standby, placements };
+    console.log(`[employeeService] submitAvailability: role=${roleRow._id} inserted=${inserted} standby=${standby} autoApproved=${autoApproved.length}`);
+    return { ok: true, errors: [], inserted, standby, placements, autoApproved };
 });
 
 /** Withdraws a future, not-yet-scheduled submission owned by the caller. */
@@ -419,6 +486,9 @@ export const withdrawAvailability = webMethod(Permissions.Anyone, async (submiss
     }
     if (toDateKey(item.date) <= toDateKey(new Date())) {
         throw new Error('FORBIDDEN: לא ניתן לבטל זמינות לתאריך שעבר.');
+    }
+    if (!isWithinEditWindow(item)) {
+        throw new Error('FORBIDDEN: חלפו 30 הדקות לעריכה חופשית — יש לשלוח בקשת מחיקה שתאושר על ידי מנהל/ת.');
     }
 
     await wixData.remove('AvailabilitySubmissions', submissionId, SA);
@@ -445,6 +515,9 @@ export const updateSubmission = webMethod(Permissions.Anyone, async (submissionI
     }
     if (toDateKey(item.date) <= toDateKey(new Date())) {
         throw new Error('FORBIDDEN: לא ניתן לערוך זמינות לתאריך שעבר.');
+    }
+    if (!isWithinEditWindow(item)) {
+        throw new Error('FORBIDDEN: חלפו 30 הדקות לעריכה חופשית — יש לשלוח בקשת שינוי שתאושר על ידי מנהל/ת.');
     }
 
     const startTime = String(patch?.startTime || '').trim();

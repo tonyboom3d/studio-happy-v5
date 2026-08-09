@@ -327,6 +327,7 @@ class EmployeePortal extends HTMLElement {
         this._adminMonth = todayKey().slice(0, 7);
         this._adminView = 'heat';
         this._adminSelectedDay = null;
+        this._adminDayGlobalOpen = false;       // collapsed accordion for day-wide (all-employees) settings
         this._adminEditEmployeeId = null;
         this._adminPage = 'board';
         this._adminSidebarCollapsed = false;

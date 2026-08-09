@@ -671,7 +671,7 @@ async function handlePortalAction(portalEl, detail) {
         }
 
         case 'adminManualAssign': {
-            const result = await manualAssign(payload?.dateKey, payload?.workshopTypeId, payload?.employeeId, payload?.workType);
+            const result = await manualAssign(payload?.dateKey, payload?.workshopTypeIds || [], payload?.employeeId, payload?.workType);
             pushActionResult(portalEl, { type, ...result });
             refreshAdmin = true;
             break;

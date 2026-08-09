@@ -830,18 +830,32 @@ export const sendAvailabilityNudge = webMethod(Permissions.SiteMember, async (ro
 // Manual assignment control
 // ---------------------------------------------------------------------------
 
-export const manualAssign = webMethod(Permissions.SiteMember, async (dateKey, workshopTypeId, employeeId, workType) => {
+/**
+ * Manager assigns an employee to a day — zero, one, or several workshops at
+ * once (each becomes its own ShiftAssignments row on the shared submission),
+ * plus a single work-type ("מתלה": סדנה/פתיחה/קיפול) for that day. An empty
+ * workshopTypeIds array is valid — used for days with no workshops, where the
+ * manager still wants to schedule the employee (e.g. for opening/closing).
+ */
+export const manualAssign = webMethod(Permissions.SiteMember, async (dateKey, workshopTypeIds, employeeId, workType) => {
     const { role } = await assertEmployeeAccess('manageScheduling');
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateKey || '') || !workshopTypeId || !employeeId) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateKey || '') || !employeeId) {
         throw new Error('BAD_REQUEST: חסרים פרטים לשיבוץ.');
     }
+    const typeIds = Array.from(new Set(
+        (Array.isArray(workshopTypeIds) ? workshopTypeIds : (workshopTypeIds ? [workshopTypeIds] : []))
+            .filter(Boolean)
+    ));
 
     const target = await wixData.get('Dashboard_Roles', employeeId, SA).catch(() => null);
     if (!target) throw new Error('NOT_FOUND: העובד/ת לא נמצא/ה.');
 
     const board = await buildBoard(dateKey, dateKey, { consistent: true });
-    const t = board.days[dateKey]?.types?.[workshopTypeId];
-    if (t?.assignedEmployeeIds.includes(employeeId)) throw new Error('CONFLICT: העובד/ת כבר משובץ/ת ליום זה.');
+    const alreadyAssigned = typeIds.filter(id => board.days[dateKey]?.types?.[id]?.assignedEmployeeIds.includes(employeeId));
+    const toAssign = typeIds.filter(id => !alreadyAssigned.includes(id));
+    if (typeIds.length && !toAssign.length) {
+        throw new Error('CONFLICT: העובד/ת כבר משובץ/ת לכל הסדנאות שנבחרו ביום זה.');
+    }
 
     const settings = await loadSettings();
     const normalizedWorkType = normalizeWorkType(workType);
@@ -852,15 +866,13 @@ export const manualAssign = webMethod(Permissions.SiteMember, async (dateKey, wo
 
     let submission = existing.items?.[0] || null;
     if (submission) {
-        if (submission.status !== SUBMISSION_STATUS.SCHEDULED) {
+        if (submission.status !== SUBMISSION_STATUS.SCHEDULED || normalizeWorkType(submission.workType) !== normalizedWorkType) {
             submission = await wixData.update('AvailabilitySubmissions', {
                 ...submission,
                 status: SUBMISSION_STATUS.SCHEDULED,
                 managerOverride: true,
                 workType: normalizedWorkType,
             }, SA);
-        } else if (normalizeWorkType(submission.workType) !== normalizedWorkType) {
-            submission = await wixData.update('AvailabilitySubmissions', { ...submission, workType: normalizedWorkType }, SA);
         }
     } else {
         submission = await wixData.insert('AvailabilitySubmissions', {
@@ -879,18 +891,20 @@ export const manualAssign = webMethod(Permissions.SiteMember, async (dateKey, wo
     }
 
     const { typesById } = await loadWorkshopTypeMap();
-    await wixData.insert('ShiftAssignments', {
-        dateKey,
-        date: new Date(`${dateKey}T12:00:00Z`),
-        monthKey: dateKey.slice(0, 7),
-        workshopTypeId,
-        workshopName: typesById[workshopTypeId]?.name || 'סדנה',
-        employeeId,
-        submissionId: submission._id,
-        status: ASSIGNMENT_STATUS.APPROVED,
-        source: 'MANUAL',
-        workType: normalizedWorkType,
-    }, SA);
+    for (const workshopTypeId of toAssign) {
+        await wixData.insert('ShiftAssignments', {
+            dateKey,
+            date: new Date(`${dateKey}T12:00:00Z`),
+            monthKey: dateKey.slice(0, 7),
+            workshopTypeId,
+            workshopName: typesById[workshopTypeId]?.name || 'סדנה',
+            employeeId,
+            submissionId: submission._id,
+            status: ASSIGNMENT_STATUS.APPROVED,
+            source: 'MANUAL',
+            workType: normalizedWorkType,
+        }, SA);
+    }
 
     await publishSchedulingUpdate('manual-assign', { dateKey });
 
@@ -898,13 +912,15 @@ export const manualAssign = webMethod(Permissions.SiteMember, async (dateKey, wo
     if (target.phone) {
         const [y, m, d] = dateKey.split('-').map(Number);
         const dow = new Intl.DateTimeFormat('he-IL', { weekday: 'long' }).format(new Date(Date.UTC(y, m - 1, d)));
+        const names = toAssign.map(id => typesById[id]?.name || 'סדנה');
+        const detail = names.length ? `בסדנת ${names.join(', ')} ` : '';
         await sendGreenApiWhatsApp(target.phone,
-            `היי ${target.displayName || ''} 👋\nשובצת למשמרת בסדנת ${typesById[workshopTypeId]?.name || 'סדנה'} בתאריך ${dow}, ${d}.${m}.${y}.\nפרטים בפורטל העובדים: https://www.studiohappy.art/employee-portal`
+            `היי ${target.displayName || ''} 👋\nשובצת למשמרת ${detail}בתאריך ${dow}, ${d}.${m}.${y}.\nפרטים בפורטל העובדים: https://www.studiohappy.art/employee-portal`
         ).catch(err => console.error('[staffAdminService] assign notify failed:', err?.message || err));
     }
 
-    console.log(`[staffAdminService] manualAssign: ${employeeId} → ${dateKey}/${workshopTypeId} by ${role._id}`);
-    return { ok: true };
+    console.log(`[staffAdminService] manualAssign: ${employeeId} → ${dateKey}/[${toAssign.join(',')}] workType=${normalizedWorkType} by ${role._id}`);
+    return { ok: true, assigned: toAssign.length, skipped: alreadyAssigned.length };
 });
 
 export const cancelAssignment = webMethod(Permissions.SiteMember, async (dateKey, workshopTypeId, employeeId) => {

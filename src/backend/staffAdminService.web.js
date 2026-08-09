@@ -2,7 +2,8 @@
  * Staff admin web methods (Module B) — powers the admin tab in the
  * employee-portal CE. Strictly separate from dashboardService (order dashboard).
  *
- * Permission gates (staffRoles.js): viewTeamSchedule (read), manageEmployees,
+ * Permission gates (staffRoles.js): manageEmployeeSystem (admin tab access),
+ * viewTeamSchedule (read), manageEmployees,
  * manageRules, manageScheduling, manageRates. Rates are stripped from
  * payloads unless the caller holds manageRates.
  */
@@ -127,7 +128,7 @@ function mapEmployeeForAdmin(role, canSeeRates, canManageRoles) {
 // ---------------------------------------------------------------------------
 
 export const getStaffAdminData = webMethod(Permissions.SiteMember, async (monthKey) => {
-    const { role } = await assertEmployeeAccess('viewTeamSchedule');
+    const { role } = await assertEmployeeAccess('manageEmployeeSystem');
     const canSeeRates = getRolePermissionValue(role, 'manageRates');
     const canManageRoles = getRolePermissionValue(role, 'manageRoles');
     const { fromKey, toKey } = monthRange(monthKey);
@@ -243,6 +244,7 @@ export const getStaffAdminData = webMethod(Permissions.SiteMember, async (monthK
     return {
         monthKey,
         permissions: {
+            manageEmployeeSystem: getRolePermissionValue(role, 'manageEmployeeSystem'),
             viewTeamSchedule: getRolePermissionValue(role, 'viewTeamSchedule'),
             manageEmployees: getRolePermissionValue(role, 'manageEmployees'),
             manageRules: getRolePermissionValue(role, 'manageRules'),

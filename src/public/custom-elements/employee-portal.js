@@ -18,7 +18,7 @@
  * Light DOM (ללא Shadow DOM), מופע יחיד בעמוד. כל ה-CSS פנימי (ללא CDN).
  *
  * טאב ניהול (Module B): נטען מ-employee-portal-admin.js ומוצג רק לבעלי
- * הרשאת viewTeamSchedule. קלט נוסף: attribute בשם `admin-data`.
+ * הרשאת manageEmployeeSystem. קלט נוסף: attribute בשם `admin-data`.
  */
 import { ADMIN_STYLE, renderAdminTab, handleAdminClick, handleAdminChange } from './employee-portal-admin.js';
 
@@ -333,6 +333,7 @@ class EmployeePortal extends HTMLElement {
         this._adminPage = 'board';
         this._adminSidebarCollapsed = false;
         this._adminModal = null;
+        this._empFormAcc = {};                  // employee form accordion open state (skills, perm-*)
         this._lastEmployeeSave = null;          // pending employee patch for optimistic UI
         this._templatesData = null;
         this._staffData = null;                 // Wix Bookings staff list (employees page)
@@ -531,7 +532,7 @@ class EmployeePortal extends HTMLElement {
                 submissions: this._data.submissions?.length ?? 0,
                 offers: this._data.myOffers?.length ?? 0,
                 openCalls: this._data.openCalls?.length ?? 0,
-                canAdmin: !!this._data.user?.permissions?.viewTeamSchedule,
+                canAdmin: !!this._data.user?.permissions?.manageEmployeeSystem,
             });
             if (!this._viewMonth && this._data?.months?.length) {
                 // Default view: first future month if open, else current month.
@@ -865,7 +866,7 @@ class EmployeePortal extends HTMLElement {
         this._tipPinned = null;
         this._hideTip();
 
-        const isAdmin = !!d.user.permissions?.viewTeamSchedule;
+        const isAdmin = !!d.user.permissions?.manageEmployeeSystem;
         const tabs = `
             <div class="ep-tabs">
                 <button class="ep-tabbtn ${this._tab === 'portal' ? 'active' : ''}" data-action="tab-portal">הפורטל שלי</button>

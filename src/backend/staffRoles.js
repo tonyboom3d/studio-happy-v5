@@ -36,6 +36,7 @@ export const PERMISSION_KEYS = [
     'viewTeamSchedule',
     'manageScheduling',
     'manageEmployees',
+    'manageEmployeeSystem',
     'editTimeEntries',
     'manageRates',
     'manageRules',
@@ -61,6 +62,7 @@ export const PERMISSION_DEFAULTS = {
     viewTeamSchedule: false,
     manageScheduling: false,
     manageEmployees: false,
+    manageEmployeeSystem: false,
     editTimeEntries: false,
     manageRates: false,
     manageRules: false,
@@ -72,23 +74,23 @@ export const PERMISSION_DEFAULTS = {
 export const ROLE_TYPE_PRESETS = {
     Trainee: {
         viewDashboard: false, submitAvailability: true, viewTeamSchedule: false,
-        manageScheduling: false, manageEmployees: false, editTimeEntries: false,
-        manageRates: false, manageRules: false, manageRoles: false,
+        manageScheduling: false, manageEmployees: false, manageEmployeeSystem: false,
+        editTimeEntries: false, manageRates: false, manageRules: false, manageRoles: false,
     },
     Employee: {
         viewDashboard: false, submitAvailability: true, viewTeamSchedule: false,
-        manageScheduling: false, manageEmployees: false, editTimeEntries: false,
-        manageRates: false, manageRules: false, manageRoles: false,
+        manageScheduling: false, manageEmployees: false, manageEmployeeSystem: false,
+        editTimeEntries: false, manageRates: false, manageRules: false, manageRoles: false,
     },
     ShiftManager: {
         viewDashboard: true, submitAvailability: true, viewTeamSchedule: true,
-        manageScheduling: true, manageEmployees: false, editTimeEntries: false,
-        manageRates: false, manageRules: false, manageRoles: false,
+        manageScheduling: true, manageEmployees: false, manageEmployeeSystem: true,
+        editTimeEntries: false, manageRates: false, manageRules: false, manageRoles: false,
     },
     Owner: {
         viewDashboard: true, submitAvailability: true, viewTeamSchedule: true,
-        manageScheduling: true, manageEmployees: true, editTimeEntries: true,
-        manageRates: true, manageRules: true, manageRoles: true,
+        manageScheduling: true, manageEmployees: true, manageEmployeeSystem: true,
+        editTimeEntries: true, manageRates: true, manageRules: true, manageRoles: true,
     },
 };
 
@@ -106,6 +108,7 @@ export const PERMISSION_LABELS = {
     viewTeamSchedule: 'צפייה בלוח הצוות',
     manageScheduling: 'ניהול שיבוץ',
     manageEmployees: 'ניהול עובדים (חיבור וערכת פרופיל)',
+    manageEmployeeSystem: 'מנהל מערכת עובדים',
     editTimeEntries: 'ניהול שעות צוות',
     manageRates: 'צפייה ועדכון תעריפים',
     manageRules: 'ניהול הגדרות, כללים ומועדים',
@@ -116,7 +119,7 @@ export const PERMISSION_LABELS = {
 /** Grouping of permission keys for the admin permissions editor UI. */
 export const PERMISSION_GROUPS = [
     { id: 'dashboard', label: 'דשבורד הזמנות', keys: ['viewDashboard', 'editSketchStatus', 'rejectSketchStatus', 'deleteSketchImage', 'editOrderNotes', 'sendWhatsApp', 'manageOrdersSystem'] },
-    { id: 'portal', label: 'פורטל עובדים ושיבוץ', keys: ['submitAvailability', 'viewTeamSchedule', 'manageScheduling', 'manageEmployees'] },
+    { id: 'portal', label: 'פורטל עובדים ושיבוץ', keys: ['submitAvailability', 'manageEmployeeSystem', 'viewTeamSchedule', 'manageScheduling', 'manageEmployees'] },
     { id: 'hours', label: 'ניהול שעות ותחנות', keys: ['editTimeEntries'] },
     { id: 'sensitive', label: 'הרשאות והגדרות רגישות', keys: ['manageRates', 'manageRules', 'manageTemplates', 'manageRoles'] },
     { id: 'skills', label: 'כישורים מיוחדים', keys: ['sketchSewingSkill'] },
@@ -152,6 +155,17 @@ export function getRolePermissionValue(role, key) {
     if (perms && typeof perms === 'object' && !Array.isArray(perms)) {
         const legacy = perms[key];
         if (legacy !== undefined && legacy !== null) return !!legacy;
+    }
+
+    // Migration: admin tab was gated by viewTeamSchedule before manageEmployeeSystem existed.
+    if (key === 'manageEmployeeSystem') {
+        if (Object.prototype.hasOwnProperty.call(role, 'viewTeamSchedule')) {
+            const vts = role.viewTeamSchedule;
+            if (vts !== undefined && vts !== null) return !!vts;
+        }
+        if (perms?.viewTeamSchedule !== undefined && perms?.viewTeamSchedule !== null) {
+            return !!perms.viewTeamSchedule;
+        }
     }
 
     return PERMISSION_DEFAULTS[key] !== false;

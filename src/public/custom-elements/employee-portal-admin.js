@@ -889,28 +889,48 @@ function renderTimeEntryForm(ce, d, entry) {
         </div>`;
 }
 
-function renderPermissionGroups(d, permissions) {
-    return (d.permissionGroups || []).map(g => `
-        <div style="margin-bottom:8px">
-            <b style="font-size:11.5px;color:#475569">${esc(g.label)}</b>
-            <div class="epa-skills" style="margin-top:4px">
-                ${g.keys.map(k => `<label><input type="checkbox" class="epaPerm" data-perm="${k}" ${permissions?.[k] ? 'checked' : ''}> ${esc(d.permissionLabels?.[k] || k)}</label>`).join('')}
-            </div>
-        </div>`).join('');
+function renderEmpAccordion(ce, accId, title, bodyHtml) {
+    const open = !!(ce._empFormAcc && ce._empFormAcc[accId]);
+    return `<div class="epa-emp-acc epa-scope-personal" style="margin-top:10px;border-radius:10px;overflow:hidden">
+        <button type="button" class="epa-accordion-toggle" data-action="admin-toggle-emp-acc" data-acc="${esc(accId)}">
+            <span>${title}</span>
+            <span class="epa-accordion-arrow">${open ? '▲' : '▼'}</span>
+        </button>
+        ${open ? `<div class="epa-accordion-body">${bodyHtml}</div>` : ''}
+    </div>`;
 }
 
-function renderEmployeeForm(e, d) {
+function renderPermissionGroups(ce, d, permissions) {
+    return (d.permissionGroups || []).map(g => {
+        const accId = `perm-${g.id}`;
+        const enabled = g.keys.filter(k => permissions?.[k]).length;
+        const body = `<div class="epa-skills" style="margin-top:4px">
+            ${g.keys.map(k => `<label><input type="checkbox" class="epaPerm" data-perm="${k}" ${permissions?.[k] ? 'checked' : ''}> ${esc(d.permissionLabels?.[k] || k)}</label>`).join('')}
+        </div>`;
+        return renderEmpAccordion(ce, accId, `${esc(g.label)} <span style="font-weight:400;font-size:11px;color:#64748b">(${enabled}/${g.keys.length})</span>`, body);
+    }).join('');
+}
+
+function renderEmployeeForm(ce, e, d) {
     if (!e) return '';
-    const skillBoxes = (d.workshopTypes || []).map(w => `
+    const workshopTypes = d.workshopTypes || [];
+    const skillBoxes = workshopTypes.map(w => `
         <label><input type="checkbox" class="epa-skill" value="${w.id}" ${(e.skillIds || []).includes(w.id) ? 'checked' : ''}> ${esc(w.name)}</label>`).join('');
+    const skillCount = (e.skillIds || []).length;
+    const skillsSection = renderEmpAccordion(
+        ce,
+        'skills',
+        `הכשרות <span style="font-weight:400;font-size:11px;color:#64748b">(${skillCount}/${workshopTypes.length})</span>`,
+        `<div class="epa-skills">${skillBoxes || '<div class="ep-empty">אין סוגי סדנאות מוגדרים</div>'}</div>`
+    );
     const rates = d.permissions.manageRates ? `
         <div><label>תעריף סטודיו</label><input id="epaF_rateStudio" type="number" value="${e.rateStudio ?? ''}"></div>
         <div><label>תעריף הדרכה</label><input id="epaF_rateInstruction" type="number" value="${e.rateInstruction ?? ''}"></div>
         <div><label>תעריף צמר</label><input id="epaF_rateWool" type="number" value="${e.rateWool ?? ''}"></div>` : '';
     const permissionsSection = d.permissions.manageRoles ? `
-        <div class="epa-section">
+        <div class="epa-section" style="margin-top:4px">
             <div class="epa-panel-title"><h3>הרשאות מפורטות</h3></div>
-            ${renderPermissionGroups(d, e.permissions)}
+            ${renderPermissionGroups(ce, d, e.permissions)}
         </div>` : '';
     return `<div class="epa-form">
             <div><label>שם תצוגה</label><input id="epaF_displayName" value="${esc(e.displayName)}"></div>
@@ -924,7 +944,7 @@ function renderEmployeeForm(e, d) {
             <div><label>חניכה</label><select id="epaF_isTrainee"><option value="0" ${!e.isTrainee ? 'selected' : ''}>לא</option><option value="1" ${e.isTrainee ? 'selected' : ''}>כן</option></select></div>
             <div><label>פעיל/ה</label><select id="epaF_active"><option value="1" ${e.active ? 'selected' : ''}>כן</option><option value="0" ${!e.active ? 'selected' : ''}>לא</option></select></div>
             ${rates}
-            <div class="epa-skills"><label style="width:100%;font-weight:700">הכשרות:</label>${skillBoxes}</div>
+            ${skillsSection}
         </div>
         ${permissionsSection}
         <div class="epa-inline">
@@ -1227,7 +1247,7 @@ function renderModal(ce, d) {
         const employee = (d.employees || []).find(e => e.id === modal.id);
         if (!employee) return '';
         title = `הגדרות — ${employee.displayName}`;
-        body = renderEmployeeForm(employee, d);
+        body = renderEmployeeForm(ce, employee, d);
     } else if (modal.type === 'submission') {
         const s = (d.submissions || []).find(x => x.id === modal.id);
         if (!s) return '';
@@ -1580,8 +1600,16 @@ export function handleAdminClick(ce, action, target) {
             ce._adminModal = null;
             ce.render();
             return true;
+        case 'admin-toggle-emp-acc': {
+            if (!ce._empFormAcc) ce._empFormAcc = {};
+            const acc = target.dataset.acc;
+            ce._empFormAcc[acc] = !ce._empFormAcc[acc];
+            ce.render();
+            return true;
+        }
         case 'admin-edit-employee':
             if (!d?.permissions?.manageEmployees) return true;
+            ce._empFormAcc = {};
             ce._adminModal = { type: 'employee', id: target.dataset.emp };
             ce.render();
             return true;

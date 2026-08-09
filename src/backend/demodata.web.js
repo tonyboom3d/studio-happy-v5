@@ -196,6 +196,7 @@ async function upsertDemoRole(config, workshops, staffList) {
         manageRoles: false,
         submitAvailability: true,
         viewTeamSchedule: false,
+        manageEmployeeSystem: false,
         manageScheduling: false,
         manageEmployees: false,
         editTimeEntries: false,

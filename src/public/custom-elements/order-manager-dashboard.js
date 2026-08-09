@@ -1249,6 +1249,7 @@ function __wdInjectGlobalAssets() {
             sendWhatsApp: true,
             manageTemplates: true,
             rejectSketchStatus: true,
+            manageOrdersSystem: false,
         };
 
         function hasDashboardPermission(key) {
@@ -1905,7 +1906,7 @@ function __wdInjectGlobalAssets() {
         }
 
         function buildPaymentSummaryHtml(order) {
-            if (order.isLegacyOrder) return '';
+            if (order.isLegacyOrder || !hasDashboardPermission('manageOrdersSystem')) return '';
             const total = Number(order.paidTotal) || 0;
             const discount = Number(order.paidDiscount) || 0;
             const hasCoupon = discount > 0 || order.couponCode;
@@ -1924,7 +1925,7 @@ function __wdInjectGlobalAssets() {
         const ECOM_ORDER_DASHBOARD_BASE = 'https://manage.wix.com/dashboard/f0548b42-7f52-447c-9076-45112f85765b/ecom-platform/order-details';
 
         function buildEcomOrderLinkHtml(order) {
-            if (!order.ecomOrderId || order.isLegacyOrder) return '';
+            if (!order.ecomOrderId || order.isLegacyOrder || !hasDashboardPermission('manageOrdersSystem')) return '';
             const url = `${ECOM_ORDER_DASHBOARD_BASE}/${order.ecomOrderId}`;
             return `<a href="${url}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()" class="inline-flex items-center gap-1 text-[10px] font-bold text-indigo-600 hover:text-indigo-800 mt-1" title="פתיחת הזמנה בלוח הבקרה"><i class="ph ph-arrow-square-out"></i>הזמנה ב-Wix</a>`;
         }

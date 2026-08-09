@@ -924,10 +924,16 @@ export const getInitialDashboardData = webMethod(Permissions.SiteMember, async (
         filters?.includeAllOrders ? w.allGroupsCount > 0 : w.groupsCount > 0
     );
 
-    // Recompute alerts against the visible workshop set only.
+    // Employees without manageOrdersSystem only see workshops where they're the
+    // instructor (Bookings/Staff match via Dashboard_Roles.connectedStaff).
+    const scopedWorkshopRows = canManageOrdersSystem
+        ? visibleWorkshopRows
+        : visibleWorkshopRows.filter(w => myStaffId && sessionStaffMap[w.id] === myStaffId);
+
+    // Recompute alerts against the scoped workshop set only.
     missingSketchesCount = 0;
     alertWorkshopIds.length = 0;
-    for (const w of visibleWorkshopRows) {
+    for (const w of scopedWorkshopRows) {
         if (!w.hasAlert && !w.hasNotReadyAlert) continue;
         missingSketchesCount += Math.max(0, (w.totalSketchesNeeded || 0) - (w.sketchesSelected || 0));
         alertWorkshopIds.push(w.id);
@@ -935,26 +941,37 @@ export const getInitialDashboardData = webMethod(Permissions.SiteMember, async (
 
     // Nearest date/time first — sessions with no resolvable start date sink
     // to the bottom rather than breaking the sort.
-    visibleWorkshopRows.sort((a, b) => {
+    scopedWorkshopRows.sort((a, b) => {
         if (a.startTimestamp === null) return 1;
         if (b.startTimestamp === null) return -1;
         return a.startTimestamp - b.startTimestamp;
     });
-    console.log('[dashboardService] Per-workshop alert flags:', visibleWorkshopRows.map(w => ({ id: w.id, date: w.date, time: w.time, hasAlert: w.hasAlert, isUrgent: w.isUrgent, sketches: `${w.sketchesReady}/${w.totalSketchesNeeded}` })));
+    console.log('[dashboardService] Per-workshop alert flags:', scopedWorkshopRows.map(w => ({ id: w.id, date: w.date, time: w.time, hasAlert: w.hasAlert, isUrgent: w.isUrgent, sketches: `${w.sketchesReady}/${w.totalSketchesNeeded}` })));
+
+    // Same scoping for orders — plus, for non-managers, strip payment/coupon
+    // details and the Wix eCom order id (used by the UI to build the
+    // "open in Wix" link) so that data never leaves the backend for them.
+    const scopedWorkshopIds = new Set(scopedWorkshopRows.map(w => w.id));
+    let scopedOrders = canManageOrdersSystem
+        ? dashboardOrders
+        : dashboardOrders.filter(o => scopedWorkshopIds.has(o.workshopId));
+    if (!canManageOrdersSystem) {
+        scopedOrders = scopedOrders.map(({ paidTotal, paidDiscount, couponCode, couponName, ecomOrderId, ...rest }) => rest);
+    }
 
     const templates = templatesResult
         ? (templatesResult.items || []).map(t => ({ id: t._id, title: t.title, body: t.messageBody, isSystem: !!t.isSystem }))
         : undefined;
     if (!refreshOnly) console.log(`[dashboardService] Loaded ${(templates || []).length} WhatsApp template(s).`);
     if (!refreshOnly) console.log('[dashboardService] Resolved current dashboard user:', currentUser);
-    console.log(`[dashboardService] getInitialDashboardData done: ${visibleWorkshopRows.length} workshop(s), ${dashboardOrders.length} order(s), ${missingSketchesCount} missing sketch(es) across ${alertWorkshopIds.length} alerted workshop(s).`);
-    if (!refreshOnly) console.warn('🧾 [dashboardService] Dashboard orders (UI-ready, with sketches):', dashboardOrders);
+    console.log(`[dashboardService] getInitialDashboardData done: ${scopedWorkshopRows.length} workshop(s), ${scopedOrders.length} order(s), ${missingSketchesCount} missing sketch(es) across ${alertWorkshopIds.length} alerted workshop(s).`);
+    if (!refreshOnly) console.warn('🧾 [dashboardService] Dashboard orders (UI-ready, with sketches):', scopedOrders);
 
     return {
         refreshOnly,
         workshopTypes: typesMap,
-        workshops: visibleWorkshopRows,
-        orders: dashboardOrders,
+        workshops: scopedWorkshopRows,
+        orders: scopedOrders,
         ...(templates ? { templates } : {}),
         alertsSummary: { count: missingSketchesCount, workshopIds: alertWorkshopIds },
         ...(currentUser ? { currentUser } : {}),

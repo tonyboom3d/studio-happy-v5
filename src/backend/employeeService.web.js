@@ -101,6 +101,21 @@ async function ensureRoleProfile(role, member) {
     return updated;
 }
 
+/** Multi-ref skills are only reliable with include('skills') — needed for calendar day states. */
+async function loadRoleWithSkills(role) {
+    if (!role?._id) return role;
+    try {
+        const result = await wixData.query('Dashboard_Roles')
+            .eq('_id', role._id)
+            .include('skills')
+            .limit(1)
+            .find(SA);
+        return result.items?.[0] || role;
+    } catch (_) {
+        return role;
+    }
+}
+
 /** Employee's non-rejected submissions from the start of the current month onward. */
 async function loadMySubmissions(roleId, now = new Date()) {
     const currentMonth = toMonthKey(now);
@@ -245,7 +260,7 @@ export const getMyPortalData = webMethod(Permissions.Anyone, async () => {
 
     const [settings, roleRow] = await Promise.all([
         loadSettings(),
-        ensureRoleProfile(role, member),
+        ensureRoleProfile(role, member).then(loadRoleWithSkills),
     ]);
 
     if (roleRow.active === false) {

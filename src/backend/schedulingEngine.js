@@ -14,6 +14,7 @@
  * Collections: ShiftAssignments, ShiftOffers (specs in plan).
  */
 import wixData from 'wix-data';
+import { availabilityCalendar } from 'wix-bookings.v2';
 import { publish } from 'wix-realtime-backend';
 import { SUBMISSION_STATUS, toDateKey, normalizeSettings, DEFAULT_WORK_TYPE } from 'backend/availabilityRules.js';
 import { refIds, getRolePermissionValue } from 'backend/staffRoles.js';
@@ -119,11 +120,62 @@ function dateRangeFilter(query, fromKey, toKey) {
 
 async function loadPaidOrders(fromKey, toKey) {
     const { start, end } = dateRangeFilter(null, fromKey, toKey);
-    const result = await wixData.query('WorkshopOrders')
-        .eq('status', 'paid')
-        .ge('workshopStart', start).le('workshopStart', end)
-        .limit(1000).find(SA).catch(() => ({ items: [] }));
-    return (result.items || []).filter(o => !o.cancelledAt);
+    const items = [];
+    let skip = 0;
+    const pageSize = 1000;
+    while (true) {
+        const result = await wixData.query('WorkshopOrders')
+            .eq('status', 'paid')
+            .ge('workshopStart', start).le('workshopStart', end)
+            .ascending('workshopStart')
+            .skip(skip).limit(pageSize).find(SA).catch(() => ({ items: [] }));
+        const batch = (result.items || []).filter(o => !o.cancelledAt);
+        items.push(...batch);
+        if (batch.length < pageSize) break;
+        skip += pageSize;
+    }
+    return items;
+}
+
+/** Scheduled Bookings slots — used so the calendar shows workshops even before paid orders exist. */
+async function loadBookingsSessions(fromKey, toKey, serviceIdToTypeId) {
+    const serviceIds = Object.keys(serviceIdToTypeId || {});
+    if (!serviceIds.length) return [];
+
+    const startDate = new Date(`${fromKey}T00:00:00Z`);
+    const endDate = new Date(`${toKey}T23:59:59Z`);
+    const options = { slotsPerDay: 100 };
+    const rows = [];
+
+    await Promise.all(serviceIds.map(async (serviceId) => {
+        try {
+            const query = {
+                filter: {
+                    serviceId,
+                    startDate: startDate.toISOString(),
+                    endDate: endDate.toISOString(),
+                },
+            };
+            const availability = await availabilityCalendar.queryAvailability(query, options);
+            for (const entry of (availability.availabilityEntries || [])) {
+                const slot = entry.slot || {};
+                if (!slot.startDate) continue;
+                const dateKey = toDateKey(slot.startDate);
+                if (dateKey < fromKey || dateKey > toKey) continue;
+                const typeId = serviceIdToTypeId[slot.serviceId || serviceId];
+                if (!typeId) continue;
+                rows.push({
+                    dateKey,
+                    typeId,
+                    startIso: new Date(slot.startDate).toISOString(),
+                });
+            }
+        } catch (err) {
+            console.warn(`[schedulingEngine] Bookings sessions load failed for ${serviceId}:`, err?.message || err);
+        }
+    }));
+
+    return rows;
 }
 
 async function loadSubmissions(fromKey, toKey, consistent) {
@@ -173,14 +225,15 @@ async function loadOffers(fromKey, toKey) {
  * }>}
  */
 export async function buildBoard(fromKey, toKey, { consistent = false, includeOffers = false } = {}) {
-    const [{ typesById, serviceIdToTypeId }, rules, roles, orders, submissions, assignments, offers] = await Promise.all([
-        loadWorkshopTypeMap(),
+    const { typesById, serviceIdToTypeId } = await loadWorkshopTypeMap();
+    const [rules, roles, orders, submissions, assignments, offers, sessionRows] = await Promise.all([
         loadRulesByTypeId(),
         loadActiveRoles(),
         loadPaidOrders(fromKey, toKey),
         loadSubmissions(fromKey, toKey, consistent),
         loadAssignments(fromKey, toKey, consistent),
         includeOffers ? loadOffers(fromKey, toKey) : Promise.resolve([]),
+        loadBookingsSessions(fromKey, toKey, serviceIdToTypeId),
     ]);
 
     const rolesById = {};
@@ -217,6 +270,13 @@ export async function buildBoard(fromKey, toKey, { consistent = false, includeOf
         if (!t.sessions.includes(startIso)) t.sessions.push(startIso);
         days[dateKey].hasWorkshops = true;
     }
+
+    for (const { dateKey, typeId, startIso } of sessionRows) {
+        const t = dayType(dateKey, typeId);
+        if (!t.sessions.includes(startIso)) t.sessions.push(startIso);
+        days[dateKey].hasWorkshops = true;
+    }
+
     for (const dateKey of Object.keys(days)) {
         for (const t of Object.values(days[dateKey].types)) {
             t.required = requiredInstructorsFor(rules[t.typeId], t.adults, t.children);

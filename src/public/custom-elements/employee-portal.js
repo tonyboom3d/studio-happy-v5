@@ -551,9 +551,16 @@ class EmployeePortal extends HTMLElement {
         if (result.type === 'approveMyMonth' && result.ok) {
             this._toast('השעות אושרו בהצלחה. תודה!', 'success');
         }
+        if (result.type === 'adminSaveEmployee' && result.ok) {
+            this._adminModal = null;
+            this._toast('פרטי העובד/ת נשמרו בהצלחה.', 'success');
+            this.render();
+            return;
+        }
         if (result.type?.startsWith('admin') && result.ok) {
             this._toast('הפעולה בוצעה בהצלחה.', 'success');
         }
+        this.render();
     }
 
     // -----------------------------------------------------------------
@@ -590,7 +597,6 @@ class EmployeePortal extends HTMLElement {
 
         const portalTab = `
             ${this._renderOffers()}
-            ${this._renderBanners()}
             <div class="ep-grid">
                 <div>
                     <div class="ep-card">${this._renderCalendar()}</div>
@@ -694,11 +700,10 @@ class EmployeePortal extends HTMLElement {
     }
 
     _renderMessagesTab(scope) {
-        const m = this._messagesData;
-        if (!m) {
+        const list = this._msgListFor(scope);
+        if (!this._messagesData && !list.length) {
             return `<div class="ep-loading"><div class="ep-spinner"></div>טוען הודעות…</div>`;
         }
-        const list = scope === 'personal' ? (m.personal || []) : (m.system || []);
         if (!list.length) {
             return `<div class="ep-empty">אין הודעות כרגע</div>`;
         }
@@ -706,6 +711,73 @@ class EmployeePortal extends HTMLElement {
             return this._renderMsgCard(list[0], scope);
         }
         return `<div class="ep-msg-car" id="epMsgCar-${scope}" data-scope="${scope}">${this._msgCarInner(scope, list)}</div>`;
+    }
+
+    /** Portal-generated notices merged into the personal/system message cards. */
+    _buildDynamicMessages() {
+        const rules = this._data?.rules || {};
+        const personal = [];
+        const system = [];
+        const viewInfo = this._monthInfo(this._viewMonth);
+
+        if (viewInfo && !viewInfo.isCurrentMonth && viewInfo.deadline) {
+            const dl = new Date(viewInfo.deadline);
+            const daysLeft = Math.ceil((dl.getTime() - Date.now()) / 86400000);
+            if (viewInfo.open) {
+                system.push({
+                    id: `dyn-deadline-${viewInfo.monthKey}`,
+                    title: 'מועד אחרון להגשת זמינות',
+                    body: `⏰ המועד האחרון להגשת זמינות ל${monthTitle(viewInfo.monthKey)}: ${formatDateHe(viewInfo.deadline.slice(0, 10))}${daysLeft >= 0 ? ` (עוד ${daysLeft} ימים)` : ''}`,
+                });
+            } else {
+                system.push({
+                    id: `dyn-deadline-closed-${viewInfo.monthKey}`,
+                    title: 'מועד ההגשה עבר',
+                    body: `🔒 חלף המועד האחרון להגשת זמינות ל${monthTitle(viewInfo.monthKey)}. לחריגים יש לפנות למנהל/ת.`,
+                });
+            }
+        }
+
+        system.push({
+            id: 'dyn-rules',
+            title: 'כללי הגשת זמינות',
+            body: `📋 מינימום ${rules.requiredShiftsPerWeek} משמרות בשבוע, אורך משמרת מינימלי ${rules.minShiftHours} שעות. שעות פעילות: ${rules.shiftMinTime}–${rules.shiftMaxTime}.`,
+        });
+
+        if (viewInfo?.isCurrentMonth) {
+            personal.push({
+                id: `dyn-bonus-${viewInfo.monthKey}`,
+                title: 'משמרות נוספות לחודש הנוכחי',
+                body: viewInfo.quota.bonusUnlocked
+                    ? '🎉 השלמת את המכסה השבועית — ניתן להגיש משמרות נוספות לחודש הנוכחי.'
+                    : 'הגשת משמרות נוספות לחודש הנוכחי נפתחת לאחר השלמת המכסה השבועית של אותו שבוע.',
+            });
+        }
+
+        if (viewInfo && !viewInfo.quota.met) {
+            const unmetWeeks = (viewInfo.quota.weeks || []).filter(w => !w.met);
+            if (unmetWeeks.length) {
+                const list = unmetWeeks.map(w => `${formatDateHe(w.weekStart)}–${formatDateHe(w.weekEnd)} (${w.submitted}/${w.required})`).join(', ');
+                personal.push({
+                    id: `dyn-quota-${viewInfo.monthKey}`,
+                    title: 'מכסה שבועית',
+                    body: `⚠️ לא עמדת במכסה השבועית עבור: ${list}.`,
+                });
+            }
+        }
+
+        if (viewInfo?.weekend && !viewInfo.weekend.met) {
+            const parts = [];
+            if (!viewInfo.weekend.fridays.met) parts.push(`ימי שישי: ${viewInfo.weekend.fridays.submitted}/${viewInfo.weekend.fridays.required}`);
+            if (!viewInfo.weekend.saturdays.met) parts.push(`ימי שבת: ${viewInfo.weekend.saturdays.submitted}/${viewInfo.weekend.saturdays.required}`);
+            personal.push({
+                id: `dyn-weekend-${viewInfo.monthKey}`,
+                title: 'דרישת סופ"ש',
+                body: `⚠️ טרם מולאה דרישת סופ"ש ל${monthTitle(viewInfo.monthKey)} — ${parts.join(', ')}.`,
+            });
+        }
+
+        return { personal, system };
     }
 
     _renderMsgCard(msg, scope) {
@@ -735,9 +807,11 @@ class EmployeePortal extends HTMLElement {
     }
 
     _msgListFor(scope) {
+        const dyn = this._buildDynamicMessages();
+        const dynamic = scope === 'personal' ? dyn.personal : dyn.system;
         const m = this._messagesData;
-        if (!m) return [];
-        return scope === 'personal' ? (m.personal || []) : (m.system || []);
+        const cms = m ? (scope === 'personal' ? (m.personal || []) : (m.system || [])) : [];
+        return [...dynamic, ...cms];
     }
 
     /** Targeted DOM update — avoids a full re-render (which would wipe open inputs). */
@@ -825,44 +899,6 @@ class EmployeePortal extends HTMLElement {
                 </div>
                 <div class="ep-quota">${chips}</div>
             </div>`;
-    }
-
-    _renderBanners() {
-        const rules = this._data.rules || {};
-        const banners = [];
-        const viewInfo = this._monthInfo(this._viewMonth);
-
-        if (viewInfo && !viewInfo.isCurrentMonth) {
-            if (viewInfo.deadline) {
-                const dl = new Date(viewInfo.deadline);
-                const daysLeft = Math.ceil((dl.getTime() - Date.now()) / 86400000);
-                if (viewInfo.open) {
-                    banners.push(`<div class="ep-banner ${daysLeft <= 2 ? 'warn' : 'info'}">⏰ המועד האחרון להגשת זמינות ל${monthTitle(viewInfo.monthKey)}: ${formatDateHe(viewInfo.deadline.slice(0, 10))}${daysLeft >= 0 ? ` (עוד ${daysLeft} ימים)` : ''}</div>`);
-                } else {
-                    banners.push(`<div class="ep-banner closed">🔒 חלף המועד האחרון להגשת זמינות ל${monthTitle(viewInfo.monthKey)}. לחריגים יש לפנות למנהל/ת.</div>`);
-                }
-            }
-        }
-        if (viewInfo && viewInfo.isCurrentMonth) {
-            banners.push(viewInfo.quota.bonusUnlocked
-                ? `<div class="ep-banner info">🎉 השלמת את המכסה השבועית — ניתן להגיש משמרות נוספות לחודש הנוכחי.</div>`
-                : `<div class="ep-banner warn">הגשת משמרות נוספות לחודש הנוכחי נפתחת לאחר השלמת המכסה השבועית של אותו שבוע.</div>`);
-        }
-        if (viewInfo && !viewInfo.quota.met) {
-            const unmetWeeks = (viewInfo.quota.weeks || []).filter(w => !w.met);
-            if (unmetWeeks.length) {
-                const list = unmetWeeks.map(w => `${formatDateHe(w.weekStart)}–${formatDateHe(w.weekEnd)} (${w.submitted}/${w.required})`).join(', ');
-                banners.push(`<div class="ep-banner warn">⚠️ לא עמדת במכסה השבועית עבור: ${list}.</div>`);
-            }
-        }
-        if (viewInfo && viewInfo.weekend && !viewInfo.weekend.met) {
-            const parts = [];
-            if (!viewInfo.weekend.fridays.met) parts.push(`ימי שישי: ${viewInfo.weekend.fridays.submitted}/${viewInfo.weekend.fridays.required}`);
-            if (!viewInfo.weekend.saturdays.met) parts.push(`ימי שבת: ${viewInfo.weekend.saturdays.submitted}/${viewInfo.weekend.saturdays.required}`);
-            banners.push(`<div class="ep-banner warn">⚠️ טרם מולאה דרישת סופ"ש ל${monthTitle(viewInfo.monthKey)} — ${parts.join(', ')}.</div>`);
-        }
-        banners.push(`<div class="ep-banner info">📋 מינימום ${rules.requiredShiftsPerWeek} משמרות בשבוע, אורך משמרת מינימלי ${rules.minShiftHours} שעות. שעות פעילות: ${rules.shiftMinTime}–${rules.shiftMaxTime}.</div>`);
-        return banners.join('');
     }
 
     _monthInfo(monthKey) {

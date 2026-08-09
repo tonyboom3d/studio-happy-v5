@@ -1211,15 +1211,14 @@ export function handleAdminClick(ce, action, target) {
                 patch.rateInstruction = num('epaF_rateInstruction');
                 patch.rateWool = num('epaF_rateWool');
             }
-            ce._startBusy('שומר…');
-            ce._adminModal = null;
-            ce._dispatch('adminUpdateEmployee', { roleId: target.dataset.emp, patch });
             const permCheckboxes = [...ce.querySelectorAll('.epaPerm')];
+            let permissions = null;
             if (permCheckboxes.length) {
-                const permissions = {};
+                permissions = {};
                 for (const cb of permCheckboxes) permissions[cb.dataset.perm] = cb.checked;
-                ce._dispatch('adminUpdateEmployeePermissions', { roleId: target.dataset.emp, permissions });
             }
+            ce._startBusy('שומר פרטי עובד/ת…');
+            ce._dispatch('adminSaveEmployee', { roleId: target.dataset.emp, patch, permissions });
             return true;
         }
         case 'admin-staff-refresh':

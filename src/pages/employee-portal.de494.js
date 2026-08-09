@@ -85,6 +85,7 @@ let __epLoadGeneration = 0;
 let __epAdminGeneration = 0;
 let __epLastAdminMonth = null;
 let __epRealtimeTimer = null;
+let __epSuppressRealtimeUntil = 0;
 
 $w.onReady(function () {
     console.log('[employee-portal] $w.onReady fired');
@@ -123,6 +124,7 @@ $w.onReady(function () {
 /** Debounced refresh whenever any client changes scheduling data. */
 function subscribeToRealtime(portalEl) {
     subscribe({ name: 'scheduling-updates' }, () => {
+        if (Date.now() < __epSuppressRealtimeUntil) return;
         console.log('[employee-portal] realtime scheduling-updates → refresh');
         clearTimeout(__epRealtimeTimer);
         __epRealtimeTimer = setTimeout(() => {
@@ -448,6 +450,18 @@ async function handlePortalAction(portalEl, detail) {
             refreshAdmin = false;
             await loadAndPushAdminData(portalEl, payload?.monthKey);
             return;
+
+        case 'adminSaveEmployee': {
+            await updateEmployeeProfile(payload?.roleId, payload?.patch);
+            if (payload?.permissions) {
+                await updateEmployeePermissions(payload?.roleId, payload.permissions);
+            }
+            __epSuppressRealtimeUntil = Date.now() + 4000;
+            pushActionResult(portalEl, { type, ok: true });
+            refreshPortal = false;
+            refreshAdmin = true;
+            break;
+        }
 
         case 'adminUpdateEmployee': {
             const result = await updateEmployeeProfile(payload?.roleId, payload?.patch);

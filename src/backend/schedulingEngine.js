@@ -48,6 +48,7 @@ export async function loadSettings() {
     return {
         ...normalizeSettings(raw),
         holidays: parseHolidays(raw?.holidays),
+        dayNotes: parseDayNotes(raw?.dayNotes),
         _rawId: raw?._id || null,
     };
 }
@@ -61,6 +62,18 @@ function parseHolidays(value) {
         } catch (_) { /* ignore */ }
     }
     return [];
+}
+
+/** { "<dateKey>": { message, updatedBy, updatedAt } } — manager notes on calendar days. */
+function parseDayNotes(value) {
+    if (value && typeof value === 'object' && !Array.isArray(value)) return value;
+    if (typeof value === 'string' && value.trim()) {
+        try {
+            const parsed = JSON.parse(value);
+            if (parsed && typeof parsed === 'object') return parsed;
+        } catch (_) { /* ignore */ }
+    }
+    return {};
 }
 
 export async function loadWorkshopTypeMap() {

@@ -32,6 +32,7 @@ import {
     DEFAULT_WORK_TYPE,
     normalizeWorkType,
 } from 'backend/availabilityRules.js';
+import { syncHebcalHolidays } from 'backend/holidayService.js';
 import {
     buildBoard,
     typeFilledCount,
@@ -49,6 +50,7 @@ import {
     listAllVacations,
     saveVacation as saveVacationRow,
     deleteVacation as deleteVacationRow,
+    decideVacationRequest,
 } from 'backend/vacations.js';
 
 const SA = { suppressAuth: true };
@@ -258,6 +260,7 @@ export const getStaffAdminData = webMethod(Permissions.SiteMember, async (monthK
             blockedDates: settings.blockedDates,
             promotedDates: settings.promotedDates,
             holidays: settings.holidays,
+            dayNotes: settings.dayNotes,
         },
         serverNow: new Date().toISOString(),
     };
@@ -569,11 +572,20 @@ export const updateDayFlags = webMethod(Permissions.SiteMember, async (dateKey, 
     return { ok: true };
 });
 
+const HOLIDAY_MODES = ['', 'CLOSED', 'SHORT'];
+
 export const updateHolidays = webMethod(Permissions.SiteMember, async (holidays) => {
     const { role } = await assertEmployeeAccess('manageRules');
     const clean = (Array.isArray(holidays) ? holidays : [])
         .filter(h => h && /^\d{4}-\d{2}-\d{2}$/.test(h.date))
-        .map(h => ({ date: h.date, name: String(h.name || '').slice(0, 80) }));
+        .map(h => ({
+            date: h.date,
+            name: String(h.name || '').slice(0, 80),
+            hebcalId: String(h.hebcalId || ''),
+            mode: HOLIDAY_MODES.includes(h.mode) ? h.mode : '',
+            shortStart: /^\d{2}:\d{2}$/.test(h.shortStart || '') ? h.shortStart : '',
+            shortEnd: /^\d{2}:\d{2}$/.test(h.shortEnd || '') ? h.shortEnd : '',
+        }));
 
     const result = await wixData.query('AvailabilitySettings')
         .eq('settingKey', 'default').limit(1).find(SA);
@@ -583,6 +595,70 @@ export const updateHolidays = webMethod(Permissions.SiteMember, async (holidays)
     await wixData.update('AvailabilitySettings', { ...row, holidays: JSON.stringify(clean) }, SA);
     await publishSchedulingUpdate('holidays-updated', {});
     console.log(`[staffAdminService] updateHolidays: ${clean.length} entries by ${role._id}`);
+    return { ok: true };
+});
+
+/** Sets a single date's holiday mode (CLOSED/SHORT/regular) + short-day hours; used from the day-detail panel. */
+export const setHolidayMode = webMethod(Permissions.SiteMember, async (dateKey, mode, shortStart, shortEnd) => {
+    const { role } = await assertEmployeeAccess('manageRules');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateKey || '')) throw new Error('BAD_REQUEST: תאריך לא תקין.');
+    const cleanMode = HOLIDAY_MODES.includes(mode) ? mode : '';
+    const cleanStart = /^\d{2}:\d{2}$/.test(shortStart || '') ? shortStart : '';
+    const cleanEnd = /^\d{2}:\d{2}$/.test(shortEnd || '') ? shortEnd : '';
+
+    const result = await wixData.query('AvailabilitySettings')
+        .eq('settingKey', 'default').limit(1).find(SA);
+    const row = result.items?.[0];
+    if (!row) throw new Error('NOT_FOUND: שורת AvailabilitySettings לא נמצאה.');
+
+    let list = [];
+    try { const parsed = JSON.parse(row.holidays || '[]'); if (Array.isArray(parsed)) list = parsed; } catch (_) { list = []; }
+    const idx = list.findIndex(h => h?.date === dateKey);
+    if (idx >= 0) {
+        list[idx] = { ...list[idx], mode: cleanMode, shortStart: cleanStart, shortEnd: cleanEnd };
+    } else {
+        // Manager can also set a mode on a plain (non-holiday) date, e.g. an
+        // ad-hoc closure day, without it being a Hebcal-imported holiday.
+        list.push({ date: dateKey, name: '', hebcalId: '', mode: cleanMode, shortStart: cleanStart, shortEnd: cleanEnd });
+    }
+
+    await wixData.update('AvailabilitySettings', { ...row, holidays: JSON.stringify(list) }, SA);
+    await publishSchedulingUpdate('holidays-updated', { dateKey });
+    console.log(`[staffAdminService] setHolidayMode: ${dateKey} -> ${cleanMode || 'regular'} by ${role._id}`);
+    return { ok: true };
+});
+
+/** Manual "sync now" button in admin — fetches Hebcal for a given year (default: current). */
+export const syncHolidaysNow = webMethod(Permissions.SiteMember, async (year) => {
+    const { role } = await assertEmployeeAccess('manageRules');
+    const result = await syncHebcalHolidays(year);
+    console.log(`[staffAdminService] syncHolidaysNow: year=${result.year} by ${role._id}`);
+    return result;
+});
+
+/** Sets (or clears, when message is empty) a manager note on a calendar day. No new CMS — stored as a JSON map on AvailabilitySettings.dayNotes. */
+export const setDayNote = webMethod(Permissions.SiteMember, async (dateKey, message) => {
+    const { role } = await assertEmployeeAccess('manageScheduling');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateKey || '')) throw new Error('BAD_REQUEST: תאריך לא תקין.');
+    const cleanMessage = typeof message === 'string' ? message.trim().slice(0, 500) : '';
+
+    const result = await wixData.query('AvailabilitySettings')
+        .eq('settingKey', 'default').limit(1).find(SA);
+    const row = result.items?.[0];
+    if (!row) throw new Error('NOT_FOUND: שורת AvailabilitySettings לא נמצאה.');
+
+    let notes = {};
+    try { const parsed = JSON.parse(row.dayNotes || '{}'); if (parsed && typeof parsed === 'object') notes = parsed; } catch (_) { notes = {}; }
+
+    if (cleanMessage) {
+        notes[dateKey] = { message: cleanMessage, updatedBy: role.displayName || '', updatedAt: new Date().toISOString() };
+    } else {
+        delete notes[dateKey];
+    }
+
+    await wixData.update('AvailabilitySettings', { ...row, dayNotes: JSON.stringify(notes) }, SA);
+    await publishSchedulingUpdate('day-note-updated', { dateKey });
+    console.log(`[staffAdminService] setDayNote: ${dateKey} ${cleanMessage ? 'set' : 'cleared'} by ${role._id}`);
     return { ok: true };
 });
 
@@ -659,6 +735,22 @@ export const deleteEmployeeVacation = webMethod(Permissions.SiteMember, async (v
     await publishSchedulingUpdate('vacation-updated', {});
     console.log(`[staffAdminService] deleteEmployeeVacation: ${vacationId} by ${role._id}`);
     return { ok: true };
+});
+
+export const approveEmployeeVacation = webMethod(Permissions.SiteMember, async (vacationId, managerComment) => {
+    const { role } = await assertEmployeeAccess('manageEmployees');
+    const result = await decideVacationRequest(vacationId, true, managerComment);
+    await publishSchedulingUpdate('vacation-updated', { employeeId: result.vacation?.employeeId });
+    console.log(`[staffAdminService] approveEmployeeVacation: ${vacationId} by ${role._id}`);
+    return result;
+});
+
+export const rejectEmployeeVacation = webMethod(Permissions.SiteMember, async (vacationId, managerComment) => {
+    const { role } = await assertEmployeeAccess('manageEmployees');
+    const result = await decideVacationRequest(vacationId, false, managerComment);
+    await publishSchedulingUpdate('vacation-updated', { employeeId: result.vacation?.employeeId });
+    console.log(`[staffAdminService] rejectEmployeeVacation: ${vacationId} by ${role._id}`);
+    return result;
 });
 
 // ---------------------------------------------------------------------------

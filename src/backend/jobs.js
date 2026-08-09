@@ -3,6 +3,7 @@ import { toDateKey } from 'backend/availabilityRules.js';
 import { runScheduling, processOfferEscalation } from 'backend/schedulingEngine.js';
 import { processDeadlineReminders, processConfirmations } from 'backend/shiftConfirmations.js';
 import { fetchEcomOrderByCheckoutId, reconcileEcomOrder } from 'backend/orderReconciliation.js';
+import { ensureHolidaysSynced } from 'backend/holidayService.js';
 
 const SA = { suppressAuth: true, suppressHooks: true };
 
@@ -44,6 +45,11 @@ export async function processSchedulingHourly() {
  * 3) auto-close time entries whose clock-out was forgotten (>12h open).
  */
 export async function processAlertsHourly() {
+    const holidays = await ensureHolidaysSynced().catch(err => {
+        console.error('[jobs] ensureHolidaysSynced failed:', err?.message || err);
+        return { synced: [] };
+    });
+
     const reminders = await processDeadlineReminders().catch(err => {
         console.error('[jobs] processDeadlineReminders failed:', err?.message || err);
         return { sent: 0 };
@@ -59,8 +65,8 @@ export async function processAlertsHourly() {
         return { closed: 0 };
     });
 
-    console.log('[jobs] processAlertsHourly:', JSON.stringify({ reminders, confirmations, staleEntries }));
-    return { reminders, confirmations, staleEntries };
+    console.log('[jobs] processAlertsHourly:', JSON.stringify({ holidays, reminders, confirmations, staleEntries }));
+    return { holidays, reminders, confirmations, staleEntries };
 }
 
 /** Closes TimeEntries left open longer than TIME_ENTRY_MAX_OPEN_HOURS. */

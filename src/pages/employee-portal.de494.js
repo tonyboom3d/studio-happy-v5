@@ -26,6 +26,7 @@ import {
     submitAvailability,
     withdrawAvailability,
     updateSubmission,
+    requestDayOff,
 } from 'backend/employeeService.web.js';
 import {
     requestShiftChange,
@@ -59,6 +60,8 @@ import {
     listVacations,
     saveEmployeeVacation,
     deleteEmployeeVacation,
+    approveEmployeeVacation,
+    rejectEmployeeVacation,
 } from 'backend/staffAdminService.web.js';
 import {
     runSchedulingNow,
@@ -328,6 +331,24 @@ async function handlePortalAction(portalEl, detail) {
             break;
         }
 
+        case 'submitCalendarSelection': {
+            const dayOffDates = payload?.dayOffDates || [];
+            const shifts = payload?.shifts || [];
+            let dayOffResult = null;
+            let availResult = null;
+            if (dayOffDates.length) dayOffResult = await requestDayOff(dayOffDates);
+            if (shifts.length) availResult = await submitAvailability(shifts);
+            pushActionResult(portalEl, {
+                type,
+                ok: true,
+                dayOffCount: dayOffResult?.created?.length || 0,
+                inserted: availResult?.inserted || 0,
+                standby: availResult?.standby || 0,
+                autoApproved: availResult?.autoApproved || [],
+            });
+            break;
+        }
+
         case 'withdrawAvailability': {
             await withdrawAvailability(payload?.id);
             pushActionResult(portalEl, { type, ok: true });
@@ -458,6 +479,22 @@ async function handlePortalAction(portalEl, detail) {
             const result = await deleteEmployeeVacation(payload?.vacationId);
             pushActionResult(portalEl, { type, ...result });
             refreshPortal = false;
+            refreshAdmin = false;
+            await loadAndPushVacations(portalEl);
+            break;
+        }
+
+        case 'adminApproveVacation': {
+            const result = await approveEmployeeVacation(payload?.vacationId, payload?.managerComment || '');
+            pushActionResult(portalEl, { type, ...result });
+            refreshAdmin = false;
+            await loadAndPushVacations(portalEl);
+            break;
+        }
+
+        case 'adminRejectVacation': {
+            const result = await rejectEmployeeVacation(payload?.vacationId, payload?.managerComment || '');
+            pushActionResult(portalEl, { type, ...result });
             refreshAdmin = false;
             await loadAndPushVacations(portalEl);
             break;

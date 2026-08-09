@@ -63,6 +63,9 @@ employee-portal * { box-sizing: border-box; }
 .ep-cal-acc-item { display: flex; align-items: flex-start; gap: 8px; }
 .ep-cal-acc-item .ep-dot { flex-shrink: 0; margin-top: 3px; }
 .ep-cal-acc-item b { color: #1f2937; font-weight: 700; display: block; font-size: 11px; margin-bottom: 1px; }
+.ep-window-line { margin-bottom: 10px; padding: 8px 12px; border-radius: 10px; font-size: 12px; font-weight: 600; background: #eff6ff; border: 1px solid #bfdbfe; color: #1e40af; }
+.ep-window-line.urgent { background: #fef2f2; border-color: #fecaca; color: #b91c1c; }
+.ep-window-line.ok { background: #f0fdf9; border-color: #6ee7b7; color: #047857; }
 .ep-progress { margin-bottom: 10px; border: 1px solid #e2e8f0; border-radius: 12px; padding: 10px 12px; background: #fbfcfe; }
 .ep-progress.complete { border-color: #6ee7b7; background: #f0fdf9; }
 .ep-progress-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 12.5px; font-weight: 700; color: #374151; margin-bottom: 7px; flex-wrap: wrap; }
@@ -78,14 +81,14 @@ employee-portal * { box-sizing: border-box; }
 .ep-progress-breakdown b { color: #374151; font-weight: 700; }
 .ep-progress-breakdown .vac-note { color: #0284c7; font-weight: 600; }
 .ep-cal-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
-.ep-cal-title { font-weight: 700; font-size: 15px; }
+.ep-cal-title { font-weight: 700; font-size: 17px; }
 .ep-cal-nav { display: flex; gap: 6px; }
 .ep-cal-nav button { border: 1px solid #dbeafe; background: #fff; color: #1d4ed8; border-radius: 9px; width: 30px; height: 30px; cursor: pointer; font-size: 14px; line-height: 1; transition: transform .14s,background .14s; }
 .ep-cal-nav button:hover:not(:disabled) { transform: translateY(-1px); background: #eff6ff; }
 .ep-cal-nav button:disabled { opacity: .35; cursor: default; }
 .ep-cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; }
-.ep-dow { text-align: center; font-size: 11px; color: #9ca3af; font-weight: 600; padding: 4px 0; }
-.ep-day { position: relative; border: 1px solid #e5e7eb; border-radius: 10px; min-height: 84px; padding: 5px; font-size: 12px; cursor: pointer; background: #fff; text-align: right; transition: border-color .15s,background .15s,transform .15s,box-shadow .15s; }
+.ep-dow { text-align: center; font-size: 13px; color: #9ca3af; font-weight: 600; padding: 4px 0; }
+.ep-day { position: relative; border: 1px solid #e5e7eb; border-radius: 10px; min-height: 96px; padding: 5px; font-size: 14px; cursor: pointer; background: #fff; text-align: right; transition: border-color .15s,background .15s,transform .15s,box-shadow .15s; }
 .ep-day:hover:not(.disabled):not(.submitted) { border-color: #60a5fa; transform: translateY(-1px); box-shadow: 0 4px 10px rgba(37,99,235,.09); }
 .ep-day.other { visibility: hidden; }
 .ep-day.disabled { background: #f9fafb; color: #c4c7cc; cursor: default; }
@@ -98,7 +101,7 @@ employee-portal * { box-sizing: border-box; }
 .ep-day.scheduled { border-color: #6ee7b7; background: #ecfdf5; cursor: default; }
 .ep-day-num { font-weight: 700; }
 .ep-day-ws { margin-top: 3px; display: flex; flex-direction: column; gap: 2px; }
-.ep-day-ws span { display: block; font-size: 8.5px; line-height: 1.25; color: #1d4ed8; background: #eff6ff; border-radius: 4px; padding: 1px 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ep-day-ws span { display: block; font-size: 11px; line-height: 1.25; color: #1d4ed8; background: #eff6ff; border-radius: 4px; padding: 1px 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ep-day.ep-day-filtered { opacity: .28; filter: grayscale(.4); }
 .ep-ws-filter { position: relative; margin-bottom: 10px; }
 .ep-ws-filter-btn { border: 1px solid #dbeafe; background: #fff; color: #1d4ed8; border-radius: 9px; padding: 6px 12px; font-size: 12px; font-weight: 600; cursor: pointer; }
@@ -107,7 +110,7 @@ employee-portal * { box-sizing: border-box; }
 .ep-ws-filter-opt { display: flex; align-items: center; gap: 8px; font-size: 12.5px; padding: 5px 6px; border-radius: 7px; cursor: pointer; }
 .ep-ws-filter-opt:hover { background: #f8fafc; }
 .ep-ws-filter-clear { width: 100%; margin-top: 6px; border: none; background: #fef2f2; color: #b91c1c; border-radius: 7px; padding: 6px; font-size: 12px; font-weight: 600; cursor: pointer; }
-.ep-day-badge { position: absolute; bottom: 4px; inset-inline-start: 5px; font-size: 9.5px; font-weight: 600; padding: 1px 5px; border-radius: 999px; }
+.ep-day-badge { position: absolute; bottom: 4px; inset-inline-start: 5px; font-size: 11px; font-weight: 600; padding: 1px 5px; border-radius: 999px; }
 .ep-badge-standby { background: #e0e7ff; color: #3730a3; }
 .ep-badge-scheduled { background: #d1fae5; color: #065f46; }
 .ep-badge-promoted { background: #fef3c7; color: #92400e; }
@@ -126,6 +129,12 @@ employee-portal * { box-sizing: border-box; }
 .ep-sel-remove { border: none; background: none; color: #ef4444; cursor: pointer; font-size: 15px; padding: 2px 4px; }
 .ep-sel-hours { font-size: 11px; color: #6b7280; min-width: 54px; text-align: center; }
 .ep-sel-hours.bad { color: #dc2626; font-weight: 700; }
+.ep-dayoff-check { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 600; color: #9d174d; white-space: nowrap; cursor: pointer; }
+.ep-dayoff-check input { width: 15px; height: 15px; cursor: pointer; }
+.ep-vac-row { border: 1px solid #e5e7eb; border-radius: 10px; padding: 9px 11px; margin-bottom: 8px; font-size: 12.5px; display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+.ep-vac-row.approved { border-color: #f9a8d4; background: #fdf2f8; }
+.ep-vac-row.pending { border-color: #d8b4fe; background: #faf5ff; }
+.ep-vac-row.rejected { border-color: #fecaca; background: #fef2f2; opacity: .85; }
 .ep-submit-btn { width: 100%; margin-top: 12px; background: linear-gradient(135deg,#2563eb,#1d4ed8); color: #fff; border: none; border-radius: 11px; padding: 11px; font-size: 14px; font-weight: 700; cursor: pointer; font-family: inherit; box-shadow: 0 7px 17px rgba(37,99,235,.2); transition: transform .15s,box-shadow .15s,filter .15s; }
 .ep-submit-btn:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 10px 22px rgba(37,99,235,.25); filter: brightness(.98); }
 .ep-submit-btn:active:not(:disabled) { transform: translateY(0); }
@@ -185,8 +194,12 @@ employee-portal * { box-sizing: border-box; }
 .ep-busy { position: fixed; inset: 0; background: rgba(255,255,255,.65); z-index: 9998; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; font-size: 14px; color: #374151; font-weight: 600; backdrop-filter: blur(1px); }
 .ep-day.waitlist { border-color: #fbbf24; background: #fffbeb; }
 .ep-day.noskill { background: #f9fafb; color: #c4c7cc; cursor: default; }
-.ep-day-hol { display: block; font-size: 8.5px; color: #b45309; font-weight: 600; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.ep-day.vacation { background: #fdf2f8; border-color: #f9a8d4; color: #831843; cursor: default; }
+.ep-day.vac-pending { background: #faf5ff; border-color: #d8b4fe; color: #6b21a8; cursor: default; }
+.ep-day-hol { display: block; font-size: 10.5px; color: #b45309; font-weight: 600; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .ep-badge-waitlist { background: #fef3c7; color: #92400e; }
+.ep-badge-vacation { background: #fbcfe8; color: #9d174d; }
+.ep-badge-vac-pending { background: #ede9fe; color: #5b21b6; }
 .ep-badge-noskill { background: #f3f4f6; color: #9ca3af; }
 .ep-offer { margin-top: 12px; border-radius: 12px; padding: 12px 14px; font-size: 13px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; border: 1px solid #fbbf24; background: #fffbeb; color: #92400e; }
 .ep-offer.call { border-color: #93c5fd; background: #eff6ff; color: #1e40af; }
@@ -707,6 +720,18 @@ class EmployeePortal extends HTMLElement {
                 URL.revokeObjectURL(url);
             } catch (_) { /* ignore */ }
         }
+        if (result.type === 'submitCalendarSelection' && result.ok) {
+            this._selected.clear();
+            const parts = [];
+            if (result.dayOffCount) parts.push(`${result.dayOffCount} בקשות חופש נשלחו`);
+            if (result.inserted) parts.push(`${result.inserted} משמרות הוגשו`);
+            this._toast(parts.join(' · ') || 'הפעולה בוצעה בהצלחה.', 'success');
+            if (result.autoApproved?.length) this._autoApprovedPopup = result.autoApproved;
+        }
+        if (result.type === 'requestDayOff' && result.ok) {
+            this._selected.clear();
+            this._toast(`בקשת החופש נשלחה לאישור מנהל/ת (${result.created?.length || 0} ימים).`, 'success');
+        }
         if (result.type === 'submitAvailability') {
             if (result.ok) {
                 this._selected.clear();
@@ -818,6 +843,7 @@ class EmployeePortal extends HTMLElement {
             <div class="ep-tabs">
                 <button class="ep-tabbtn ${this._tab === 'portal' ? 'active' : ''}" data-action="tab-portal">הפורטל שלי</button>
                 <button class="ep-tabbtn ${this._tab === 'hours' ? 'active' : ''}" data-action="tab-hours">השעות שלי</button>
+                <button class="ep-tabbtn ${this._tab === 'vacations' ? 'active' : ''}" data-action="tab-vacations">ימי חופש</button>
                 ${isAdmin ? `<button class="ep-tabbtn ${this._tab === 'admin' ? 'active' : ''}" data-action="tab-admin">ניהול צוות</button>` : ''}
             </div>`;
 
@@ -841,6 +867,8 @@ class EmployeePortal extends HTMLElement {
             tabContent = `<div style="margin-top:12px">${renderAdminTab(this)}</div>`;
         } else if (this._tab === 'hours') {
             tabContent = `<div style="margin-top:12px">${this._renderHoursTab()}</div>`;
+        } else if (this._tab === 'vacations') {
+            tabContent = `<div style="margin-top:12px">${this._renderVacationsTab()}</div>`;
         } else {
             tabContent = portalTab;
         }
@@ -908,6 +936,31 @@ class EmployeePortal extends HTMLElement {
                 <div class="ep-quota" style="margin-bottom:12px">${chips}</div>
                 ${rows || '<div class="ep-empty">אין רישומי שעות לחודש זה</div>'}
                 ${approval}
+            </div>`;
+    }
+
+    /** "ימי חופש" — approved and pending day-off records. */
+    _renderVacationsTab() {
+        const list = (this._data.myVacations || []).slice().sort((a, b) => b.startDate.localeCompare(a.startDate));
+        const statusLabel = { APPROVED: 'מאושר', PENDING: 'ממתין לאישור', REJECTED: 'נדחה' };
+        const rows = list.map(v => {
+            const range = v.startDate === v.endDate
+                ? formatDateHe(v.startDate)
+                : `${formatDateHe(v.startDate)} – ${formatDateHe(v.endDate)}`;
+            const cls = v.status === 'APPROVED' ? 'approved' : v.status === 'PENDING' ? 'pending' : 'rejected';
+            return `<div class="ep-vac-row ${cls}">
+                <div>
+                    <div class="ep-b-date">${range}</div>
+                    ${v.notes ? `<div class="ep-b-time">${escapeHtml(v.notes)}</div>` : ''}
+                    ${v.managerComment ? `<div class="ep-b-time">הערת מנהל/ת: ${escapeHtml(v.managerComment)}</div>` : ''}
+                </div>
+                <span class="ep-status ${v.status === 'APPROVED' ? 'SCHEDULED' : v.status === 'PENDING' ? 'PENDING' : 'REJECTED'}">${statusLabel[v.status] || v.status}</span>
+            </div>`;
+        }).join('');
+        return `
+            <div class="ep-card">
+                <h2>ימי חופש${this._sectionHelp('ימי חופש מאושרים מוצגים גם בלוח השנה. בקשות חדשות נשלחות לאישור מנהל/ת דרך סימון "יום חופש" בהגשת זמינות.')}</h2>
+                ${rows || '<div class="ep-empty">אין רישומי חופש. בחרו יום בלוח השנה וסמנו "יום חופש" כדי לשלוח בקשה.</div>'}
             </div>`;
     }
 
@@ -1141,6 +1194,25 @@ class EmployeePortal extends HTMLElement {
         return map;
     }
 
+    _vacationByDate() {
+        const map = {};
+        for (const v of (this._data.myVacations || [])) {
+            if (v.status === 'REJECTED') continue;
+            const start = v.startDate;
+            const end = v.endDate || v.startDate;
+            const [sy, sm, sd] = start.split('-').map(Number);
+            const [ey, em, ed] = end.split('-').map(Number);
+            const cur = new Date(Date.UTC(sy, sm - 1, sd));
+            const last = new Date(Date.UTC(ey, em - 1, ed));
+            while (cur <= last) {
+                const key = cur.toISOString().slice(0, 10);
+                if (!map[key] || v.status === 'APPROVED') map[key] = v;
+                cur.setUTCDate(cur.getUTCDate() + 1);
+            }
+        }
+        return map;
+    }
+
     _renderWorkshopFilter() {
         const types = this._data.allWorkshopTypes || [];
         if (!types.length) return '';
@@ -1170,6 +1242,7 @@ class EmployeePortal extends HTMLElement {
         const idx = months.indexOf(this._viewMonth);
         const rules = this._data.rules || {};
         const subByDate = this._submissionByDate();
+        const vacByDate = this._vacationByDate();
         const viewInfo = this._monthInfo(this._viewMonth);
         const tKey = todayKey();
 
@@ -1186,6 +1259,7 @@ class EmployeePortal extends HTMLElement {
         for (let day = 1; day <= daysInMonth; day++) {
             const dateKey = `${this._viewMonth}-${pad2(day)}`;
             const sub = subByDate[dateKey];
+            const vacation = vacByDate[dateKey];
             const isPast = dateKey <= tKey;
             const blocked = (rules.blockedDates || []).includes(dateKey);
             const full = (rules.fullDates || []).includes(dateKey);
@@ -1198,7 +1272,13 @@ class EmployeePortal extends HTMLElement {
             const skillState = this._data.dayStates?.[dateKey]?.state || null;
 
             let cls = 'ep-day', badge = '', clickable = false;
-            if (isPast) cls += ' disabled';
+            if (vacation?.status === 'APPROVED') {
+                cls += ' vacation';
+                badge = `<span class="ep-day-badge ep-badge-vacation">יום חופש</span>`;
+            } else if (vacation?.status === 'PENDING') {
+                cls += ' vac-pending';
+                badge = `<span class="ep-day-badge ep-badge-vac-pending">ממתין לאישור</span>`;
+            } else if (isPast) cls += ' disabled';
             else if (sub) {
                 cls += sub.status === 'SCHEDULED' ? ' scheduled' : ' submitted';
                 if (sub.status === 'SCHEDULED') {
@@ -1259,6 +1339,7 @@ class EmployeePortal extends HTMLElement {
                     <button data-action="month-prev" ${idx <= 0 ? 'disabled' : ''} title="חודש קודם">&#8250;</button>
                 </div>
             </div>
+            ${this._renderUpcomingWindow()}
             ${this._renderMonthProgress()}
             ${this._renderCalLegendAccordion()}
             ${this._renderWorkshopFilter()}
@@ -1275,6 +1356,21 @@ class EmployeePortal extends HTMLElement {
     _dowUTC(dateKey) {
         const [y, m, d] = dateKey.split('-').map(Number);
         return new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+    }
+
+    /** Nearest upcoming 2-week submission window still open, with its deadline + missing-shifts count. */
+    _renderUpcomingWindow() {
+        const w = (this._data.upcomingWindows || [])[0];
+        if (!w) return '';
+        const deadlineKey = String(w.deadline).slice(0, 10);
+        const daysLeft = Math.ceil((new Date(`${deadlineKey}T23:59:59+02:00`).getTime() - Date.now()) / 86400000);
+        const range = `${formatDateHe(w.start)} – ${formatDateHe(w.end)}`;
+        if (w.met) {
+            return `<div class="ep-window-line ok">✔ הוגשה זמינות מלאה לתקופה ${range} (עד ${formatDateHe(deadlineKey)}).</div>`;
+        }
+        return `<div class="ep-window-line ${daysLeft <= 3 ? 'urgent' : ''}">
+            ⏰ יש להגיש עוד <b>${w.missing}</b> משמרות לתקופה ${range} — עד <b>${formatDateHe(deadlineKey)}</b>${daysLeft >= 0 ? ` (עוד ${daysLeft} ימים)` : ''}.
+        </div>`;
     }
 
     /**
@@ -1378,6 +1474,8 @@ class EmployeePortal extends HTMLElement {
             { dot: 'background:#eff6ff;border:1px solid #2563eb', title: 'נבחר', desc: 'יום שנבחר להגשת זמינות — טרם נשלח' },
             { dot: 'background:#eef2ff;border:1px solid #d1d5db', title: 'הגשה קיימת', desc: 'כבר הגשתם זמינות ליום זה' },
             { dot: 'background:#ecfdf5;border:1px solid #6ee7b7', title: 'משובץ', desc: 'משמרת שאושרה ושובצתם אליה' },
+            { dot: 'background:#fdf2f8;border:1px solid #f9a8d4', title: 'יום חופש', desc: 'חופשה מאושרת — מוצג בלוח ובטאב "ימי חופש"' },
+            { dot: 'background:#faf5ff;border:1px solid #d8b4fe', title: 'בקשת חופש', desc: 'בקשת יום חופש ממתינה לאישור מנהל/ת' },
             { dot: 'background:#fffbeb;border:1px solid #f59e0b', title: 'דרושים עובדים', desc: 'יום עם דרישה מוגברת לכוח אדם' },
             { dot: 'background:#fffbeb;border:1px solid #fbbf24', title: 'רשימת המתנה', desc: 'ניתן להגיש — המשמרת מלאה, תיכנסו לרשימת המתנה' },
             { dot: 'background:#f3f4f6;border:1px solid #e5e7eb', title: 'מאויש', desc: 'אין מקומות פנויים ליום זה' },
@@ -1438,29 +1536,44 @@ class EmployeePortal extends HTMLElement {
             rows = `<div class="ep-empty">בחרו ימים בלוח השנה להגשת זמינות</div>`;
         } else {
             rows = `<div class="ep-sel-list">` + entries.map(([dateKey, times]) => {
-                const hrs = hoursBetween(times.startTime, times.endTime);
-                const tooShort = hrs !== null && hrs < rules.minShiftHours;
-                const hoursLabel = hrs === null ? '—' : `${hrs} ש׳`;
-                return `<div class="ep-sel-row">
-                    <span class="ep-sel-date">${formatDateHe(dateKey)}</span>
+                const dayOff = !!times.dayOff;
+                const hrs = dayOff ? null : hoursBetween(times.startTime, times.endTime);
+                const tooShort = !dayOff && hrs !== null && hrs < rules.minShiftHours;
+                const hoursLabel = dayOff ? '—' : (hrs === null ? '—' : `${hrs} ש׳`);
+                const timeFields = dayOff ? '' : `
                     <input type="time" min="${SHIFT_MIN_TIME}" max="${SHIFT_MAX_TIME}" data-role="start" data-date="${dateKey}" value="${escapeHtml(times.startTime)}">
                     <span>-</span>
                     <input type="time" min="${SHIFT_MIN_TIME}" max="${SHIFT_MAX_TIME}" data-role="end" data-date="${dateKey}" value="${escapeHtml(times.endTime)}">
-                    <span class="ep-sel-hours ${tooShort || hrs === null ? 'bad' : ''}">${hoursLabel}</span>
-                    <span class="ep-status PENDING ep-tip-trigger" data-tip="${escapeHtml(STATUS_HINTS.PENDING)}">${STATUS_LABELS.PENDING}</span>
+                    <span class="ep-sel-hours ${tooShort || hrs === null ? 'bad' : ''}">${hoursLabel}</span>`;
+                const statusChip = dayOff
+                    ? `<span class="ep-status PENDING ep-tip-trigger" data-tip="בקשת יום חופש — תישלח לאישור מנהל/ת">יום חופש</span>`
+                    : `<span class="ep-status PENDING ep-tip-trigger" data-tip="${escapeHtml(STATUS_HINTS.PENDING)}">${STATUS_LABELS.PENDING}</span>`;
+                return `<div class="ep-sel-row">
+                    <span class="ep-sel-date">${formatDateHe(dateKey)}</span>
+                    ${timeFields}
+                    <label class="ep-dayoff-check"><input type="checkbox" data-action="toggle-day-off" data-date="${dateKey}" ${dayOff ? 'checked' : ''}>יום חופש</label>
+                    ${statusChip}
                     <button class="ep-sel-remove" data-action="remove-day" data-date="${dateKey}" title="הסרה">✕</button>
                 </div>`;
             }).join('') + `</div>`;
         }
         const invalid = entries.some(([, t]) => {
+            if (t.dayOff) return false;
             const hrs = hoursBetween(t.startTime, t.endTime);
             return hrs === null || hrs < rules.minShiftHours;
         });
+        const hasDayOff = entries.some(([, t]) => t.dayOff);
+        const hasAvail = entries.some(([, t]) => !t.dayOff);
+        const submitLabel = hasDayOff && hasAvail
+            ? 'שליחה (זמינות + חופש)'
+            : hasDayOff
+                ? 'שליחת בקשת חופש'
+                : 'הגשת זמינות';
         return `
             <div class="ep-sel-head">
-                <h2>הגשת זמינות (${entries.length})${this._sectionHelp('בחרו ימים בלוח השנה, הגדירו שעות התחלה וסיום, ולחצו "הגשת זמינות" כדי לשלוח את המשמרות לאישור.')}</h2>
+                <h2>הגשת זמינות (${entries.length})${this._sectionHelp('בחרו ימים בלוח השנה. סמנו "יום חופש" לבקשת חופש לאישור מנהל/ת, או הגדירו שעות להגשת זמינות.')}</h2>
                 <button class="ep-submit-btn small" data-action="submit" ${(!entries.length || invalid || this._submitting) ? 'disabled' : ''}>
-                    ${this._submitting ? 'שולח…' : 'הגשת זמינות'}
+                    ${this._submitting ? 'שולח…' : submitLabel}
                 </button>
             </div>
             ${rows}
@@ -1833,6 +1946,10 @@ class EmployeePortal extends HTMLElement {
                 if (!this._hoursData) this._requestHoursData();
                 else this.render();
                 return;
+            case 'tab-vacations':
+                this._tab = 'vacations';
+                this.render();
+                return;
             case 'subtab-myshifts':
             case 'subtab-mysubmissions':
                 this._shiftSubTab = action === 'subtab-mysubmissions' ? 'mySubmissions' : 'myShifts';
@@ -1999,10 +2116,12 @@ class EmployeePortal extends HTMLElement {
                 break;
             case 'toggle-day': {
                 const dateKey = target.dataset.date;
+                if (this._vacationByDate()[dateKey]) return;
                 if (this._selected.has(dateKey)) this._selected.delete(dateKey);
                 else this._selected.set(dateKey, {
                     startTime: rules.defaultShiftStart || '10:00',
                     endTime: rules.defaultShiftEnd || '16:00',
+                    dayOff: false,
                 });
                 this.render();
                 break;
@@ -2013,7 +2132,13 @@ class EmployeePortal extends HTMLElement {
                 break;
             case 'submit': {
                 if (this._submitting || !this._selected.size) return;
+                const dayOffDates = [];
+                const shifts = [];
                 for (const [date, t] of this._selected.entries()) {
+                    if (t.dayOff) {
+                        dayOffDates.push(date);
+                        continue;
+                    }
                     if (!t.startTime || !t.endTime) {
                         this._toast(`יש להזין שעת התחלה וסיום עבור ${formatDateHe(date)}.`, 'error');
                         return;
@@ -2026,13 +2151,15 @@ class EmployeePortal extends HTMLElement {
                         this._toast(`שעת ההתחלה חייבת להיות לפני שעת הסיום (${formatDateHe(date)}).`, 'error');
                         return;
                     }
+                    shifts.push({ date, startTime: t.startTime, endTime: t.endTime });
                 }
                 this._submitting = true;
-                this._busy = 'שולח את ההגשה ובודק זמינות מול המערכת…';
-                const shifts = [...this._selected.entries()].map(([date, t]) => ({
-                    date, startTime: t.startTime, endTime: t.endTime,
-                }));
-                this._dispatch('submitAvailability', { shifts });
+                this._busy = dayOffDates.length && shifts.length
+                    ? 'שולח בקשות חופש והגשת זמינות…'
+                    : dayOffDates.length
+                        ? 'שולח בקשות חופש…'
+                        : 'שולח את ההגשה ובודק זמינות מול המערכת…';
+                this._dispatch('submitCalendarSelection', { dayOffDates, shifts });
                 this.render();
                 break;
             }
@@ -2058,6 +2185,14 @@ class EmployeePortal extends HTMLElement {
             else this._urgentSelected.delete(id);
             const submitBtn = this.querySelector('.ep-urgent-submit');
             if (submitBtn) submitBtn.disabled = this._urgentSelected.size === 0;
+            return;
+        }
+        if (input?.dataset?.action === 'toggle-day-off') {
+            const dateKey = input.dataset.date;
+            const entry = this._selected.get(dateKey);
+            if (!entry) return;
+            entry.dayOff = input.checked;
+            this.render();
             return;
         }
         if (input.id === 'epaStaffSearch') {

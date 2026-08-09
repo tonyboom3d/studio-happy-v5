@@ -15,17 +15,17 @@ export const ADMIN_STYLE = `
 .epa-btn.danger { color: #b91c1c; border-color: #fecaca; }
 .epa-btn.active { background: #eff6ff; border-color: #2563eb; color: #1d4ed8; font-weight: 700; }
 .epa-grid7 { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; }
-.epa-day { border: 1px solid #e5e7eb; border-radius: 9px; min-height: 76px; padding: 5px; font-size: 11px; cursor: pointer; background: #fff; position: relative; }
+.epa-day { border: 1px solid #e5e7eb; border-radius: 9px; min-height: 90px; padding: 5px; font-size: 13px; cursor: pointer; background: #fff; position: relative; }
 .epa-day.other { visibility: hidden; }
 .epa-day.sel { box-shadow: inset 0 0 0 2px #2563eb; }
-.epa-day .num { font-weight: 700; font-size: 12px; }
+.epa-day .num { font-weight: 700; font-size: 14px; }
 .epa-day.cov-none { background: #fef2f2; }
 .epa-day.cov-partial { background: #fffbeb; }
 .epa-day.cov-full { background: #ecfdf5; }
 .epa-day.no-ws { background: #f9fafb; color: #9ca3af; }
 .epa-day.blocked { background: #e5e7eb; }
-.epa-day .hol { display: block; font-size: 9px; color: #b45309; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.epa-day .cnt { display: block; font-size: 9.5px; color: #4b5563; line-height: 1.3; margin-top: 1px; }
+.epa-day .hol { display: block; font-size: 11px; color: #b45309; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.epa-day .cnt { display: block; font-size: 11.5px; color: #4b5563; line-height: 1.3; margin-top: 1px; }
 .epa-flag { position: absolute; top: 3px; inset-inline-start: 4px; font-size: 10px; }
 .epa-detail { border: 1px solid #bfdbfe; background: #eff6ff; border-radius: 12px; padding: 12px; margin-top: 12px; font-size: 12.5px; }
 .epa-detail h3 { margin: 0 0 8px; font-size: 14px; }
@@ -926,23 +926,44 @@ function renderMessageForm(ce, d, message) {
 }
 
 function renderVacationsPage(ce, d) {
-    const head = `<div class="epa-page-head"><div><h2>חופשות</h2><p>חופשות מאושרות לעובדים — פוטרות מדרישת הגשת שישי/שבת החודשית לתאריכים החופפים</p></div>
+    const head = `<div class="epa-page-head"><div><h2>חופשות</h2><p>חופשות מאושרות ופטורות מדרישת הגשה — ובקשות חופש ממתינות לאישור מעובדים</p></div>
         ${ce._vacationsData ? `<button class="epa-btn primary" data-action="admin-new-vacation">חופשה חדשה +</button>` : ''}</div>`;
     if (!ce._vacationsData) {
         return `${head}<section class="epa-panel"><div class="ep-loading"><div class="ep-spinner"></div>טוען חופשות…</div></section>`;
     }
-    const rows = ce._vacationsData.slice().sort((a, b) => b.startDate.localeCompare(a.startDate)).map(v => `
+    const statusLabel = { APPROVED: 'מאושר', PENDING: 'ממתין', REJECTED: 'נדחה' };
+    const pending = ce._vacationsData.filter(v => v.status === 'PENDING');
+    const pendingSection = pending.length ? `
+        <section class="epa-panel">
+            <div class="epa-panel-title"><h3>בקשות ממתינות (${pending.length})</h3></div>
+            <div class="epa-table-wrap"><table class="epa-table"><thead><tr><th>עובד/ת</th><th>תאריך</th><th>הערות</th><th>סטטוס</th><th></th></tr></thead>
+                <tbody>${pending.map(v => `
+                    <tr>
+                        <td>${esc(v.employeeName)}</td>
+                        <td>${fmtDate(v.startDate)}${v.endDate !== v.startDate ? ` – ${fmtDate(v.endDate)}` : ''}</td>
+                        <td>${esc(v.notes || '—')}</td>
+                        <td><span class="epa-badge miss">${statusLabel.PENDING}</span></td>
+                        <td class="epa-sub-actions">
+                            <button class="epa-btn primary" data-action="admin-approve-vacation" data-vacation="${esc(v.id)}">אישור</button>
+                            <button class="epa-btn danger" data-action="admin-reject-vacation" data-vacation="${esc(v.id)}">דחייה</button>
+                        </td>
+                    </tr>`).join('')}
+                </tbody>
+            </table></div>
+        </section>` : '';
+    const rows = ce._vacationsData.filter(v => v.status !== 'PENDING').slice().sort((a, b) => b.startDate.localeCompare(a.startDate)).map(v => `
         <tr class="epa-row-click" data-action="admin-edit-vacation" data-vacation="${esc(v.id)}">
             <td>${esc(v.employeeName)}</td>
             <td>${fmtDate(v.startDate)} – ${fmtDate(v.endDate)}</td>
             <td>${esc(v.notes || '—')}</td>
+            <td><span class="epa-badge ${v.status === 'APPROVED' ? 'ok' : 'miss'}">${statusLabel[v.status] || esc(v.status)}</span></td>
             <td><button class="epa-btn danger" data-action="admin-delete-vacation" data-vacation="${esc(v.id)}">מחיקה</button></td>
         </tr>`).join('');
-    return `${head}
+    return `${head}${pendingSection}
         <section class="epa-panel">
             <div class="epa-panel-title"><h3>כל החופשות (${ce._vacationsData.length})</h3></div>
-            <div class="epa-table-wrap"><table class="epa-table"><thead><tr><th>עובד/ת</th><th>טווח תאריכים</th><th>הערות</th><th></th></tr></thead>
-                <tbody>${rows || '<tr><td colspan="4" class="ep-empty">אין חופשות מוגדרות</td></tr>'}</tbody>
+            <div class="epa-table-wrap"><table class="epa-table"><thead><tr><th>עובד/ת</th><th>טווח תאריכים</th><th>הערות</th><th>סטטוס</th><th></th></tr></thead>
+                <tbody>${rows || '<tr><td colspan="5" class="ep-empty">אין חופשות מוגדרות</td></tr>'}</tbody>
             </table></div>
         </section>`;
 }
@@ -1439,6 +1460,14 @@ export function handleAdminClick(ce, action, target) {
             ce._adminModal = null;
             ce._startBusy('מוחק חופשה…');
             ce._dispatch('adminDeleteVacation', { vacationId: target.dataset.vacation });
+            return true;
+        case 'admin-approve-vacation':
+            ce._startBusy('מאשר בקשת חופש…');
+            ce._dispatch('adminApproveVacation', { vacationId: target.dataset.vacation });
+            return true;
+        case 'admin-reject-vacation':
+            ce._startBusy('דוחה בקשת חופש…');
+            ce._dispatch('adminRejectVacation', { vacationId: target.dataset.vacation });
             return true;
         case 'admin-save-rule': {
             const row = target.closest('tr');

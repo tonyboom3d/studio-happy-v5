@@ -31,6 +31,8 @@ import {
     getRequiredShiftsPerWeek,
     evaluateQuota,
     evaluateWeekendCompliance,
+    evaluatePeriodQuota,
+    getUpcomingPeriods,
     validateSubmission,
     normalizeWorkType,
     WORK_TYPE_LABELS,
@@ -51,7 +53,7 @@ import {
 import { getRoleSkillWorkshopIds } from 'backend/staffRoles.js';
 import { loadMyChangeRequests } from 'backend/shiftChangeRequests.js';
 import { loadMySwapRequests } from 'backend/shiftSwaps.js';
-import { loadVacationsForEmployee } from 'backend/vacations.js';
+import { loadVacationsForEmployee, loadVacationHistoryForEmployee, requestEmployeeDaysOff } from 'backend/vacations.js';
 
 const SA = { suppressAuth: true };
 // Free edit/delete window for a just-submitted (SUBMITTED) shift. After this,
@@ -256,6 +258,23 @@ function buildMonthsSummary(role, settings, submissions, now, vacations) {
     });
 }
 
+/** Upcoming 2-week submission windows + how many shifts are still missing for each. */
+function buildUpcomingWindows(role, settings, submissions, now, vacations) {
+    const subsForRules = submissions.map(s => ({ status: s.status, dateKey: s.date }));
+    return getUpcomingPeriods(now, 2).map(period => {
+        const quota = evaluatePeriodQuota(role, settings, period, subsForRules, vacations);
+        return {
+            start: period.start,
+            end: period.end,
+            deadline: period.deadline.toISOString(),
+            required: quota.required,
+            submitted: quota.submitted,
+            missing: quota.missing,
+            met: quota.met,
+        };
+    });
+}
+
 // ---------------------------------------------------------------------------
 // Web methods
 // ---------------------------------------------------------------------------
@@ -273,11 +292,12 @@ export const getMyPortalData = webMethod(Permissions.Anyone, async () => {
         throw new Error('ACCESS_DENIED: Employee profile is inactive.');
     }
 
-    const [rawSubmissions, changeRequests, mySwapRequests, vacations] = await Promise.all([
+    const [rawSubmissions, changeRequests, mySwapRequests, vacations, myVacations] = await Promise.all([
         loadMySubmissions(roleRow._id, now),
         loadMyChangeRequests(roleRow._id),
         loadMySwapRequests(roleRow._id),
         loadVacationsForEmployee(roleRow._id),
+        loadVacationHistoryForEmployee(roleRow._id),
     ]);
     const submissions = rawSubmissions.map(mapSubmission);
     const scheduled = submissions.filter(s => s.status === SUBMISSION_STATUS.SCHEDULED);
@@ -301,12 +321,16 @@ export const getMyPortalData = webMethod(Permissions.Anyone, async () => {
         dayStates[dateKey] = {
             state: personalDayState(day, mySkills),
             // Times let the calendar show every session (incl. several of the
-            // same workshop type on one day) instead of just its name.
-            workshops: Object.values(day.types).map(t => ({
-                id: t.typeId,
-                name: t.name,
-                times: [...t.sessions].sort(),
-            })),
+            // same workshop type on one day) instead of just its name. Strictly
+            // filtered to the employee's own skills — workshops they cannot
+            // instruct are never shown to them, even as informational text.
+            workshops: Object.values(day.types)
+                .filter(t => mySkills.includes(t.typeId))
+                .map(t => ({
+                    id: t.typeId,
+                    name: t.name,
+                    times: [...t.sessions].sort(),
+                })),
         };
     }
 
@@ -337,10 +361,11 @@ export const getMyPortalData = webMethod(Permissions.Anyone, async () => {
 
     return {
         dayStates,
-        allWorkshopTypes: Object.values(typesById),
+        allWorkshopTypes: Object.values(typesById).filter(t => mySkills.includes(t.id)),
         myOffers,
         openCalls,
         holidays: settings.holidays || [],
+        dayNotes: settings.dayNotes || {},
         user: {
             name: roleRow.displayName || extractMemberName(member, extractMemberEmail(member)),
             roleType: roleRow.roleType || 'Employee',
@@ -364,12 +389,21 @@ export const getMyPortalData = webMethod(Permissions.Anyone, async () => {
             shiftMaxTime: SHIFT_MAX_TIME,
         },
         months: buildMonthsSummary(roleRow, settings, submissions, now, vacations),
+        upcomingWindows: buildUpcomingWindows(roleRow, settings, submissions, now, vacations),
         submissions,
         scheduledWorkshops,
         changeRequests,
         mySwapRequests,
+        myVacations,
         serverNow: now.toISOString(),
     };
+});
+
+/** Employee: request one or more days off (manager approval required). */
+export const requestDayOff = webMethod(Permissions.Anyone, async (dates, notes) => {
+    const { role } = await assertEmployeeAccess('submitAvailability');
+    if (!Array.isArray(dates) || !dates.length) throw new Error('BAD_REQUEST: יש לבחור לפחות יום אחד.');
+    return requestEmployeeDaysOff(role, dates, notes);
 });
 
 /**

@@ -184,6 +184,70 @@ export function isSubmissionOpenForMonth(monthKey, settings, now = new Date()) {
     return now.getTime() <= computeSubmissionDeadline(monthKey, settings).getTime();
 }
 
+// ---------------------------------------------------------------------------
+// Biweekly submission windows
+//
+// Two windows per month, each requiring advance submission:
+//   Window A = days 1–15  → deadline = last day of the PRECEDING month, 23:59:59 IL
+//   Window B = days 16–end → deadline = the 15th of the SAME month, 23:59:59 IL
+// Each deadline sits exactly one day before its window starts (submit ~2
+// weeks ahead). Reminders fire N days before a deadline (default 5/3/1 →
+// the 10th/12th/14th for the mid-month deadline).
+// ---------------------------------------------------------------------------
+
+/** Last calendar day-of-month (1-31) for a 'YYYY-MM' key. */
+function lastDayOfMonthKey(monthKey) {
+    const [y, m] = monthKey.split('-').map(Number);
+    return new Date(Date.UTC(y, m, 0)).getUTCDate();
+}
+
+/** The 2-week submission window containing `dateKey`, and its deadline. */
+export function getPeriodForDate(dateKey) {
+    const monthKey = dateKey.slice(0, 7);
+    const day = Number(dateKey.slice(8, 10));
+    if (day <= 15) {
+        const prevMonth = addMonths(monthKey, -1);
+        const prevLastDay = lastDayOfMonthKey(prevMonth);
+        const deadlineKey = `${prevMonth}-${String(prevLastDay).padStart(2, '0')}`;
+        return {
+            key: `${monthKey}-A`,
+            start: `${monthKey}-01`,
+            end: `${monthKey}-15`,
+            deadline: new Date(`${deadlineKey}T23:59:59+02:00`),
+        };
+    }
+    const lastDay = lastDayOfMonthKey(monthKey);
+    return {
+        key: `${monthKey}-B`,
+        start: `${monthKey}-16`,
+        end: `${monthKey}-${String(lastDay).padStart(2, '0')}`,
+        deadline: new Date(`${monthKey}-15T23:59:59+02:00`),
+    };
+}
+
+/** 'YYYY-MM-DD' for the day right after `dateKey`. */
+function nextDateKey(dateKey) {
+    const [y, m, d] = dateKey.split('-').map(Number);
+    return new Date(Date.UTC(y, m - 1, d + 1)).toISOString().slice(0, 10);
+}
+
+/**
+ * The upcoming submission windows whose deadline hasn't passed yet (nearest
+ * first) — i.e. the windows an employee still needs to act on. The window
+ * currently in progress (its deadline was necessarily before it started) is
+ * skipped; only future, still-open windows are returned.
+ */
+export function getUpcomingPeriods(now = new Date(), count = 2) {
+    const periods = [];
+    let cursorKey = toDateKey(now);
+    for (let guard = 0; guard < 8 && periods.length < count; guard++) {
+        const period = getPeriodForDate(cursorKey);
+        if (period.deadline.getTime() > now.getTime()) periods.push(period);
+        cursorKey = nextDateKey(period.end);
+    }
+    return periods;
+}
+
 /** Shift length in hours from 'HH:mm' strings; null when invalid/negative. */
 export function shiftHours(startTime, endTime) {
     const parse = (t) => {
@@ -215,14 +279,44 @@ export function getRequiredShiftsForMonth(profile, settings, monthKey) {
     return getRequiredShiftsPerWeek(profile, settings) * getWeeksInMonth(monthKey).length;
 }
 
+/** CLOSED-mode holiday dateKeys from settings.holidays (business-closed days). */
+export function getClosedHolidayDates(settings) {
+    return (settings?.holidays || [])
+        .filter(h => h?.mode === 'CLOSED' && /^\d{4}-\d{2}-\d{2}$/.test(String(h.date || '')))
+        .map(h => h.date);
+}
+
+/**
+ * Combined vacation ∪ closed-holiday blocked-day checker (union, no double
+ * counting) — used everywhere a week's "days the employee simply cannot
+ * work" needs to be known.
+ */
+function buildBlockedDayChecker(vacations, closedHolidayDates) {
+    const closedSet = new Set(closedHolidayDates || []);
+    const inVacation = (dateKey) => (vacations || []).some(v => v.startDate <= dateKey && dateKey <= v.endDate);
+    return (dateKey) => closedSet.has(dateKey) || inVacation(dateKey);
+}
+
+function countBlockedDaysInWeek(weekStart, isBlocked) {
+    const [wy, wm, wd] = weekStart.split('-').map(Number);
+    let count = 0;
+    for (let i = 0; i < 7; i++) {
+        const dk = new Date(Date.UTC(wy, wm - 1, wd + i)).toISOString().slice(0, 10);
+        if (isBlocked(dk)) count++;
+    }
+    return count;
+}
+
 /**
  * Weekly quota status for every Sun–Sat week overlapping `monthKey`.
  * `allSubmissions` should be the employee's non-rejected rows across the
  * whole open range (not just this month) so weeks straddling a month
  * boundary are still counted correctly.
- * `vacations` = [{ startDate, endDate }] ('YYYY-MM-DD', inclusive) — approved
- * vacation days within a week reduce that week's required shift count
- * (floor 0); a full-week vacation fully exempts the week.
+ * `vacations` = [{ startDate, endDate }] ('YYYY-MM-DD', inclusive). Combined
+ * with CLOSED holidays (from settings.holidays), a week's required count is
+ * only reduced when the blocked days actually make the base quota
+ * unreachable: required_effective = min(requiredBase, 7 - blockedDays) — a
+ * week with fewer blocked days than the quota still needs the full quota.
  */
 export function evaluateQuota(profile, settings, monthKey, allSubmissions, vacations) {
     const requiredPerWeek = getRequiredShiftsPerWeek(profile, settings);
@@ -234,20 +328,16 @@ export function evaluateQuota(profile, settings, monthKey, allSubmissions, vacat
         const weekStart = getWeekStart(dateKey);
         countByWeek[weekStart] = (countByWeek[weekStart] || 0) + 1;
     }
-    const onVacation = (dateKey) => (vacations || []).some(v => v.startDate <= dateKey && dateKey <= v.endDate);
+    const isBlocked = buildBlockedDayChecker(vacations, getClosedHolidayDates(settings));
     const weeks = getWeeksInMonth(monthKey).map(weekStart => {
         const weekEnd = getWeekEnd(weekStart);
-        const [wy, wm, wd] = weekStart.split('-').map(Number);
-        let vacationExempt = 0;
-        for (let i = 0; i < 7; i++) {
-            const dk = new Date(Date.UTC(wy, wm - 1, wd + i)).toISOString().slice(0, 10);
-            if (onVacation(dk)) vacationExempt++;
-        }
+        const blockedDays = countBlockedDaysInWeek(weekStart, isBlocked);
+        const availableDays = Math.max(0, 7 - blockedDays);
+        const required = Math.min(requiredPerWeek, availableDays);
         const submitted = countByWeek[weekStart] || 0;
-        const required = Math.max(0, requiredPerWeek - vacationExempt);
         return {
             weekStart, weekEnd, submitted, required, requiredBase: requiredPerWeek,
-            vacationExempt, met: submitted >= required,
+            vacationExempt: requiredPerWeek - required, met: submitted >= required,
         };
     });
     const submitted = weeks.reduce((sum, w) => sum + w.submitted, 0);
@@ -262,15 +352,54 @@ export function evaluateQuota(profile, settings, monthKey, allSubmissions, vacat
 }
 
 /**
+ * Same weekly-quota math as `evaluateQuota`, but restricted to the weeks
+ * overlapping a submission window (period.start..period.end) — used to show
+ * "what's left for the next window" instead of a full-month figure.
+ */
+export function evaluatePeriodQuota(profile, settings, period, allSubmissions, vacations) {
+    const requiredPerWeek = getRequiredShiftsPerWeek(profile, settings);
+    const countByWeek = {};
+    for (const s of (allSubmissions || [])) {
+        if (s.status === SUBMISSION_STATUS.REJECTED) continue;
+        const dateKey = s.dateKey || toDateKey(s.date);
+        if (!dateKey) continue;
+        const weekStart = getWeekStart(dateKey);
+        countByWeek[weekStart] = (countByWeek[weekStart] || 0) + 1;
+    }
+    const isBlocked = buildBlockedDayChecker(vacations, getClosedHolidayDates(settings));
+
+    const weekStarts = [];
+    let cursor = getWeekStart(period.start);
+    while (cursor <= period.end) {
+        weekStarts.push(cursor);
+        cursor = nextDateKey(getWeekEnd(cursor));
+    }
+
+    const weeks = weekStarts.map(weekStart => {
+        const weekEnd = getWeekEnd(weekStart);
+        const blockedDays = countBlockedDaysInWeek(weekStart, isBlocked);
+        const availableDays = Math.max(0, 7 - blockedDays);
+        const required = Math.min(requiredPerWeek, availableDays);
+        const submitted = countByWeek[weekStart] || 0;
+        return { weekStart, weekEnd, submitted, required, requiredBase: requiredPerWeek, met: submitted >= required };
+    });
+    const submitted = weeks.reduce((sum, w) => sum + w.submitted, 0);
+    const required = weeks.reduce((sum, w) => sum + w.required, 0);
+    const met = weeks.every(w => w.met);
+    return { requiredPerWeek, required, submitted, missing: Math.max(0, required - submitted), met, weeks };
+}
+
+/**
  * Friday/Saturday submission compliance for one month: employees must submit
  * `requiredFridaysPerMonth`/`requiredSaturdaysPerMonth` such days; an approved
- * vacation covering a given Friday/Saturday exempts that occurrence.
+ * vacation or CLOSED holiday covering a given Friday/Saturday exempts that
+ * occurrence.
  * `vacations` = [{ startDate, endDate }] ('YYYY-MM-DD', inclusive).
  */
 export function evaluateWeekendCompliance(profile, settings, monthKey, allSubmissions, vacations) {
     const [y, m] = monthKey.split('-').map(Number);
     const daysInMonth = new Date(Date.UTC(y, m, 0)).getUTCDate();
-    const onVacation = (dateKey) => (vacations || []).some(v => v.startDate <= dateKey && dateKey <= v.endDate);
+    const isBlocked = buildBlockedDayChecker(vacations, getClosedHolidayDates(settings));
     const submittedDates = new Set((allSubmissions || [])
         .filter(s => s.status !== SUBMISSION_STATUS.REJECTED)
         .map(s => s.dateKey || toDateKey(s.date)));
@@ -280,7 +409,7 @@ export function evaluateWeekendCompliance(profile, settings, monthKey, allSubmis
         const dateKey = `${monthKey}-${String(day).padStart(2, '0')}`;
         const dow = new Date(Date.UTC(y, m - 1, day)).getUTCDay(); // 5=Friday, 6=Saturday
         if (dow !== 5 && dow !== 6) continue;
-        const exempt = onVacation(dateKey);
+        const exempt = isBlocked(dateKey);
         if (dow === 5) {
             if (exempt) fridayExempt++;
             else if (submittedDates.has(dateKey)) fridaySubmitted++;
@@ -342,6 +471,11 @@ export function validateSubmission(shifts, profile, settings, existing, opts = {
         existingByWeek[weekStart] = (existingByWeek[weekStart] || 0) + 1;
     }
     const requiredPerWeek = getRequiredShiftsPerWeek(profile, settings);
+    const currentPeriod = getPeriodForDate(todayKey);
+    const holidayByDate = {};
+    for (const h of (settings.holidays || [])) {
+        if (h?.date) holidayByDate[h.date] = h;
+    }
 
     const seenInBatch = new Set();
 
@@ -402,19 +536,38 @@ export function validateSubmission(shifts, profile, settings, existing, opts = {
             continue;
         }
 
-        // Future months (not current): deadline gate.
-        const currentMonth = toMonthKey(now);
-        if (monthKey > currentMonth && !isSubmissionOpenForMonth(monthKey, settings, now)) {
-            errors.push({ date: dateKey, code: 'DEADLINE_PASSED', message: `חלף המועד האחרון להגשת זמינות לחודש ${monthKey}.` });
+        const holidayEntry = holidayByDate[dateKey];
+        if (holidayEntry?.mode === 'CLOSED') {
+            errors.push({ date: dateKey, code: 'HOLIDAY_CLOSED', message: `בתאריך ${dateKey} העסק סגור (${holidayEntry.name || 'חג'}).` });
+            continue;
+        }
+        if (holidayEntry?.mode === 'SHORT' && holidayEntry.shortStart && holidayEntry.shortEnd) {
+            if (shift.startTime < holidayEntry.shortStart || shift.endTime > holidayEntry.shortEnd) {
+                errors.push({
+                    date: dateKey, code: 'OUT_OF_HOLIDAY_HOURS',
+                    message: `בתאריך ${dateKey} (${holidayEntry.name || 'יום מקוצר'}) ניתן להגיש רק בין ${holidayEntry.shortStart} ל-${holidayEntry.shortEnd}.`,
+                });
+                continue;
+            }
+        }
+
+        // Biweekly submission window: a date belongs to a 2-week window whose
+        // deadline sits one day before the window starts. The currently-active
+        // window's own deadline has necessarily already passed (bonus rule
+        // below governs it instead); only a still-upcoming window is gated here.
+        const period = getPeriodForDate(dateKey);
+        const isFutureWindow = period.start > currentPeriod.end;
+        if (isFutureWindow && now.getTime() > period.deadline.getTime()) {
+            errors.push({ date: dateKey, code: 'DEADLINE_PASSED', message: `חלף המועד האחרון להגשת זמינות לתקופה ${period.start}–${period.end}.` });
             continue;
         }
 
-        // Current-month additions are a bonus perk: allowed only once the
-        // employee met the quota for that shift's own week (incentivization rule).
+        // Additions to the currently-active window are a bonus perk: allowed
+        // only once the employee met the quota for that shift's own week.
         const weekStart = getWeekStart(dateKey);
         const weekBonusUnlocked = settings.bonusUnlockEnabled && (existingByWeek[weekStart] || 0) >= requiredPerWeek;
-        if (monthKey === currentMonth && !weekBonusUnlocked) {
-            errors.push({ date: dateKey, code: 'BONUS_LOCKED', message: 'הגשת משמרות נוספות לשבוע זה בחודש הנוכחי נפתחת רק לאחר עמידה במכסה השבועית.' });
+        if (!isFutureWindow && !weekBonusUnlocked) {
+            errors.push({ date: dateKey, code: 'BONUS_LOCKED', message: 'הגשת משמרות נוספות לשבוע זה בתקופה הנוכחית נפתחת רק לאחר עמידה במכסה השבועית.' });
             continue;
         }
 

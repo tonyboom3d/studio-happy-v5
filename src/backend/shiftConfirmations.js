@@ -15,9 +15,8 @@ import wixData from 'wix-data';
 import {
     SUBMISSION_STATUS,
     toDateKey,
-    toMonthKey,
-    computeSubmissionDeadline,
-    getRequiredShiftsForMonth,
+    getPeriodForDate,
+    evaluatePeriodQuota,
 } from 'backend/availabilityRules.js';
 import {
     ASSIGNMENT_STATUS,
@@ -30,6 +29,7 @@ import {
 } from 'backend/schedulingEngine.js';
 import { getRolePermissionValue } from 'backend/staffRoles.js';
 import { sendGreenApiWhatsApp } from 'backend/whatsappService.jsw';
+import { loadVacationsOverlappingRangeByEmployee } from 'backend/vacations.js';
 
 const SA = { suppressAuth: true };
 const SAC = { suppressAuth: true, consistentRead: true };
@@ -95,59 +95,60 @@ function randomToken() {
 // 1) Availability-deadline reminders
 // ---------------------------------------------------------------------------
 
-function addMonths(monthKey, n) {
-    const [y, m] = monthKey.split('-').map(Number);
-    const t = y * 12 + (m - 1) + n;
-    return `${Math.floor(t / 12)}-${String((t % 12) + 1).padStart(2, '0')}`;
-}
-
 /**
- * Sends quota reminders for next month's submissions. The hourly job calls
- * this every run; it only fires during the configured Israel hour, and the
- * (deadline − N days) date match makes it once per reminder day.
+ * Sends quota reminders for the upcoming 2-week submission window. The hourly
+ * job calls this every run; it only fires during the configured Israel hour,
+ * and the (deadline − N days) date match makes it once per reminder day —
+ * with the default [5,3,1] offsets this lands on the 10th/12th/14th for the
+ * mid-month (15th) deadline, and symmetric days before the month-end deadline.
  */
 export async function processDeadlineReminders(now = new Date()) {
     const alerts = await loadAlertSettings();
     if (israelHour(now) !== alerts.reminderSendHourIL) return { sent: 0, skipped: 'not send hour' };
 
-    const settings = await loadSettings();
-    const nextMonth = addMonths(toMonthKey(now), 1);
-    const deadline = computeSubmissionDeadline(nextMonth, settings);
     const todayKey = toDateKey(now);
-
-    const daysUntilDeadline = Math.round((new Date(`${toDateKey(deadline)}T12:00:00Z`).getTime()
+    // The window whose deadline is still ahead of today (the one employees
+    // currently need to act on) — same window a still-open portal would show.
+    const period = getPeriodForDate(todayKey).deadline.getTime() > now.getTime()
+        ? getPeriodForDate(todayKey)
+        : getPeriodForDate(`${toDateKey(new Date(now.getTime() + 16 * 86400000))}`);
+    const deadlineKey = toDateKey(period.deadline);
+    const daysUntilDeadline = Math.round((new Date(`${deadlineKey}T12:00:00Z`).getTime()
         - new Date(`${todayKey}T12:00:00Z`).getTime()) / 86400000);
     if (!alerts.reminderDaysBeforeDeadline.includes(daysUntilDeadline)) {
         return { sent: 0, skipped: `deadline in ${daysUntilDeadline}d — no reminder configured` };
     }
 
+    const settings = await loadSettings();
     const roles = (await loadActiveRoles()).filter(r => getRolePermissionValue(r, 'submitAvailability'));
     const subsResult = await wixData.query('AvailabilitySubmissions')
-        .eq('monthKey', nextMonth)
+        .ge('date', new Date(`${period.start}T00:00:00Z`))
+        .le('date', new Date(`${period.end}T23:59:59Z`))
         .ne('status', SUBMISSION_STATUS.REJECTED)
         .limit(1000).find(SA).catch(() => ({ items: [] }));
-    const countByEmployee = {};
+    const subsByEmployee = {};
     for (const s of (subsResult.items || [])) {
-        countByEmployee[s.employeeId] = (countByEmployee[s.employeeId] || 0) + 1;
+        if (!subsByEmployee[s.employeeId]) subsByEmployee[s.employeeId] = [];
+        subsByEmployee[s.employeeId].push({ status: s.status, dateKey: toDateKey(s.date) });
     }
+    const vacationsByEmployee = await loadVacationsOverlappingRangeByEmployee(period.start, period.end);
 
     let sent = 0;
     for (const role of roles) {
-        const required = getRequiredShiftsForMonth(role, settings, nextMonth);
-        const submitted = countByEmployee[role._id] || 0;
-        if (submitted >= required || !role.phone) continue;
+        const quota = evaluatePeriodQuota(role, settings, period, subsByEmployee[role._id] || [], vacationsByEmployee[role._id]);
+        if (quota.met || !role.phone) continue;
         const msg = [
             `היי ${role.displayName || ''} 👋`,
-            `תזכורת מסטודיו האפי: נותרו ${daysUntilDeadline} ימים להגשת זמינות לחודש ${nextMonth}.`,
-            `הוגשו ${submitted} מתוך ${required} משמרות נדרשות.`,
+            `תזכורת מסטודיו האפי: נותרו ${daysUntilDeadline} ימים להגשת זמינות לשבועיים ${period.start}–${period.end}.`,
+            `הוגשו ${quota.submitted} מתוך ${quota.required} משמרות נדרשות.`,
             `להגשה: ${PORTAL_URL}`,
         ].join('\n');
         await sendGreenApiWhatsApp(role.phone, msg).catch(err =>
             console.error('[shiftConfirmations] reminder failed:', err?.message || err));
         sent++;
     }
-    console.log(`[shiftConfirmations] processDeadlineReminders: month=${nextMonth} sent=${sent}`);
-    return { sent, month: nextMonth, daysUntilDeadline };
+    console.log(`[shiftConfirmations] processDeadlineReminders: window=${period.start}..${period.end} sent=${sent}`);
+    return { sent, window: { start: period.start, end: period.end }, daysUntilDeadline };
 }
 
 // ---------------------------------------------------------------------------

@@ -9,7 +9,6 @@
  *  - Add the `shift-swap` custom element (Tag Name: shift-swap, source:
  *    src/public/custom-elements/shift-swap.js).
  *  - This file assumes the element's ID is `#shiftSwap1`.
- *  - Copy this file's contents into the Wix-generated page code file.
  *
  * Flow: reads ?token=... → getShiftSwapByToken → pushes `swap-data` (incl.
  * `viewer` classification); `swap-action` events → login prompt / account

@@ -281,6 +281,19 @@ async function applyEmployeeSkills(roleId, skillIds) {
     await wixData.replaceReferences('Dashboard_Roles', 'skills', roleId, skillIdsForWrite(skillIds), SA);
 }
 
+/**
+ * Merge a patch onto an existing CMS row.
+ * Wix update() drops any property omitted from the item — so we must start from
+ * the full existing row. Multi-ref `skills` is stripped (handled separately).
+ */
+function mergeRoleRowForUpdate(existing, patchRow) {
+    const row = { ...existing, ...patchRow };
+    delete row.skills;
+    if (row.connectedStaff) row.connectedStaff = refId(row.connectedStaff) || row.connectedStaff;
+    if (row.userId) row.userId = refId(row.userId) || row.userId;
+    return row;
+}
+
 /** Build a partial Dashboard_Roles row — only touched scalar fields, never spread a full get(). */
 function buildEmployeePatchRow(roleId, patch, { callerRole, permissions } = {}) {
     const row = { _id: roleId };
@@ -306,7 +319,11 @@ function buildEmployeePatchRow(roleId, patch, { callerRole, permissions } = {}) 
 }
 
 async function persistEmployeePatch(roleId, patch, { callerRole, permissions } = {}) {
-    const row = buildEmployeePatchRow(roleId, patch, { callerRole, permissions });
+    const existing = await wixData.get('Dashboard_Roles', roleId, SA).catch(() => null);
+    if (!existing) throw new Error('NOT_FOUND: העובד/ת לא נמצא/ה.');
+
+    const patchRow = buildEmployeePatchRow(roleId, patch, { callerRole, permissions });
+    const row = mergeRoleRowForUpdate(existing, patchRow);
     await wixData.update('Dashboard_Roles', row, SA);
     if (Array.isArray(patch.skillIds)) {
         await applyEmployeeSkills(roleId, patch.skillIds);
@@ -350,10 +367,11 @@ export const updateEmployeePermissions = webMethod(Permissions.SiteMember, async
     const exists = await wixData.get('Dashboard_Roles', roleId, SA).catch(() => null);
     if (!exists) throw new Error('NOT_FOUND: העובד/ת לא נמצא/ה.');
 
-    const row = { _id: roleId };
+    const patchRow = { _id: roleId };
     for (const key of PERMISSION_KEYS) {
-        if (permissions[key] !== undefined) row[key] = !!permissions[key];
+        if (permissions[key] !== undefined) patchRow[key] = !!permissions[key];
     }
+    const row = mergeRoleRowForUpdate(exists, patchRow);
 
     await wixData.update('Dashboard_Roles', row, SA);
     await publishSchedulingUpdate('employee-permissions-updated', { roleId });

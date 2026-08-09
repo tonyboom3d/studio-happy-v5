@@ -606,7 +606,7 @@ class EmployeePortal extends HTMLElement {
     }
 
     renderDenied() {
-        this.innerHTML = `<div class="ep-wrap"><div class="ep-denied">אין לך הרשאה לפורטל העובדים.<br>יש לפנות למנהל/ת הסטודיו.</div></div>`;
+        this.innerHTML = `<div class="ep-wrap"><div class="ep-denied">אין לך גישה לדף זה</div></div>`;
     }
 
     renderLoadError(message) {

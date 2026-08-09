@@ -236,7 +236,7 @@ function buildMonthsSummary(role, settings, submissions, now, vacations) {
     // evaluateQuota/evaluateWeekendCompliance expect { status, date|dateKey }.
     const subsForRules = submissions.map(s => ({ status: s.status, dateKey: s.date }));
     return openMonths.map(monthKey => {
-        const quota = evaluateQuota(role, settings, monthKey, subsForRules);
+        const quota = evaluateQuota(role, settings, monthKey, subsForRules, vacations);
         const weekend = evaluateWeekendCompliance(role, settings, monthKey, subsForRules, vacations);
         const isCurrent = monthKey === toMonthKey(now);
         return {
@@ -246,6 +246,12 @@ function buildMonthsSummary(role, settings, submissions, now, vacations) {
             open: isCurrent ? quota.bonusUnlocked : isSubmissionOpenForMonth(monthKey, settings, now),
             quota,
             weekend,
+            // Consolidated progress-bar payload: three components summing to 100%.
+            progress: {
+                shifts: { submitted: quota.submitted, required: quota.required, requiredBase: quota.requiredBase, exempt: quota.vacationExempt },
+                fridays: { submitted: weekend.fridays.submitted, required: weekend.fridays.required, requiredBase: weekend.fridays.requiredBase, exempt: weekend.fridays.vacationExempt },
+                saturdays: { submitted: weekend.saturdays.submitted, required: weekend.saturdays.required, requiredBase: weekend.saturdays.requiredBase, exempt: weekend.saturdays.vacationExempt },
+            },
         };
     });
 }

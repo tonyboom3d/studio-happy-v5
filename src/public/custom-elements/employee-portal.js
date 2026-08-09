@@ -63,6 +63,20 @@ employee-portal * { box-sizing: border-box; }
 .ep-cal-acc-item { display: flex; align-items: flex-start; gap: 8px; }
 .ep-cal-acc-item .ep-dot { flex-shrink: 0; margin-top: 3px; }
 .ep-cal-acc-item b { color: #1f2937; font-weight: 700; display: block; font-size: 11px; margin-bottom: 1px; }
+.ep-progress { margin-bottom: 10px; border: 1px solid #e2e8f0; border-radius: 12px; padding: 10px 12px; background: #fbfcfe; }
+.ep-progress.complete { border-color: #6ee7b7; background: #f0fdf9; }
+.ep-progress-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 12.5px; font-weight: 700; color: #374151; margin-bottom: 7px; flex-wrap: wrap; }
+.ep-progress-pct { font-weight: 700; color: #1d4ed8; white-space: nowrap; }
+.ep-progress.complete .ep-progress-pct { color: #047857; }
+.ep-progress-livepct { color: #7c3aed; font-weight: 700; }
+.ep-progress-track { position: relative; display: flex; height: 12px; border-radius: 999px; background: #e5e7eb; overflow: hidden; }
+.ep-prog-seg { height: 100%; transition: width .25s ease; }
+.ep-prog-seg.done { background: linear-gradient(90deg,#059669,#10b981); }
+.ep-prog-seg.vac { background: repeating-linear-gradient(45deg,#0ea5e9,#0ea5e9 5px,#38bdf8 5px,#38bdf8 10px); }
+.ep-prog-seg.live { background: repeating-linear-gradient(45deg,#a78bfa,#a78bfa 5px,#c4b5fd 5px,#c4b5fd 10px); opacity: .85; }
+.ep-progress-breakdown { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 7px; font-size: 11px; color: #6b7280; }
+.ep-progress-breakdown b { color: #374151; font-weight: 700; }
+.ep-progress-breakdown .vac-note { color: #0284c7; font-weight: 600; }
 .ep-cal-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
 .ep-cal-title { font-weight: 700; font-size: 15px; }
 .ep-cal-nav { display: flex; gap: 6px; }
@@ -1203,7 +1217,6 @@ class EmployeePortal extends HTMLElement {
         }
 
         return `
-            ${this._renderCalLegendAccordion()}
             <div class="ep-cal-head">
                 <div class="ep-cal-title">${monthTitle(this._viewMonth)}</div>
                 <div class="ep-cal-nav">
@@ -1211,8 +1224,118 @@ class EmployeePortal extends HTMLElement {
                     <button data-action="month-prev" ${idx <= 0 ? 'disabled' : ''} title="חודש קודם">&#8250;</button>
                 </div>
             </div>
+            ${this._renderMonthProgress()}
+            ${this._renderCalLegendAccordion()}
             ${this._renderWorkshopFilter()}
             <div class="ep-cal-grid">${cells}</div>`;
+    }
+
+    _localWeekStart(dateKey) {
+        const [y, m, d] = dateKey.split('-').map(Number);
+        const date = new Date(Date.UTC(y, m - 1, d));
+        date.setUTCDate(date.getUTCDate() - date.getUTCDay());
+        return date.toISOString().slice(0, 10);
+    }
+
+    _dowUTC(dateKey) {
+        const [y, m, d] = dateKey.split('-').map(Number);
+        return new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+    }
+
+    /**
+     * Monthly submission progress bar: three components (weekly shifts quota,
+     * required Fridays, required Saturdays) summed into one 0–100% bar.
+     * Segments: submitted (green) · vacation-exempt (teal, "completes" the bar)
+     * · live preview of calendar-selected-but-not-yet-submitted days (striped)
+     * · remaining gap (gray track).
+     */
+    _renderMonthProgress() {
+        const info = this._monthInfo(this._viewMonth);
+        const progress = info?.progress;
+        if (!progress) return '';
+        const { shifts, fridays, saturdays } = progress;
+        const weeks = info.quota?.weeks || [];
+
+        // Live preview: calendar days selected in the viewed month but not yet submitted.
+        const selectedInMonth = [...this._selected.keys()].filter(dk => dk.startsWith(this._viewMonth));
+        const selectedByWeek = {};
+        let fridaysLiveRaw = 0, saturdaysLiveRaw = 0;
+        for (const dk of selectedInMonth) {
+            const dow = this._dowUTC(dk);
+            if (dow === 5) fridaysLiveRaw++;
+            else if (dow === 6) saturdaysLiveRaw++;
+            const ws = this._localWeekStart(dk);
+            selectedByWeek[ws] = (selectedByWeek[ws] || 0) + 1;
+        }
+        let shiftsLiveRaw = 0;
+        for (const w of weeks) {
+            const gap = Math.max(0, w.required - w.submitted);
+            shiftsLiveRaw += Math.min(selectedByWeek[w.weekStart] || 0, gap);
+        }
+        const fridaysLive = Math.min(fridaysLiveRaw, Math.max(0, fridays.required - fridays.submitted));
+        const saturdaysLive = Math.min(saturdaysLiveRaw, Math.max(0, saturdays.required - saturdays.submitted));
+
+        // Breaks one component into its bar-share: submitted / vacation-exempt / live-preview / remaining gap.
+        const seg = (comp, live) => {
+            const requiredBase = comp.requiredBase || 0;
+            const required = comp.required ?? requiredBase;
+            const submitted = Math.min(comp.submitted, required);
+            const vacation = Math.max(0, requiredBase - required);
+            const livePortion = Math.min(live, Math.max(0, required - submitted));
+            const remainder = Math.max(0, requiredBase - submitted - vacation - livePortion);
+            return { requiredBase, submitted, vacation, live: livePortion, remainder };
+        };
+
+        const shiftsSeg = seg(shifts, shiftsLiveRaw);
+        const fridaysSeg = seg(fridays, fridaysLive);
+        const saturdaysSeg = seg(saturdays, saturdaysLive);
+        const grandTotal = shiftsSeg.requiredBase + fridaysSeg.requiredBase + saturdaysSeg.requiredBase;
+
+        const tip = 'הפס מציג את ההתקדמות שלכם להשלמת דרישת ההגשה החודשית — משמרות שבועיות + ימי שישי/שבת נדרשים. ' +
+            'ירוק = הוגש ואושר לביצוע · טורקיז = פטור בגין חופשה מאושרת · פס מנוקד = ימים שנבחרו בלוח אך טרם הוגשו · אפור = נותר להשלים.';
+
+        if (grandTotal <= 0) {
+            return `<div class="ep-progress">
+                <div class="ep-progress-head"><span>התקדמות הגשות לחודש${this._sectionHelp(tip)}</span></div>
+                <div class="ep-empty">אין דרישות הגשה לחודש זה</div>
+            </div>`;
+        }
+
+        const totals = { submitted: 0, vacation: 0, live: 0 };
+        for (const s of [shiftsSeg, fridaysSeg, saturdaysSeg]) {
+            totals.submitted += s.submitted;
+            totals.vacation += s.vacation;
+            totals.live += s.live;
+        }
+        const pct = (n) => Math.max(0, Math.min(100, (n / grandTotal) * 100));
+        const completedPct = Math.round(pct(totals.submitted + totals.vacation));
+        const withLivePct = Math.round(pct(totals.submitted + totals.vacation + totals.live));
+        const complete = completedPct >= 100;
+
+        const breakdownPart = (label, comp) => {
+            if (!comp.requiredBase) return '';
+            const exemptNote = comp.exempt ? ` (מתוכם ${comp.exempt} חופשה)` : '';
+            return `<span>${label} <b>${comp.submitted}/${comp.required}</b>${exemptNote}</span>`;
+        };
+
+        return `
+            <div class="ep-progress ${complete ? 'complete' : ''}">
+                <div class="ep-progress-head">
+                    <span>התקדמות הגשות לחודש${this._sectionHelp(tip)}</span>
+                    <span class="ep-progress-pct">${complete ? 'הושלם ✓' : `${completedPct}%`}${!complete && totals.live > 0 ? ` <b class="ep-progress-livepct">(+${Math.max(0, withLivePct - completedPct)}% בבחירה)</b>` : ''}</span>
+                </div>
+                <div class="ep-progress-track">
+                    <span class="ep-prog-seg done" style="width:${pct(totals.submitted)}%"></span>
+                    <span class="ep-prog-seg vac" style="width:${pct(totals.vacation)}%"></span>
+                    <span class="ep-prog-seg live" style="width:${pct(totals.live)}%"></span>
+                </div>
+                <div class="ep-progress-breakdown">
+                    ${breakdownPart('משמרות', shifts)}
+                    ${breakdownPart('שישי', fridays)}
+                    ${breakdownPart('שבת', saturdays)}
+                    ${totals.vacation > 0 ? `<span class="vac-note">🌴 חופשה מפחיתה מהדרישה</span>` : ''}
+                </div>
+            </div>`;
     }
 
     _renderCalLegendAccordion() {

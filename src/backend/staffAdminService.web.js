@@ -183,8 +183,9 @@ export const getStaffAdminData = webMethod(Permissions.SiteMember, async (monthK
     // Submission tracker: weekly quota + Friday/Saturday compliance per employee.
     const tracker = employees.filter(e => e.active).map(e => {
         const empSubs = weeklySubsByEmployee[e.id] || [];
-        const quota = evaluateQuota(board.rolesById[e.id], settings, monthKey, empSubs);
-        const weekend = evaluateWeekendCompliance(board.rolesById[e.id], settings, monthKey, empSubs, vacationsByEmployee[e.id] || []);
+        const empVacations = vacationsByEmployee[e.id] || [];
+        const quota = evaluateQuota(board.rolesById[e.id], settings, monthKey, empSubs, empVacations);
+        const weekend = evaluateWeekendCompliance(board.rolesById[e.id], settings, monthKey, empSubs, empVacations);
         return {
             employeeId: e.id,
             name: e.displayName,

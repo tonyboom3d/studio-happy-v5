@@ -220,8 +220,11 @@ export function getRequiredShiftsForMonth(profile, settings, monthKey) {
  * `allSubmissions` should be the employee's non-rejected rows across the
  * whole open range (not just this month) so weeks straddling a month
  * boundary are still counted correctly.
+ * `vacations` = [{ startDate, endDate }] ('YYYY-MM-DD', inclusive) — approved
+ * vacation days within a week reduce that week's required shift count
+ * (floor 0); a full-week vacation fully exempts the week.
  */
-export function evaluateQuota(profile, settings, monthKey, allSubmissions) {
+export function evaluateQuota(profile, settings, monthKey, allSubmissions, vacations) {
     const requiredPerWeek = getRequiredShiftsPerWeek(profile, settings);
     const countByWeek = {};
     for (const s of (allSubmissions || [])) {
@@ -231,14 +234,31 @@ export function evaluateQuota(profile, settings, monthKey, allSubmissions) {
         const weekStart = getWeekStart(dateKey);
         countByWeek[weekStart] = (countByWeek[weekStart] || 0) + 1;
     }
+    const onVacation = (dateKey) => (vacations || []).some(v => v.startDate <= dateKey && dateKey <= v.endDate);
     const weeks = getWeeksInMonth(monthKey).map(weekStart => {
+        const weekEnd = getWeekEnd(weekStart);
+        const [wy, wm, wd] = weekStart.split('-').map(Number);
+        let vacationExempt = 0;
+        for (let i = 0; i < 7; i++) {
+            const dk = new Date(Date.UTC(wy, wm - 1, wd + i)).toISOString().slice(0, 10);
+            if (onVacation(dk)) vacationExempt++;
+        }
         const submitted = countByWeek[weekStart] || 0;
-        return { weekStart, weekEnd: getWeekEnd(weekStart), submitted, required: requiredPerWeek, met: submitted >= requiredPerWeek };
+        const required = Math.max(0, requiredPerWeek - vacationExempt);
+        return {
+            weekStart, weekEnd, submitted, required, requiredBase: requiredPerWeek,
+            vacationExempt, met: submitted >= required,
+        };
     });
     const submitted = weeks.reduce((sum, w) => sum + w.submitted, 0);
-    const required = requiredPerWeek * weeks.length;
+    const required = weeks.reduce((sum, w) => sum + w.required, 0);
+    const requiredBase = requiredPerWeek * weeks.length;
+    const vacationExempt = weeks.reduce((sum, w) => sum + w.vacationExempt, 0);
     const met = weeks.every(w => w.met);
-    return { requiredPerWeek, required, submitted, met, bonusUnlocked: settings.bonusUnlockEnabled && met, weeks };
+    return {
+        requiredPerWeek, required, requiredBase, submitted, vacationExempt, met,
+        bonusUnlocked: settings.bonusUnlockEnabled && met, weeks,
+    };
 }
 
 /**
@@ -272,8 +292,16 @@ export function evaluateWeekendCompliance(profile, settings, monthKey, allSubmis
 
     const requiredFridays = Math.max(0, (settings.requiredFridaysPerMonth ?? 0) - fridayExempt);
     const requiredSaturdays = Math.max(0, (settings.requiredSaturdaysPerMonth ?? 0) - saturdayExempt);
-    const fridays = { submitted: fridaySubmitted, required: requiredFridays, met: fridaySubmitted >= requiredFridays };
-    const saturdays = { submitted: saturdaySubmitted, required: requiredSaturdays, met: saturdaySubmitted >= requiredSaturdays };
+    const fridays = {
+        submitted: fridaySubmitted, required: requiredFridays,
+        requiredBase: settings.requiredFridaysPerMonth ?? 0, vacationExempt: fridayExempt,
+        met: fridaySubmitted >= requiredFridays,
+    };
+    const saturdays = {
+        submitted: saturdaySubmitted, required: requiredSaturdays,
+        requiredBase: settings.requiredSaturdaysPerMonth ?? 0, vacationExempt: saturdayExempt,
+        met: saturdaySubmitted >= requiredSaturdays,
+    };
     return { fridays, saturdays, met: fridays.met && saturdays.met };
 }
 

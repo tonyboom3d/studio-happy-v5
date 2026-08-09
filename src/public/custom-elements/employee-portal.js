@@ -1125,9 +1125,18 @@ class EmployeePortal extends HTMLElement {
     }
 
     /** Waiting-list offers addressed to me + a single unified banner for open calls matching my skills. */
+    _skillMatchedOpenCalls() {
+        const skillTypeIds = new Set((this._data.allWorkshopTypes || []).map(t => t.id).filter(Boolean));
+        const skillNames = new Set((this._data.allWorkshopTypes || []).map(t => workshopLabel(t.name)));
+        return (this._data.openCalls || []).filter(c => {
+            if (c.workshopTypeId) return skillTypeIds.has(c.workshopTypeId);
+            return skillNames.has(workshopLabel(c.workshopName));
+        });
+    }
+
     _renderOffers() {
         const offers = this._data.myOffers || [];
-        const calls = this._data.openCalls || [];
+        const calls = this._skillMatchedOpenCalls();
         let html = '';
         for (const o of offers) {
             html += `<div class="ep-offer">
@@ -1733,7 +1742,7 @@ class EmployeePortal extends HTMLElement {
 
     /** Compact selection popup for all pending urgent open calls. */
     _renderUrgentPopup() {
-        const calls = this._data.openCalls || [];
+        const calls = this._skillMatchedOpenCalls();
         const rows = calls.map(c => `
             <label class="ep-urgent-row">
                 <input type="checkbox" data-action="urgent-toggle" data-id="${escapeHtml(c.id)}" ${this._urgentSelected.has(c.id) ? 'checked' : ''}>
@@ -2107,6 +2116,7 @@ class EmployeePortal extends HTMLElement {
             case 'urgent-open':
                 this._urgentSelected = new Set();
                 this._urgentPopupOpen = true;
+                this._pruneUrgentSelection();
                 this.render();
                 return;
             case 'urgent-close':
@@ -2262,11 +2272,23 @@ class EmployeePortal extends HTMLElement {
 
     _submitUrgentCalls() {
         if (!this._urgentSelected.size) return;
-        const callIds = Array.from(this._urgentSelected);
+        const eligibleIds = new Set(this._skillMatchedOpenCalls().map(c => c.id));
+        const callIds = Array.from(this._urgentSelected).filter(id => eligibleIds.has(id));
+        if (!callIds.length) {
+            this._toast('לא נבחרו משמרות מתאימות להכשרות שלכם.', 'error');
+            return;
+        }
         this._urgentPopupOpen = false;
         this._urgentSelected = new Set();
         this._startBusy('בודק זמינות ומשבץ את המשמרות שנבחרו…');
         this._dispatch('claimOpenCalls', { callIds });
+    }
+
+    _pruneUrgentSelection() {
+        const eligibleIds = new Set(this._skillMatchedOpenCalls().map(c => c.id));
+        for (const id of this._urgentSelected) {
+            if (!eligibleIds.has(id)) this._urgentSelected.delete(id);
+        }
     }
 
     _toast(message, kind) {

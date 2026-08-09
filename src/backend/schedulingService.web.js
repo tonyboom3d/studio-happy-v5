@@ -4,7 +4,7 @@
  * and claim open calls (atomic first-write-wins inside the engine).
  */
 import { Permissions, webMethod } from 'wix-web-module';
-import { assertEmployeeAccess } from 'backend/staffRoles.js';
+import { assertEmployeeAccess, loadRoleWithSkills } from 'backend/staffRoles.js';
 import { toDateKey } from 'backend/availabilityRules.js';
 import {
     runScheduling,
@@ -49,14 +49,20 @@ export const respondToOffer = webMethod(Permissions.SiteMember, async (offerId, 
 export const claimOpenCall = webMethod(Permissions.SiteMember, async (callId) => {
     const { role } = await assertEmployeeAccess('submitAvailability');
     if (!callId) throw new Error('BAD_REQUEST: חסר מזהה קריאה.');
-    const settings = await loadSettings();
-    return engineClaimOpenCall(callId, role, settings);
+    const [settings, roleWithSkills] = await Promise.all([
+        loadSettings(),
+        loadRoleWithSkills(role),
+    ]);
+    return engineClaimOpenCall(callId, roleWithSkills, settings);
 });
 
 /** Employee: claim several open calls at once — each is re-verified against the live DB before being assigned. */
 export const claimOpenCalls = webMethod(Permissions.SiteMember, async (callIds) => {
     const { role } = await assertEmployeeAccess('submitAvailability');
     if (!Array.isArray(callIds) || !callIds.length) throw new Error('BAD_REQUEST: לא נבחרו משמרות.');
-    const settings = await loadSettings();
-    return engineClaimOpenCalls(callIds, role, settings);
+    const [settings, roleWithSkills] = await Promise.all([
+        loadSettings(),
+        loadRoleWithSkills(role),
+    ]);
+    return engineClaimOpenCalls(callIds, roleWithSkills, settings);
 });

@@ -217,6 +217,21 @@ export async function getCurrentRoleRecord(member) {
     return role;
 }
 
+/** Multi-ref skills are only reliable with include('skills') — needed for skill checks and calendar day states. */
+export async function loadRoleWithSkills(role) {
+    if (!role?._id) return role;
+    try {
+        const result = await wixData.query('Dashboard_Roles')
+            .eq('_id', role._id)
+            .include('skills')
+            .limit(1)
+            .find(SA);
+        return result.items?.[0] || role;
+    } catch (_) {
+        return role;
+    }
+}
+
 /** True when the role row has a linked Bookings/Staff reference. */
 export function hasConnectedStaff(role) {
     return !!refId(role?.connectedStaff);

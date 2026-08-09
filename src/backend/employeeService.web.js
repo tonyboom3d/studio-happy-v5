@@ -50,7 +50,7 @@ import {
     OFFER_KIND,
     OFFER_STATUS,
 } from 'backend/schedulingEngine.js';
-import { getRoleSkillWorkshopIds } from 'backend/staffRoles.js';
+import { getRoleSkillWorkshopIds, loadRoleWithSkills } from 'backend/staffRoles.js';
 import { loadMyChangeRequests } from 'backend/shiftChangeRequests.js';
 import { loadMySwapRequests } from 'backend/shiftSwaps.js';
 import { loadVacationsForEmployee, loadVacationHistoryForEmployee, requestEmployeeDaysOff } from 'backend/vacations.js';
@@ -101,21 +101,6 @@ async function ensureRoleProfile(role, member) {
     const updated = await wixData.update('Dashboard_Roles', patch, SA);
     console.log(`[employeeService] Dashboard_Roles: patched profile fields for role ${role._id}`);
     return updated;
-}
-
-/** Multi-ref skills are only reliable with include('skills') — needed for calendar day states. */
-async function loadRoleWithSkills(role) {
-    if (!role?._id) return role;
-    try {
-        const result = await wixData.query('Dashboard_Roles')
-            .eq('_id', role._id)
-            .include('skills')
-            .limit(1)
-            .find(SA);
-        return result.items?.[0] || role;
-    } catch (_) {
-        return role;
-    }
 }
 
 /** Employee's non-rejected submissions from the start of the current month onward. */
@@ -356,6 +341,7 @@ export const getMyPortalData = webMethod(Permissions.Anyone, async () => {
         .map(o => ({
             id: o._id,
             date: o.dateKey || toDateKey(o.date),
+            workshopTypeId: o.workshopTypeId || null,
             workshopName: o.workshopName || 'סדנה',
         }));
 

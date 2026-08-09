@@ -10,6 +10,7 @@ import { sendGreenApiWhatsApp } from 'backend/whatsappService.jsw';
 import { SKETCH_STATUS, SKETCH_STATUSES, normalizeSketchStatus, isLockedStatus } from 'backend/sketchStatus.js';
 import { PERMISSION_KEYS, PERMISSION_DEFAULTS, refId } from 'backend/staffRoles.js';
 import { getItemWithRetry } from 'backend/wixDataRetry.js';
+import { TUFTING_SERVICE_IDS } from 'backend/sketchEditingPolicy.js';
 
 const SA = { suppressAuth: true };
 const ISRAEL_TZ = 'Asia/Jerusalem';
@@ -701,6 +702,7 @@ async function assertPermission(key) {
 export const getInitialDashboardData = webMethod(Permissions.SiteMember, async (filters) => {
     const dashboardRole = await assertDashboardAccess();
     const canManageOrdersSystem = hasPermission(dashboardRole, 'manageOrdersSystem');
+    const hasSketchSewingSkill = hasPermission(dashboardRole, 'sketchSewingSkill');
     const myStaffId = refId(dashboardRole.connectedStaff);
 
     const refreshOnly = !!filters?.refreshOnly;
@@ -924,11 +926,23 @@ export const getInitialDashboardData = webMethod(Permissions.SiteMember, async (
         filters?.includeAllOrders ? w.allGroupsCount > 0 : w.groupsCount > 0
     );
 
-    // Employees without manageOrdersSystem only see workshops where they're the
-    // instructor (Bookings/Staff match via Dashboard_Roles.connectedStaff).
+    // CMS workshop type ids that map to tufting Bookings services — used so
+    // sketch-sewing staff can see all tufting workshops, not only their own slots.
+    const tuftingTypeIds = new Set(
+        Object.values(TUFTING_SERVICE_IDS)
+            .map((sid) => serviceIdToTypeId[sid])
+            .filter(Boolean),
+    );
+
+    // Employees without manageOrdersSystem see workshops where they're the
+    // instructor, plus all tufting workshops when they hold sketchSewingSkill.
     const scopedWorkshopRows = canManageOrdersSystem
         ? visibleWorkshopRows
-        : visibleWorkshopRows.filter(w => myStaffId && sessionStaffMap[w.id] === myStaffId);
+        : visibleWorkshopRows.filter((w) => {
+            const isOwnSession = myStaffId && sessionStaffMap[w.id] === myStaffId;
+            const isTufting = tuftingTypeIds.has(w.type);
+            return isOwnSession || (hasSketchSewingSkill && isTufting);
+        });
 
     // Recompute alerts against the scoped workshop set only.
     missingSketchesCount = 0;

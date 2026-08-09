@@ -49,6 +49,7 @@ export async function loadSettings() {
         ...normalizeSettings(raw),
         holidays: parseHolidays(raw?.holidays),
         dayNotes: parseDayNotes(raw?.dayNotes),
+        sketchSewingDays: parseSketchSewingDays(raw?.sketchSewingDays),
         _rawId: raw?._id || null,
     };
 }
@@ -66,6 +67,18 @@ function parseHolidays(value) {
 
 /** { "<dateKey>": { message, updatedBy, updatedAt } } — manager notes on calendar days. */
 function parseDayNotes(value) {
+    if (value && typeof value === 'object' && !Array.isArray(value)) return value;
+    if (typeof value === 'string' && value.trim()) {
+        try {
+            const parsed = JSON.parse(value);
+            if (parsed && typeof parsed === 'object') return parsed;
+        } catch (_) { /* ignore */ }
+    }
+    return {};
+}
+
+/** { "<dateKey>": { startTime, endTime, confirmedOverlap, updatedBy, updatedAt } } — manager-defined "sketch sewing" days, gated by the sketchSewingSkill flag. */
+function parseSketchSewingDays(value) {
     if (value && typeof value === 'object' && !Array.isArray(value)) return value;
     if (typeof value === 'string' && value.trim()) {
         try {
@@ -518,6 +531,110 @@ export async function runScheduling(fromKey, toKey) {
     }
     console.log(`[schedulingEngine] runScheduling ${fromKey}..${toKey}:`, JSON.stringify(report));
     return report;
+}
+
+export const MAX_MANUAL_RUN_EMPLOYEES = 3;
+export const MAX_MANUAL_RUN_DAYS = 28; // 4 weeks
+
+/**
+ * Manager-triggered batch run: assigns a hand-picked set of employees
+ * (≤ MAX_MANUAL_RUN_EMPLOYEES) into open capacity across a bounded date range
+ * (≤ MAX_MANUAL_RUN_DAYS), using each employee's own submitted availability
+ * and skills. Unlike runScheduling this is an explicit manual action, so it
+ * runs regardless of the "אישור אוטומטי" setting, and returns a full,
+ * per-employee report (assigned / already-scheduled / standby / no-capacity /
+ * no matching availability) for the confirmation UI.
+ */
+export async function runSchedulingForEmployees(fromKey, toKey, employeeIds) {
+    const ids = Array.from(new Set((employeeIds || []).filter(Boolean)));
+    if (!ids.length) throw new Error('BAD_REQUEST: לא נבחרו עובדים.');
+    if (ids.length > MAX_MANUAL_RUN_EMPLOYEES) {
+        throw new Error(`BAD_REQUEST: ניתן לבחור עד ${MAX_MANUAL_RUN_EMPLOYEES} עובדים בכל פעם.`);
+    }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(fromKey || '') || !/^\d{4}-\d{2}-\d{2}$/.test(toKey || '') || toKey < fromKey) {
+        throw new Error('BAD_REQUEST: טווח תאריכים לא תקין.');
+    }
+    const spanDays = Math.round((new Date(`${toKey}T00:00:00Z`) - new Date(`${fromKey}T00:00:00Z`)) / 86400000) + 1;
+    if (spanDays > MAX_MANUAL_RUN_DAYS) {
+        throw new Error(`BAD_REQUEST: טווח התאריכים לא יכול לעלות על ${MAX_MANUAL_RUN_DAYS} ימים (4 שבועות).`);
+    }
+
+    const board = await buildBoard(fromKey, toKey, { consistent: true, includeOffers: true });
+    const submissions = await loadSubmissions(fromKey, toKey, true);
+    const idSet = new Set(ids);
+
+    const reportByEmployee = {};
+    for (const id of ids) {
+        reportByEmployee[id] = {
+            employeeId: id,
+            employeeName: board.rolesById[id]?.displayName || '(לא נמצא/ה)',
+            shifts: [],
+        };
+    }
+
+    const todayKey = toDateKey(new Date());
+    for (const dateKey of Object.keys(board.days).sort()) {
+        if (dateKey < fromKey || dateKey > toKey || dateKey <= todayKey) continue;
+        const day = board.days[dateKey];
+        for (const t of Object.values(day.types)) {
+            const daySubs = submissions.filter(s => idSet.has(s.employeeId) && toDateKey(s.date) === dateKey);
+            for (const sub of daySubs) {
+                const rep = reportByEmployee[sub.employeeId];
+                if (!rep) continue;
+                const hasSkill = (board.skillsByRoleId[sub.employeeId] || []).includes(t.typeId);
+                if (!hasSkill) continue;
+
+                if (t.assignedEmployeeIds.includes(sub.employeeId)) {
+                    if (!rep.shifts.some(x => x.dateKey === dateKey && x.workshopTypeId === t.typeId)) {
+                        rep.shifts.push({ dateKey, workshopTypeId: t.typeId, workshopName: t.name, status: 'ALREADY_ASSIGNED' });
+                    }
+                    continue;
+                }
+                if (sub.status === SUBMISSION_STATUS.STANDBY) {
+                    rep.shifts.push({ dateKey, workshopTypeId: t.typeId, workshopName: t.name, status: 'STANDBY' });
+                    continue;
+                }
+
+                const shortage = t.required - t.assignedCount;
+                if (shortage > 0) {
+                    await wixData.insert('ShiftAssignments', {
+                        dateKey,
+                        date: new Date(`${dateKey}T12:00:00Z`),
+                        monthKey: dateKey.slice(0, 7),
+                        workshopTypeId: t.typeId,
+                        workshopName: t.name,
+                        employeeId: sub.employeeId,
+                        submissionId: sub._id,
+                        status: ASSIGNMENT_STATUS.APPROVED,
+                        source: 'MANUAL_BATCH',
+                        workType: DEFAULT_WORK_TYPE,
+                    }, SA);
+                    if (sub.status !== SUBMISSION_STATUS.SCHEDULED) {
+                        await wixData.update('AvailabilitySubmissions', { ...sub, status: SUBMISSION_STATUS.SCHEDULED }, SA);
+                        sub.status = SUBMISSION_STATUS.SCHEDULED;
+                    }
+                    t.assignedCount++;
+                    t.assignedEmployeeIds.push(sub.employeeId);
+                    rep.shifts.push({ dateKey, workshopTypeId: t.typeId, workshopName: t.name, status: 'ASSIGNED' });
+                } else {
+                    rep.shifts.push({ dateKey, workshopTypeId: t.typeId, workshopName: t.name, status: 'FULL' });
+                }
+            }
+        }
+    }
+
+    for (const id of ids) {
+        if (!reportByEmployee[id].shifts.length) {
+            reportByEmployee[id].shifts.push({ dateKey: null, workshopTypeId: null, workshopName: null, status: 'NO_MATCHING_AVAILABILITY' });
+        }
+    }
+
+    const employees = ids.map(id => reportByEmployee[id]);
+    const totalAssigned = employees.reduce((sum, e) => sum + e.shifts.filter(s => s.status === 'ASSIGNED').length, 0);
+    if (totalAssigned) await publishSchedulingUpdate('manual-batch-scheduling', { fromKey, toKey, employeeIds: ids });
+
+    console.log(`[schedulingEngine] runSchedulingForEmployees ${fromKey}..${toKey} employees=${ids.join(',')}: assigned=${totalAssigned}`);
+    return { ok: true, fromKey, toKey, employees };
 }
 
 /** Hourly: expire stale offers and escalate to the next in the FIFO queue. */

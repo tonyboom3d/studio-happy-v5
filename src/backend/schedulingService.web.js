@@ -8,6 +8,7 @@ import { assertEmployeeAccess, loadRoleWithSkills } from 'backend/staffRoles.js'
 import { toDateKey } from 'backend/availabilityRules.js';
 import {
     runScheduling,
+    runSchedulingForEmployees as engineRunSchedulingForEmployees,
     respondToOffer as engineRespondToOffer,
     claimOpenCall as engineClaimOpenCall,
     claimOpenCalls as engineClaimOpenCalls,
@@ -36,6 +37,14 @@ export const runSchedulingNow = webMethod(Permissions.SiteMember, async (scope) 
     const report = await runScheduling(fromKey, toKey);
     console.log(`[schedulingService] runSchedulingNow by ${role._id}: ${fromKey}..${toKey}`);
     return { ok: true, fromKey, toKey, ...report };
+});
+
+/** Admin: manual batch run — up to 3 hand-picked employees, up to 4 weeks ahead. Returns a per-employee shift report. */
+export const runSchedulingForEmployees = webMethod(Permissions.SiteMember, async (fromKey, toKey, employeeIds) => {
+    const { role } = await assertEmployeeAccess('manageScheduling');
+    const result = await engineRunSchedulingForEmployees(fromKey, toKey, employeeIds);
+    console.log(`[schedulingService] runSchedulingForEmployees by ${role._id}: ${fromKey}..${toKey} employees=${(employeeIds || []).join(',')}`);
+    return result;
 });
 
 /** Employee: accept/decline a waiting-list offer addressed to them. */

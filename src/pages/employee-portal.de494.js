@@ -48,6 +48,8 @@ import {
     setHolidayMode,
     syncHolidaysNow,
     setDayNote,
+    saveSketchSewingDay,
+    deleteSketchSewingDay,
     updateAvailabilitySettings,
     getStaffTemplates,
     saveStaffTemplate,
@@ -68,6 +70,7 @@ import {
 } from 'backend/staffAdminService.web.js';
 import {
     runSchedulingNow,
+    runSchedulingForEmployees,
     respondToOffer,
     claimOpenCall,
     claimOpenCalls,
@@ -662,6 +665,29 @@ async function handlePortalAction(portalEl, detail) {
             break;
         }
 
+        case 'adminSaveSketchDuty': {
+            const result = await saveSketchSewingDay(payload?.dateKey, payload?.startTime, payload?.endTime, !!payload?.confirmOverlap);
+            pushActionResult(portalEl, {
+                type,
+                ...result,
+                dateKey: payload?.dateKey,
+                startTime: payload?.startTime,
+                endTime: payload?.endTime,
+            });
+            // Needs a second confirm click first — don't refetch/collapse the day panel yet.
+            refreshPortal = !result?.needsConfirm;
+            refreshAdmin = !result?.needsConfirm;
+            break;
+        }
+
+        case 'adminDeleteSketchDuty': {
+            const result = await deleteSketchSewingDay(payload?.dateKey);
+            pushActionResult(portalEl, { type, ...result });
+            refreshPortal = true;
+            refreshAdmin = true;
+            break;
+        }
+
         case 'adminNudge': {
             const result = await sendAvailabilityNudge(payload?.roleIds, payload?.monthKey);
             pushActionResult(portalEl, { type, ...result });
@@ -707,6 +733,13 @@ async function handlePortalAction(portalEl, detail) {
 
         case 'adminRunScheduling': {
             const result = await runSchedulingNow(payload?.scope);
+            pushActionResult(portalEl, { type, ...result });
+            refreshAdmin = true;
+            break;
+        }
+
+        case 'adminRunSchedulingForEmployees': {
+            const result = await runSchedulingForEmployees(payload?.fromKey, payload?.toKey, payload?.employeeIds || []);
             pushActionResult(portalEl, { type, ...result });
             refreshAdmin = true;
             break;

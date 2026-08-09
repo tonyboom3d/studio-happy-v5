@@ -16,6 +16,7 @@ import {
     buildPermissionsFromRole,
     extractMemberName,
     extractMemberEmail,
+    getRolePermissionValue,
     refId,
     ROLE_TYPE_LABELS,
 } from 'backend/staffRoles.js';
@@ -352,6 +353,9 @@ export const getMyPortalData = webMethod(Permissions.Anyone, async () => {
         openCalls,
         holidays: settings.holidays || [],
         dayNotes: settings.dayNotes || {},
+        // Only sent to employees holding the sketchSewingSkill flag — this is
+        // the sole gate that lets these manager-defined days become visible.
+        sketchSewingDays: getRolePermissionValue(roleRow, 'sketchSewingSkill') ? (settings.sketchSewingDays || {}) : {},
         user: {
             name: roleRow.displayName || extractMemberName(member, extractMemberEmail(member)),
             roleType: roleRow.roleType || 'Employee',

@@ -33,6 +33,7 @@ import {
     normalizeWorkType,
 } from 'backend/availabilityRules.js';
 import { syncHebcalHolidays } from 'backend/holidayService.js';
+import { TUFTING_SERVICE_IDS } from 'backend/sketchEditingPolicy.js';
 import {
     buildBoard,
     typeFilledCount,
@@ -77,6 +78,23 @@ function shiftDateKey(dateKey, days) {
     return new Date(Date.UTC(y, m - 1, d + days)).toISOString().slice(0, 10);
 }
 
+/** Workshop typeIds (CMS `workshops` rows) whose serviceIds include a tufting Bookings service. */
+async function loadTuftingTypeIdSet() {
+    const { serviceIdToTypeId } = await loadWorkshopTypeMap();
+    return new Set(Object.values(TUFTING_SERVICE_IDS).map(sid => serviceIdToTypeId[sid]).filter(Boolean));
+}
+
+/** Whether any tufting workshop appears on the board for this single date (paid or Bookings-scheduled). */
+async function dateHasTuftingWorkshop(dateKey) {
+    const [tuftingTypeIds, board] = await Promise.all([
+        loadTuftingTypeIdSet(),
+        buildBoard(dateKey, dateKey),
+    ]);
+    const day = board.days[dateKey];
+    if (!day) return false;
+    return Object.keys(day.types).some(id => tuftingTypeIds.has(id));
+}
+
 function mapEmployeeForAdmin(role, canSeeRates, canManageRoles) {
     return {
         id: role._id,
@@ -118,7 +136,7 @@ export const getStaffAdminData = webMethod(Permissions.SiteMember, async (monthK
     const paddedFromKey = shiftDateKey(fromKey, -6);
     const paddedToKey = shiftDateKey(toKey, 6);
 
-    const [board, settings, submissionsRaw, weeklySubsRaw, vacationsByEmployee] = await Promise.all([
+    const [board, settings, submissionsRaw, weeklySubsRaw, vacationsByEmployee, tuftingTypeIds] = await Promise.all([
         buildBoard(fromKey, toKey, { includeOffers: true }),
         loadSettings(),
         // All statuses (incl. REJECTED) so the tracker page shows the full picture;
@@ -132,6 +150,7 @@ export const getStaffAdminData = webMethod(Permissions.SiteMember, async (monthK
             .ne('status', SUBMISSION_STATUS.REJECTED)
             .limit(1000).find(SA).catch(() => ({ items: [] })),
         loadVacationsOverlappingRangeByEmployee(fromKey, toKey),
+        loadTuftingTypeIdSet(),
     ]);
 
     const weeklySubsByEmployee = {};
@@ -169,6 +188,7 @@ export const getStaffAdminData = webMethod(Permissions.SiteMember, async (monthK
     for (const [dateKey, day] of Object.entries(board.days)) {
         days[dateKey] = {
             hasWorkshops: day.hasWorkshops,
+            hasTufting: Object.keys(day.types).some(id => tuftingTypeIds.has(id)),
             types: Object.values(day.types).map(t => ({
                 typeId: t.typeId,
                 name: t.name,
@@ -261,6 +281,7 @@ export const getStaffAdminData = webMethod(Permissions.SiteMember, async (monthK
             promotedDates: settings.promotedDates,
             holidays: settings.holidays,
             dayNotes: settings.dayNotes,
+            sketchSewingDays: settings.sketchSewingDays,
         },
         serverNow: new Date().toISOString(),
     };
@@ -659,6 +680,70 @@ export const setDayNote = webMethod(Permissions.SiteMember, async (dateKey, mess
     await wixData.update('AvailabilitySettings', { ...row, dayNotes: JSON.stringify(notes) }, SA);
     await publishSchedulingUpdate('day-note-updated', { dateKey });
     console.log(`[staffAdminService] setDayNote: ${dateKey} ${cleanMessage ? 'set' : 'cleared'} by ${role._id}`);
+    return { ok: true };
+});
+
+/**
+ * Defines (or updates) a "sketch sewing" duty window on a calendar day —
+ * visible only to employees holding the sketchSewingSkill flag. No new CMS —
+ * stored as a JSON map on AvailabilitySettings.sketchSewingDays.
+ *
+ * If a tufting workshop appears on the board for that date and the caller
+ * hasn't confirmed the overlap yet, returns { ok: false, needsConfirm: true }
+ * without writing anything — the admin UI must re-call with confirmOverlap=true.
+ */
+export const saveSketchSewingDay = webMethod(Permissions.SiteMember, async (dateKey, startTime, endTime, confirmOverlap) => {
+    const { role } = await assertEmployeeAccess('manageRules');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateKey || '')) throw new Error('BAD_REQUEST: תאריך לא תקין.');
+    if (!/^\d{2}:\d{2}$/.test(startTime || '') || !/^\d{2}:\d{2}$/.test(endTime || '')) {
+        throw new Error('BAD_REQUEST: שעת התחלה/סיום לא תקינה.');
+    }
+    if (startTime >= endTime) throw new Error('BAD_REQUEST: שעת ההתחלה חייבת להיות לפני שעת הסיום.');
+
+    const hasTufting = await dateHasTuftingWorkshop(dateKey);
+    if (hasTufting && !confirmOverlap) {
+        return { ok: false, needsConfirm: true };
+    }
+
+    const result = await wixData.query('AvailabilitySettings')
+        .eq('settingKey', 'default').limit(1).find(SA);
+    const row = result.items?.[0];
+    if (!row) throw new Error('NOT_FOUND: שורת AvailabilitySettings לא נמצאה.');
+
+    let days = {};
+    try { const parsed = JSON.parse(row.sketchSewingDays || '{}'); if (parsed && typeof parsed === 'object') days = parsed; } catch (_) { days = {}; }
+
+    days[dateKey] = {
+        startTime,
+        endTime,
+        confirmedOverlap: !!hasTufting,
+        updatedBy: role.displayName || '',
+        updatedAt: new Date().toISOString(),
+    };
+
+    await wixData.update('AvailabilitySettings', { ...row, sketchSewingDays: JSON.stringify(days) }, SA);
+    await publishSchedulingUpdate('sketch-duty-updated', { dateKey });
+    console.log(`[staffAdminService] saveSketchSewingDay: ${dateKey} ${startTime}-${endTime} by ${role._id}`);
+    return { ok: true };
+});
+
+/** Removes a "sketch sewing" duty day. */
+export const deleteSketchSewingDay = webMethod(Permissions.SiteMember, async (dateKey) => {
+    const { role } = await assertEmployeeAccess('manageRules');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateKey || '')) throw new Error('BAD_REQUEST: תאריך לא תקין.');
+
+    const result = await wixData.query('AvailabilitySettings')
+        .eq('settingKey', 'default').limit(1).find(SA);
+    const row = result.items?.[0];
+    if (!row) throw new Error('NOT_FOUND: שורת AvailabilitySettings לא נמצאה.');
+
+    let days = {};
+    try { const parsed = JSON.parse(row.sketchSewingDays || '{}'); if (parsed && typeof parsed === 'object') days = parsed; } catch (_) { days = {}; }
+    delete days[dateKey];
+
+    await wixData.update('AvailabilitySettings', { ...row, sketchSewingDays: JSON.stringify(days) }, SA);
+    await publishSchedulingUpdate('sketch-duty-updated', { dateKey });
+    console.log(`[staffAdminService] deleteSketchSewingDay: ${dateKey} by ${role._id}`);
     return { ok: true };
 });
 

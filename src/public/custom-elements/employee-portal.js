@@ -120,6 +120,7 @@ employee-portal * { box-sizing: border-box; }
 .ep-badge-full { background: #e5e7eb; color: #4b5563; }
 .ep-badge-blocked { background: #fee2e2; color: #991b1b; }
 .ep-badge-short { background: #fef3c7; color: #92400e; }
+.ep-day-sketch { margin-top: 3px; font-size: 10.5px; font-weight: 700; color: #7c3aed; background: #f5f3ff; border-radius: 4px; padding: 1px 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ep-legend { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 10px; font-size: 11px; color: #6b7280; }
 .ep-legend span { display: inline-flex; align-items: center; gap: 5px; }
 .ep-dot { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
@@ -808,6 +809,27 @@ class EmployeePortal extends HTMLElement {
         if (result.type === 'adminSaveEmployee' && result.error) {
             this._lastEmployeeSave = null;
         }
+        if (result.type === 'adminRunSchedulingForEmployees' && result.ok) {
+            this._autoAssignReport = result.employees || [];
+            this._autoAssignOpenRows = new Set((result.employees || []).map(e => e.employeeId));
+            this._adminModal = { type: 'autoAssignSummary' };
+            const totalAssigned = (result.employees || []).reduce((sum, e) => sum + (e.shifts || []).filter(s => s.status === 'ASSIGNED').length, 0);
+            this._toast(totalAssigned ? `${totalAssigned} משמרות שובצו בהצלחה! 🎉` : 'לא נמצאו משמרות זמינות לשיבוץ בטווח שנבחר.', totalAssigned ? 'success' : 'error');
+            this.render();
+            return;
+        }
+        if (result.type === 'adminSaveSketchDuty') {
+            if (result.needsConfirm) {
+                this._pendingSketchDutyConfirm = { dateKey: result.dateKey, startTime: result.startTime, endTime: result.endTime };
+                this._toast('קיימת סדנת טאפטינג ביום זה — יש לאשר שוב לשמירה.', 'error');
+                this.render();
+                return;
+            }
+            this._pendingSketchDutyConfirm = null;
+        }
+        if (result.type === 'adminDeleteSketchDuty' && result.ok) {
+            this._pendingSketchDutyConfirm = null;
+        }
         if (result.type?.startsWith('admin') && result.ok) {
             this._toast('הפעולה בוצעה בהצלחה.', 'success');
         }
@@ -1357,11 +1379,18 @@ class EmployeePortal extends HTMLElement {
                 ? `<span class="ep-day-note ep-tip-trigger" data-tip="${escapeHtml(note.message)}">✉</span>`
                 : '';
 
+            // Only ever present for employees holding the sketchSewingSkill flag (server-gated).
+            const sketchDuty = (this._data.sketchSewingDays || {})[dateKey];
+            const sketchDutyRow = sketchDuty
+                ? `<div class="ep-day-sketch">🧵 תפירת סקיצות ${escapeHtml(sketchDuty.startTime || '')}–${escapeHtml(sketchDuty.endTime || '')}</div>`
+                : '';
+
             cells += `<div class="${cls}" ${clickable ? `data-action="toggle-day" data-date="${dateKey}"` : ''}>
                 <span class="ep-day-num">${day}</span>
                 ${noteIcon}
                 ${holidayByDate[dateKey] ? `<span class="ep-day-hol">${escapeHtml(holidayByDate[dateKey])}</span>` : ''}
                 ${wsList}
+                ${sketchDutyRow}
                 ${badge}
             </div>`;
         }

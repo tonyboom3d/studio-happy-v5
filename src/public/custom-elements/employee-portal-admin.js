@@ -43,6 +43,7 @@ export const ADMIN_STYLE = `
 .epa-badge.ok { background: #d1fae5; color: #065f46; }
 .epa-badge.miss { background: #fee2e2; color: #991b1b; }
 .epa-badge.kind { background: #dbeafe; color: #1e40af; }
+.epa-warning { background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; border-radius: 8px; padding: 6px 9px; font-size: 12px; margin: 4px 0; }
 .epa-form { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; margin-top: 8px; }
 .epa-form label { font-size: 11px; color: #6b7280; display: block; margin-bottom: 2px; }
 .epa-form input, .epa-form select { width: 100%; border: 1px solid #d1d5db; border-radius: 7px; padding: 5px 7px; font-size: 12px; font-family: inherit; }
@@ -126,6 +127,12 @@ export const ADMIN_STYLE = `
 .epa-accordion-body .epa-field-block b { font-size: 12px; color: #78350f; display: block; margin-bottom: 5px; }
 .epa-assign-ws { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; padding: 4px 10px; border: 1px solid #bfdbfe; border-radius: 999px; cursor: pointer; margin: 3px 4px 0 0; background: #fff; }
 .epa-assign-ws:hover { border-color: #60a5fa; }
+.epa-pick-row { display: flex; justify-content: space-between; align-items: center; padding: 7px 4px; border-bottom: 1px solid #f1f5f9; font-size: 12.5px; }
+.epa-pick-row:last-child { border-bottom: none; }
+.epa-pick-row input:disabled { opacity: .35; cursor: not-allowed; }
+.epa-emp-acc .epa-accordion-toggle { color: #1d4ed8; }
+.epa-emp-acc .epa-accordion-toggle:hover { background: rgba(37,99,235,.08); }
+.epa-emp-acc .epa-accordion-body { border-top: 1px solid #dbeafe; }
 .epa-detail-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; }
 .epa-detail-item { background: #f8fafc; border-radius: 9px; padding: 8px 10px; }
 .epa-detail-item span { display: block; font-size: 10.5px; color: #64748b; }
@@ -357,7 +364,7 @@ function renderToolbar(ce, d) {
             <div class="epa-month">${monthTitle(d.monthKey)}</div>
             <button class="epa-btn ${ce._adminView !== 'list' ? 'active' : ''}" data-action="admin-view-heat">לוח חודשי</button>
             <button class="epa-btn ${ce._adminView === 'list' ? 'active' : ''}" data-action="admin-view-list">רשימה</button>
-            ${d.permissions.manageScheduling ? `<button class="epa-btn primary" data-action="admin-run-scheduling">הרצת שיבוץ אוטומטי</button>` : ''}
+            ${d.permissions.manageScheduling ? `<button class="epa-btn primary" data-action="admin-open-auto-assign">✨ שיבוץ אוטומטי לעובדים נבחרים</button>` : ''}
         </div>`;
 }
 
@@ -384,6 +391,10 @@ function getHolidayEntry(d, dateKey) {
 
 function getDayNote(d, dateKey) {
     return (d.settings?.dayNotes || {})[dateKey] || null;
+}
+
+function getSketchDuty(d, dateKey) {
+    return (d.settings?.sketchSewingDays || {})[dateKey] || null;
 }
 
 /** Short marker shown on calendar cells/list rows for a holiday's mode. */
@@ -511,7 +522,7 @@ function renderDayDetail(ce, d) {
                 <span>⚙️ הגדרות ליום זה <span class="epa-scope-tag all">משפיע על כל העובדים</span></span>
                 <span class="epa-accordion-arrow">${globalOpen ? '▲' : '▼'}</span>
             </button>
-            ${globalOpen ? `<div class="epa-accordion-body">${renderDayGlobalSection(d, dateKey, blocked, promoted)}</div>` : ''}
+            ${globalOpen ? `<div class="epa-accordion-body">${renderDayGlobalSection(ce, d, dateKey, blocked, promoted, info)}</div>` : ''}
         </div>` : '';
 
     return `<div class="epa-detail">
@@ -546,7 +557,7 @@ function renderManualAssignSection(d, dateKey, info, activeEmployees) {
 }
 
 /** Day-wide settings that affect every employee: blocking/promotion, holiday mode, and the shared day note. */
-function renderDayGlobalSection(d, dateKey, blocked, promoted) {
+function renderDayGlobalSection(ce, d, dateKey, blocked, promoted, info) {
     const flags = d.permissions.manageRules ? `
         <div class="epa-field-block">
             <b>הגשות ליום זה</b>
@@ -584,7 +595,42 @@ function renderDayGlobalSection(d, dateKey, blocked, promoted) {
             </div>
         </div>` : '';
 
-    return `${flags}${holidaySection}${noteSection}`;
+    const sketchDutySection = d.permissions.manageRules ? renderSketchDutySection(ce, d, dateKey, info) : '';
+
+    return `${flags}${holidaySection}${noteSection}${sketchDutySection}`;
+}
+
+/**
+ * "תפירת סקיצות" duty window for a day — visible only to employees with the
+ * sketchSewingSkill flag. If a tufting workshop appears on the board for
+ * this date, saving requires an extra explicit confirm click.
+ */
+function renderSketchDutySection(ce, d, dateKey, info) {
+    const duty = getSketchDuty(d, dateKey);
+    const hasTufting = !!info?.hasTufting;
+    const pending = ce._pendingSketchDutyConfirm?.dateKey === dateKey ? ce._pendingSketchDutyConfirm : null;
+    const startVal = esc(pending?.startTime || duty?.startTime || '');
+    const endVal = esc(pending?.endTime || duty?.endTime || '');
+
+    const warning = hasTufting
+        ? `<div class="epa-warning">⚠️ קיימת סדנת טאפטינג ביום זה בלוח — נא לוודא שאין התנגשות עם שעות התפירה.</div>`
+        : '';
+
+    const confirmButton = pending
+        ? `<button class="epa-btn danger" data-action="admin-confirm-sketch-duty" data-date="${dateKey}">אישור ושמירה למרות ההתנגשות</button>`
+        : '';
+
+    return `<div class="epa-field-block">
+        <b>🧵 תפירת סקיצות (סקאלה — מוצג רק לעובדים עם ההרשאה)</b>
+        ${warning}
+        <div class="epa-inline" style="margin-top:0">
+            <input type="time" id="epaSketchStart" value="${startVal}" placeholder="שעת התחלה">
+            <input type="time" id="epaSketchEnd" value="${endVal}" placeholder="שעת סיום">
+            <button class="epa-btn primary" data-action="admin-save-sketch-duty" data-date="${dateKey}">שמירה</button>
+            ${duty ? `<button class="epa-btn danger" data-action="admin-delete-sketch-duty" data-date="${dateKey}">מחיקה</button>` : ''}
+            ${confirmButton}
+        </div>
+    </div>`;
 }
 
 function renderOpenOffers(d) {
@@ -908,6 +954,89 @@ function renderConnectStaffForm(ce, d, staffId) {
         </div>`;
 }
 
+// ---------------------------------------------------------------------------
+// Manual batch auto-assign wizard (pick employees → pick date range → summary)
+// ---------------------------------------------------------------------------
+
+const AUTO_ASSIGN_MAX_EMPLOYEES = 3;
+const AUTO_ASSIGN_MAX_DAYS = 28;
+
+function renderAutoAssignEmployeesStep(ce, d) {
+    const selected = ce._autoAssignSelected || [];
+    const activeEmployees = (d.employees || []).slice().sort((a, b) => a.displayName.localeCompare(b.displayName, 'he'));
+    const rows = activeEmployees.filter(e => e.active).map(e => {
+        const checked = selected.includes(e.id);
+        const disable = !checked && selected.length >= AUTO_ASSIGN_MAX_EMPLOYEES;
+        return `<label class="epa-pick-row">
+            <span><input type="checkbox" class="epaAutoEmp" data-action="admin-auto-emp-toggle" value="${esc(e.id)}" ${checked ? 'checked' : ''} ${disable ? 'disabled' : ''}> ${esc(e.displayName)}</span>
+            <span style="color:#9ca3af">${esc(e.roleLabel)}</span>
+        </label>`;
+    }).join('');
+    return `<div class="ep-empty" style="text-align:right;margin-bottom:8px">בחרו עד ${AUTO_ASSIGN_MAX_EMPLOYEES} עובדים לשיבוץ אוטומטי במכה (${selected.length}/${AUTO_ASSIGN_MAX_EMPLOYEES} נבחרו).</div>
+        <div style="max-height:48vh;overflow:auto;border:1px solid #e5e7eb;border-radius:10px;padding:2px 10px">${rows || '<div class="ep-empty">אין עובדים פעילים</div>'}</div>
+        <div class="epa-inline">
+            <button class="epa-btn primary" data-action="admin-auto-assign-next" ${selected.length ? '' : 'disabled'}>המשך ›</button>
+            <button class="epa-btn" data-action="admin-close-modal">ביטול</button>
+        </div>`;
+}
+
+function renderAutoAssignRangeStep(ce, d) {
+    const selected = ce._autoAssignSelected || [];
+    const names = selected.map(id => (d.employees || []).find(e => e.id === id)?.displayName || '—').join(', ');
+    if (!ce._autoAssignFrom || !ce._autoAssignTo) {
+        const from = new Date(); from.setDate(from.getDate() + 1);
+        const to = new Date(from); to.setDate(to.getDate() + 6);
+        ce._autoAssignFrom = ce._autoAssignFrom || from.toISOString().slice(0, 10);
+        ce._autoAssignTo = ce._autoAssignTo || to.toISOString().slice(0, 10);
+    }
+    return `<div class="ep-empty" style="text-align:right;margin-bottom:8px">עובדים שנבחרו: <b>${esc(names)}</b></div>
+        <div class="epa-form">
+            <div><label>מתאריך</label><input type="date" id="epaAutoFrom" value="${esc(ce._autoAssignFrom)}"></div>
+            <div><label>עד תאריך (עד ${AUTO_ASSIGN_MAX_DAYS / 7} שבועות מהתאריך ההתחלה)</label><input type="date" id="epaAutoTo" value="${esc(ce._autoAssignTo)}"></div>
+        </div>
+        <div class="ep-empty" style="margin-top:6px">המערכת תשבץ את העובדים שנבחרו לפי הזמינות וההכשרות שלהם ותציג סיכום מפורט בסיום.</div>
+        <div class="epa-inline">
+            <button class="epa-btn" data-action="admin-auto-assign-back">‹ חזרה</button>
+            <button class="epa-btn primary" data-action="admin-auto-assign-run">הרצת שיבוץ</button>
+            <button class="epa-btn" data-action="admin-close-modal">ביטול</button>
+        </div>`;
+}
+
+const AUTO_ASSIGN_STATUS_META = {
+    ASSIGNED: { label: '✅ שובץ עכשיו', cls: 'ok' },
+    ALREADY_ASSIGNED: { label: 'כבר היה משובץ/ת', cls: 'kind' },
+    STANDBY: { label: 'ברשימת המתנה', cls: 'kind' },
+    FULL: { label: 'אין מקום פנוי בסדנה', cls: 'miss' },
+    NO_MATCHING_AVAILABILITY: { label: 'אין הגשת זמינות תואמת בטווח שנבחר', cls: 'miss' },
+};
+
+function renderAutoAssignSummaryStep(ce) {
+    const report = ce._autoAssignReport || [];
+    const openRows = ce._autoAssignOpenRows || new Set();
+    const rows = report.map(emp => {
+        const open = openRows.has(emp.employeeId);
+        const assignedCount = (emp.shifts || []).filter(s => s.status === 'ASSIGNED').length;
+        const shiftsHtml = (emp.shifts || []).map(s => {
+            const meta = AUTO_ASSIGN_STATUS_META[s.status] || { label: s.status, cls: 'kind' };
+            return `<div class="ep-aa-item">
+                <span>${s.dateKey ? fmtDate(s.dateKey) : '—'}${s.workshopName ? ` · ${esc(s.workshopName)}` : ''}</span>
+                <span class="epa-badge ${meta.cls}">${meta.label}</span>
+            </div>`;
+        }).join('');
+        return `<div class="epa-panel epa-emp-acc" style="margin-bottom:8px;padding:0;overflow:hidden">
+            <button type="button" class="epa-accordion-toggle" data-action="admin-auto-assign-toggle-row" data-emp="${esc(emp.employeeId)}">
+                <span>${esc(emp.employeeName)} <span class="epa-badge ${assignedCount ? 'ok' : 'miss'}" style="margin-inline-start:8px">${assignedCount} משמרות שובצו</span></span>
+                <span class="epa-accordion-arrow">${open ? '▲' : '▼'}</span>
+            </button>
+            ${open ? `<div class="epa-accordion-body">${shiftsHtml || '<div class="ep-empty">אין נתונים</div>'}</div>` : ''}
+        </div>`;
+    }).join('');
+    return `${rows || '<div class="ep-empty">אין תוצאות להצגה</div>'}
+        <div class="epa-inline">
+            <button class="epa-btn primary" data-action="admin-close-modal">סגירה</button>
+        </div>`;
+}
+
 function renderRules(d) {
     const rows = (d.rules || []).map(r => `
         <tr class="epa-rule-inputs" data-type="${r.workshopTypeId}">
@@ -1148,6 +1277,15 @@ function renderModal(ce, d) {
         const vacation = modal.id ? (ce._vacationsData || []).find(v => v.id === modal.id) : null;
         title = vacation ? `עריכת חופשה — ${vacation.employeeName}` : 'חופשה חדשה';
         body = renderVacationForm(ce, d, vacation);
+    } else if (modal.type === 'autoAssignEmployees') {
+        title = '✨ שיבוץ אוטומטי — שלב 1: בחירת עובדים';
+        body = renderAutoAssignEmployeesStep(ce, d);
+    } else if (modal.type === 'autoAssignRange') {
+        title = '✨ שיבוץ אוטומטי — שלב 2: טווח תאריכים';
+        body = renderAutoAssignRangeStep(ce, d);
+    } else if (modal.type === 'autoAssignSummary') {
+        title = '📋 שיבוץ אוטומטי — סיכום תוצאות';
+        body = renderAutoAssignSummaryStep(ce);
     }
     return `<div class="epa-modal-backdrop">
         <div class="epa-modal" role="dialog" aria-modal="true" aria-label="${esc(title)}">
@@ -1162,6 +1300,17 @@ function renderModal(ce, d) {
 // ---------------------------------------------------------------------------
 
 export function handleAdminChange(ce, input) {
+    if (input?.classList?.contains('epaAutoEmp')) {
+        ce._autoAssignSelected = ce._autoAssignSelected || [];
+        if (input.checked) {
+            if (ce._autoAssignSelected.length >= 3) { input.checked = false; return true; }
+            ce._autoAssignSelected.push(input.value);
+        } else {
+            ce._autoAssignSelected = ce._autoAssignSelected.filter(id => id !== input.value);
+        }
+        ce.render();
+        return true;
+    }
     if (input?.dataset?.action === 'admin-holiday-mode-change') {
         const isShort = input.value === 'SHORT';
         const start = ce.querySelector('#epaHolStart');
@@ -1248,10 +1397,44 @@ export function handleAdminClick(ce, action, target) {
             ce._adminDayGlobalOpen = !ce._adminDayGlobalOpen;
             ce.render();
             return true;
-        case 'admin-run-scheduling':
-            ce._startBusy('מריץ שיבוץ אוטומטי…');
-            ce._dispatch('adminRunScheduling', { scope: ce._adminMonth });
+        case 'admin-open-auto-assign':
+            ce._autoAssignSelected = [];
+            ce._autoAssignFrom = null;
+            ce._autoAssignTo = null;
+            ce._autoAssignReport = null;
+            ce._autoAssignOpenRows = new Set();
+            ce._adminModal = { type: 'autoAssignEmployees' };
+            ce.render();
             return true;
+        case 'admin-auto-assign-next':
+            if (!(ce._autoAssignSelected || []).length) { ce._toast('יש לבחור לפחות עובד/ת אחד/ת.', 'error'); ce.render(); return true; }
+            ce._adminModal = { type: 'autoAssignRange' };
+            ce.render();
+            return true;
+        case 'admin-auto-assign-back':
+            ce._adminModal = { type: 'autoAssignEmployees' };
+            ce.render();
+            return true;
+        case 'admin-auto-assign-run': {
+            const from = ce.querySelector('#epaAutoFrom')?.value;
+            const to = ce.querySelector('#epaAutoTo')?.value;
+            if (!from || !to || to < from) { ce._toast('יש לבחור טווח תאריכים תקין.', 'error'); return true; }
+            const days = Math.round((new Date(to) - new Date(from)) / 86400000) + 1;
+            if (days > 28) { ce._toast('טווח התאריכים לא יכול לעלות על 4 שבועות.', 'error'); return true; }
+            ce._autoAssignFrom = from;
+            ce._autoAssignTo = to;
+            ce._adminModal = null;
+            ce._startBusy('מריץ שיבוץ אוטומטי לעובדים שנבחרו…');
+            ce._dispatch('adminRunSchedulingForEmployees', { fromKey: from, toKey: to, employeeIds: ce._autoAssignSelected });
+            return true;
+        }
+        case 'admin-auto-assign-toggle-row': {
+            ce._autoAssignOpenRows = ce._autoAssignOpenRows || new Set();
+            const id = target.dataset.emp;
+            if (ce._autoAssignOpenRows.has(id)) ce._autoAssignOpenRows.delete(id); else ce._autoAssignOpenRows.add(id);
+            ce.render();
+            return true;
+        }
         case 'admin-toggle-block':
             ce._startBusy('מעדכן…');
             ce._dispatch('adminDayFlags', { dateKey: target.dataset.date, flags: { blocked: target.dataset.on === '1' } });
@@ -1279,6 +1462,34 @@ export function handleAdminClick(ce, action, target) {
         case 'admin-clear-day-note': {
             ce._startBusy?.('מוחק…');
             ce._dispatch('adminSaveDayNote', { dateKey: target.dataset.date, message: '' });
+            return true;
+        }
+        case 'admin-save-sketch-duty': {
+            const dateKey = target.dataset.date;
+            const startTime = ce.querySelector('#epaSketchStart')?.value || '';
+            const endTime = ce.querySelector('#epaSketchEnd')?.value || '';
+            if (!startTime || !endTime || startTime >= endTime) {
+                ce._toast?.('יש להזין שעת התחלה ושעת סיום תקינות (התחלה לפני סיום).', 'error');
+                return true;
+            }
+            ce._pendingSketchDutyConfirm = null;
+            ce._startBusy?.('שומר…');
+            ce._dispatch('adminSaveSketchDuty', { dateKey, startTime, endTime, confirmOverlap: false });
+            return true;
+        }
+        case 'admin-confirm-sketch-duty': {
+            const dateKey = target.dataset.date;
+            const pending = ce._pendingSketchDutyConfirm;
+            if (!pending || pending.dateKey !== dateKey) return true;
+            ce._pendingSketchDutyConfirm = null;
+            ce._startBusy?.('שומר…');
+            ce._dispatch('adminSaveSketchDuty', { dateKey, startTime: pending.startTime, endTime: pending.endTime, confirmOverlap: true });
+            return true;
+        }
+        case 'admin-delete-sketch-duty': {
+            ce._pendingSketchDutyConfirm = null;
+            ce._startBusy?.('מוחק…');
+            ce._dispatch('adminDeleteSketchDuty', { dateKey: target.dataset.date });
             return true;
         }
         case 'admin-toggle-promote':

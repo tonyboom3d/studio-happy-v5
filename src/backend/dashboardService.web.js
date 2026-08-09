@@ -699,7 +699,9 @@ async function assertPermission(key) {
 }
 
 export const getInitialDashboardData = webMethod(Permissions.SiteMember, async (filters) => {
-    await assertDashboardAccess();
+    const dashboardRole = await assertDashboardAccess();
+    const canManageOrdersSystem = hasPermission(dashboardRole, 'manageOrdersSystem');
+    const myStaffId = refId(dashboardRole.connectedStaff);
 
     const refreshOnly = !!filters?.refreshOnly;
     const now = new Date();
@@ -770,9 +772,13 @@ export const getInitialDashboardData = webMethod(Permissions.SiteMember, async (
     const dashboardOrders = [];
     let missingSketchesCount = 0;
     const alertWorkshopIds = [];
+    // Instructor per session — used to scope workshops/orders to the logged-in
+    // employee's own sessions when they lack the manageOrdersSystem permission.
+    const sessionStaffMap = {};
 
     for (const session of sessions) {
         const sessionId = session.id;
+        sessionStaffMap[sessionId] = session.staffId || null;
         const typeId = serviceIdToTypeId[session.serviceId] || 'unknown';
         const typeInfo = typesMap[typeId] || typesMap.unknown;
 

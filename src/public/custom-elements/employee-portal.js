@@ -210,7 +210,6 @@ employee-portal * { box-sizing: border-box; }
 .ep-urgent-row input { flex-shrink: 0; width: 16px; height: 16px; cursor: pointer; }
 .ep-urgent-row-date { font-weight: 700; color: #1f2937; white-space: nowrap; }
 .ep-urgent-row-name { color: #1e40af; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ep-urgent-hint { font-size: 12px; font-weight: 600; color: #1d4ed8; text-align: center; margin-top: 2px; }
 .ep-urgent-submit:disabled { opacity: .5; cursor: default; }
 .ep-msg-card { border: 1px solid #e5e7eb; background: #fff; border-radius: 12px; padding: 12px 14px; margin-bottom: 10px; }
 .ep-msg-card.system { border-color: #bfdbfe; background: #f5f9ff; }
@@ -361,7 +360,6 @@ class EmployeePortal extends HTMLElement {
         this.renderLoading();
         // Event delegation for all dynamic content.
         this.addEventListener('click', (e) => this._onClick(e));
-        this.addEventListener('dblclick', (e) => this._onDblClick(e));
         this.addEventListener('change', (e) => this._onChange(e));
         // Swipe support for the messages carousel.
         this.addEventListener('touchstart', (e) => {
@@ -1607,9 +1605,8 @@ class EmployeePortal extends HTMLElement {
                 <div class="epa-modal-head"><h2>📣 משמרות דחופות פתוחות</h2><button class="epa-modal-close" data-action="urgent-close" aria-label="סגירה">×</button></div>
                 <div class="ep-empty" style="text-align:right;margin-bottom:6px">סמנו את המשמרות שתרצו לקחת — כל הקודם/ת זוכה. הרשימה כבר מסוננת לפי ההכשרות שלכם.</div>
                 <div class="ep-urgent-list">${rows || '<div class="ep-empty">אין כרגע משמרות דחופות פתוחות.</div>'}</div>
-                <div class="ep-urgent-hint">⚠️ לחצו לחיצה כפולה (דאבל-קליק) על הכפתור כדי לאשר ולשלוח את הבחירה!</div>
                 <div class="epa-inline">
-                    <button type="button" class="epa-btn primary ep-urgent-submit" data-action="urgent-submit-hint" data-dblaction="urgent-submit" ${hasSelection ? '' : 'disabled'}>✅ שיבוץ המשמרות שנבחרו (לחיצה כפולה)</button>
+                    <button type="button" class="epa-btn primary ep-urgent-submit" data-action="urgent-submit" ${hasSelection ? '' : 'disabled'}>✅ שיבוץ המשמרות שנבחרו</button>
                     <button type="button" class="epa-btn" data-action="urgent-close">ביטול</button>
                 </div>
             </div>
@@ -1963,7 +1960,7 @@ class EmployeePortal extends HTMLElement {
                 this._dispatch('claimOpenCall', { callId: target.dataset.id });
                 return;
             case 'urgent-open':
-                this._urgentSelected = new Set((this._data.openCalls || []).map(c => c.id));
+                this._urgentSelected = new Set();
                 this._urgentPopupOpen = true;
                 this.render();
                 return;
@@ -1972,8 +1969,8 @@ class EmployeePortal extends HTMLElement {
                 this._urgentSelected = new Set();
                 this.render();
                 return;
-            case 'urgent-submit-hint':
-                if (!target.disabled) this._toast('סמנו את המשמרות ולחצו לחיצה כפולה על הכפתור כדי לאשר את השיבוץ.', 'info');
+            case 'urgent-submit':
+                this._submitUrgentCalls();
                 return;
             case 'urgent-summary-close':
                 this._urgentSummary = null;
@@ -2093,18 +2090,13 @@ class EmployeePortal extends HTMLElement {
         this.render();
     }
 
-    _onDblClick(e) {
-        const target = e.target.closest('[data-dblaction]');
-        if (!target) return;
-        const action = target.dataset.dblaction;
-        if (action === 'urgent-submit') {
-            if (target.disabled || !this._urgentSelected.size) return;
-            const callIds = Array.from(this._urgentSelected);
-            this._urgentPopupOpen = false;
-            this._urgentSelected = new Set();
-            this._startBusy('בודק זמינות ומשבץ את המשמרות שנבחרו…');
-            this._dispatch('claimOpenCalls', { callIds });
-        }
+    _submitUrgentCalls() {
+        if (!this._urgentSelected.size) return;
+        const callIds = Array.from(this._urgentSelected);
+        this._urgentPopupOpen = false;
+        this._urgentSelected = new Set();
+        this._startBusy('בודק זמינות ומשבץ את המשמרות שנבחרו…');
+        this._dispatch('claimOpenCalls', { callIds });
     }
 
     _toast(message, kind) {

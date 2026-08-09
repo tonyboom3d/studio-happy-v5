@@ -310,7 +310,6 @@ export const getMyPortalData = webMethod(Permissions.Anyone, async () => {
         };
     }
 
-    const myScheduledDates = new Set(scheduled.map(s => s.date));
     const myOffers = (board.offers || [])
         .filter(o => o.kind === OFFER_KIND.WAITLIST_OFFER
             && o.status === OFFER_STATUS.PENDING
@@ -322,10 +321,14 @@ export const getMyPortalData = webMethod(Permissions.Anyone, async () => {
             expiresAt: o.expiresAt || null,
         }));
     const openCalls = (board.offers || [])
-        .filter(o => o.kind === OFFER_KIND.OPEN_CALL
-            && o.status === OFFER_STATUS.OPEN
-            && mySkills.includes(o.workshopTypeId)
-            && !myScheduledDates.has(o.dateKey || toDateKey(o.date)))
+        .filter(o => {
+            if (o.kind !== OFFER_KIND.OPEN_CALL || o.status !== OFFER_STATUS.OPEN) return false;
+            if (!mySkills.includes(o.workshopTypeId)) return false;
+            const dateKey = o.dateKey || toDateKey(o.date);
+            const t = board.days[dateKey]?.types?.[o.workshopTypeId];
+            if (t?.assignedEmployeeIds?.includes(roleRow._id)) return false;
+            return true;
+        })
         .map(o => ({
             id: o._id,
             date: o.dateKey || toDateKey(o.date),

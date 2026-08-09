@@ -135,6 +135,9 @@ employee-portal * { box-sizing: border-box; }
 .ep-toast.success { background: #047857; }
 .ep-loading, .ep-denied { text-align: center; padding: 60px 20px; color: #6b7280; font-size: 15px; }
 .ep-denied { color: #b91c1c; }
+.ep-denied-msg { margin: 0 0 16px; color: #b91c1c; font-size: 16px; font-weight: 600; }
+.ep-denied-login { border: none; background: #2563eb; color: #fff; border-radius: 10px; padding: 10px 28px; font-size: 14px; font-weight: 600; cursor: pointer; transition: background .15s; }
+.ep-denied-login:hover { background: #1d4ed8; }
 .ep-spinner { width: 34px; height: 34px; border: 3px solid #dbeafe; border-top-color: #2563eb; border-radius: 50%; margin: 0 auto 14px; animation: ep-spin .8s linear infinite; }
 @keyframes ep-spin { to { transform: rotate(360deg); } }
 .ep-tabs { display: inline-flex; gap: 5px; margin-top: 14px; padding: 4px; border: 1px solid #dbeafe; border-radius: 13px; background: rgba(255,255,255,.85); }
@@ -606,7 +609,10 @@ class EmployeePortal extends HTMLElement {
     }
 
     renderDenied() {
-        this.innerHTML = `<div class="ep-wrap"><div class="ep-denied">אין לך גישה לדף זה</div></div>`;
+        this.innerHTML = `<div class="ep-wrap"><div class="ep-denied">
+            <p class="ep-denied-msg">אין לך גישה לדף זה</p>
+            <button type="button" class="ep-denied-login" data-action="prompt-login">התחברות</button>
+        </div></div>`;
     }
 
     renderLoadError(message) {
@@ -1407,6 +1413,9 @@ class EmployeePortal extends HTMLElement {
         }
 
         switch (action) {
+            case 'prompt-login':
+                this._dispatch('promptLogin');
+                return;
             case 'tab-portal':
                 console.log('[employee-portal] tab → portal');
                 this._tab = 'portal';

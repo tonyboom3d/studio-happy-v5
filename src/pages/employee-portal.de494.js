@@ -20,6 +20,7 @@
  *    all connected clients when scheduling data changes anywhere.
  */
 import { subscribe } from 'wix-realtime';
+import { authentication } from 'wix-members-frontend';
 import {
     getMyPortalData,
     submitAvailability,
@@ -307,6 +308,17 @@ async function handlePortalAction(portalEl, detail) {
     switch (type) {
         case 'refresh':
             break;
+
+        case 'promptLogin':
+            refreshPortal = false;
+            refreshAdmin = false;
+            try {
+                await authentication.promptLogin({ mode: 'login', modal: true });
+                await loadAndPushData(portalEl);
+            } catch (err) {
+                console.warn('[employee-portal] promptLogin cancelled/failed:', err?.message || err);
+            }
+            return;
 
         case 'submitAvailability': {
             const result = await submitAvailability(payload?.shifts || []);

@@ -269,31 +269,74 @@ export const getStaffAdminData = webMethod(Permissions.SiteMember, async (monthK
 const PROFILE_FIELDS = ['displayName', 'phone', 'color', 'seniority', 'isTrainee', 'active', 'minShiftsPerWeek', 'minShiftHours', 'priorityRank', 'roleType'];
 const RATE_FIELDS = ['rateStudio', 'rateInstruction', 'rateWool'];
 
-export const updateEmployeeProfile = webMethod(Permissions.SiteMember, async (roleId, patch) => {
-    const { role } = await assertEmployeeAccess('manageEmployees');
-    if (!roleId || !patch || typeof patch !== 'object') throw new Error('BAD_REQUEST: חסרים פרטים.');
+/** Normalize workshop multi-ref ids for a CMS write (strings only). */
+function skillIdsForWrite(skillIds) {
+    return (Array.isArray(skillIds) ? skillIds : [])
+        .map(id => String(id || '').trim())
+        .filter(Boolean);
+}
 
-    const target = await wixData.get('Dashboard_Roles', roleId, SA).catch(() => null);
-    if (!target) throw new Error('NOT_FOUND: העובד/ת לא נמצא/ה.');
+/** Multi-reference fields must use replaceReferences — wixData.update ignores them. */
+async function applyEmployeeSkills(roleId, skillIds) {
+    await wixData.replaceReferences('Dashboard_Roles', 'skills', roleId, skillIdsForWrite(skillIds), SA);
+}
 
-    const updated = { ...target };
+/** Build a partial Dashboard_Roles row — only touched scalar fields, never spread a full get(). */
+function buildEmployeePatchRow(roleId, patch, { callerRole, permissions } = {}) {
+    const row = { _id: roleId };
     for (const field of PROFILE_FIELDS) {
-        if (patch[field] !== undefined) updated[field] = patch[field];
+        if (patch[field] !== undefined) row[field] = patch[field];
     }
     if (patch.roleType !== undefined && !ROLE_TYPES.includes(patch.roleType)) {
         throw new Error('BAD_REQUEST: roleType לא תקין.');
     }
     if (RATE_FIELDS.some(f => patch[f] !== undefined)) {
-        if (!getRolePermissionValue(role, 'manageRates')) throw new Error('PERMISSION_DENIED:manageRates');
+        if (!getRolePermissionValue(callerRole, 'manageRates')) throw new Error('PERMISSION_DENIED:manageRates');
         for (const field of RATE_FIELDS) {
-            if (patch[field] !== undefined) updated[field] = patch[field];
+            if (patch[field] !== undefined) row[field] = patch[field];
         }
     }
-    if (Array.isArray(patch.skillIds)) {
-        updated.skills = patch.skillIds.filter(Boolean);
+    if (permissions && typeof permissions === 'object') {
+        if (!getRolePermissionValue(callerRole, 'manageRoles')) throw new Error('PERMISSION_DENIED:manageRoles');
+        for (const key of PERMISSION_KEYS) {
+            if (permissions[key] !== undefined) row[key] = !!permissions[key];
+        }
     }
+    return row;
+}
 
-    await wixData.update('Dashboard_Roles', updated, SA);
+async function persistEmployeePatch(roleId, patch, { callerRole, permissions } = {}) {
+    const row = buildEmployeePatchRow(roleId, patch, { callerRole, permissions });
+    await wixData.update('Dashboard_Roles', row, SA);
+    if (Array.isArray(patch.skillIds)) {
+        await applyEmployeeSkills(roleId, patch.skillIds);
+    }
+}
+
+/** Atomic employee save — profile, skills, rates, and optional permissions in one CMS write. */
+export const saveEmployeeAdmin = webMethod(Permissions.SiteMember, async (roleId, patch, permissions) => {
+    const { role } = await assertEmployeeAccess('manageEmployees');
+    if (!roleId || !patch || typeof patch !== 'object') throw new Error('BAD_REQUEST: חסרים פרטים.');
+
+    const exists = await wixData.get('Dashboard_Roles', roleId, SA).catch(() => null);
+    if (!exists) throw new Error('NOT_FOUND: העובד/ת לא נמצא/ה.');
+
+    await persistEmployeePatch(roleId, patch, { callerRole: role, permissions });
+    await publishSchedulingUpdate('employee-updated', { roleId });
+    console.log(`[staffAdminService] saveEmployeeAdmin: ${roleId} by ${role._id}`, {
+        skills: Array.isArray(patch.skillIds) ? skillIdsForWrite(patch.skillIds).length : 'unchanged',
+    });
+    return { ok: true };
+});
+
+export const updateEmployeeProfile = webMethod(Permissions.SiteMember, async (roleId, patch) => {
+    const { role } = await assertEmployeeAccess('manageEmployees');
+    if (!roleId || !patch || typeof patch !== 'object') throw new Error('BAD_REQUEST: חסרים פרטים.');
+
+    const exists = await wixData.get('Dashboard_Roles', roleId, SA).catch(() => null);
+    if (!exists) throw new Error('NOT_FOUND: העובד/ת לא נמצא/ה.');
+
+    await persistEmployeePatch(roleId, patch, { callerRole: role });
     await publishSchedulingUpdate('employee-updated', { roleId });
     console.log(`[staffAdminService] updateEmployeeProfile: ${roleId} by ${role._id}`);
     return { ok: true };
@@ -304,15 +347,15 @@ export const updateEmployeePermissions = webMethod(Permissions.SiteMember, async
     const { role } = await assertEmployeeAccess('manageRoles');
     if (!roleId || !permissions || typeof permissions !== 'object') throw new Error('BAD_REQUEST: חסרים פרטים.');
 
-    const target = await wixData.get('Dashboard_Roles', roleId, SA).catch(() => null);
-    if (!target) throw new Error('NOT_FOUND: העובד/ת לא נמצא/ה.');
+    const exists = await wixData.get('Dashboard_Roles', roleId, SA).catch(() => null);
+    if (!exists) throw new Error('NOT_FOUND: העובד/ת לא נמצא/ה.');
 
-    const updated = { ...target };
+    const row = { _id: roleId };
     for (const key of PERMISSION_KEYS) {
-        if (permissions[key] !== undefined) updated[key] = !!permissions[key];
+        if (permissions[key] !== undefined) row[key] = !!permissions[key];
     }
 
-    await wixData.update('Dashboard_Roles', updated, SA);
+    await wixData.update('Dashboard_Roles', row, SA);
     await publishSchedulingUpdate('employee-permissions-updated', { roleId });
     console.log(`[staffAdminService] updateEmployeePermissions: ${roleId} by ${role._id}`);
     return { ok: true };

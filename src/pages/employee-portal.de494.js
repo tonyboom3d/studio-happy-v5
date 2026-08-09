@@ -37,6 +37,7 @@ import {
 } from 'backend/shiftSwaps.web.js';
 import {
     getStaffAdminData,
+    saveEmployeeAdmin,
     updateEmployeeProfile,
     updateEmployeePermissions,
     updateSchedulingRule,
@@ -452,12 +453,9 @@ async function handlePortalAction(portalEl, detail) {
             return;
 
         case 'adminSaveEmployee': {
-            await updateEmployeeProfile(payload?.roleId, payload?.patch);
-            if (payload?.permissions) {
-                await updateEmployeePermissions(payload?.roleId, payload.permissions);
-            }
+            const result = await saveEmployeeAdmin(payload?.roleId, payload?.patch, payload?.permissions || null);
             __epSuppressRealtimeUntil = Date.now() + 4000;
-            pushActionResult(portalEl, { type, ok: true });
+            pushActionResult(portalEl, { type, ...result });
             refreshPortal = false;
             refreshAdmin = true;
             break;

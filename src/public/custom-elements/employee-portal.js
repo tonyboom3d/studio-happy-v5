@@ -242,6 +242,7 @@ class EmployeePortal extends HTMLElement {
         this._adminPage = 'board';
         this._adminSidebarCollapsed = false;
         this._adminModal = null;
+        this._lastEmployeeSave = null;          // pending employee patch for optimistic UI
         this._templatesData = null;
         this._staffData = null;                 // Wix Bookings staff list (employees page)
         this._staffSearch = '';
@@ -350,6 +351,7 @@ class EmployeePortal extends HTMLElement {
                 return;
             }
             this._busy = null;
+            this._clearBusyOverlay();
             this._pendingWorkTypes = null;
             if (this._adminData?.monthKey) this._adminMonth = this._adminData.monthKey;
             console.log('[employee-portal] admin-data received', {
@@ -466,12 +468,32 @@ class EmployeePortal extends HTMLElement {
 
     _startBusy(message) {
         this._busy = message || 'מעדכן…';
+        // Keep the admin modal form intact while saving — a full render would rebuild it from stale data.
+        if (this._adminModal) {
+            this._syncBusyOverlay();
+            return;
+        }
         this.render();
+    }
+
+    _syncBusyOverlay() {
+        let el = this.querySelector('.ep-busy');
+        if (!el) {
+            el = document.createElement('div');
+            el.className = 'ep-busy';
+            this.appendChild(el);
+        }
+        el.innerHTML = `<div class="ep-spinner"></div>${escapeHtml(this._busy)}`;
+    }
+
+    _clearBusyOverlay() {
+        this.querySelector('.ep-busy')?.remove();
     }
 
     _handleActionResult(result) {
         this._submitting = false;
         this._busy = null;
+        this._clearBusyOverlay();
         console.log('[employee-portal] action-result ←', result.type, result.error ? result.message : result);
         if (result.error) {
             if (result.type === 'adminTemplatesLoad') this._templatesData = [];
@@ -552,10 +574,22 @@ class EmployeePortal extends HTMLElement {
             this._toast('השעות אושרו בהצלחה. תודה!', 'success');
         }
         if (result.type === 'adminSaveEmployee' && result.ok) {
+            if (this._lastEmployeeSave && this._adminData?.employees) {
+                const { roleId, patch } = this._lastEmployeeSave;
+                const emp = this._adminData.employees.find(e => e.id === roleId);
+                if (emp && patch) {
+                    Object.assign(emp, patch);
+                    if (Array.isArray(patch.skillIds)) emp.skillIds = patch.skillIds;
+                }
+                this._lastEmployeeSave = null;
+            }
             this._adminModal = null;
             this._toast('פרטי העובד/ת נשמרו בהצלחה.', 'success');
             this.render();
             return;
+        }
+        if (result.type === 'adminSaveEmployee' && result.error) {
+            this._lastEmployeeSave = null;
         }
         if (result.type?.startsWith('admin') && result.ok) {
             this._toast('הפעולה בוצעה בהצלחה.', 'success');

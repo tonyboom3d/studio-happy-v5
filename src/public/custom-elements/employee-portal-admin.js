@@ -1217,6 +1217,7 @@ export function handleAdminClick(ce, action, target) {
                 permissions = {};
                 for (const cb of permCheckboxes) permissions[cb.dataset.perm] = cb.checked;
             }
+            ce._lastEmployeeSave = { roleId: target.dataset.emp, patch };
             ce._startBusy('שומר פרטי עובד/ת…');
             ce._dispatch('adminSaveEmployee', { roleId: target.dataset.emp, patch, permissions });
             return true;

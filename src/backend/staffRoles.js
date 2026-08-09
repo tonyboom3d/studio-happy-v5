@@ -109,17 +109,17 @@ export const PERMISSION_LABELS = {
     editTimeEntries: 'ניהול שעות צוות',
     manageRates: 'צפייה ועדכון תעריפים',
     manageRules: 'ניהול הגדרות, כללים ומועדים',
-    sketchSewingSkill: 'תפירת סקיצות (סקאלה)',
+    sketchSewingSkill: 'תפירת סקיצות',
     manageOrdersSystem: 'מנהל מערכת הזמנות',
 };
 
 /** Grouping of permission keys for the admin permissions editor UI. */
 export const PERMISSION_GROUPS = [
-    { id: 'dashboard', label: 'דשבורד הזמנות', keys: ['viewDashboard', 'editSketchStatus', 'rejectSketchStatus', 'deleteSketchImage', 'editOrderNotes', 'sendWhatsApp'] },
+    { id: 'dashboard', label: 'דשבורד הזמנות', keys: ['viewDashboard', 'editSketchStatus', 'rejectSketchStatus', 'deleteSketchImage', 'editOrderNotes', 'sendWhatsApp', 'manageOrdersSystem'] },
     { id: 'portal', label: 'פורטל עובדים ושיבוץ', keys: ['submitAvailability', 'viewTeamSchedule', 'manageScheduling', 'manageEmployees'] },
     { id: 'hours', label: 'ניהול שעות ותחנות', keys: ['editTimeEntries'] },
-    { id: 'sensitive', label: 'הרשאות והגדרות רגישות', keys: ['manageRates', 'manageRules', 'manageTemplates', 'manageRoles', 'manageOrdersSystem'] },
-    { id: 'skills', label: 'סקאלות / כישורים מיוחדים', keys: ['sketchSewingSkill'] },
+    { id: 'sensitive', label: 'הרשאות והגדרות רגישות', keys: ['manageRates', 'manageRules', 'manageTemplates', 'manageRoles'] },
+    { id: 'skills', label: 'כישורים מיוחדים', keys: ['sketchSewingSkill'] },
 ];
 
 /**

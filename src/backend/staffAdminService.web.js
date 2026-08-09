@@ -780,6 +780,7 @@ export const manualAssign = webMethod(Permissions.SiteMember, async (dateKey, wo
             monthKey: dateKey.slice(0, 7),
             managerOverride: true,
             workType: normalizedWorkType,
+            submittedByName: role.displayName || 'מנהל/ת',
             notes: 'שיבוץ ידני על ידי מנהל/ת',
         }, SA);
     }

@@ -45,7 +45,9 @@ employee-portal * { box-sizing: border-box; }
 @media (max-width: 860px) { .ep-grid { grid-template-columns: 1fr; } }
 .ep-card { background: rgba(255,255,255,.98); border: 1px solid #e2e8f0; border-radius: 17px; padding: 16px; box-shadow: 0 6px 22px rgba(15,23,42,.045); transition: box-shadow .18s ease,border-color .18s ease; }
 .ep-card:hover { border-color: #dbeafe; box-shadow: 0 9px 26px rgba(30,64,175,.065); }
-.ep-card h2 { margin: 0 0 10px; font-size: 15px; font-weight: 700; }
+.ep-card h2 { margin: 0 0 10px; font-size: 15px; font-weight: 700; display: inline-flex; align-items: center; gap: 4px; }
+.ep-section-help { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 50%; background: #e5e7eb; color: #4b5563; font-size: 11px; font-weight: 700; cursor: help; flex-shrink: 0; }
+.ep-tab-help { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; border-radius: 50%; background: rgba(37,99,235,.12); color: #1d4ed8; font-size: 10px; font-weight: 700; cursor: help; margin-inline-start: 4px; vertical-align: middle; }
 .ep-cal-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
 .ep-cal-title { font-weight: 700; font-size: 15px; }
 .ep-cal-nav { display: flex; gap: 6px; }
@@ -100,7 +102,7 @@ employee-portal * { box-sizing: border-box; }
 .ep-submit-btn:active:not(:disabled) { transform: translateY(0); }
 .ep-submit-btn:disabled { background: #93c5fd; box-shadow: none; cursor: default; }
 .ep-empty { color: #9ca3af; font-size: 12.5px; text-align: center; padding: 14px 0; }
-.ep-board-item { border: 1px solid #e5e7eb; border-radius: 10px; padding: 9px 11px; margin-bottom: 8px; font-size: 12.5px; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.ep-board-item { border: 1px solid #e5e7eb; border-radius: 10px; padding: 9px 11px; margin-bottom: 8px; font-size: 12.5px; display: flex; justify-content: space-between; align-items: center; gap: 8px; cursor: help; }
 .ep-board-item .ep-b-date { font-weight: 700; }
 .ep-board-item .ep-b-time { color: #6b7280; }
 .ep-status { font-size: 11px; font-weight: 700; padding: 2px 9px; border-radius: 999px; white-space: nowrap; }
@@ -204,6 +206,14 @@ function monthTitle(monthKey) {
     const [y, m] = monthKey.split('-').map(Number);
     const name = new Intl.DateTimeFormat('he-IL', { month: 'long' }).format(new Date(y, m - 1, 1));
     return `${name} ${y}`;
+}
+function formatDateTimeHe(iso) {
+    if (!iso) return '';
+    return new Intl.DateTimeFormat('he-IL', {
+        timeZone: 'Asia/Jerusalem',
+        weekday: 'short', day: 'numeric', month: 'numeric', year: 'numeric',
+        hour: '2-digit', minute: '2-digit',
+    }).format(new Date(iso));
 }
 function formatDateHe(dateKey) {
     if (!dateKey) return '';
@@ -640,8 +650,8 @@ class EmployeePortal extends HTMLElement {
             <div class="ep-grid">
                 <div>
                     <div class="ep-card">${this._renderCalendar()}</div>
-                    <div class="ep-card" style="margin-top:16px">${this._renderShiftsCard()}</div>
                     <div class="ep-card" style="margin-top:16px">${this._renderSelectionPanel()}</div>
+                    <div class="ep-card" style="margin-top:16px">${this._renderShiftsCard()}</div>
                 </div>
                 <div>
                     <div class="ep-card">${this._renderMessageCard('personal', 'הודעות אישיות')}</div>
@@ -1082,6 +1092,26 @@ class EmployeePortal extends HTMLElement {
             </div>`;
     }
 
+    _sectionHelp(text) {
+        return `<span class="ep-section-help" title="${escapeHtml(text)}" aria-label="${escapeHtml(text)}">?</span>`;
+    }
+
+    _tabHelp(text) {
+        return `<span class="ep-tab-help" title="${escapeHtml(text)}" aria-label="${escapeHtml(text)}">?</span>`;
+    }
+
+    _submissionTooltip(s) {
+        const parts = [];
+        if (s.createdAt) parts.push(`הוגשה: ${formatDateTimeHe(s.createdAt)}`);
+        const managerEntered = !!(s.submittedByName || (s.managerOverride && String(s.notes || '').includes('שיבוץ ידני')));
+        if (managerEntered) {
+            parts.push(`הוזנה על ידי: ${s.submittedByName || 'מנהל/ת'}`);
+        } else if (s.createdAt) {
+            parts.push('הוגשה על ידך');
+        }
+        return parts.join(' · ');
+    }
+
     _renderSelectionPanel() {
         const rules = this._data.rules || {};
         const entries = [...this._selected.entries()].sort((a, b) => a[0].localeCompare(b[0]));
@@ -1110,7 +1140,7 @@ class EmployeePortal extends HTMLElement {
         });
         return `
             <div class="ep-sel-head">
-                <h2>הגשת זמינות (${entries.length})</h2>
+                <h2>הגשת זמינות (${entries.length})${this._sectionHelp('בחרו ימים בלוח השנה, הגדירו שעות התחלה וסיום, ולחצו "הגשת זמינות" כדי לשלוח את המשמרות לאישור.')}</h2>
                 <button class="ep-submit-btn small" data-action="submit" ${(!entries.length || invalid || this._submitting) ? 'disabled' : ''}>
                     ${this._submitting ? 'שולח…' : 'הגשת זמינות'}
                 </button>
@@ -1167,8 +1197,8 @@ class EmployeePortal extends HTMLElement {
 
         return `
             <div class="ep-tabs" style="margin-top:0">
-                <button class="ep-tabbtn ${subTab === 'myShifts' ? 'active' : ''}" data-action="subtab-myshifts">המשמרות שלי (${myShifts.length})</button>
-                <button class="ep-tabbtn ${subTab === 'mySubmissions' ? 'active' : ''}" data-action="subtab-mysubmissions">ההגשות שלי (${mySubmissions.length})</button>
+                <button class="ep-tabbtn ${subTab === 'myShifts' ? 'active' : ''}" data-action="subtab-myshifts">המשמרות שלי (${myShifts.length})${this._tabHelp('משמרות שכבר שובצו לכם או שנמצאות ברשימת המתנה — ניתן לבקש שינוי, מחיקה או החלפה.')}</button>
+                <button class="ep-tabbtn ${subTab === 'mySubmissions' ? 'active' : ''}" data-action="subtab-mysubmissions">ההגשות שלי (${mySubmissions.length})${this._tabHelp('משמרות שהגשתם וטרם אושרו או שובצו — ממתינות לאישור מנהל/ת או לשיבוץ אוטומטי.')}</button>
             </div>
             ${this._renderEditWindowBanner()}
             ${this._renderStatusGuide()}
@@ -1191,7 +1221,7 @@ class EmployeePortal extends HTMLElement {
         const countNote = editable.length > 1 ? ` (${editable.length} הגשות חדשות)` : '';
         return `
             <div class="ep-edit-window-banner" id="epEditWindowBanner" data-until="${soonest}">
-                ⏱️ ניתן לערוך או למחוק בחינם את ההגשה החדשה${countNote} — נותרו <b id="epEditWindowClock">${clock}</b> דקות לעריכה חופשית. לאחר מכן כל שינוי יצריך אישור מנהל/ת.
+                ⏱️ ניתן לערוך או למחוק את ההגשה החדשה${countNote} — נותרו <b id="epEditWindowClock">${clock}</b> דקות לעריכה חופשית. לאחר מכן כל שינוי יצריך אישור מנהל/ת.
             </div>`;
     }
 
@@ -1276,8 +1306,9 @@ class EmployeePortal extends HTMLElement {
         const lockBadge = s.autoApproved
             ? `<span class="ep-lock-badge" title="אושר אוטומטית מול הזמנת לקוח — נעול לשינוי ישיר">🔒 אושר אוטומטית</span>`
             : '';
+        const submitTooltip = this._submissionTooltip(s);
         return `
-            <div class="ep-board-item ${s.autoApproved ? 'auto-approved' : ''}">
+            <div class="ep-board-item ${s.autoApproved ? 'auto-approved' : ''}" ${submitTooltip ? `title="${escapeHtml(submitTooltip)}"` : ''}>
                 <div>
                     <div class="ep-b-date">${formatDateHe(s.date)}</div>
                     <div class="ep-b-time">${escapeHtml(s.startTime)}–${escapeHtml(s.endTime)}${s.hours ? ` · ${s.hours} ש׳` : ''}</div>

@@ -127,6 +127,7 @@ function mapSubmission(item) {
         status: item.status || SUBMISSION_STATUS.SUBMITTED,
         monthKey: item.monthKey || toMonthKey(item.date),
         managerOverride: !!item.managerOverride,
+        submittedByName: item.submittedByName || '',
         notes: item.notes || '',
         workType: normalizeWorkType(item.workType),
         workTypeLabel: WORK_TYPE_LABELS[normalizeWorkType(item.workType)],

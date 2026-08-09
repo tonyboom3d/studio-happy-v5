@@ -22,6 +22,7 @@ import {
     getRolePermissionValue,
     refId,
     refIds,
+    roleHasWorkshopSkill,
 } from 'backend/staffRoles.js';
 import {
     buildBoard,
@@ -66,7 +67,16 @@ async function findByToken(token) {
 
 async function getRoleById(id) {
     if (!id) return null;
-    return wixData.get('Dashboard_Roles', id, SA).catch(() => null);
+    try {
+        const result = await wixData.query('Dashboard_Roles')
+            .eq('_id', id)
+            .include('skills')
+            .limit(1)
+            .find(SA);
+        return result.items?.[0] || null;
+    } catch (_) {
+        return wixData.get('Dashboard_Roles', id, SA).catch(() => null);
+    }
 }
 
 /**
@@ -110,17 +120,18 @@ function assertSwappable(submission, role) {
 export async function listSwapCandidates(role, submissionId) {
     if (!submissionId) throw new Error('BAD_REQUEST: חסר מזהה משמרת.');
     const submission = await wixData.get('AvailabilitySubmissions', submissionId, SA).catch(() => null);
-    assertSwappable(submission, role);
+    const requester = await getRoleById(role._id) || role;
+    assertSwappable(submission, requester);
 
-    const workshopTypeIds = await resolveWorkshopTypeIds(submission, role);
+    const workshopTypeIds = await resolveWorkshopTypeIds(submission, requester);
     if (!workshopTypeIds.length) {
         throw new Error('BAD_REQUEST: לא ניתן לזהות את סוג הסדנה עבור משמרת זו — לא ניתן להציע החלפה.');
     }
 
     const roles = await loadActiveRoles();
     const candidates = roles
-        .filter(r => r._id !== role._id)
-        .filter(r => refIds(r.skills).some(id => workshopTypeIds.includes(id)))
+        .filter(r => r._id !== requester._id)
+        .filter(r => workshopTypeIds.some(id => roleHasWorkshopSkill(r, id)))
         .map(r => ({ id: r._id, name: r.displayName || 'עובד/ת' }))
         .sort((a, b) => a.name.localeCompare(b.name, 'he'));
 
@@ -141,7 +152,8 @@ function buildTargetMessage(swap) {
 export async function createSwapRequest(role, submissionId, targetEmployeeId) {
     if (!targetEmployeeId) throw new Error('BAD_REQUEST: יש לבחור עובד/ת להחלפה.');
     const submission = await wixData.get('AvailabilitySubmissions', submissionId, SA).catch(() => null);
-    const dateKey = assertSwappable(submission, role);
+    const requester = await getRoleById(role._id) || role;
+    const dateKey = assertSwappable(submission, requester);
 
     const existing = await wixData.query('ShiftSwapRequests')
         .eq('submissionId', submissionId)
@@ -151,16 +163,15 @@ export async function createSwapRequest(role, submissionId, targetEmployeeId) {
         throw new Error('BAD_REQUEST: יש כבר בקשת החלפה בטיפול למשמרת הזו.');
     }
 
-    const workshopTypeIds = await resolveWorkshopTypeIds(submission, role);
+    const workshopTypeIds = await resolveWorkshopTypeIds(submission, requester);
     if (!workshopTypeIds.length) {
         throw new Error('BAD_REQUEST: לא ניתן לזהות את סוג הסדנה עבור משמרת זו.');
     }
 
     const target = await getRoleById(targetEmployeeId);
-    if (!target || target._id === role._id) throw new Error('NOT_FOUND: העובד/ת שנבחר/ה לא נמצא/ה.');
+    if (!target || target._id === requester._id) throw new Error('NOT_FOUND: העובד/ת שנבחר/ה לא נמצא/ה.');
     if (target.active === false) throw new Error('BAD_REQUEST: העובד/ת שנבחר/ה אינו/ה פעיל/ה.');
-    const targetSkills = refIds(target.skills);
-    if (!workshopTypeIds.some(id => targetSkills.includes(id))) {
+    if (!workshopTypeIds.some(id => roleHasWorkshopSkill(target, id))) {
         throw new Error('BAD_REQUEST: לעובד/ת שנבחר/ה אין הכשרה מתאימה לסוג המשמרת הזו.');
     }
 
@@ -170,8 +181,8 @@ export async function createSwapRequest(role, submissionId, targetEmployeeId) {
 
     const swap = {
         submissionId,
-        requesterId: role._id,
-        requesterName: role.displayName || 'עובד/ת',
+        requesterId: requester._id,
+        requesterName: requester.displayName || 'עובד/ת',
         targetEmployeeId: target._id,
         targetEmployeeName: target.displayName || 'עובד/ת',
         dateKey,
@@ -195,7 +206,7 @@ export async function createSwapRequest(role, submissionId, targetEmployeeId) {
         console.warn(`[shiftSwaps] target role ${target._id} has no phone — swap request created without WhatsApp`);
     }
 
-    console.log(`[shiftSwaps] request created: submission=${submissionId} requester=${role._id} target=${target._id}`);
+    console.log(`[shiftSwaps] request created: submission=${submissionId} requester=${requester._id} target=${target._id}`);
     return { ok: true };
 }
 

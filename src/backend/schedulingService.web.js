@@ -10,6 +10,7 @@ import {
     runScheduling,
     respondToOffer as engineRespondToOffer,
     claimOpenCall as engineClaimOpenCall,
+    claimOpenCalls as engineClaimOpenCalls,
     loadSettings,
 } from 'backend/schedulingEngine.js';
 
@@ -50,4 +51,12 @@ export const claimOpenCall = webMethod(Permissions.SiteMember, async (callId) =>
     if (!callId) throw new Error('BAD_REQUEST: חסר מזהה קריאה.');
     const settings = await loadSettings();
     return engineClaimOpenCall(callId, role, settings);
+});
+
+/** Employee: claim several open calls at once — each is re-verified against the live DB before being assigned. */
+export const claimOpenCalls = webMethod(Permissions.SiteMember, async (callIds) => {
+    const { role } = await assertEmployeeAccess('submitAvailability');
+    if (!Array.isArray(callIds) || !callIds.length) throw new Error('BAD_REQUEST: לא נבחרו משמרות.');
+    const settings = await loadSettings();
+    return engineClaimOpenCalls(callIds, role, settings);
 });

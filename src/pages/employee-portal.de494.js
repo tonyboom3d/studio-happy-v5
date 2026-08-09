@@ -64,6 +64,7 @@ import {
     runSchedulingNow,
     respondToOffer,
     claimOpenCall,
+    claimOpenCalls,
 } from 'backend/schedulingService.web.js';
 import {
     getMyTimeEntries,
@@ -379,6 +380,12 @@ async function handlePortalAction(portalEl, detail) {
 
         case 'claimOpenCall': {
             const result = await claimOpenCall(payload?.callId);
+            pushActionResult(portalEl, { type, ...result });
+            break;
+        }
+
+        case 'claimOpenCalls': {
+            const result = await claimOpenCalls(payload?.callIds || []);
             pushActionResult(portalEl, { type, ...result });
             break;
         }

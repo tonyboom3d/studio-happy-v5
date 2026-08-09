@@ -746,3 +746,27 @@ export async function claimOpenCall(callId, role, settings) {
     await publishSchedulingUpdate('open-call-claimed', { dateKey });
     return { ok: true, dateKey };
 }
+
+/**
+ * Employee claims a batch of open calls at once (bulk selection UI).
+ * Each call is re-verified against the live database immediately before being
+ * claimed (consistent read inside claimOpenCall), so two employees racing to
+ * grab the same shift can never both win it — the second one simply fails
+ * with a CONFLICT for that specific item while the rest of the batch proceeds.
+ */
+export async function claimOpenCalls(callIds, role, settings) {
+    const ids = Array.from(new Set((callIds || []).filter(Boolean)));
+    const results = [];
+    for (const callId of ids) {
+        const call = await wixData.get('ShiftOffers', callId, SAC).catch(() => null);
+        const dateKey = call ? (call.dateKey || toDateKey(call.date)) : null;
+        const workshopName = call?.workshopName || 'סדנה';
+        try {
+            const outcome = await claimOpenCall(callId, role, settings);
+            results.push({ callId, ok: true, dateKey: outcome.dateKey || dateKey, workshopName });
+        } catch (err) {
+            results.push({ callId, ok: false, dateKey, workshopName, error: err?.message || String(err) });
+        }
+    }
+    return { ok: true, results };
+}

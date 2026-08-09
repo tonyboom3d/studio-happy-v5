@@ -195,6 +195,23 @@ employee-portal * { box-sizing: border-box; }
 .ep-offer-btns button { border-radius: 8px; padding: 6px 14px; font-size: 12.5px; font-weight: 700; cursor: pointer; font-family: inherit; border: 1px solid transparent; }
 .ep-offer-accept { background: #059669; color: #fff; }
 .ep-offer-decline { background: #fff; color: #b91c1c; border-color: #fecaca !important; }
+.ep-urgent-banner { width: 100%; text-align: right; cursor: pointer; font-family: inherit; color: inherit; appearance: none; box-shadow: 0 0 0 0 rgba(37,99,235,.45); animation: ep-urgent-pulse 2.1s ease-in-out infinite; }
+.ep-urgent-banner:hover { filter: brightness(.98); }
+.ep-urgent-cta { font-weight: 700; font-size: 12.5px; margin-inline-start: auto; white-space: nowrap; color: #1d4ed8; }
+@keyframes ep-urgent-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(37,99,235,.45); transform: scale(1); }
+  50% { box-shadow: 0 0 0 9px rgba(37,99,235,0); transform: scale(1.012); }
+  100% { box-shadow: 0 0 0 0 rgba(37,99,235,0); transform: scale(1); }
+}
+.ep-urgent-list { max-height: 46vh; overflow-y: auto; margin: 10px 0; border: 1px solid #e2e8f0; border-radius: 10px; }
+.ep-urgent-row { display: flex; align-items: center; gap: 9px; padding: 8px 11px; font-size: 12.5px; border-bottom: 1px solid #f1f5f9; cursor: pointer; }
+.ep-urgent-row:last-child { border-bottom: none; }
+.ep-urgent-row:hover { background: #f8fafc; }
+.ep-urgent-row input { flex-shrink: 0; width: 16px; height: 16px; cursor: pointer; }
+.ep-urgent-row-date { font-weight: 700; color: #1f2937; white-space: nowrap; }
+.ep-urgent-row-name { color: #1e40af; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ep-urgent-hint { font-size: 12px; font-weight: 600; color: #1d4ed8; text-align: center; margin-top: 2px; }
+.ep-urgent-submit:disabled { opacity: .5; cursor: default; }
 .ep-msg-card { border: 1px solid #e5e7eb; background: #fff; border-radius: 12px; padding: 12px 14px; margin-bottom: 10px; }
 .ep-msg-card.system { border-color: #bfdbfe; background: #f5f9ff; }
 .ep-msg-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-weight: 700; margin-bottom: 5px; }
@@ -270,6 +287,13 @@ function hoursBetween(start, end) {
 function escapeHtml(str) {
     return String(str ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
+/** Prefixes a workshop name with "סדנת" — unless it already carries that (or an equivalent) prefix, avoiding "סדנת סדנת X". */
+function workshopLabel(name) {
+    const clean = String(name ?? '').trim();
+    if (!clean) return 'סדנה';
+    if (/^סדנ/.test(clean)) return clean;
+    return `סדנת ${clean}`;
+}
 
 class EmployeePortal extends HTMLElement {
     static get observedAttributes() { return ['portal-data', 'action-result', 'admin-data', 'hours-data', 'templates-data', 'staff-data', 'team-time-data', 'messages-data', 'messages-admin-data', 'vacations-data']; }
@@ -312,6 +336,9 @@ class EmployeePortal extends HTMLElement {
         this._busy = null;                      // busy-overlay message while a mutation is in flight
         this._editWindowTimer = null;           // 1s ticker for the 30-min free-edit countdown
         this._autoApprovedPopup = null;         // shifts array shown right after an instant auto-approve
+        this._urgentPopupOpen = false;          // urgent open-calls selection popup
+        this._urgentSelected = new Set();       // selected open-call ids in the popup
+        this._urgentSummary = null;             // bulk-claim result array shown after submission
         this._swapCandidates = null;            // { submissionId, candidates: [{id,name}] } for the swap modal
         this._calLegendOpen = false;            // calendar color legend accordion
         this._tipTimer = null;
@@ -334,6 +361,7 @@ class EmployeePortal extends HTMLElement {
         this.renderLoading();
         // Event delegation for all dynamic content.
         this.addEventListener('click', (e) => this._onClick(e));
+        this.addEventListener('dblclick', (e) => this._onDblClick(e));
         this.addEventListener('change', (e) => this._onChange(e));
         // Swipe support for the messages carousel.
         this.addEventListener('touchstart', (e) => {
@@ -726,6 +754,11 @@ class EmployeePortal extends HTMLElement {
         if (result.type === 'claimOpenCall' && result.ok) {
             this._toast('המשמרת נתפסה ושובצה לך! 🎉', 'success');
         }
+        if (result.type === 'claimOpenCalls' && result.ok) {
+            this._urgentSummary = result.results || [];
+            const successCount = this._urgentSummary.filter(r => r.ok).length;
+            this._toast(successCount ? `${successCount} משמרות שובצו לך! 🎉` : 'לא נותרו משמרות פנויות מהבחירה שלכם.', successCount ? 'success' : 'error');
+        }
         if (result.type === 'approveMyMonth' && result.ok) {
             this._toast('השעות אושרו בהצלחה. תודה!', 'success');
         }
@@ -823,6 +856,8 @@ class EmployeePortal extends HTMLElement {
             ${this._busy ? `<div class="ep-busy"><div class="ep-spinner"></div>${escapeHtml(this._busy)}</div>` : ''}
             ${this._shiftModal ? this._renderShiftModal() : ''}
             ${this._autoApprovedPopup ? this._renderAutoApprovedPopup() : ''}
+            ${this._urgentPopupOpen ? this._renderUrgentPopup() : ''}
+            ${this._urgentSummary ? this._renderUrgentSummary() : ''}
             <div class="ep-toast" id="epToast"></div>
         `;
         this._restoreToast();
@@ -1034,27 +1069,29 @@ class EmployeePortal extends HTMLElement {
         }, 6000);
     }
 
-    /** Waiting-list offers addressed to me + open calls matching my skills. */
+    /** Waiting-list offers addressed to me + a single unified banner for open calls matching my skills. */
     _renderOffers() {
         const offers = this._data.myOffers || [];
         const calls = this._data.openCalls || [];
         let html = '';
         for (const o of offers) {
             html += `<div class="ep-offer">
-                <span>⏳ <b>הצעת משמרת מרשימת ההמתנה:</b> סדנת ${escapeHtml(o.workshopName)} · ${formatDateHe(o.date)}${o.expiresAt ? ` (בתוקף עד ${formatTimeHe(o.expiresAt)})` : ''}</span>
+                <span>⏳ <b>הצעת משמרת מרשימת ההמתנה:</b> ${escapeHtml(workshopLabel(o.workshopName))} · ${formatDateHe(o.date)}${o.expiresAt ? ` (בתוקף עד ${formatTimeHe(o.expiresAt)})` : ''}</span>
                 <span class="ep-offer-btns">
                     <button class="ep-offer-accept" data-action="offer-accept" data-id="${escapeHtml(o.id)}">אישור המשמרת</button>
                     <button class="ep-offer-decline" data-action="offer-decline" data-id="${escapeHtml(o.id)}">לא מתאים לי</button>
                 </span>
             </div>`;
         }
-        for (const c of calls) {
-            html += `<div class="ep-offer call">
-                <span>📣 <b>דרושה עובד/ת:</b> סדנת ${escapeHtml(c.workshopName)} · ${formatDateHe(c.date)} — כל הקודם/ת זוכה!</span>
-                <span class="ep-offer-btns">
-                    <button class="ep-offer-accept" data-action="call-claim" data-id="${escapeHtml(c.id)}">אני זמין/ה — שבצו אותי</button>
-                </span>
-            </div>`;
+        if (calls.length) {
+            const label = calls.length === 1
+                ? `📣 <b>דרושה עובד/ת:</b> ${escapeHtml(workshopLabel(calls[0].workshopName))} · ${formatDateHe(calls[0].date)} — כל הקודם/ת זוכה!`
+                : `📣 <b>${calls.length} משמרות דחופות דורשות עובד/ת</b> — כל הקודם/ת זוכה!`;
+            html += `
+                <button type="button" class="ep-offer call ep-urgent-banner" data-action="urgent-open">
+                    <span>${label}</span>
+                    <span class="ep-urgent-cta">לבחירת משמרות ›</span>
+                </button>`;
         }
         return html;
     }
@@ -1555,6 +1592,55 @@ class EmployeePortal extends HTMLElement {
         </div>`;
     }
 
+    /** Compact selection popup for all pending urgent open calls. */
+    _renderUrgentPopup() {
+        const calls = this._data.openCalls || [];
+        const rows = calls.map(c => `
+            <label class="ep-urgent-row">
+                <input type="checkbox" data-action="urgent-toggle" data-id="${escapeHtml(c.id)}" ${this._urgentSelected.has(c.id) ? 'checked' : ''}>
+                <span class="ep-urgent-row-date">${formatDateHe(c.date)}</span>
+                <span class="ep-urgent-row-name">${escapeHtml(workshopLabel(c.workshopName))}</span>
+            </label>`).join('');
+        const hasSelection = this._urgentSelected.size > 0;
+        return `<div class="epa-modal-backdrop">
+            <div class="epa-modal" role="dialog" aria-modal="true" aria-label="משמרות דחופות פתוחות">
+                <div class="epa-modal-head"><h2>📣 משמרות דחופות פתוחות</h2><button class="epa-modal-close" data-action="urgent-close" aria-label="סגירה">×</button></div>
+                <div class="ep-empty" style="text-align:right;margin-bottom:6px">סמנו את המשמרות שתרצו לקחת — כל הקודם/ת זוכה. הרשימה כבר מסוננת לפי ההכשרות שלכם.</div>
+                <div class="ep-urgent-list">${rows || '<div class="ep-empty">אין כרגע משמרות דחופות פתוחות.</div>'}</div>
+                <div class="ep-urgent-hint">⚠️ לחצו לחיצה כפולה (דאבל-קליק) על הכפתור כדי לאשר ולשלוח את הבחירה!</div>
+                <div class="epa-inline">
+                    <button type="button" class="epa-btn primary ep-urgent-submit" data-action="urgent-submit-hint" data-dblaction="urgent-submit" ${hasSelection ? '' : 'disabled'}>✅ שיבוץ המשמרות שנבחרו (לחיצה כפולה)</button>
+                    <button type="button" class="epa-btn" data-action="urgent-close">ביטול</button>
+                </div>
+            </div>
+        </div>`;
+    }
+
+    /** Post-submission summary: which urgent shifts were assigned vs. lost to another employee. */
+    _renderUrgentSummary() {
+        const results = this._urgentSummary || [];
+        const success = results.filter(r => r.ok);
+        const failed = results.filter(r => !r.ok);
+        const rows = results.map(r => `
+            <div class="ep-aa-item">
+                <span>${formatDateHe(r.dateKey)} · ${escapeHtml(workshopLabel(r.workshopName))}</span>
+                <span class="${r.ok ? 'ep-lock-badge' : 'ep-status REJECTED'}">${r.ok ? '✔ שובץ בהצלחה' : `✕ ${escapeHtml(r.error || 'לא הצליח')}`}</span>
+            </div>`).join('');
+        const summaryLine = failed.length
+            ? `${success.length} מתוך ${results.length} משמרות שובצו לך בהצלחה. ${failed.length} לא שובצו — כפי הנראה עובד/ת אחר/ת הקדימ/ה אתכם.`
+            : `כל ${success.length} המשמרות שנבחרו שובצו לך בהצלחה! 🎉`;
+        return `<div class="epa-modal-backdrop">
+            <div class="epa-modal" role="dialog" aria-modal="true" aria-label="סיכום שיבוץ משמרות דחופות">
+                <div class="epa-modal-head"><h2>📋 סיכום שיבוץ</h2><button class="epa-modal-close" data-action="urgent-summary-close" aria-label="סגירה">×</button></div>
+                <div class="ep-empty" style="text-align:right;margin-bottom:8px">${escapeHtml(summaryLine)}</div>
+                ${rows}
+                <div class="epa-inline">
+                    <button class="epa-btn primary" data-action="urgent-summary-close">הבנתי</button>
+                </div>
+            </div>
+        </div>`;
+    }
+
     /** One shift row: free edit/delete (SUBMITTED, within 30-min window) or request-change/delete otherwise. */
     _renderShiftRow(s, pendingReq, pendingSwap) {
         const tKey = todayKey();
@@ -1876,6 +1962,23 @@ class EmployeePortal extends HTMLElement {
                 this._startBusy('תופס את המשמרת…');
                 this._dispatch('claimOpenCall', { callId: target.dataset.id });
                 return;
+            case 'urgent-open':
+                this._urgentSelected = new Set((this._data.openCalls || []).map(c => c.id));
+                this._urgentPopupOpen = true;
+                this.render();
+                return;
+            case 'urgent-close':
+                this._urgentPopupOpen = false;
+                this._urgentSelected = new Set();
+                this.render();
+                return;
+            case 'urgent-submit-hint':
+                if (!target.disabled) this._toast('סמנו את המשמרות ולחצו לחיצה כפולה על הכפתור כדי לאשר את השיבוץ.', 'info');
+                return;
+            case 'urgent-summary-close':
+                this._urgentSummary = null;
+                this.render();
+                return;
         }
 
         switch (action) {
@@ -1952,6 +2055,14 @@ class EmployeePortal extends HTMLElement {
             this.render();
             return;
         }
+        if (input?.dataset?.action === 'urgent-toggle') {
+            const id = input.dataset.id;
+            if (input.checked) this._urgentSelected.add(id);
+            else this._urgentSelected.delete(id);
+            const submitBtn = this.querySelector('.ep-urgent-submit');
+            if (submitBtn) submitBtn.disabled = this._urgentSelected.size === 0;
+            return;
+        }
         if (input.id === 'epaStaffSearch') {
             this._staffSearch = input.value;
             this.render();
@@ -1980,6 +2091,20 @@ class EmployeePortal extends HTMLElement {
         if (input.dataset.role === 'start') entry.startTime = value;
         if (input.dataset.role === 'end') entry.endTime = value;
         this.render();
+    }
+
+    _onDblClick(e) {
+        const target = e.target.closest('[data-dblaction]');
+        if (!target) return;
+        const action = target.dataset.dblaction;
+        if (action === 'urgent-submit') {
+            if (target.disabled || !this._urgentSelected.size) return;
+            const callIds = Array.from(this._urgentSelected);
+            this._urgentPopupOpen = false;
+            this._urgentSelected = new Set();
+            this._startBusy('בודק זמינות ומשבץ את המשמרות שנבחרו…');
+            this._dispatch('claimOpenCalls', { callIds });
+        }
     }
 
     _toast(message, kind) {

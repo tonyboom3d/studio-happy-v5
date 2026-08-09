@@ -99,7 +99,10 @@ employee-portal * { box-sizing: border-box; }
 .ep-day.selected { border-color: #2563eb; background: #eff6ff; box-shadow: inset 0 0 0 1px #2563eb; }
 .ep-day.submitted { border-color: #d1d5db; background: #eef2ff; cursor: default; }
 .ep-day.scheduled { border-color: #6ee7b7; background: #ecfdf5; cursor: default; }
+.ep-day.holiday-closed { background: #fef2f2; border-color: #fecaca; }
+.ep-day.holiday-short { border-color: #fbbf24; background: #fffbeb; }
 .ep-day-num { font-weight: 700; }
+.ep-day-note { position: absolute; top: 4px; inset-inline-start: 5px; font-size: 12px; cursor: help; }
 .ep-day-ws { margin-top: 3px; display: flex; flex-direction: column; gap: 2px; }
 .ep-day-ws span { display: block; font-size: 11px; line-height: 1.25; color: #1d4ed8; background: #eff6ff; border-radius: 4px; padding: 1px 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ep-day.ep-day-filtered { opacity: .28; filter: grayscale(.4); }
@@ -116,6 +119,7 @@ employee-portal * { box-sizing: border-box; }
 .ep-badge-promoted { background: #fef3c7; color: #92400e; }
 .ep-badge-full { background: #e5e7eb; color: #4b5563; }
 .ep-badge-blocked { background: #fee2e2; color: #991b1b; }
+.ep-badge-short { background: #fef3c7; color: #92400e; }
 .ep-legend { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 10px; font-size: 11px; color: #6b7280; }
 .ep-legend span { display: inline-flex; align-items: center; gap: 5px; }
 .ep-dot { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
@@ -1254,7 +1258,12 @@ class EmployeePortal extends HTMLElement {
         for (let i = 0; i < firstDow; i++) cells += `<div class="ep-day other"></div>`;
 
         const holidayByDate = {};
-        for (const h of (this._data.holidays || [])) holidayByDate[h.date] = h.name || 'חג';
+        const holidayEntryByDate = {};
+        const dayNoteByDate = this._data.dayNotes || {};
+        for (const h of (this._data.holidays || [])) {
+            holidayByDate[h.date] = h.name || 'חג';
+            holidayEntryByDate[h.date] = h;
+        }
 
         for (let day = 1; day <= daysInMonth; day++) {
             const dateKey = `${this._viewMonth}-${pad2(day)}`;
@@ -1270,6 +1279,9 @@ class EmployeePortal extends HTMLElement {
             const selected = this._selected.has(dateKey);
             // Personalized per-skill state from the scheduling engine.
             const skillState = this._data.dayStates?.[dateKey]?.state || null;
+            const holidayEntry = holidayEntryByDate[dateKey];
+            const holidayClosed = holidayEntry?.mode === 'CLOSED';
+            const holidayShort = holidayEntry?.mode === 'SHORT';
 
             let cls = 'ep-day', badge = '', clickable = false;
             if (vacation?.status === 'APPROVED') {
@@ -1279,7 +1291,10 @@ class EmployeePortal extends HTMLElement {
                 cls += ' vac-pending';
                 badge = `<span class="ep-day-badge ep-badge-vac-pending">ממתין לאישור</span>`;
             } else if (isPast) cls += ' disabled';
-            else if (sub) {
+            else if (holidayClosed && !sub) {
+                cls += ' blocked holiday-closed';
+                badge = `<span class="ep-day-badge ep-badge-blocked">סגור — ${escapeHtml(holidayEntry.name || 'חג')}</span>`;
+            } else if (sub) {
                 cls += sub.status === 'SCHEDULED' ? ' scheduled' : ' submitted';
                 if (sub.status === 'SCHEDULED') {
                     badge = `<span class="ep-day-badge ep-badge-scheduled">משובץ</span>`;
@@ -1308,6 +1323,10 @@ class EmployeePortal extends HTMLElement {
                 clickable = true;
                 if (full) { cls += ' full'; badge = `<span class="ep-day-badge ep-badge-full">מאויש</span>`; }
                 if (promoted) { cls += ' promoted'; badge = `<span class="ep-day-badge ep-badge-promoted">דרושים ⭐</span>`; }
+                if (holidayShort) {
+                    cls += ' holiday-short';
+                    badge = `<span class="ep-day-badge ep-badge-short">מקוצר ${escapeHtml(holidayEntry.shortStart || '')}–${escapeHtml(holidayEntry.shortEnd || '')}</span>`;
+                }
                 if (selected) cls += ' selected';
             }
 
@@ -1323,8 +1342,14 @@ class EmployeePortal extends HTMLElement {
             const filterActive = this._workshopFilter && this._workshopFilter.size > 0;
             if (filterActive && !dayWorkshops.some(w => this._workshopFilter.has(w.id))) cls += ' ep-day-filtered';
 
+            const note = dayNoteByDate[dateKey];
+            const noteIcon = note
+                ? `<span class="ep-day-note ep-tip-trigger" data-tip="${escapeHtml(note.message)}">✉</span>`
+                : '';
+
             cells += `<div class="${cls}" ${clickable ? `data-action="toggle-day" data-date="${dateKey}"` : ''}>
                 <span class="ep-day-num">${day}</span>
+                ${noteIcon}
                 ${holidayByDate[dateKey] ? `<span class="ep-day-hol">${escapeHtml(holidayByDate[dateKey])}</span>` : ''}
                 ${wsList}
                 ${badge}
@@ -1481,7 +1506,10 @@ class EmployeePortal extends HTMLElement {
             { dot: 'background:#f3f4f6;border:1px solid #e5e7eb', title: 'מאויש', desc: 'אין מקומות פנויים ליום זה' },
             { dot: 'background:#f9fafb;border:1px solid #e5e7eb', title: 'לא בהכשרה', desc: 'אין לכם הכשרה מתאימה לסדנה ביום זה' },
             { dot: 'background:#fef2f2;border:1px solid #fecaca', title: 'חסום', desc: 'היום חסום להגשה (חג, מועד אחרון וכד׳)' },
+            { dot: 'background:#fef2f2;border:1px solid #fecaca', title: 'עסק סגור', desc: 'חג בו העסק סגור — לא ניתן להגיש זמינות' },
+            { dot: 'background:#fffbeb;border:1px solid #fbbf24', title: 'יום מקוצר', desc: 'חג עם שעות פעילות מקוצרות — ניתן להגיש רק בטווח השעות המצוין' },
             { dot: 'background:#f9fafb;border:1px solid #e5e7eb;opacity:.5', title: 'מסונן', desc: 'יום ללא סדנה מהסוג שנבחר בסינון' },
+            { dot: 'background:#fff;border:1px solid #e5e7eb', title: '✉ הודעה', desc: 'המנהל/ת השאיר/ה הודעה ליום זה — מעבר עכבר או לחיצה להצגה' },
         ];
         const open = this._calLegendOpen;
         const body = open
@@ -2118,11 +2146,18 @@ class EmployeePortal extends HTMLElement {
                 const dateKey = target.dataset.date;
                 if (this._vacationByDate()[dateKey]) return;
                 if (this._selected.has(dateKey)) this._selected.delete(dateKey);
-                else this._selected.set(dateKey, {
-                    startTime: rules.defaultShiftStart || '10:00',
-                    endTime: rules.defaultShiftEnd || '16:00',
-                    dayOff: false,
-                });
+                else {
+                    // Short holiday days default their shift to the defined
+                    // hours instead of the site default, so the pre-filled
+                    // times don't fall outside what the backend will accept.
+                    const holiday = (this._data.holidays || []).find(h => h.date === dateKey);
+                    const useShort = holiday?.mode === 'SHORT' && holiday.shortStart && holiday.shortEnd;
+                    this._selected.set(dateKey, {
+                        startTime: useShort ? holiday.shortStart : (rules.defaultShiftStart || '10:00'),
+                        endTime: useShort ? holiday.shortEnd : (rules.defaultShiftEnd || '16:00'),
+                        dayOff: false,
+                    });
+                }
                 this.render();
                 break;
             }

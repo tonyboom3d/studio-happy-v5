@@ -45,6 +45,9 @@ import {
     updateSchedulingRule,
     updateDayFlags,
     updateHolidays,
+    setHolidayMode,
+    syncHolidaysNow,
+    setDayNote,
     updateAvailabilitySettings,
     getStaffTemplates,
     saveStaffTemplate,
@@ -631,6 +634,30 @@ async function handlePortalAction(portalEl, detail) {
         case 'adminDayFlags': {
             const result = await updateDayFlags(payload?.dateKey, payload?.flags);
             pushActionResult(portalEl, { type, ...result });
+            refreshAdmin = true;
+            break;
+        }
+
+        case 'adminSetHolidayMode': {
+            const result = await setHolidayMode(payload?.dateKey, payload?.mode, payload?.shortStart, payload?.shortEnd);
+            pushActionResult(portalEl, { type, ...result });
+            refreshPortal = true;
+            refreshAdmin = true;
+            break;
+        }
+
+        case 'adminSyncHolidays': {
+            const result = await syncHolidaysNow(payload?.year);
+            pushActionResult(portalEl, { type, ...result });
+            refreshPortal = true;
+            refreshAdmin = true;
+            break;
+        }
+
+        case 'adminSaveDayNote': {
+            const result = await setDayNote(payload?.dateKey, payload?.message || '');
+            pushActionResult(portalEl, { type, ...result });
+            refreshPortal = true;
             refreshAdmin = true;
             break;
         }

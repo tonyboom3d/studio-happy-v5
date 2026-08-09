@@ -365,6 +365,22 @@ function holidayByDate(d) {
     return map;
 }
 
+function getHolidayEntry(d, dateKey) {
+    return (d.settings?.holidays || []).find(h => h.date === dateKey) || null;
+}
+
+function getDayNote(d, dateKey) {
+    return (d.settings?.dayNotes || {})[dateKey] || null;
+}
+
+/** Short marker shown on calendar cells/list rows for a holiday's mode. */
+function holidayModeMarker(entry) {
+    if (!entry) return '';
+    if (entry.mode === 'CLOSED') return ' 🚫 סגור';
+    if (entry.mode === 'SHORT') return ` ⏱ מקוצר${entry.shortStart ? ` ${entry.shortStart}-${entry.shortEnd}` : ''}`;
+    return '';
+}
+
 function renderHeatmap(ce, d) {
     const [y, m] = d.monthKey.split('-').map(Number);
     const firstDow = new Date(y, m - 1, 1).getDay();
@@ -381,16 +397,18 @@ function renderHeatmap(ce, d) {
         const blocked = (d.settings?.blockedDates || []).includes(dateKey);
         const promoted = (d.settings?.promotedDates || []).includes(dateKey);
         const subs = subsByDate[dateKey] || [];
-        const cls = ['epa-day', blocked ? 'blocked' : coverageClass(info), ce._adminSelectedDay === dateKey ? 'sel' : ''].join(' ');
-        const flags = `${promoted ? '⭐' : ''}${blocked ? '🚫' : ''}`;
+        const holidayEntry = getHolidayEntry(d, dateKey);
+        const note = getDayNote(d, dateKey);
+        const cls = ['epa-day', blocked || holidayEntry?.mode === 'CLOSED' ? 'blocked' : coverageClass(info), ce._adminSelectedDay === dateKey ? 'sel' : ''].join(' ');
+        const flags = `${promoted ? '⭐' : ''}${blocked ? '🚫' : ''}${note ? ' ✉' : ''}`;
         // One line per workshop type so every workshop on the day is visible.
         const summary = info?.hasWorkshops
             ? (info.types || []).map(t => `<span class="cnt">${esc(t.name)} ${Math.min(t.filled, t.required)}/${t.required}</span>`).join('')
             : (subs.length ? `<span class="cnt">${subs.length} הגשות</span>` : '');
-        cells += `<div class="${cls}" data-action="admin-select-day" data-date="${dateKey}">
+        cells += `<div class="${cls}" data-action="admin-select-day" data-date="${dateKey}" ${note ? `title="${esc(note.message)}"` : ''}>
             ${flags ? `<span class="epa-flag">${flags}</span>` : ''}
             <span class="num">${day}</span>
-            ${holidays[dateKey] ? `<span class="hol">${esc(holidays[dateKey])}</span>` : ''}
+            ${holidays[dateKey] ? `<span class="hol">${esc(holidays[dateKey])}${holidayModeMarker(holidayEntry)}</span>` : ''}
             ${summary}
         </div>`;
     }
@@ -416,11 +434,14 @@ function renderListView(ce, d) {
         const dateKey = `${d.monthKey}-${pad2(day)}`;
         const info = d.days?.[dateKey];
         const subs = subsByDate[dateKey] || [];
-        const holiday = holidays[dateKey] ? ` · 🕎 ${esc(holidays[dateKey])}` : '';
+        const holidayEntry = getHolidayEntry(d, dateKey);
+        const note = getDayNote(d, dateKey);
+        const holiday = holidays[dateKey] ? ` · 🕎 ${esc(holidays[dateKey])}${holidayModeMarker(holidayEntry)}` : '';
+        const noteFlag = note ? ` · ✉` : '';
 
         if (!info?.hasWorkshops) {
             rows.push(`<div class="epa-list-day no-ws" data-action="admin-select-day" data-date="${dateKey}">
-                <div class="epa-list-head"><span>${fmtDate(dateKey)}${holiday}</span><span>אין סדנאות${subs.length ? ` · ${subs.length} הגשות` : ''}</span></div>
+                <div class="epa-list-head"><span>${fmtDate(dateKey)}${holiday}${noteFlag}</span><span>אין סדנאות${subs.length ? ` · ${subs.length} הגשות` : ''}</span></div>
             </div>`);
             continue;
         }
@@ -436,7 +457,7 @@ function renderListView(ce, d) {
             </div>`;
         }).join('');
         rows.push(`<div class="epa-list-day" data-action="admin-select-day" data-date="${dateKey}">
-            <div class="epa-list-head"><span>${fmtDate(dateKey)}${holiday}</span></div>
+            <div class="epa-list-head"><span>${fmtDate(dateKey)}${holiday}${noteFlag}</span></div>
             ${typeRows}
         </div>`);
     }
@@ -479,11 +500,41 @@ function renderDayDetail(ce, d) {
             <button class="epa-btn ${promoted ? 'active' : ''}" data-action="admin-toggle-promote" data-date="${dateKey}" data-on="${promoted ? '0' : '1'}">${promoted ? 'ביטול קידום היום' : 'קידום היום (דרושים ⭐)'}</button>
         </div>` : '';
 
+    const holidayEntry = getHolidayEntry(d, dateKey);
+    const mode = holidayEntry?.mode || '';
+    const holidaySection = d.permissions.manageRules ? `
+        <div class="epa-panel" style="margin-top:10px">
+            <div class="epa-panel-title"><h3>מועד/חג ${holidayEntry?.name ? `— ${esc(holidayEntry.name)}` : ''}</h3></div>
+            <div class="epa-inline">
+                <select id="epaHolMode" data-action="admin-holiday-mode-change">
+                    <option value="" ${mode === '' ? 'selected' : ''}>רגיל</option>
+                    <option value="CLOSED" ${mode === 'CLOSED' ? 'selected' : ''}>עסק סגור</option>
+                    <option value="SHORT" ${mode === 'SHORT' ? 'selected' : ''}>יום מקוצר</option>
+                </select>
+                <input type="time" id="epaHolStart" value="${esc(holidayEntry?.shortStart || '')}" placeholder="שעת פתיחה" ${mode === 'SHORT' ? '' : 'disabled'}>
+                <input type="time" id="epaHolEnd" value="${esc(holidayEntry?.shortEnd || '')}" placeholder="שעת סגירה" ${mode === 'SHORT' ? '' : 'disabled'}>
+                <button class="epa-btn primary" data-action="admin-save-holiday-mode" data-date="${dateKey}">שמירה</button>
+            </div>
+        </div>` : '';
+
+    const note = getDayNote(d, dateKey);
+    const noteSection = d.permissions.manageScheduling ? `
+        <div class="epa-panel" style="margin-top:10px">
+            <div class="epa-panel-title"><h3>הודעה ליום ✉</h3></div>
+            <textarea id="epaDayNote" rows="2" placeholder="הודעה שתוצג לעובדים על יום זה…">${esc(note?.message || '')}</textarea>
+            <div class="epa-inline">
+                <button class="epa-btn primary" data-action="admin-save-day-note" data-date="${dateKey}">שמירת הודעה</button>
+                ${note ? `<button class="epa-btn danger" data-action="admin-clear-day-note" data-date="${dateKey}">מחיקת הודעה</button>` : ''}
+            </div>
+        </div>` : '';
+
     return `<div class="epa-detail">
         <h3>${fmtDate(dateKey)} <button class="epa-btn" data-action="admin-close-day" style="float:left">סגירה</button></h3>
         ${typeBlocks}
         ${manualAssign}
         ${flags}
+        ${holidaySection}
+        ${noteSection}
     </div>`;
 }
 
@@ -849,7 +900,12 @@ function renderSettingsPage(_ce, d) {
             ${renderRules(d)}
         </section>
         <section class="epa-panel">
-            <div class="epa-panel-title"><h3>חגים ומועדים</h3><button class="epa-btn" data-action="admin-add-holiday">הוספת מועד</button></div>
+            <div class="epa-panel-title"><h3>חגים ומועדים</h3>
+                <div class="epa-inline" style="margin:0">
+                    <button class="epa-btn" data-action="admin-sync-holidays">סנכרון חגים מ-Hebcal</button>
+                    <button class="epa-btn" data-action="admin-add-holiday">הוספת מועד</button>
+                </div>
+            </div>
             <div id="epaHolidayList">${holidays || '<div class="ep-empty" id="epaHolidayEmpty">לא הוגדרו מועדים</div>'}</div>
             <div class="epa-inline"><button class="epa-btn primary" data-action="admin-save-holidays">שמירת מועדים</button></div>
         </section>`;
@@ -1056,6 +1112,14 @@ function renderModal(ce, d) {
 // ---------------------------------------------------------------------------
 
 export function handleAdminChange(ce, input) {
+    if (input?.dataset?.action === 'admin-holiday-mode-change') {
+        const isShort = input.value === 'SHORT';
+        const start = ce.querySelector('#epaHolStart');
+        const end = ce.querySelector('#epaHolEnd');
+        if (start) start.disabled = !isShort;
+        if (end) end.disabled = !isShort;
+        return true;
+    }
     if (input?.dataset?.action !== 'admin-sub-worktype') return false;
     const newVal = input.value;
     const prev = input.dataset.prev || DEFAULT_WORK_TYPE;
@@ -1132,6 +1196,31 @@ export function handleAdminClick(ce, action, target) {
             ce._startBusy('מעדכן…');
             ce._dispatch('adminDayFlags', { dateKey: target.dataset.date, flags: { blocked: target.dataset.on === '1' } });
             return true;
+        case 'admin-save-holiday-mode': {
+            const dateKey = target.dataset.date;
+            const mode = ce.querySelector('#epaHolMode')?.value || '';
+            const shortStart = ce.querySelector('#epaHolStart')?.value || '';
+            const shortEnd = ce.querySelector('#epaHolEnd')?.value || '';
+            if (mode === 'SHORT' && (!shortStart || !shortEnd)) {
+                ce._toast?.('יש להזין שעת פתיחה וסגירה ליום מקוצר.', 'error');
+                return true;
+            }
+            ce._startBusy?.('שומר…');
+            ce._dispatch('adminSetHolidayMode', { dateKey, mode, shortStart, shortEnd });
+            return true;
+        }
+        case 'admin-save-day-note': {
+            const dateKey = target.dataset.date;
+            const message = ce.querySelector('#epaDayNote')?.value || '';
+            ce._startBusy?.('שומר…');
+            ce._dispatch('adminSaveDayNote', { dateKey, message });
+            return true;
+        }
+        case 'admin-clear-day-note': {
+            ce._startBusy?.('מוחק…');
+            ce._dispatch('adminSaveDayNote', { dateKey: target.dataset.date, message: '' });
+            return true;
+        }
         case 'admin-toggle-promote':
             ce._startBusy('מעדכן…');
             ce._dispatch('adminDayFlags', { dateKey: target.dataset.date, flags: { promoted: target.dataset.on === '1' } });
@@ -1356,14 +1445,24 @@ export function handleAdminClick(ce, action, target) {
             target.closest('[data-holiday-row]')?.remove();
             return true;
         case 'admin-save-holidays': {
-            const holidays = [...ce.querySelectorAll('[data-holiday-row]')].map(row => ({
-                date: row.querySelector('.epaH_date')?.value || '',
-                name: row.querySelector('.epaH_name')?.value || '',
-            })).filter(h => h.date && h.name.trim());
+            // Bulk name/date editor — mode/shortStart/shortEnd (set via the
+            // day-detail panel) are preserved by carrying over the matching
+            // existing entry for each date instead of overwriting it.
+            const existingByDate = {};
+            for (const h of (d.settings?.holidays || [])) if (h?.date) existingByDate[h.date] = h;
+            const holidays = [...ce.querySelectorAll('[data-holiday-row]')].map(row => {
+                const date = row.querySelector('.epaH_date')?.value || '';
+                const name = row.querySelector('.epaH_name')?.value || '';
+                return { ...(existingByDate[date] || {}), date, name };
+            }).filter(h => h.date && h.name.trim());
             ce._startBusy('שומר מועדים…');
             ce._dispatch('adminUpdateHolidays', { holidays });
             return true;
         }
+        case 'admin-sync-holidays':
+            ce._startBusy('מסנכרן חגים…');
+            ce._dispatch('adminSyncHolidays', {});
+            return true;
         case 'admin-new-template':
             ce._adminModal = { type: 'template', id: null };
             ce.render();

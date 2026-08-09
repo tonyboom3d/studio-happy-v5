@@ -46,8 +46,23 @@ employee-portal * { box-sizing: border-box; }
 .ep-card { background: rgba(255,255,255,.98); border: 1px solid #e2e8f0; border-radius: 17px; padding: 16px; box-shadow: 0 6px 22px rgba(15,23,42,.045); transition: box-shadow .18s ease,border-color .18s ease; }
 .ep-card:hover { border-color: #dbeafe; box-shadow: 0 9px 26px rgba(30,64,175,.065); }
 .ep-card h2 { margin: 0 0 10px; font-size: 15px; font-weight: 700; display: inline-flex; align-items: center; gap: 4px; }
-.ep-section-help { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 50%; background: #e5e7eb; color: #4b5563; font-size: 11px; font-weight: 700; cursor: help; flex-shrink: 0; }
-.ep-tab-help { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; border-radius: 50%; background: rgba(37,99,235,.12); color: #1d4ed8; font-size: 10px; font-weight: 700; cursor: help; margin-inline-start: 4px; vertical-align: middle; }
+.ep-section-help { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 50%; background: #e5e7eb; color: #4b5563; font-size: 11px; font-weight: 700; cursor: pointer; flex-shrink: 0; transition: background .12s,color .12s; }
+.ep-section-help:hover,.ep-section-help:focus-visible { background: #dbeafe; color: #1d4ed8; outline: none; }
+.ep-tab-help { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; border-radius: 50%; background: rgba(37,99,235,.12); color: #1d4ed8; font-size: 10px; font-weight: 700; cursor: pointer; margin-inline-start: 4px; vertical-align: middle; transition: background .12s; }
+.ep-tab-help:hover,.ep-tab-help:focus-visible { background: rgba(37,99,235,.22); outline: none; }
+.ep-tip-pop { position: fixed; z-index: 10001; max-width: min(300px, 92vw); background: linear-gradient(145deg,#1e293b,#0f172a); color: #f8fafc; font-size: 12.5px; line-height: 1.5; padding: 9px 13px; border-radius: 11px; box-shadow: 0 10px 28px rgba(15,23,42,.28), 0 0 0 1px rgba(255,255,255,.06) inset; pointer-events: none; opacity: 0; transform: translateY(5px) scale(.98); transition: opacity .1s ease,transform .1s ease; white-space: pre-wrap; text-align: right; }
+.ep-tip-pop.show { opacity: 1; transform: none; }
+.ep-tip-pop::after { content: ''; position: absolute; width: 10px; height: 10px; background: #1e293b; transform: rotate(45deg); }
+.ep-tip-pop.ep-tip-above::after { bottom: -5px; inset-inline-end: 18px; }
+.ep-tip-pop.ep-tip-below::after { top: -5px; inset-inline-end: 18px; }
+.ep-cal-acc { margin-bottom: 10px; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; background: #f8fafc; }
+.ep-cal-acc-head { width: 100%; display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 9px 12px; border: none; background: transparent; font-size: 12.5px; font-weight: 700; color: #374151; cursor: pointer; font-family: inherit; text-align: right; }
+.ep-cal-acc-head:hover { background: #f1f5f9; }
+.ep-cal-acc-chevron { font-size: 10px; color: #6b7280; flex-shrink: 0; }
+.ep-cal-acc-body { padding: 10px 12px 12px; display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 8px 14px; font-size: 11.5px; color: #4b5563; line-height: 1.45; border-top: 1px solid #e2e8f0; }
+.ep-cal-acc-item { display: flex; align-items: flex-start; gap: 8px; }
+.ep-cal-acc-item .ep-dot { flex-shrink: 0; margin-top: 3px; }
+.ep-cal-acc-item b { color: #1f2937; font-weight: 700; display: block; font-size: 11px; margin-bottom: 1px; }
 .ep-cal-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
 .ep-cal-title { font-weight: 700; font-size: 15px; }
 .ep-cal-nav { display: flex; gap: 6px; }
@@ -102,9 +117,16 @@ employee-portal * { box-sizing: border-box; }
 .ep-submit-btn:active:not(:disabled) { transform: translateY(0); }
 .ep-submit-btn:disabled { background: #93c5fd; box-shadow: none; cursor: default; }
 .ep-empty { color: #9ca3af; font-size: 12.5px; text-align: center; padding: 14px 0; }
-.ep-board-item { border: 1px solid #e5e7eb; border-radius: 10px; padding: 9px 11px; margin-bottom: 8px; font-size: 12.5px; display: flex; justify-content: space-between; align-items: center; gap: 8px; cursor: help; }
+.ep-board-item { border: 1px solid #e5e7eb; border-radius: 10px; padding: 9px 11px; margin-bottom: 8px; font-size: 12.5px; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 .ep-board-item .ep-b-date { font-weight: 700; }
 .ep-board-item .ep-b-time { color: #6b7280; }
+.ep-b-meta { display: none; flex-direction: column; gap: 1px; margin-top: 3px; font-size: 10.5px; color: #9ca3af; font-weight: 500; }
+.ep-b-info { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 50%; border: 1px solid #cbd5e1; background: #f8fafc; color: #64748b; font-size: 11px; font-weight: 700; font-style: italic; font-family: Georgia,serif; cursor: pointer; flex-shrink: 0; padding: 0; line-height: 1; transition: background .12s,border-color .12s,color .12s; }
+.ep-b-info:hover,.ep-b-info:focus-visible { background: #eff6ff; border-color: #93c5fd; color: #1d4ed8; outline: none; }
+@media (min-width: 768px) {
+  .ep-b-meta { display: flex; }
+  .ep-b-info { display: none !important; }
+}
 .ep-status { font-size: 11px; font-weight: 700; padding: 2px 9px; border-radius: 999px; white-space: nowrap; }
 .ep-status.SUBMITTED { background: #e0e7ff; color: #3730a3; }
 .ep-status.STANDBY { background: #fef3c7; color: #92400e; }
@@ -277,6 +299,11 @@ class EmployeePortal extends HTMLElement {
         this._editWindowTimer = null;           // 1s ticker for the 30-min free-edit countdown
         this._autoApprovedPopup = null;         // shifts array shown right after an instant auto-approve
         this._swapCandidates = null;            // { submissionId, candidates: [{id,name}] } for the swap modal
+        this._calLegendOpen = false;            // calendar color legend accordion
+        this._tipTimer = null;
+        this._tipEl = null;
+        this._tipPinned = null;
+        this._tipInited = false;
         // Hours tab state (Module E)
         this._hoursData = null;
         this._hoursMonth = todayKey().slice(0, 7);
@@ -311,11 +338,113 @@ class EmployeePortal extends HTMLElement {
             this._msgCarIdx[scope] = (this._msgCarIdx[scope] + (dx > 0 ? 1 : -1) + list.length) % list.length;
             this._updateMsgCar(scope);
         }, { passive: true });
+        this._initTooltipSystem();
     }
 
     disconnectedCallback() {
         clearInterval(this._msgCarTimer);
         clearInterval(this._editWindowTimer);
+        clearTimeout(this._tipTimer);
+        if (this._tipDocClick) document.removeEventListener('click', this._tipDocClick);
+        if (this._tipEl?.parentNode) this._tipEl.parentNode.removeChild(this._tipEl);
+        this._tipEl = null;
+    }
+
+    _initTooltipSystem() {
+        if (this._tipInited) return;
+        this._tipInited = true;
+        this.addEventListener('pointerover', (e) => this._onTipOver(e), true);
+        this.addEventListener('pointerout', (e) => this._onTipOut(e), true);
+        this.addEventListener('focusin', (e) => this._onTipOver(e), true);
+        this.addEventListener('focusout', (e) => this._onTipOut(e), true);
+        this.addEventListener('click', (e) => this._onTipClick(e), true);
+        this._tipDocClick = (e) => {
+            if (!this._tipPinned || !this.isConnected) return;
+            if (this._tipPinned.contains(e.target) || this._tipEl?.contains(e.target)) return;
+            this._tipPinned = null;
+            this._hideTip();
+        };
+        document.addEventListener('click', this._tipDocClick);
+    }
+
+    _ensureTipEl() {
+        if (!this._tipEl) {
+            this._tipEl = document.createElement('div');
+            this._tipEl.className = 'ep-tip-pop';
+            this._tipEl.setAttribute('role', 'tooltip');
+            document.body.appendChild(this._tipEl);
+        }
+        return this._tipEl;
+    }
+
+    _onTipOver(e) {
+        const el = e.target.closest?.('[data-tip]');
+        if (!el || !this.contains(el)) return;
+        const related = e.relatedTarget;
+        if (related && el.contains(related)) return;
+        if (this._tipPinned && this._tipPinned !== el) return;
+        if (el.classList.contains('ep-b-info') && window.matchMedia('(hover: none)').matches) return;
+        clearTimeout(this._tipTimer);
+        const text = el.getAttribute('data-tip');
+        if (!text) return;
+        this._tipTimer = setTimeout(() => this._showTip(el, text), 120);
+    }
+
+    _onTipOut(e) {
+        const el = e.target.closest?.('[data-tip]');
+        if (!el || !this.contains(el)) return;
+        const related = e.relatedTarget;
+        if (related && el.contains(related)) return;
+        if (this._tipPinned === el) return;
+        clearTimeout(this._tipTimer);
+        this._hideTip();
+    }
+
+    _onTipClick(e) {
+        const el = e.target.closest?.('[data-tip]');
+        if (!el || !this.contains(el)) return;
+        const touchMode = window.matchMedia('(hover: none)').matches;
+        const pin = el.classList.contains('ep-b-info') || (touchMode && el.classList.contains('ep-tip-trigger'));
+        if (!pin) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const text = el.getAttribute('data-tip');
+        if (!text) return;
+        if (this._tipPinned === el) {
+            this._tipPinned = null;
+            this._hideTip();
+            return;
+        }
+        this._tipPinned = el;
+        clearTimeout(this._tipTimer);
+        this._showTip(el, text);
+    }
+
+    _showTip(anchor, text) {
+        const tip = this._ensureTipEl();
+        tip.textContent = text;
+        tip.classList.add('show');
+        tip.style.visibility = 'hidden';
+        tip.classList.remove('ep-tip-above', 'ep-tip-below');
+        const rect = anchor.getBoundingClientRect();
+        const tipRect = tip.getBoundingClientRect();
+        const margin = 8;
+        let top = rect.top - tipRect.height - margin;
+        let placeBelow = false;
+        if (top < margin) {
+            top = rect.bottom + margin;
+            placeBelow = true;
+        }
+        tip.classList.add(placeBelow ? 'ep-tip-below' : 'ep-tip-above');
+        let left = rect.left + rect.width / 2 - tipRect.width / 2;
+        left = Math.max(margin, Math.min(left, window.innerWidth - tipRect.width - margin));
+        tip.style.top = `${top}px`;
+        tip.style.left = `${left}px`;
+        tip.style.visibility = '';
+    }
+
+    _hideTip() {
+        if (this._tipEl) this._tipEl.classList.remove('show');
     }
 
     attributeChangedCallback(name, _oldVal, newVal) {
@@ -636,6 +765,8 @@ class EmployeePortal extends HTMLElement {
     render() {
         const d = this._data;
         if (!d?.user) { this.renderLoading(); return; }
+        this._tipPinned = null;
+        this._hideTip();
 
         const isAdmin = !!d.user.permissions?.viewTeamSchedule;
         const tabs = `
@@ -1072,6 +1203,7 @@ class EmployeePortal extends HTMLElement {
         }
 
         return `
+            ${this._renderCalLegendAccordion()}
             <div class="ep-cal-head">
                 <div class="ep-cal-title">${monthTitle(this._viewMonth)}</div>
                 <div class="ep-cal-nav">
@@ -1080,27 +1212,43 @@ class EmployeePortal extends HTMLElement {
                 </div>
             </div>
             ${this._renderWorkshopFilter()}
-            <div class="ep-cal-grid">${cells}</div>
-            <div class="ep-legend">
-                <span><span class="ep-dot" style="background:#eff6ff;border:1px solid #2563eb"></span>נבחר</span>
-                <span><span class="ep-dot" style="background:#eef2ff"></span>המתנה</span>
-                <span><span class="ep-dot" style="background:#ecfdf5;border:1px solid #6ee7b7"></span>משובץ</span>
-                <span><span class="ep-dot" style="background:#fffbeb;border:1px solid #f59e0b"></span>דרושים עובדים</span>
-                <span><span class="ep-dot" style="background:#fffbeb;border:1px solid #fbbf24"></span>רשימת המתנה</span>
-                <span><span class="ep-dot" style="background:#f9fafb;border:1px solid #e5e7eb"></span>לא בהכשרה</span>
-                <span><span class="ep-dot" style="background:#fef2f2"></span>חסום</span>
-            </div>`;
+            <div class="ep-cal-grid">${cells}</div>`;
+    }
+
+    _renderCalLegendAccordion() {
+        const items = [
+            { dot: 'background:#eff6ff;border:1px solid #2563eb', title: 'נבחר', desc: 'יום שנבחר להגשת זמינות — טרם נשלח' },
+            { dot: 'background:#eef2ff;border:1px solid #d1d5db', title: 'הגשה קיימת', desc: 'כבר הגשתם זמינות ליום זה' },
+            { dot: 'background:#ecfdf5;border:1px solid #6ee7b7', title: 'משובץ', desc: 'משמרת שאושרה ושובצתם אליה' },
+            { dot: 'background:#fffbeb;border:1px solid #f59e0b', title: 'דרושים עובדים', desc: 'יום עם דרישה מוגברת לכוח אדם' },
+            { dot: 'background:#fffbeb;border:1px solid #fbbf24', title: 'רשימת המתנה', desc: 'ניתן להגיש — המשמרת מלאה, תיכנסו לרשימת המתנה' },
+            { dot: 'background:#f3f4f6;border:1px solid #e5e7eb', title: 'מאויש', desc: 'אין מקומות פנויים ליום זה' },
+            { dot: 'background:#f9fafb;border:1px solid #e5e7eb', title: 'לא בהכשרה', desc: 'אין לכם הכשרה מתאימה לסדנה ביום זה' },
+            { dot: 'background:#fef2f2;border:1px solid #fecaca', title: 'חסום', desc: 'היום חסום להגשה (חג, מועד אחרון וכד׳)' },
+            { dot: 'background:#f9fafb;border:1px solid #e5e7eb;opacity:.5', title: 'מסונן', desc: 'יום ללא סדנה מהסוג שנבחר בסינון' },
+        ];
+        const open = this._calLegendOpen;
+        const body = open
+            ? `<div class="ep-cal-acc-body">${items.map(it =>
+                `<div class="ep-cal-acc-item"><span class="ep-dot" style="${it.dot}"></span><div><b>${escapeHtml(it.title)}</b>${escapeHtml(it.desc)}</div></div>`
+            ).join('')}</div>`
+            : '';
+        return `<div class="ep-cal-acc ${open ? 'open' : ''}">
+            <button type="button" class="ep-cal-acc-head" data-action="toggle-cal-legend" aria-expanded="${open}">
+                <span>מקרא צבעי לוח השנה</span>
+                <span class="ep-cal-acc-chevron" aria-hidden="true">${open ? '▲' : '▼'}</span>
+            </button>${body}</div>`;
     }
 
     _sectionHelp(text) {
-        return `<span class="ep-section-help" title="${escapeHtml(text)}" aria-label="${escapeHtml(text)}">?</span>`;
+        return `<span class="ep-section-help ep-tip-trigger" tabindex="0" data-tip="${escapeHtml(text)}" aria-label="${escapeHtml(text)}">?</span>`;
     }
 
     _tabHelp(text) {
-        return `<span class="ep-tab-help" title="${escapeHtml(text)}" aria-label="${escapeHtml(text)}">?</span>`;
+        return `<span class="ep-tab-help ep-tip-trigger" tabindex="0" data-tip="${escapeHtml(text)}" aria-label="${escapeHtml(text)}">?</span>`;
     }
 
-    _submissionTooltip(s) {
+    _submissionMetaParts(s) {
         const parts = [];
         if (s.createdAt) parts.push(`הוגשה: ${formatDateTimeHe(s.createdAt)}`);
         const managerEntered = !!(s.submittedByName || (s.managerOverride && String(s.notes || '').includes('שיבוץ ידני')));
@@ -1109,7 +1257,19 @@ class EmployeePortal extends HTMLElement {
         } else if (s.createdAt) {
             parts.push('הוגשה על ידך');
         }
-        return parts.join(' · ');
+        return parts;
+    }
+
+    _submissionMetaDesktop(s) {
+        const parts = this._submissionMetaParts(s);
+        if (!parts.length) return '';
+        return `<div class="ep-b-meta">${parts.map(p => `<span>${escapeHtml(p)}</span>`).join('')}</div>`;
+    }
+
+    _submissionMetaIcon(s) {
+        const parts = this._submissionMetaParts(s);
+        if (!parts.length) return '';
+        return `<button type="button" class="ep-b-info" data-tip="${escapeHtml(parts.join(' · '))}" aria-label="פרטי הגשה">i</button>`;
     }
 
     _renderSelectionPanel() {
@@ -1129,7 +1289,7 @@ class EmployeePortal extends HTMLElement {
                     <span>-</span>
                     <input type="time" min="${SHIFT_MIN_TIME}" max="${SHIFT_MAX_TIME}" data-role="end" data-date="${dateKey}" value="${escapeHtml(times.endTime)}">
                     <span class="ep-sel-hours ${tooShort || hrs === null ? 'bad' : ''}">${hoursLabel}</span>
-                    <span class="ep-status PENDING" title="${escapeHtml(STATUS_HINTS.PENDING)}">${STATUS_LABELS.PENDING}</span>
+                    <span class="ep-status PENDING ep-tip-trigger" data-tip="${escapeHtml(STATUS_HINTS.PENDING)}">${STATUS_LABELS.PENDING}</span>
                     <button class="ep-sel-remove" data-action="remove-day" data-date="${dateKey}" title="הסרה">✕</button>
                 </div>`;
             }).join('') + `</div>`;
@@ -1301,22 +1461,25 @@ class EmployeePortal extends HTMLElement {
             ? (s.workTypeLabel || 'סדנה')
             : null;
         const workTypeChip = workTypeLabel
-            ? `<span class="ep-worktype" title="סוג העבודה שהוגדר לך">${escapeHtml(workTypeLabel)}</span>`
+            ? `<span class="ep-worktype ep-tip-trigger" data-tip="סוג העבודה שהוגדר לך">${escapeHtml(workTypeLabel)}</span>`
             : '';
         const lockBadge = s.autoApproved
-            ? `<span class="ep-lock-badge" title="אושר אוטומטית מול הזמנת לקוח — נעול לשינוי ישיר">🔒 אושר אוטומטית</span>`
+            ? `<span class="ep-lock-badge ep-tip-trigger" data-tip="אושר אוטומטית מול הזמנת לקוח — נעול לשינוי ישיר">🔒 אושר אוטומטית</span>`
             : '';
-        const submitTooltip = this._submissionTooltip(s);
+        const metaDesktop = this._submissionMetaDesktop(s);
+        const metaIcon = this._submissionMetaIcon(s);
         return `
-            <div class="ep-board-item ${s.autoApproved ? 'auto-approved' : ''}" ${submitTooltip ? `title="${escapeHtml(submitTooltip)}"` : ''}>
+            <div class="ep-board-item ${s.autoApproved ? 'auto-approved' : ''}">
                 <div>
                     <div class="ep-b-date">${formatDateHe(s.date)}</div>
                     <div class="ep-b-time">${escapeHtml(s.startTime)}–${escapeHtml(s.endTime)}${s.hours ? ` · ${s.hours} ש׳` : ''}</div>
+                    ${metaDesktop}
                 </div>
                 <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;justify-content:flex-end">
+                    ${metaIcon}
                     ${workTypeChip}
                     ${lockBadge}
-                    <span class="ep-status ${escapeHtml(s.status)}" title="${escapeHtml(STATUS_HINTS[s.status] || '')}">${STATUS_LABELS[s.status] || s.status}</span>
+                    <span class="ep-status ${escapeHtml(s.status)} ep-tip-trigger" data-tip="${escapeHtml(STATUS_HINTS[s.status] || '')}">${STATUS_LABELS[s.status] || s.status}</span>
                     ${actions}
                 </div>
             </div>`;
@@ -1601,6 +1764,10 @@ class EmployeePortal extends HTMLElement {
                 break;
             case 'toggle-ws-filter-menu':
                 this._workshopFilterOpen = !this._workshopFilterOpen;
+                this.render();
+                break;
+            case 'toggle-cal-legend':
+                this._calLegendOpen = !this._calLegendOpen;
                 this.render();
                 break;
             case 'clear-ws-filter':

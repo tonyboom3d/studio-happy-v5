@@ -153,12 +153,17 @@ export const ADMIN_STYLE = `
 
 const HEBREW_DOW = ['א׳', 'ב׳', 'ג׳', 'ד׳', 'ה׳', 'ו׳', 'ש׳'];
 
-// Placeholder — replace with the actual Wix dashboard URL for creating a new
-// Bookings staff member on this site (Bookings > Staff > New staff member).
-const WIX_NEW_STAFF_URL = 'https://manage.wix.com/dashboard/bookings/staff-members';
+// Wix dashboard URL for creating a new Bookings staff member.
+const WIX_NEW_STAFF_URL = 'https://manage.wix.com/dashboard/f0548b42-7f52-447c-9076-45112f85765b/bookings/staff?referralInfo=search';
 
 function esc(str) {
     return String(str ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+function asArray(value) {
+    if (Array.isArray(value)) return value;
+    if (value == null || value === '') return [];
+    if (typeof value === 'object') return Object.values(value).filter(Boolean);
+    return [value];
 }
 function pad2(n) { return String(n).padStart(2, '0'); }
 function monthTitle(monthKey) {
@@ -737,61 +742,64 @@ function renderTrackerPage(ce, d) {
         </section>`;
 }
 
-function renderStaffPanel(ce, d) {
-    if (!d.permissions.manageEmployees) return '';
-    const staffData = ce._staffData;
-    if (!staffData) {
-        return `<section class="epa-panel">
-            <div class="epa-panel-title"><h3>צוות ב-Wix Bookings</h3></div>
-            <div class="ep-loading"><div class="ep-spinner"></div>טוען רשימת צוות…</div>
-        </section>`;
-    }
-    const search = (ce._staffSearch || '').trim().toLowerCase();
-    const filtered = search
-        ? staffData.filter(s => (s.name || '').toLowerCase().includes(search) || (s.email || '').toLowerCase().includes(search) || (s.phone || '').includes(search))
-        : staffData;
-    const rows = filtered.map(s => `
-        <tr>
-            <td>${esc(s.name || '—')}</td>
-            <td>${esc(s.email || '—')}</td>
-            <td>${esc(s.phone || '—')}</td>
-            <td>${s.linked
-        ? `<span class="epa-badge ${s.active === false ? 'miss' : 'ok'}">${s.active === false ? 'מחובר/ת (לא פעיל/ה)' : 'מחובר/ת לפורטל'}</span>`
-        : '<span class="epa-badge kind">לא מחובר/ת</span>'}</td>
-            <td>${!s.linked || s.active === false
-        ? `<button class="epa-btn primary" data-action="admin-connect-staff" data-staff="${esc(s.staffId)}">${s.linked ? 'חיבור מחדש' : 'חיבור לפורטל'}</button>`
-        : ''}</td>
-        </tr>`).join('');
-    return `<section class="epa-panel">
-        <div class="epa-panel-title">
-            <h3>צוות ב-Wix Bookings (${filtered.length}/${staffData.length})</h3>
-            <div class="epa-inline" style="margin:0">
-                <input id="epaStaffSearch" placeholder="חיפוש לפי שם, אימייל או טלפון" value="${esc(ce._staffSearch || '')}">
-                <button class="epa-btn" data-action="admin-staff-refresh">רענון</button>
-                <button class="epa-btn primary" data-action="admin-new-staff">צור עובד חדש +</button>
-            </div>
+function isBookingsLinked(employee, staffIds) {
+    return !!(employee?.staffId && staffIds && staffIds.has(employee.staffId));
+}
+
+function renderSetupStaffForm(ce, d, roleId) {
+    const employee = (asArray(d.allEmployees).length ? asArray(d.allEmployees) : asArray(d.employees)).find(e => e.id === roleId);
+    if (!employee) return '<div class="ep-empty">לא נמצא/ה עובד/ת.</div>';
+    const unlinked = asArray(ce._staffData).filter(s => !s.linked);
+    const rows = unlinked.map(s => `
+        <button type="button" class="epa-pick-row" data-action="admin-link-staff-to-employee" data-staff="${esc(s.staffId)}" data-emp="${esc(roleId)}">
+            <span>${esc(s.name || s.email || s.staffId)}</span>
+            <span style="color:#9ca3af">${esc(s.email || s.phone || '')}</span>
+        </button>`).join('');
+    return `<p style="margin:0 0 10px">בחרו עובד/ת מ-Wix Bookings לחיבור לפרופיל <b>${esc(employee.displayName)}</b>:</p>
+        <div style="max-height:42vh;overflow:auto;border:1px solid #e5e7eb;border-radius:10px;padding:2px 10px;margin-bottom:10px">
+            ${rows || '<div class="ep-empty">אין עובדי Bookings פנויים לחיבור. צרו עובד/ת חדש/ה ב-Bookings.</div>'}
         </div>
-        <div class="epa-table-wrap"><table class="epa-table"><thead><tr><th>שם</th><th>אימייל</th><th>טלפון</th><th>סטטוס</th><th></th></tr></thead>
-            <tbody>${rows || '<tr><td colspan="5" class="ep-empty">אין תוצאות</td></tr>'}</tbody>
-        </table></div>
-    </section>`;
+        <div class="epa-inline">
+            <button type="button" class="epa-btn primary" data-action="admin-new-staff">צור עובד חדש ב-Bookings +</button>
+            <button type="button" class="epa-btn" data-action="admin-close-modal">ביטול</button>
+        </div>`;
 }
 
 function renderEmployeesPage(ce, d) {
-    const rows = (d.employees || []).map(e => `
-        <tr class="${d.permissions.manageEmployees ? 'epa-row-click' : ''}" style="${e.active ? '' : 'opacity:.55'}" ${d.permissions.manageEmployees ? `data-action="admin-edit-employee" data-emp="${e.id}"` : ''}>
+    const canManage = d.permissions.manageEmployees;
+    const staffIds = ce._staffIds;
+    const staffLoading = canManage && ce._staffData === null;
+    const employees = asArray(d.allEmployees).length ? asArray(d.allEmployees) : asArray(d.employees);
+    const workshopTypes = asArray(d.workshopTypes);
+    const rows = employees.map(e => {
+        const bookingsLinked = !staffLoading && isBookingsLinked(e, staffIds);
+        const skillIds = asArray(e.skillIds);
+        const bookingsCell = !canManage
+            ? '—'
+            : staffLoading
+                ? '<span style="color:#9ca3af;font-size:12px">בודק…</span>'
+                : bookingsLinked
+                    ? '<span class="epa-badge ok">מוקם ב-Bookings</span>'
+                    : `<button type="button" class="epa-btn primary" data-action="admin-setup-staff" data-emp="${esc(e.id)}">הקמה</button>`;
+        return `
+        <tr class="${canManage ? 'epa-row-click' : ''}" style="${e.active ? '' : 'opacity:.55'}" ${canManage ? `data-action="admin-edit-employee" data-emp="${e.id}"` : ''}>
             <td><span class="epa-dot-lg" style="background:${esc(e.color || '#2563eb')}"></span>${esc(e.displayName)}${e.isTrainee ? ' <span class="ep-tag">חניכה</span>' : ''}</td>
             <td>${esc(e.roleLabel)}</td>
             <td>${e.priorityRank ?? '—'}</td>
             <td>${e.minShiftsPerWeek ?? 'ברירת מחדל'}</td>
-            <td>${(e.skillIds || []).map(id => esc((d.workshopTypes.find(w => w.id === id) || {}).name || '')).filter(Boolean).join(', ') || '—'}</td>
+            <td>${skillIds.map(id => esc((workshopTypes.find(w => w.id === id) || {}).name || '')).filter(Boolean).join(', ') || '—'}</td>
+            <td>${bookingsCell}</td>
             <td><span class="epa-badge ${e.active ? 'ok' : 'miss'}">${e.active ? 'פעיל/ה' : 'לא פעיל/ה'}</span></td>
-        </tr>`).join('');
-    return `<div class="epa-page-head"><div><h2>עובדים</h2><p>פרופילים, הרשאות עבודה והכשרות</p></div></div>
-        ${renderStaffPanel(ce, d)}
+        </tr>`;
+    }).join('');
+    const headActions = canManage ? `<div class="epa-inline" style="margin:0">
+            <button type="button" class="epa-btn" data-action="admin-staff-refresh">רענון Bookings</button>
+            <button type="button" class="epa-btn primary" data-action="admin-new-staff">צור עובד חדש +</button>
+        </div>` : '';
+    return `<div class="epa-page-head"><div><h2>עובדים</h2><p>פרופילים, הרשאות עבודה והכשרות</p></div>${headActions}</div>
         <section class="epa-panel">
-            <div class="epa-panel-title"><h3>כל העובדים (${(d.employees || []).length})</h3></div>
-            <div class="epa-table-wrap"><table class="epa-table"><thead><tr><th>שם</th><th>תפקיד</th><th>דירוג</th><th>מכסה</th><th>הכשרות</th><th>מצב</th></tr></thead><tbody>${rows}</tbody></table></div>
+            <div class="epa-panel-title"><h3>כל העובדים (${employees.length})</h3></div>
+            <div class="epa-table-wrap"><table class="epa-table"><thead><tr><th>שם</th><th>תפקיד</th><th>דירוג</th><th>מכסה</th><th>הכשרות</th><th>Bookings</th><th>מצב</th></tr></thead><tbody>${rows || '<tr><td colspan="7" class="ep-empty">אין עובדים</td></tr>'}</tbody></table></div>
         </section>`;
 }
 
@@ -949,27 +957,6 @@ function renderEmployeeForm(ce, e, d) {
         ${permissionsSection}
         <div class="epa-inline">
             <button class="epa-btn primary" data-action="admin-save-employee" data-emp="${e.id}">שמירה</button>
-            <button class="epa-btn" data-action="admin-close-modal">ביטול</button>
-        </div>`;
-}
-
-function renderConnectStaffForm(ce, d, staffId) {
-    const staff = (ce._staffData || []).find(s => s.staffId === staffId);
-    if (!staff) return '<div class="ep-empty">לא נמצאו פרטי עובד/ת.</div>';
-    return `<div class="epa-detail-grid" style="margin-bottom:10px">
-            <div class="epa-detail-item"><span>שם ב-Wix Bookings</span><b>${esc(staff.name || '—')}</b></div>
-            <div class="epa-detail-item"><span>אימייל</span><b>${esc(staff.email || '—')}</b></div>
-            <div class="epa-detail-item"><span>טלפון</span><b>${esc(staff.phone || '—')}</b></div>
-        </div>
-        <div class="epa-form">
-            <div><label>שם תצוגה בפורטל</label><input id="epaCS_displayName" value="${esc(staff.name || '')}"></div>
-            <div><label>תפקיד</label><select id="epaCS_roleType">${(d.roleTypes || []).map(r => `<option value="${r.value}" ${r.value === 'Employee' ? 'selected' : ''}>${esc(r.label)}</option>`).join('')}</select></div>
-            <div><label>טלפון</label><input id="epaCS_phone" value="${esc(staff.phone || '')}"></div>
-            <div><label>צבע</label><input id="epaCS_color" type="color" value="#2563eb"></div>
-        </div>
-        <div class="ep-empty" style="text-align:center;margin-top:8px">הרשאות ברירת המחדל יוחלו אוטומטית לפי סוג התפקיד שנבחר. ניתן לערוך הרשאות מפורטות בעריכת הפרופיל לאחר החיבור.</div>
-        <div class="epa-inline">
-            <button class="epa-btn primary" data-action="admin-save-connect-staff" data-staff="${esc(staff.staffId)}">חיבור עובד/ת</button>
             <button class="epa-btn" data-action="admin-close-modal">ביטול</button>
         </div>`;
 }
@@ -1244,7 +1231,7 @@ function renderModal(ce, d) {
     if (!modal) return '';
     let title = '', body = '';
     if (modal.type === 'employee') {
-        const employee = (d.employees || []).find(e => e.id === modal.id);
+        const employee = (asArray(d.allEmployees).length ? asArray(d.allEmployees) : asArray(d.employees)).find(e => e.id === modal.id);
         if (!employee) return '';
         title = `הגדרות — ${employee.displayName}`;
         body = renderEmployeeForm(ce, employee, d);
@@ -1270,11 +1257,11 @@ function renderModal(ce, d) {
         const template = modal.id ? (ce._templatesData || []).find(t => t.id === modal.id) : null;
         title = template ? `עריכת תבנית — ${template.title}` : 'תבנית חדשה';
         body = renderTemplateForm(template);
-    } else if (modal.type === 'connectStaff') {
-        const staff = (ce._staffData || []).find(s => s.staffId === modal.id);
-        if (!staff) return '';
-        title = `חיבור עובד/ת — ${staff.name || staff.email || staff.staffId}`;
-        body = renderConnectStaffForm(ce, d, modal.id);
+    } else if (modal.type === 'setupStaff') {
+        const employee = (asArray(d.allEmployees).length ? asArray(d.allEmployees) : asArray(d.employees)).find(e => e.id === modal.id);
+        if (!employee) return '';
+        title = `הקמת Bookings — ${employee.displayName}`;
+        body = renderSetupStaffForm(ce, d, modal.id);
     } else if (modal.type === 'timeEntry') {
         const entry = modal.id
             ? (ce._teamTimeData?.employees || []).flatMap(e => e.entries).find(x => x.id === modal.id)
@@ -1657,27 +1644,27 @@ export function handleAdminClick(ce, action, target) {
         }
         case 'admin-staff-refresh':
             ce._staffData = null;
+            ce._staffIds = null;
             ce.render();
             ce._dispatch('adminStaffLoad');
             return true;
         case 'admin-new-staff':
             window.open(WIX_NEW_STAFF_URL, '_blank', 'noopener');
             return true;
-        case 'admin-connect-staff':
-            ce._adminModal = { type: 'connectStaff', id: target.dataset.staff };
+        case 'admin-setup-staff':
+            if (!d?.permissions?.manageEmployees) return true;
+            ce._adminModal = { type: 'setupStaff', id: target.dataset.emp };
             ce.render();
             return true;
-        case 'admin-save-connect-staff': {
-            const val = (id) => ce.querySelector(`#${id}`)?.value;
-            const patch = {
-                displayName: val('epaCS_displayName') || undefined,
-                roleType: val('epaCS_roleType') || undefined,
-                phone: val('epaCS_phone') ?? undefined,
-                color: val('epaCS_color') || undefined,
-            };
+        case 'admin-link-staff-to-employee': {
+            if (!d?.permissions?.manageEmployees) return true;
+            const emp = (asArray(d?.allEmployees).length ? asArray(d.allEmployees) : asArray(d?.employees)).find(e => e.id === target.dataset.emp);
             ce._adminModal = null;
-            ce._startBusy('מחבר עובד/ת…');
-            ce._dispatch('adminLinkStaff', { staffId: target.dataset.staff, patch });
+            ce._startBusy('מחבר ל-Bookings…');
+            ce._dispatch('adminLinkStaff', {
+                staffId: target.dataset.staff,
+                patch: { roleId: target.dataset.emp, displayName: emp?.displayName, phone: emp?.phone },
+            });
             return true;
         }
         case 'admin-teamtime-month-prev':

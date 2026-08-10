@@ -336,7 +336,8 @@ class EmployeePortal extends HTMLElement {
         this._empFormAcc = {};                  // employee form accordion open state (skills, perm-*)
         this._lastEmployeeSave = null;          // pending employee patch for optimistic UI
         this._templatesData = null;
-        this._staffData = null;                 // Wix Bookings staff list (employees page)
+        this._staffData = null;                 // Wix Bookings staff list (employees page — matching only)
+        this._staffIds = null;                  // Set of valid Bookings staff _ids
         this._staffSearch = '';
         this._teamTimeData = null;              // Team time admin page
         this._teamTimeMonth = todayKey().slice(0, 7);
@@ -591,7 +592,13 @@ class EmployeePortal extends HTMLElement {
         if (name === 'staff-data') {
             try {
                 const parsed = JSON.parse(newVal);
-                this._staffData = parsed.staff || [];
+                const staff = Array.isArray(parsed?.staff) ? parsed.staff : (Array.isArray(parsed) ? parsed : []);
+                this._staffData = staff;
+                this._staffIds = new Set(
+                    Array.isArray(parsed?.staffIds)
+                        ? parsed.staffIds
+                        : staff.map(s => s.staffId).filter(Boolean),
+                );
             } catch (err) {
                 console.error('[employee-portal] bad staff-data JSON:', err);
                 return;
@@ -699,7 +706,7 @@ class EmployeePortal extends HTMLElement {
         console.log('[employee-portal] action-result ←', result.type, result.error ? result.message : result);
         if (result.error) {
             if (result.type === 'adminTemplatesLoad') this._templatesData = [];
-            if (result.type === 'adminStaffLoad') this._staffData = [];
+            if (result.type === 'adminStaffLoad') { this._staffData = []; this._staffIds = new Set(); }
             if (result.type === 'adminTeamTimeLoad') this._teamTimeData = { employees: [], monthKey: this._teamTimeMonth };
             if (result.type === 'loadMyMessages') this._messagesData = { personal: [], system: [] };
             if (result.type === 'adminMessagesLoad') this._adminMessagesData = [];
@@ -793,12 +800,16 @@ class EmployeePortal extends HTMLElement {
             this._toast('השעות אושרו בהצלחה. תודה!', 'success');
         }
         if (result.type === 'adminSaveEmployee' && result.ok) {
-            if (this._lastEmployeeSave && this._adminData?.employees) {
+            if (this._lastEmployeeSave && this._adminData) {
                 const { roleId, patch } = this._lastEmployeeSave;
-                const emp = this._adminData.employees.find(e => e.id === roleId);
-                if (emp && patch) {
-                    Object.assign(emp, patch);
-                    if (Array.isArray(patch.skillIds)) emp.skillIds = patch.skillIds;
+                for (const list of [this._adminData.allEmployees, this._adminData.employees]) {
+                    if (!Array.isArray(list)) continue;
+                    const emp = list.find(e => e.id === roleId);
+                    if (emp && patch) {
+                        Object.assign(emp, patch);
+                        if (Array.isArray(patch.skillIds)) emp.skillIds = patch.skillIds;
+                        break;
+                    }
                 }
                 this._lastEmployeeSave = null;
             }

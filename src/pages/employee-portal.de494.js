@@ -257,8 +257,14 @@ async function loadAndPushTemplates(portalEl) {
 }
 
 async function loadAndPushStaffList(portalEl) {
-    const staff = await listBookingStaff();
-    portalEl.setAttribute('staff-data', JSON.stringify({ staff, __fetchedAt: Date.now() }));
+    const data = await listBookingStaff();
+    const normalized = Array.isArray(data)
+        ? { staffIds: data.map(s => s.staffId).filter(Boolean), staff: data }
+        : {
+            staffIds: Array.isArray(data?.staffIds) ? data.staffIds : [],
+            staff: Array.isArray(data?.staff) ? data.staff : [],
+        };
+    portalEl.setAttribute('staff-data', JSON.stringify({ ...normalized, __fetchedAt: Date.now() }));
 }
 
 async function loadAndPushTeamTime(portalEl, monthKey) {

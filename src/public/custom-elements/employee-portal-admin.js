@@ -137,6 +137,13 @@ export const ADMIN_STYLE = `
 .epa-detail-item { background: #f8fafc; border-radius: 9px; padding: 8px 10px; }
 .epa-detail-item span { display: block; font-size: 10.5px; color: #64748b; }
 .epa-detail-item b { font-size: 12.5px; }
+.epa-sort-handle { cursor: grab; color: #94a3b8; padding: 0 8px; user-select: none; font-size: 16px; line-height: 1; }
+.epa-sort-handle:active { cursor: grabbing; }
+.epa-emp-sort-row.dragging { opacity: 0.45; }
+.epa-emp-sort-row.drag-over { box-shadow: inset 0 -2px 0 #3b82f6; }
+.epa-sort-actions { display: inline-flex; flex-direction: column; gap: 2px; }
+.epa-sort-actions button { border: 1px solid #dbeafe; background: #fff; border-radius: 6px; width: 24px; height: 20px; cursor: pointer; font-size: 11px; line-height: 1; padding: 0; color: #1d4ed8; }
+.epa-sort-actions button:disabled { opacity: 0.35; cursor: not-allowed; }
 @keyframes epa-page-in { from { opacity:0; transform:translateY(5px) } to { opacity:1; transform:none } }
 @keyframes epa-fade-in { from { opacity:0 } to { opacity:1 } }
 @keyframes epa-modal-in { from { opacity:0; transform:scale(.97) translateY(7px) } to { opacity:1; transform:none } }
@@ -164,6 +171,104 @@ function asArray(value) {
     if (value == null || value === '') return [];
     if (typeof value === 'object') return Object.values(value).filter(Boolean);
     return [value];
+}
+function employeesForPage(ce, d) {
+    return sortEmployees(d?.permissions?.manageEmployees ? asArray(ce._allEmployees) : asArray(d?.employees));
+}
+function sortEmployees(list) {
+    return asArray(list).slice().sort((a, b) =>
+        (a.priorityRank ?? 999) - (b.priorityRank ?? 999)
+        || a.displayName.localeCompare(b.displayName, 'he'));
+}
+function findEmployee(ce, d, id) {
+    return employeesForPage(ce, d).find(e => e.id === id);
+}
+
+function readEmployeeFormValues(ce, d) {
+    const val = (id) => ce.querySelector(`#${id}`)?.value;
+    const num = (id) => { const v = Number(val(id)); return Number.isFinite(v) && val(id) !== '' ? v : null; };
+    const patch = {
+        displayName: val('epaF_displayName') || undefined,
+        roleType: val('epaF_roleType') || undefined,
+        phone: val('epaF_phone') ?? undefined,
+        color: val('epaF_color') || undefined,
+        seniority: val('epaF_seniority') ?? undefined,
+        priorityRank: num('epaF_priorityRank'),
+        minShiftsPerWeek: num('epaF_minShiftsPerWeek'),
+        minShiftHours: num('epaF_minShiftHours'),
+        isTrainee: val('epaF_isTrainee') === '1',
+        active: val('epaF_active') === '1',
+    };
+    const skillEls = [...ce.querySelectorAll('.epa-skill')];
+    if (skillEls.length) patch.skillIds = skillEls.filter(x => x.checked).map(x => x.value);
+    if (d?.permissions?.manageRates) {
+        patch.rateStudio = num('epaF_rateStudio');
+        patch.rateInstruction = num('epaF_rateInstruction');
+        patch.rateWool = num('epaF_rateWool');
+    }
+    const permEls = [...ce.querySelectorAll('.epaPerm')];
+    let permissions = null;
+    if (permEls.length) {
+        permissions = {};
+        for (const cb of permEls) permissions[cb.dataset.perm] = cb.checked;
+    }
+    return { patch, permissions };
+}
+
+/** Persists in-progress employee form edits across accordion toggles / re-renders. */
+export function captureEmployeeFormDraft(ce, d) {
+    if (ce._adminModal?.type !== 'employee') return;
+    if (!ce.querySelector('#epaF_displayName')) return;
+    const roleId = ce._adminModal.id;
+    const existing = ce._empFormDraft?.[roleId] || {};
+    const { patch: domPatch, permissions: domPerms } = readEmployeeFormValues(ce, d);
+    const patch = { ...(existing.patch || {}), ...domPatch };
+    if (domPatch.skillIds) patch.skillIds = domPatch.skillIds;
+    else if (existing.patch?.skillIds) patch.skillIds = existing.patch.skillIds;
+    let permissions = { ...(existing.permissions || {}) };
+    if (domPerms) Object.assign(permissions, domPerms);
+    if (!ce._empFormDraft) ce._empFormDraft = {};
+    ce._empFormDraft[roleId] = {
+        patch,
+        permissions: Object.keys(permissions).length ? permissions : null,
+    };
+}
+
+function employeeForForm(ce, employee) {
+    if (!employee) return null;
+    const draft = ce._empFormDraft?.[employee.id];
+    if (!draft) return employee;
+    const merged = { ...employee, ...draft.patch };
+    if (draft.patch?.skillIds) merged.skillIds = draft.patch.skillIds;
+    if (draft.permissions) merged.permissions = { ...(employee.permissions || {}), ...draft.permissions };
+    return merged;
+}
+function applyEmployeeOrder(ce, d, roleIds) {
+    const list = employeesForPage(ce, d);
+    const byId = Object.fromEntries(list.map(e => [e.id, e]));
+    const reordered = roleIds.map((id, index) => {
+        const emp = byId[id];
+        return emp ? { ...emp, priorityRank: index + 1 } : null;
+    }).filter(Boolean);
+    for (const emp of list) {
+        if (!roleIds.includes(emp.id)) reordered.push(emp);
+    }
+    if (d?.permissions?.manageEmployees) ce._allEmployees = reordered;
+}
+function requestEmployeeReorder(ce, d, roleIds) {
+    applyEmployeeOrder(ce, d, roleIds);
+    ce._startBusy('שומר סדר עובדים…');
+    ce._dispatch('adminReorderEmployees', { roleIds });
+}
+function moveEmployeeInOrder(ce, d, roleId, direction) {
+    const employees = employeesForPage(ce, d);
+    const idx = employees.findIndex(e => e.id === roleId);
+    if (idx < 0) return;
+    const target = direction === 'up' ? idx - 1 : idx + 1;
+    if (target < 0 || target >= employees.length) return;
+    const next = employees.slice();
+    [next[idx], next[target]] = [next[target], next[idx]];
+    requestEmployeeReorder(ce, d, next.map(e => e.id));
 }
 function pad2(n) { return String(n).padStart(2, '0'); }
 function monthTitle(monthKey) {
@@ -743,11 +848,18 @@ function renderTrackerPage(ce, d) {
 }
 
 function isBookingsLinked(employee, staffIds) {
-    return !!(employee?.staffId && staffIds && staffIds.has(employee.staffId));
+    if (employee?.bookingsLinked === true) return true;
+    if (employee?.bookingsLinked === false) return false;
+    const connectedId = String(employee?.connectedStaffId || employee?.staffId || '').trim().toLowerCase();
+    if (!connectedId || !staffIds?.size) return false;
+    for (const id of staffIds) {
+        if (String(id).trim().toLowerCase() === connectedId) return true;
+    }
+    return false;
 }
 
 function renderSetupStaffForm(ce, d, roleId) {
-    const employee = (asArray(d.allEmployees).length ? asArray(d.allEmployees) : asArray(d.employees)).find(e => e.id === roleId);
+    const employee = findEmployee(ce, d, roleId);
     if (!employee) return '<div class="ep-empty">לא נמצא/ה עובד/ת.</div>';
     const unlinked = asArray(ce._staffData).filter(s => !s.linked);
     const rows = unlinked.map(s => `
@@ -767,39 +879,56 @@ function renderSetupStaffForm(ce, d, roleId) {
 
 function renderEmployeesPage(ce, d) {
     const canManage = d.permissions.manageEmployees;
+    const sortMode = !!ce._empSortMode && canManage;
+    const headActions = canManage ? `<div class="epa-inline" style="margin:0">
+            <button type="button" class="epa-btn ${sortMode ? 'primary' : ''}" data-action="admin-toggle-emp-sort">${sortMode ? 'סיום סידור' : 'סידור רשימה'}</button>
+            <button type="button" class="epa-btn" data-action="admin-staff-refresh">רענון Bookings</button>
+            <button type="button" class="epa-btn primary" data-action="admin-new-staff">צור עובד חדש +</button>
+        </div>` : '';
+    const pageHead = `<div class="epa-page-head"><div><h2>עובדים</h2><p>${sortMode ? 'גררו שורות או השתמשו בחצים לשינוי הסדר — השינוי נשמר אוטומטית' : 'פרופילים, הרשאות עבודה והכשרות'}</p></div>${headActions}</div>`;
+
+    if (canManage && ce._staffData === null) {
+        return `${pageHead}<section class="epa-panel"><div class="ep-loading"><div class="ep-spinner"></div>טוען עובדים…</div></section>`;
+    }
+
     const staffIds = ce._staffIds;
-    const staffLoading = canManage && ce._staffData === null;
-    const employees = asArray(d.allEmployees).length ? asArray(d.allEmployees) : asArray(d.employees);
+    const employees = employeesForPage(ce, d);
     const workshopTypes = asArray(d.workshopTypes);
-    const rows = employees.map(e => {
-        const bookingsLinked = !staffLoading && isBookingsLinked(e, staffIds);
+    const rows = employees.map((e, index) => {
+        const bookingsLinked = isBookingsLinked(e, staffIds);
         const skillIds = asArray(e.skillIds);
         const bookingsCell = !canManage
             ? '—'
-            : staffLoading
-                ? '<span style="color:#9ca3af;font-size:12px">בודק…</span>'
-                : bookingsLinked
-                    ? '<span class="epa-badge ok">מוקם ב-Bookings</span>'
-                    : `<button type="button" class="epa-btn primary" data-action="admin-setup-staff" data-emp="${esc(e.id)}">הקמה</button>`;
+            : bookingsLinked
+                ? '<span class="epa-badge ok">מוקם ב-Bookings</span>'
+                : `<button type="button" class="epa-btn primary" data-action="admin-setup-staff" data-emp="${esc(e.id)}">הקמה</button>`;
+        const sortCell = sortMode ? `
+            <td class="epa-sort-cell">
+                <span class="epa-sort-handle" draggable="true" data-action="admin-emp-drag" data-emp="${esc(e.id)}" title="גרירה לשינוי סדר">☰</span>
+                <span class="epa-sort-actions">
+                    <button type="button" data-action="admin-emp-move" data-dir="up" data-emp="${esc(e.id)}" ${index === 0 ? 'disabled' : ''} title="הזזה למעלה">▲</button>
+                    <button type="button" data-action="admin-emp-move" data-dir="down" data-emp="${esc(e.id)}" ${index === employees.length - 1 ? 'disabled' : ''} title="הזזה למטה">▼</button>
+                </span>
+            </td>` : '';
+        const rowClass = sortMode ? 'epa-emp-sort-row' : (canManage ? 'epa-row-click' : '');
+        const rowAction = sortMode ? '' : (canManage ? `data-action="admin-edit-employee" data-emp="${e.id}"` : '');
         return `
-        <tr class="${canManage ? 'epa-row-click' : ''}" style="${e.active ? '' : 'opacity:.55'}" ${canManage ? `data-action="admin-edit-employee" data-emp="${e.id}"` : ''}>
+        <tr class="${rowClass}" style="${e.active ? '' : 'opacity:.55'}" data-emp-row="${esc(e.id)}" ${rowAction}>
+            ${sortCell}
             <td><span class="epa-dot-lg" style="background:${esc(e.color || '#2563eb')}"></span>${esc(e.displayName)}${e.isTrainee ? ' <span class="ep-tag">חניכה</span>' : ''}</td>
             <td>${esc(e.roleLabel)}</td>
-            <td>${e.priorityRank ?? '—'}</td>
+            <td>${index + 1}</td>
             <td>${e.minShiftsPerWeek ?? 'ברירת מחדל'}</td>
             <td>${skillIds.map(id => esc((workshopTypes.find(w => w.id === id) || {}).name || '')).filter(Boolean).join(', ') || '—'}</td>
             <td>${bookingsCell}</td>
             <td><span class="epa-badge ${e.active ? 'ok' : 'miss'}">${e.active ? 'פעיל/ה' : 'לא פעיל/ה'}</span></td>
         </tr>`;
     }).join('');
-    const headActions = canManage ? `<div class="epa-inline" style="margin:0">
-            <button type="button" class="epa-btn" data-action="admin-staff-refresh">רענון Bookings</button>
-            <button type="button" class="epa-btn primary" data-action="admin-new-staff">צור עובד חדש +</button>
-        </div>` : '';
-    return `<div class="epa-page-head"><div><h2>עובדים</h2><p>פרופילים, הרשאות עבודה והכשרות</p></div>${headActions}</div>
+    const sortHeader = sortMode ? '<th style="width:72px">סדר</th>' : '';
+    return `${pageHead}
         <section class="epa-panel">
             <div class="epa-panel-title"><h3>כל העובדים (${employees.length})</h3></div>
-            <div class="epa-table-wrap"><table class="epa-table"><thead><tr><th>שם</th><th>תפקיד</th><th>דירוג</th><th>מכסה</th><th>הכשרות</th><th>Bookings</th><th>מצב</th></tr></thead><tbody>${rows || '<tr><td colspan="7" class="ep-empty">אין עובדים</td></tr>'}</tbody></table></div>
+            <div class="epa-table-wrap"><table class="epa-table"><thead><tr>${sortHeader}<th>שם</th><th>תפקיד</th><th>#</th><th>מכסה</th><th>הכשרות</th><th>Bookings</th><th>מצב</th></tr></thead><tbody>${rows || `<tr><td colspan="${sortMode ? 8 : 7}" class="ep-empty">אין עובדים</td></tr>`}</tbody></table></div>
         </section>`;
 }
 
@@ -1231,7 +1360,7 @@ function renderModal(ce, d) {
     if (!modal) return '';
     let title = '', body = '';
     if (modal.type === 'employee') {
-        const employee = (asArray(d.allEmployees).length ? asArray(d.allEmployees) : asArray(d.employees)).find(e => e.id === modal.id);
+        const employee = employeeForForm(ce, findEmployee(ce, d, modal.id));
         if (!employee) return '';
         title = `הגדרות — ${employee.displayName}`;
         body = renderEmployeeForm(ce, employee, d);
@@ -1258,7 +1387,7 @@ function renderModal(ce, d) {
         title = template ? `עריכת תבנית — ${template.title}` : 'תבנית חדשה';
         body = renderTemplateForm(template);
     } else if (modal.type === 'setupStaff') {
-        const employee = (asArray(d.allEmployees).length ? asArray(d.allEmployees) : asArray(d.employees)).find(e => e.id === modal.id);
+        const employee = findEmployee(ce, d, modal.id);
         if (!employee) return '';
         title = `הקמת Bookings — ${employee.displayName}`;
         body = renderSetupStaffForm(ce, d, modal.id);
@@ -1358,7 +1487,7 @@ export function handleAdminClick(ce, action, target) {
             if (ce._adminPage === 'templates' && !ce._templatesData) {
                 ce._dispatch('adminTemplatesLoad');
             }
-            if (ce._adminPage === 'employees' && !ce._staffData && d?.permissions?.manageEmployees) {
+            if (ce._adminPage === 'employees' && ce._staffData === null && d?.permissions?.manageEmployees) {
                 ce._dispatch('adminStaffLoad');
             }
             if (ce._adminPage === 'teamTime' && !ce._teamTimeData && d?.permissions?.editTimeEntries) {
@@ -1588,6 +1717,7 @@ export function handleAdminClick(ce, action, target) {
             ce.render();
             return true;
         case 'admin-toggle-emp-acc': {
+            captureEmployeeFormDraft(ce, d);
             if (!ce._empFormAcc) ce._empFormAcc = {};
             const acc = target.dataset.acc;
             ce._empFormAcc[acc] = !ce._empFormAcc[acc];
@@ -1597,6 +1727,8 @@ export function handleAdminClick(ce, action, target) {
         case 'admin-edit-employee':
             if (!d?.permissions?.manageEmployees) return true;
             ce._empFormAcc = {};
+            if (!ce._empFormDraft) ce._empFormDraft = {};
+            delete ce._empFormDraft[target.dataset.emp];
             ce._adminModal = { type: 'employee', id: target.dataset.emp };
             ce.render();
             return true;
@@ -1605,46 +1737,48 @@ export function handleAdminClick(ce, action, target) {
             ce.render();
             return true;
         case 'admin-close-modal':
+            if (ce._adminModal?.type === 'employee' && ce._adminModal.id && ce._empFormDraft) {
+                delete ce._empFormDraft[ce._adminModal.id];
+            }
             ce._adminModal = null;
             ce.render();
             return true;
         case 'admin-cancel-edit':
-            ce._adminModal = null; ce.render(); return true;
+            if (ce._adminModal?.type === 'employee' && ce._adminModal.id && ce._empFormDraft) {
+                delete ce._empFormDraft[ce._adminModal.id];
+            }
+            ce._adminModal = null;
+            ce.render();
+            return true;
         case 'admin-save-employee': {
-            const val = (id) => ce.querySelector(`#${id}`)?.value;
-            const num = (id) => { const v = Number(val(id)); return Number.isFinite(v) && val(id) !== '' ? v : null; };
-            const patch = {
-                displayName: val('epaF_displayName') || undefined,
-                roleType: val('epaF_roleType') || undefined,
-                phone: val('epaF_phone') ?? undefined,
-                color: val('epaF_color') || undefined,
-                seniority: val('epaF_seniority') ?? undefined,
-                priorityRank: num('epaF_priorityRank'),
-                minShiftsPerWeek: num('epaF_minShiftsPerWeek'),
-                minShiftHours: num('epaF_minShiftHours'),
-                isTrainee: val('epaF_isTrainee') === '1',
-                active: val('epaF_active') === '1',
-                skillIds: [...ce.querySelectorAll('.epa-skill:checked')].map(x => x.value),
-            };
-            if (d?.permissions?.manageRates) {
-                patch.rateStudio = num('epaF_rateStudio');
-                patch.rateInstruction = num('epaF_rateInstruction');
-                patch.rateWool = num('epaF_rateWool');
-            }
-            const permCheckboxes = [...ce.querySelectorAll('.epaPerm')];
-            let permissions = null;
-            if (permCheckboxes.length) {
-                permissions = {};
-                for (const cb of permCheckboxes) permissions[cb.dataset.perm] = cb.checked;
-            }
-            ce._lastEmployeeSave = { roleId: target.dataset.emp, patch };
+            if (ce._empSaveFinishing) return true;
+            captureEmployeeFormDraft(ce, d);
+            const draft = ce._empFormDraft?.[target.dataset.emp];
+            const { patch, permissions } = draft
+                ? { patch: draft.patch, permissions: draft.permissions }
+                : readEmployeeFormValues(ce, d);
+            ce._lastEmployeeSave = { roleId: target.dataset.emp, patch, permissions };
+            ce._empSaveFinishing = true;
             ce._startBusy('שומר פרטי עובד/ת…');
             ce._dispatch('adminSaveEmployee', { roleId: target.dataset.emp, patch, permissions });
             return true;
         }
+        case 'admin-toggle-emp-sort':
+            if (!d?.permissions?.manageEmployees) return true;
+            ce._empSortMode = !ce._empSortMode;
+            ce.render();
+            return true;
+        case 'admin-emp-move':
+            if (!d?.permissions?.manageEmployees || !ce._empSortMode) return true;
+            moveEmployeeInOrder(ce, d, target.dataset.emp, target.dataset.dir);
+            ce.render();
+            return true;
+        case 'admin-emp-drag':
+            return true;
         case 'admin-staff-refresh':
             ce._staffData = null;
             ce._staffIds = null;
+            ce._allEmployees = null;
             ce.render();
             ce._dispatch('adminStaffLoad');
             return true;
@@ -1658,7 +1792,7 @@ export function handleAdminClick(ce, action, target) {
             return true;
         case 'admin-link-staff-to-employee': {
             if (!d?.permissions?.manageEmployees) return true;
-            const emp = (asArray(d?.allEmployees).length ? asArray(d.allEmployees) : asArray(d?.employees)).find(e => e.id === target.dataset.emp);
+            const emp = findEmployee(ce, d, target.dataset.emp);
             ce._adminModal = null;
             ce._startBusy('מחבר ל-Bookings…');
             ce._dispatch('adminLinkStaff', {
@@ -1894,4 +2028,53 @@ export function handleAdminClick(ce, action, target) {
         default:
             return false;
     }
+}
+
+export function handleAdminDragStart(ce, e) {
+    if (!ce._empSortMode) return false;
+    const handle = e.target.closest('[data-action="admin-emp-drag"]');
+    if (!handle) return false;
+    ce._empDragId = handle.dataset.emp;
+    if (e.dataTransfer) {
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', ce._empDragId);
+    }
+    handle.closest('tr')?.classList.add('dragging');
+    return true;
+}
+
+export function handleAdminDragEnd(ce) {
+    ce._empDragId = null;
+    ce.querySelectorAll('.epa-emp-sort-row').forEach((row) => row.classList.remove('dragging', 'drag-over'));
+    return true;
+}
+
+export function handleAdminDragOver(ce, e) {
+    if (!ce._empSortMode || !ce._empDragId) return false;
+    const row = e.target.closest('tr[data-emp-row]');
+    if (!row) return false;
+    ce.querySelectorAll('.epa-emp-sort-row.drag-over').forEach((el) => el.classList.remove('drag-over'));
+    row.classList.add('drag-over');
+    return true;
+}
+
+export function handleAdminDrop(ce, e, d) {
+    if (!ce._empSortMode || !ce._empDragId || !d) return false;
+    const row = e.target.closest('tr[data-emp-row]');
+    if (!row) return false;
+    const targetId = row.dataset.empRow;
+    const dragId = ce._empDragId;
+    ce._empDragId = null;
+    ce.querySelectorAll('.epa-emp-sort-row').forEach((el) => el.classList.remove('dragging', 'drag-over'));
+    if (!targetId || !dragId || targetId === dragId) return true;
+    const employees = employeesForPage(ce, d);
+    const from = employees.findIndex((emp) => emp.id === dragId);
+    const to = employees.findIndex((emp) => emp.id === targetId);
+    if (from < 0 || to < 0) return true;
+    const next = employees.slice();
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved);
+    requestEmployeeReorder(ce, d, next.map((emp) => emp.id));
+    ce.render();
+    return true;
 }

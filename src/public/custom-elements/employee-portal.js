@@ -20,7 +20,9 @@
  * טאב ניהול (Module B): נטען מ-employee-portal-admin.js ומוצג רק לבעלי
  * הרשאת manageEmployeeSystem. קלט נוסף: attribute בשם `admin-data`.
  */
-import { ADMIN_STYLE, renderAdminTab, handleAdminClick, handleAdminChange } from './employee-portal-admin.js';
+import { ADMIN_STYLE, renderAdminTab, handleAdminClick, handleAdminChange, handleAdminDragStart, handleAdminDragEnd, handleAdminDragOver, handleAdminDrop, captureEmployeeFormDraft } from './employee-portal-admin.js';
+
+const EMPLOYEE_SAVE_HOLD_MS = 2000;
 
 const EP_STYLE = `
 employee-portal { display: block; direction: rtl; font-family: 'Heebo', 'Segoe UI', Arial, sans-serif; background: linear-gradient(145deg,#f8fafc,#eff6ff); color: #1f2937; min-height: 100%; }
@@ -334,10 +336,15 @@ class EmployeePortal extends HTMLElement {
         this._adminSidebarCollapsed = false;
         this._adminModal = null;
         this._empFormAcc = {};                  // employee form accordion open state (skills, perm-*)
+        this._empFormDraft = {};                // unsaved employee form field values (survives re-render)
+        this._empSaveFinishing = false;         // keep save spinner visible after CMS write
         this._lastEmployeeSave = null;          // pending employee patch for optimistic UI
         this._templatesData = null;
         this._staffData = null;                 // Wix Bookings staff list (employees page — matching only)
         this._staffIds = null;                  // Set of valid Bookings staff _ids
+        this._allEmployees = null;              // full CMS employee list (loaded with staff on employees page)
+        this._empSortMode = false;              // manual employee list ordering mode
+        this._empDragId = null;
         this._staffSearch = '';
         this._teamTimeData = null;              // Team time admin page
         this._teamTimeMonth = todayKey().slice(0, 7);
@@ -382,6 +389,25 @@ class EmployeePortal extends HTMLElement {
         // Event delegation for all dynamic content.
         this.addEventListener('click', (e) => this._onClick(e));
         this.addEventListener('change', (e) => this._onChange(e));
+        this.addEventListener('input', (e) => {
+            const input = e.target;
+            if (this._adminModal?.type === 'employee' && input?.id?.startsWith('epaF_')) {
+                captureEmployeeFormDraft(this, this._adminData);
+            }
+        });
+        this.addEventListener('dragstart', (e) => {
+            if (handleAdminDragStart(this, e)) e.stopPropagation();
+        });
+        this.addEventListener('dragend', () => handleAdminDragEnd(this));
+        this.addEventListener('dragover', (e) => {
+            if (handleAdminDragOver(this, e)) e.preventDefault();
+        });
+        this.addEventListener('drop', (e) => {
+            if (handleAdminDrop(this, e, this._adminData)) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
+        });
         // Swipe support for the messages carousel.
         this.addEventListener('touchstart', (e) => {
             if (e.target.closest('.ep-msg-car')) this._msgCarTouchX = e.touches[0]?.clientX ?? null;
@@ -554,7 +580,7 @@ class EmployeePortal extends HTMLElement {
                 return;
             }
             this._busy = null;
-            this._clearBusyOverlay();
+            if (!this._empSaveFinishing) this._clearBusyOverlay();
             this._pendingWorkTypes = null;
             if (this._adminData?.monthKey) this._adminMonth = this._adminData.monthKey;
             console.log('[employee-portal] admin-data received', {
@@ -562,6 +588,7 @@ class EmployeePortal extends HTMLElement {
                 employees: this._adminData.employees?.length ?? 0,
                 days: Object.keys(this._adminData.days || {}).length,
             });
+            if (this._empSaveFinishing) return;
             this.render();
         }
         if (name === 'hours-data') {
@@ -599,6 +626,7 @@ class EmployeePortal extends HTMLElement {
                         ? parsed.staffIds
                         : staff.map(s => s.staffId).filter(Boolean),
                 );
+                this._allEmployees = Array.isArray(parsed?.allEmployees) ? parsed.allEmployees : [];
             } catch (err) {
                 console.error('[employee-portal] bad staff-data JSON:', err);
                 return;
@@ -701,12 +729,61 @@ class EmployeePortal extends HTMLElement {
 
     _handleActionResult(result) {
         this._submitting = false;
+
+        if (result.type === 'adminSaveEmployee' && result.ok) {
+            if (this._lastEmployeeSave && this._adminData) {
+                const { roleId, patch, permissions } = this._lastEmployeeSave;
+                for (const list of [this._allEmployees, this._adminData?.employees]) {
+                    if (!Array.isArray(list)) continue;
+                    const emp = list.find(e => e.id === roleId);
+                    if (emp && patch) {
+                        Object.assign(emp, patch);
+                        if (Array.isArray(patch.skillIds)) emp.skillIds = patch.skillIds;
+                        if (permissions) emp.permissions = { ...(emp.permissions || {}), ...permissions };
+                    }
+                }
+            }
+            this._busy = 'שומר פרטי עובד/ת…';
+            this._syncBusyOverlay();
+            setTimeout(() => {
+                const savedRoleId = this._lastEmployeeSave?.roleId;
+                this._empSaveFinishing = false;
+                this._lastEmployeeSave = null;
+                this._busy = null;
+                this._clearBusyOverlay();
+                if (savedRoleId && this._empFormDraft) delete this._empFormDraft[savedRoleId];
+                this._adminModal = null;
+                this._toast('פרטי העובד/ת נשמרו בהצלחה.', 'success');
+                this.render();
+            }, EMPLOYEE_SAVE_HOLD_MS);
+            return;
+        }
+
+        if (result.type === 'adminSaveEmployee' && result.error) {
+            this._empSaveFinishing = false;
+            this._busy = null;
+            this._clearBusyOverlay();
+            if (this._lastEmployeeSave) {
+                const { roleId, patch, permissions } = this._lastEmployeeSave;
+                if (!this._empFormDraft) this._empFormDraft = {};
+                this._empFormDraft[roleId] = { patch, permissions };
+                this._lastEmployeeSave = null;
+            }
+            this._toast(result.message || 'שמירת פרטי העובד/ת נכשלה.', 'error');
+            this.render();
+            return;
+        }
+
         this._busy = null;
         this._clearBusyOverlay();
         console.log('[employee-portal] action-result ←', result.type, result.error ? result.message : result);
         if (result.error) {
             if (result.type === 'adminTemplatesLoad') this._templatesData = [];
-            if (result.type === 'adminStaffLoad') { this._staffData = []; this._staffIds = new Set(); }
+            if (result.type === 'adminStaffLoad') {
+                this._staffData = [];
+                this._staffIds = new Set();
+                this._allEmployees = [];
+            }
             if (result.type === 'adminTeamTimeLoad') this._teamTimeData = { employees: [], monthKey: this._teamTimeMonth };
             if (result.type === 'loadMyMessages') this._messagesData = { personal: [], system: [] };
             if (result.type === 'adminMessagesLoad') this._adminMessagesData = [];
@@ -799,27 +876,17 @@ class EmployeePortal extends HTMLElement {
         if (result.type === 'approveMyMonth' && result.ok) {
             this._toast('השעות אושרו בהצלחה. תודה!', 'success');
         }
-        if (result.type === 'adminSaveEmployee' && result.ok) {
-            if (this._lastEmployeeSave && this._adminData) {
-                const { roleId, patch } = this._lastEmployeeSave;
-                for (const list of [this._adminData.allEmployees, this._adminData.employees]) {
-                    if (!Array.isArray(list)) continue;
-                    const emp = list.find(e => e.id === roleId);
-                    if (emp && patch) {
-                        Object.assign(emp, patch);
-                        if (Array.isArray(patch.skillIds)) emp.skillIds = patch.skillIds;
-                        break;
-                    }
-                }
-                this._lastEmployeeSave = null;
-            }
-            this._adminModal = null;
-            this._toast('פרטי העובד/ת נשמרו בהצלחה.', 'success');
+        if (result.type === 'adminReorderEmployees' && result.ok) {
+            this._busy = null;
+            this._toast('סדר העובדים נשמר.', 'success');
             this.render();
             return;
         }
-        if (result.type === 'adminSaveEmployee' && result.error) {
-            this._lastEmployeeSave = null;
+        if (result.type === 'adminReorderEmployees' && result.error) {
+            this._busy = null;
+            this._toast(result.message || 'שמירת הסדר נכשלה.', 'error');
+            this._dispatch('adminStaffLoad');
+            return;
         }
         if (result.type === 'adminRunSchedulingForEmployees' && result.ok) {
             this._autoAssignReport = result.employees || [];
@@ -874,6 +941,7 @@ class EmployeePortal extends HTMLElement {
     render() {
         const d = this._data;
         if (!d?.user) { this.renderLoading(); return; }
+        captureEmployeeFormDraft(this, this._adminData);
         this._tipPinned = null;
         this._hideTip();
 
@@ -2258,6 +2326,10 @@ class EmployeePortal extends HTMLElement {
 
     _onChange(e) {
         const input = e.target;
+        if (this._adminModal?.type === 'employee' && (input?.id?.startsWith('epaF_') || input?.classList?.contains('epa-skill') || input?.classList?.contains('epaPerm'))) {
+            captureEmployeeFormDraft(this, this._adminData);
+            return;
+        }
         if (input?.dataset?.action?.startsWith('admin-') && handleAdminChange(this, input)) return;
         if (input?.dataset?.action === 'toggle-ws-filter') {
             const wsId = input.dataset.wsId;

@@ -289,8 +289,8 @@ export async function assertEmployeeAccess(permissionKey = 'submitAvailability')
 /** Single Wix reference field → item _id (string or expanded object). */
 export function refId(refValue) {
     if (!refValue) return null;
-    if (typeof refValue === 'string') return refValue;
-    return refValue._id || null;
+    if (typeof refValue === 'string') return refValue.trim() || null;
+    return refValue._id || refValue.id || null;
 }
 
 /** Multi-reference field → array of item _ids. */

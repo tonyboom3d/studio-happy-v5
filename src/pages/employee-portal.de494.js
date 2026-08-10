@@ -62,6 +62,7 @@ import {
     updateSubmissionWorkType,
     listBookingStaff,
     linkEmployeeStaff,
+    reorderEmployees,
     listVacations,
     saveEmployeeVacation,
     deleteEmployeeVacation,
@@ -259,10 +260,11 @@ async function loadAndPushTemplates(portalEl) {
 async function loadAndPushStaffList(portalEl) {
     const data = await listBookingStaff();
     const normalized = Array.isArray(data)
-        ? { staffIds: data.map(s => s.staffId).filter(Boolean), staff: data }
+        ? { staffIds: data.map(s => s.staffId).filter(Boolean), staff: data, allEmployees: [] }
         : {
             staffIds: Array.isArray(data?.staffIds) ? data.staffIds : [],
             staff: Array.isArray(data?.staff) ? data.staff : [],
+            allEmployees: Array.isArray(data?.allEmployees) ? data.allEmployees : [],
         };
     portalEl.setAttribute('staff-data', JSON.stringify({ ...normalized, __fetchedAt: Date.now() }));
 }
@@ -525,7 +527,7 @@ async function handlePortalAction(portalEl, detail) {
             __epSuppressRealtimeUntil = Date.now() + 4000;
             pushActionResult(portalEl, { type, ...result });
             refreshPortal = false;
-            refreshAdmin = true;
+            refreshAdmin = false;
             break;
         }
 
@@ -550,6 +552,14 @@ async function handlePortalAction(portalEl, detail) {
             refreshAdmin = false;
             await loadAndPushStaffList(portalEl);
             return;
+
+        case 'adminReorderEmployees': {
+            const result = await reorderEmployees(payload?.roleIds);
+            pushActionResult(portalEl, { type, ...result });
+            refreshPortal = false;
+            refreshAdmin = false;
+            return;
+        }
 
         case 'adminLinkStaff': {
             const result = await linkEmployeeStaff(payload?.staffId, payload?.patch);

@@ -53,6 +53,11 @@ import {
     deleteVacation as deleteVacationRow,
     decideVacationRequest,
 } from 'backend/vacations.js';
+import {
+    TEMPLATE_USE,
+    assertTemplateUse,
+    mapTemplateRow,
+} from 'backend/whatsappTemplates.js';
 
 const SA = { suppressAuth: true };
 
@@ -969,12 +974,7 @@ export const rejectEmployeeVacation = webMethod(Permissions.SiteMember, async (v
 export const getStaffTemplates = webMethod(Permissions.SiteMember, async () => {
     await assertEmployeeAccess('manageTemplates');
     const result = await wixData.query('WhatsApp_Templates').ascending('title').limit(1000).find(SA);
-    return (result.items || []).map(t => ({
-        id: t._id,
-        title: t.title || '',
-        body: t.messageBody || '',
-        isSystem: !!t.isSystem,
-    }));
+    return (result.items || []).map(mapTemplateRow);
 });
 
 export const saveStaffTemplate = webMethod(Permissions.SiteMember, async (template) => {
@@ -983,7 +983,8 @@ export const saveStaffTemplate = webMethod(Permissions.SiteMember, async (templa
     const body = String(template?.body || '').trim();
     if (!title || !body) throw new Error('BAD_REQUEST: יש להזין כותרת ותוכן.');
 
-    const data = { title, messageBody: body };
+    const use = assertTemplateUse(template?.use, TEMPLATE_USE.EMPLOYEES);
+    const data = { title, messageBody: body, use };
     let saved;
     if (template?.id) {
         const existing = await wixData.get('WhatsApp_Templates', template.id, SA).catch(() => null);
@@ -992,7 +993,7 @@ export const saveStaffTemplate = webMethod(Permissions.SiteMember, async (templa
     } else {
         saved = await wixData.insert('WhatsApp_Templates', { ...data, isSystem: false }, SA);
     }
-    return { id: saved._id, title: saved.title, body: saved.messageBody, isSystem: !!saved.isSystem };
+    return mapTemplateRow(saved);
 });
 
 export const deleteStaffTemplate = webMethod(Permissions.SiteMember, async (templateId) => {

@@ -166,6 +166,15 @@ const HEBREW_DOW = ['א׳', 'ב׳', 'ג׳', 'ד׳', 'ה׳', 'ו׳', 'ש׳'];
 // Wix dashboard URL for creating a new Bookings staff member.
 const WIX_NEW_STAFF_URL = 'https://manage.wix.com/dashboard/f0548b42-7f52-447c-9076-45112f85765b/bookings/staff?referralInfo=search';
 
+const TEMPLATE_USE = {
+    ORDERS: 'orders',
+    EMPLOYEES: 'employees',
+};
+const TEMPLATE_USE_LABELS = {
+    orders: 'מערכת ניהול הזמנות',
+    employees: 'מערכת עובדים',
+};
+
 function esc(str) {
     return String(str ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
@@ -1268,18 +1277,38 @@ function renderTemplatesPage(ce, _d) {
         return `<div class="epa-page-head"><div><h2>תבניות</h2><p>ניהול תבניות וואטסאפ</p></div></div>
             <section class="epa-panel"><div class="ep-loading"><div class="ep-spinner"></div>טוען תבניות…</div></section>`;
     }
-    const cards = ce._templatesData.map(t => `<article class="epa-template" data-action="admin-edit-template" data-template="${esc(t.id)}">
+    const all = asArray(ce._templatesData);
+    const orders = all.filter(t => (t.use || TEMPLATE_USE.ORDERS) === TEMPLATE_USE.ORDERS);
+    const employees = all.filter(t => (t.use || TEMPLATE_USE.EMPLOYEES) === TEMPLATE_USE.EMPLOYEES);
+
+    const renderCards = (list) => list.map(t => `<article class="epa-template" data-action="admin-edit-template" data-template="${esc(t.id)}">
         <div class="epa-panel-title"><h3>${esc(t.title)}</h3>${t.isSystem ? '<span class="epa-badge kind">מערכת</span>' : ''}</div>
         <p>${esc(t.body)}</p>
     </article>`).join('');
-    return `<div class="epa-page-head"><div><h2>תבניות</h2><p>ניהול הודעות וואטסאפ שמורות</p></div>
-        <button class="epa-btn primary" data-action="admin-new-template">תבנית חדשה</button></div>
-        <section class="epa-panel"><div class="epa-template-grid">${cards || '<div class="ep-empty">אין תבניות שמורות</div>'}</div></section>`;
+
+    const section = (title, list, useKey) => `
+        <section class="epa-panel" style="margin-bottom:12px">
+            <div class="epa-panel-title">
+                <h3>${title} (${list.length})</h3>
+                <button type="button" class="epa-btn primary" data-action="admin-new-template" data-use="${useKey}">תבנית חדשה +</button>
+            </div>
+            <div class="epa-template-grid">${renderCards(list) || '<div class="ep-empty">אין תבניות בקטגוריה זו</div>'}</div>
+        </section>`;
+
+    return `<div class="epa-page-head"><div><h2>תבניות</h2><p>כל התבניות נשמרות ב-CMS — WhatsApp_Templates</p></div></div>
+        ${section('תבניות מערכת ניהול הזמנות', orders, TEMPLATE_USE.ORDERS)}
+        ${section('תבניות למערכת עובדים', employees, TEMPLATE_USE.EMPLOYEES)}`;
 }
 
-function renderTemplateForm(template) {
-    return `<div class="epa-field"><label>שם התבנית</label><input id="epaT_title" value="${esc(template?.title || '')}" maxlength="120"></div>
+function renderTemplateForm(template, defaultUse) {
+    const use = template?.use || defaultUse || TEMPLATE_USE.EMPLOYEES;
+    const useOptions = Object.entries(TEMPLATE_USE_LABELS).map(([k, label]) =>
+        `<option value="${k}" ${use === k ? 'selected' : ''}>${label}</option>`).join('');
+    return `<div class="epa-field"><label>מערכת (שדה use ב-CMS)</label>
+            <select id="epaT_use" ${template?.id && template?.isSystem ? 'disabled' : ''}>${useOptions}</select></div>
+        <div class="epa-field" style="margin-top:10px"><label>שם התבנית</label><input id="epaT_title" value="${esc(template?.title || '')}" maxlength="120"></div>
         <div class="epa-field" style="margin-top:10px"><label>תוכן ההודעה</label><textarea id="epaT_body">${esc(template?.body || '')}</textarea></div>
+        <p style="margin:8px 0 0;font-size:11px;color:#64748b">תבניות הזמנות: {{Name}}, {{Date}}, {{Time}}, {{OrderUrl}}</p>
         <div class="epa-inline">
             <button class="epa-btn primary" data-action="admin-save-template" data-template="${esc(template?.id || '')}">שמירה</button>
             ${template?.id && !template.isSystem ? `<button class="epa-btn danger" data-action="admin-delete-template" data-template="${esc(template.id)}">מחיקה</button>` : ''}
@@ -1423,7 +1452,7 @@ function renderModal(ce, d) {
     } else if (modal.type === 'template') {
         const template = modal.id ? (ce._templatesData || []).find(t => t.id === modal.id) : null;
         title = template ? `עריכת תבנית — ${template.title}` : 'תבנית חדשה';
-        body = renderTemplateForm(template);
+        body = renderTemplateForm(template, modal.use);
     } else if (modal.type === 'setupStaff') {
         const employee = findEmployee(ce, d, modal.id);
         if (!employee) return '';
@@ -1964,7 +1993,7 @@ export function handleAdminClick(ce, action, target) {
             ce._dispatch('adminSyncHolidays', {});
             return true;
         case 'admin-new-template':
-            ce._adminModal = { type: 'template', id: null };
+            ce._adminModal = { type: 'template', id: null, use: target.dataset.use || TEMPLATE_USE.EMPLOYEES };
             ce.render();
             return true;
         case 'admin-edit-template':
@@ -1974,13 +2003,14 @@ export function handleAdminClick(ce, action, target) {
         case 'admin-save-template': {
             const title = ce.querySelector('#epaT_title')?.value || '';
             const body = ce.querySelector('#epaT_body')?.value || '';
+            const use = ce.querySelector('#epaT_use')?.value || TEMPLATE_USE.EMPLOYEES;
             if (!title.trim() || !body.trim()) {
                 ce._toast('יש להזין שם ותוכן לתבנית.', 'error');
                 return true;
             }
             ce._adminModal = null;
             ce._startBusy('שומר תבנית…');
-            ce._dispatch('adminTemplateSave', { template: { id: target.dataset.template || null, title, body } });
+            ce._dispatch('adminTemplateSave', { template: { id: target.dataset.template || null, title, body, use } });
             return true;
         }
         case 'admin-delete-template':

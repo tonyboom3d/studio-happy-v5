@@ -11,6 +11,12 @@ import { SKETCH_STATUS, SKETCH_STATUSES, normalizeSketchStatus, isLockedStatus }
 import { PERMISSION_KEYS, PERMISSION_DEFAULTS, refId } from 'backend/staffRoles.js';
 import { getItemWithRetry } from 'backend/wixDataRetry.js';
 import { TUFTING_SERVICE_IDS } from 'backend/sketchEditingPolicy.js';
+import {
+    TEMPLATE_USE,
+    assertTemplateUse,
+    mapTemplateRow,
+    resolveTemplateUse,
+} from 'backend/whatsappTemplates.js';
 
 const SA = { suppressAuth: true };
 const ISRAEL_TZ = 'Asia/Jerusalem';
@@ -974,7 +980,9 @@ export const getInitialDashboardData = webMethod(Permissions.SiteMember, async (
     }
 
     const templates = templatesResult
-        ? (templatesResult.items || []).map(t => ({ id: t._id, title: t.title, body: t.messageBody, isSystem: !!t.isSystem }))
+        ? (templatesResult.items || [])
+            .map(mapTemplateRow)
+            .filter(t => t.use === TEMPLATE_USE.ORDERS)
         : undefined;
     if (!refreshOnly) console.log(`[dashboardService] Loaded ${(templates || []).length} WhatsApp template(s).`);
     if (!refreshOnly) console.log('[dashboardService] Resolved current dashboard user:', currentUser);
@@ -1165,22 +1173,33 @@ export const getTemplates = webMethod(Permissions.SiteMember, async () => {
     await assertDashboardAccess();
 
     const result = await wixData.query('WhatsApp_Templates').find(SA);
-    return (result.items || []).map(t => ({ id: t._id, title: t.title, body: t.messageBody, isSystem: !!t.isSystem }));
+    return (result.items || [])
+        .map(mapTemplateRow)
+        .filter(t => t.use === TEMPLATE_USE.ORDERS);
 });
 
 export const saveTemplate = webMethod(Permissions.SiteMember, async (template) => {
     await assertPermission('manageTemplates');
 
-    const data = { title: template.title, messageBody: template.body, isSystem: !!template.isSystem };
+    const use = assertTemplateUse(template?.use, TEMPLATE_USE.ORDERS);
+    const data = {
+        title: template.title,
+        messageBody: template.body,
+        isSystem: !!template.isSystem,
+        use,
+    };
     let saved;
     if (template.id) {
         const existing = await wixData.get('WhatsApp_Templates', template.id, SA);
         if (!existing) throw new Error('Template not found');
+        if (resolveTemplateUse(existing) !== TEMPLATE_USE.ORDERS) {
+            throw new Error('Cannot edit an employee-system template from the orders dashboard');
+        }
         saved = await wixData.update('WhatsApp_Templates', { ...existing, ...data }, SA);
     } else {
         saved = await wixData.insert('WhatsApp_Templates', data, SA);
     }
-    return { id: saved._id, title: saved.title, body: saved.messageBody, isSystem: !!saved.isSystem };
+    return mapTemplateRow(saved);
 });
 
 export const deleteTemplate = webMethod(Permissions.SiteMember, async (templateId) => {

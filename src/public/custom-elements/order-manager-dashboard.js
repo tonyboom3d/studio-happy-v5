@@ -3395,7 +3395,7 @@ function __wdInjectGlobalAssets() {
                 });
             }
 
-            dispatchDashboardAction('saveTemplate', { id: id || null, title, body });
+            dispatchDashboardAction('saveTemplate', { id: id || null, title, body, use: 'orders' });
             renderTemplatesManager();
             closeTemplateEditor();
         }

@@ -144,6 +144,9 @@ export const ADMIN_STYLE = `
 .epa-sort-actions { display: inline-flex; flex-direction: column; gap: 2px; }
 .epa-sort-actions button { border: 1px solid #dbeafe; background: #fff; border-radius: 6px; width: 24px; height: 20px; cursor: pointer; font-size: 11px; line-height: 1; padding: 0; color: #1d4ed8; }
 .epa-sort-actions button:disabled { opacity: 0.35; cursor: not-allowed; }
+.epa-btn-sm { padding: 3px 9px !important; font-size: 11px !important; border-radius: 7px !important; }
+.epa-error-list { margin-top: 10px; display: flex; flex-direction: column; gap: 5px; }
+.epa-error-item { font-size: 12px; color: #b91c1c; background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; padding: 6px 10px; }
 @keyframes epa-page-in { from { opacity:0; transform:translateY(5px) } to { opacity:1; transform:none } }
 @keyframes epa-fade-in { from { opacity:0 } to { opacity:1 } }
 @keyframes epa-modal-in { from { opacity:0; transform:scale(.97) translateY(7px) } to { opacity:1; transform:none } }
@@ -260,15 +263,27 @@ function requestEmployeeReorder(ce, d, roleIds) {
     ce._startBusy('שומר סדר עובדים…');
     ce._dispatch('adminReorderEmployees', { roleIds });
 }
-function moveEmployeeInOrder(ce, d, roleId, direction) {
+/** Employees ordered by the in-progress (unsaved) sort-mode arrangement, if any. */
+function sortModeEmployees(ce, d) {
     const employees = employeesForPage(ce, d);
+    if (!ce._empSortMode || !Array.isArray(ce._empPendingOrder)) return employees;
+    const byId = new Map(employees.map(e => [e.id, e]));
+    const ordered = ce._empPendingOrder.map(id => byId.get(id)).filter(Boolean);
+    for (const e of employees) {
+        if (!ce._empPendingOrder.includes(e.id)) ordered.push(e);
+    }
+    return ordered;
+}
+function moveEmployeeInOrder(ce, d, roleId, direction) {
+    const employees = sortModeEmployees(ce, d);
     const idx = employees.findIndex(e => e.id === roleId);
     if (idx < 0) return;
     const target = direction === 'up' ? idx - 1 : idx + 1;
     if (target < 0 || target >= employees.length) return;
     const next = employees.slice();
     [next[idx], next[target]] = [next[target], next[idx]];
-    requestEmployeeReorder(ce, d, next.map(e => e.id));
+    ce._empPendingOrder = next.map(e => e.id);
+    ce._empOrderDirty = true;
 }
 function pad2(n) { return String(n).padStart(2, '0'); }
 function monthTitle(monthKey) {
@@ -848,14 +863,20 @@ function renderTrackerPage(ce, d) {
 }
 
 function isBookingsLinked(employee, staffIds) {
-    if (employee?.bookingsLinked === true) return true;
-    if (employee?.bookingsLinked === false) return false;
+    if (typeof employee?.bookingsLinked === 'boolean') return employee.bookingsLinked;
     const connectedId = String(employee?.connectedStaffId || employee?.staffId || '').trim().toLowerCase();
     if (!connectedId || !staffIds?.size) return false;
     for (const id of staffIds) {
         if (String(id).trim().toLowerCase() === connectedId) return true;
     }
     return false;
+}
+
+/** Loose phone validity check — requires 9–15 digits once formatting is stripped. */
+function isValidEmployeePhone(phone) {
+    if (!phone) return false;
+    const digits = String(phone).replace(/\D/g, '');
+    return digits.length >= 9 && digits.length <= 15;
 }
 
 function renderSetupStaffForm(ce, d, roleId) {
@@ -880,20 +901,25 @@ function renderSetupStaffForm(ce, d, roleId) {
 function renderEmployeesPage(ce, d) {
     const canManage = d.permissions.manageEmployees;
     const sortMode = !!ce._empSortMode && canManage;
+    const saveOrderBtn = sortMode
+        ? `<button type="button" class="epa-btn primary" data-action="admin-emp-save-order" ${ce._empOrderDirty ? '' : 'disabled'}>שמירת סדר</button>`
+        : '';
     const headActions = canManage ? `<div class="epa-inline" style="margin:0">
-            <button type="button" class="epa-btn ${sortMode ? 'primary' : ''}" data-action="admin-toggle-emp-sort">${sortMode ? 'סיום סידור' : 'סידור רשימה'}</button>
+            ${saveOrderBtn}
+            <button type="button" class="epa-btn" data-action="admin-toggle-emp-sort">${sortMode ? 'ביטול סידור' : 'סידור רשימה'}</button>
             <button type="button" class="epa-btn" data-action="admin-staff-refresh">רענון Bookings</button>
             <button type="button" class="epa-btn primary" data-action="admin-new-staff">צור עובד חדש +</button>
         </div>` : '';
-    const pageHead = `<div class="epa-page-head"><div><h2>עובדים</h2><p>${sortMode ? 'גררו שורות או השתמשו בחצים לשינוי הסדר — השינוי נשמר אוטומטית' : 'פרופילים, הרשאות עבודה והכשרות'}</p></div>${headActions}</div>`;
+    const pageHead = `<div class="epa-page-head"><div><h2>עובדים</h2><p>${sortMode ? 'גררו שורות או השתמשו בחצים לשינוי הסדר, ואז לחצו "שמירת סדר" לשמירה' : 'פרופילים, הרשאות עבודה והכשרות'}</p></div>${headActions}</div>`;
 
     if (canManage && ce._staffData === null) {
         return `${pageHead}<section class="epa-panel"><div class="ep-loading"><div class="ep-spinner"></div>טוען עובדים…</div></section>`;
     }
 
     const staffIds = ce._staffIds;
-    const employees = employeesForPage(ce, d);
+    const employees = sortModeEmployees(ce, d);
     const workshopTypes = asArray(d.workshopTypes);
+    const phoneErrors = [];
     const rows = employees.map((e, index) => {
         const bookingsLinked = isBookingsLinked(e, staffIds);
         const skillIds = asArray(e.skillIds);
@@ -901,7 +927,12 @@ function renderEmployeesPage(ce, d) {
             ? '—'
             : bookingsLinked
                 ? '<span class="epa-badge ok">מוקם ב-Bookings</span>'
-                : `<button type="button" class="epa-btn primary" data-action="admin-setup-staff" data-emp="${esc(e.id)}">הקמה</button>`;
+                : `<button type="button" class="epa-btn epa-btn-sm primary" data-action="admin-setup-staff" data-emp="${esc(e.id)}">קישור עובד</button>`;
+        const phoneValid = isValidEmployeePhone(e.phone);
+        if (!phoneValid) phoneErrors.push({ name: e.displayName, phone: e.phone });
+        const phoneCell = e.phone
+            ? `<span ${phoneValid ? '' : 'style="color:#b91c1c"'}>${esc(e.phone)}</span>`
+            : '<span style="color:#b91c1c">—</span>';
         const sortCell = sortMode ? `
             <td class="epa-sort-cell">
                 <span class="epa-sort-handle" draggable="true" data-action="admin-emp-drag" data-emp="${esc(e.id)}" title="גרירה לשינוי סדר">☰</span>
@@ -918,6 +949,7 @@ function renderEmployeesPage(ce, d) {
             <td><span class="epa-dot-lg" style="background:${esc(e.color || '#2563eb')}"></span>${esc(e.displayName)}${e.isTrainee ? ' <span class="ep-tag">חניכה</span>' : ''}</td>
             <td>${esc(e.roleLabel)}</td>
             <td>${index + 1}</td>
+            <td>${phoneCell}</td>
             <td>${e.minShiftsPerWeek ?? 'ברירת מחדל'}</td>
             <td>${skillIds.map(id => esc((workshopTypes.find(w => w.id === id) || {}).name || '')).filter(Boolean).join(', ') || '—'}</td>
             <td>${bookingsCell}</td>
@@ -925,10 +957,16 @@ function renderEmployeesPage(ce, d) {
         </tr>`;
     }).join('');
     const sortHeader = sortMode ? '<th style="width:72px">סדר</th>' : '';
+    const colCount = (sortMode ? 1 : 0) + 8;
+    const errorList = phoneErrors.length ? `
+        <div class="epa-error-list">
+            ${phoneErrors.map(e => `<div class="epa-error-item">⚠️ ${esc(e.name)} — מספר טלפון ${e.phone ? 'לא תקין' : 'חסר'}${e.phone ? `: ${esc(e.phone)}` : ''}</div>`).join('')}
+        </div>` : '';
     return `${pageHead}
         <section class="epa-panel">
             <div class="epa-panel-title"><h3>כל העובדים (${employees.length})</h3></div>
-            <div class="epa-table-wrap"><table class="epa-table"><thead><tr>${sortHeader}<th>שם</th><th>תפקיד</th><th>#</th><th>מכסה</th><th>הכשרות</th><th>Bookings</th><th>מצב</th></tr></thead><tbody>${rows || `<tr><td colspan="${sortMode ? 8 : 7}" class="ep-empty">אין עובדים</td></tr>`}</tbody></table></div>
+            <div class="epa-table-wrap"><table class="epa-table"><thead><tr>${sortHeader}<th>שם</th><th>תפקיד</th><th>#</th><th>טלפון</th><th>מכסה</th><th>הכשרות</th><th>Bookings</th><th>מצב</th></tr></thead><tbody>${rows || `<tr><td colspan="${colCount}" class="ep-empty">אין עובדים</td></tr>`}</tbody></table></div>
+            ${errorList}
         </section>`;
 }
 
@@ -1765,7 +1803,15 @@ export function handleAdminClick(ce, action, target) {
         }
         case 'admin-toggle-emp-sort':
             if (!d?.permissions?.manageEmployees) return true;
-            ce._empSortMode = !ce._empSortMode;
+            if (!ce._empSortMode) {
+                ce._empSortMode = true;
+                ce._empPendingOrder = employeesForPage(ce, d).map(e => e.id);
+                ce._empOrderDirty = false;
+            } else {
+                ce._empSortMode = false;
+                ce._empPendingOrder = null;
+                ce._empOrderDirty = false;
+            }
             ce.render();
             return true;
         case 'admin-emp-move':
@@ -1773,6 +1819,16 @@ export function handleAdminClick(ce, action, target) {
             moveEmployeeInOrder(ce, d, target.dataset.emp, target.dataset.dir);
             ce.render();
             return true;
+        case 'admin-emp-save-order': {
+            if (!d?.permissions?.manageEmployees || !Array.isArray(ce._empPendingOrder)) return true;
+            const roleIds = ce._empPendingOrder;
+            ce._empPendingOrder = null;
+            ce._empOrderDirty = false;
+            ce._empSortMode = false;
+            requestEmployeeReorder(ce, d, roleIds);
+            ce.render();
+            return true;
+        }
         case 'admin-emp-drag':
             return true;
         case 'admin-staff-refresh':
@@ -2067,14 +2123,15 @@ export function handleAdminDrop(ce, e, d) {
     ce._empDragId = null;
     ce.querySelectorAll('.epa-emp-sort-row').forEach((el) => el.classList.remove('dragging', 'drag-over'));
     if (!targetId || !dragId || targetId === dragId) return true;
-    const employees = employeesForPage(ce, d);
+    const employees = sortModeEmployees(ce, d);
     const from = employees.findIndex((emp) => emp.id === dragId);
     const to = employees.findIndex((emp) => emp.id === targetId);
     if (from < 0 || to < 0) return true;
     const next = employees.slice();
     const [moved] = next.splice(from, 1);
     next.splice(to, 0, moved);
-    requestEmployeeReorder(ce, d, next.map((emp) => emp.id));
+    ce._empPendingOrder = next.map((emp) => emp.id);
+    ce._empOrderDirty = true;
     ce.render();
     return true;
 }

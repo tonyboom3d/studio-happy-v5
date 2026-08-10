@@ -344,6 +344,8 @@ class EmployeePortal extends HTMLElement {
         this._staffIds = null;                  // Set of valid Bookings staff _ids
         this._allEmployees = null;              // full CMS employee list (loaded with staff on employees page)
         this._empSortMode = false;              // manual employee list ordering mode
+        this._empPendingOrder = null;           // unsaved drag/arrow order while in sort mode
+        this._empOrderDirty = false;            // whether pending order differs from saved order
         this._empDragId = null;
         this._staffSearch = '';
         this._teamTimeData = null;              // Team time admin page

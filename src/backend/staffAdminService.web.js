@@ -60,6 +60,74 @@ async function queryStaffMembers(query, options) {
     return staffMembers.queryStaffMembers(query, options);
 }
 
+/** Normalizes Bookings staff _id for Set lookups (case-insensitive GUID). */
+function normalizeBookingStaffId(id) {
+    if (!id) return null;
+    const s = String(id).trim();
+    return s ? s.toLowerCase() : null;
+}
+
+function buildBookingStaffIdSet(staffList) {
+    const set = new Set();
+    for (const member of staffList || []) {
+        const id = normalizeBookingStaffId(member?._id || member?.id);
+        if (id) set.add(id);
+    }
+    return set;
+}
+
+/**
+ * True when Dashboard_Roles.connectedStaff points to a live Bookings staff _id.
+ * Requires connectedStaff to be set AND that id to exist in queryStaffMembers results.
+ */
+export function isConnectedStaffBookingsLinked(connectedStaff, bookingStaffIdSet) {
+    const connectedId = normalizeBookingStaffId(refId(connectedStaff));
+    if (!connectedId || !bookingStaffIdSet?.size) return false;
+    return bookingStaffIdSet.has(connectedId);
+}
+
+/** Loads all Bookings staff (paginated + non-service-providers). */
+async function loadAllBookingStaffMembers() {
+    const byId = new Map();
+
+    async function fetchPages(queryBase = {}) {
+        let cursor;
+        do {
+            const query = {
+                ...queryBase,
+                cursorPaging: { limit: 100, ...(cursor ? { cursor } : {}) },
+            };
+            const response = await queryStaffMembers(query);
+            for (const member of (response?.staffMembers || [])) {
+                const id = member?._id || member?.id;
+                if (id) byId.set(id, member);
+            }
+            cursor = response?.pagingMetadata?.cursors?.next;
+        } while (cursor);
+    }
+
+    await fetchPages();
+    await fetchPages({ filter: { serviceProvider: { $eq: false } } }).catch(() => {});
+
+    if (typeof staffMembers.queryStaffMembersV2 === 'function') {
+        try {
+            let cursor;
+            do {
+                const response = await staffMembers.queryStaffMembersV2({
+                    cursorPaging: { limit: 100, ...(cursor ? { cursor } : {}) },
+                });
+                for (const member of (response?.staffMembers || [])) {
+                    const id = member?._id || member?.id;
+                    if (id) byId.set(id, member);
+                }
+                cursor = response?.pagingMetadata?.cursors?.next;
+            } while (cursor);
+        } catch (_) { /* V2 optional */ }
+    }
+
+    return [...byId.values()];
+}
+
 const WIX_NEW_STAFF_URL = 'https://manage.wix.com/dashboard/f0548b42-7f52-447c-9076-45112f85765b/bookings/staff?referralInfo=search';
 
 function monthRange(monthKey) {
@@ -92,7 +160,8 @@ async function dateHasTuftingWorkshop(dateKey) {
     return Object.keys(day.types).some(id => tuftingTypeIds.has(id));
 }
 
-function mapEmployeeForAdmin(role, canSeeRates, canManageRoles) {
+function mapEmployeeForAdmin(role, canSeeRates, canManageRoles, bookingStaffIdSet) {
+    const staffId = refId(role.connectedStaff);
     return {
         id: role._id,
         displayName: role.displayName || '(ללא שם)',
@@ -107,7 +176,11 @@ function mapEmployeeForAdmin(role, canSeeRates, canManageRoles) {
         minShiftsPerWeek: role.minShiftsPerWeek ?? null,
         minShiftHours: role.minShiftHours ?? null,
         skillIds: refIds(role.skills),
-        staffId: refId(role.connectedStaff),
+        staffId,
+        connectedStaffId: staffId,
+        bookingsLinked: bookingStaffIdSet
+            ? isConnectedStaffBookingsLinked(role.connectedStaff, bookingStaffIdSet)
+            : undefined,
         ...(canSeeRates ? {
             rateStudio: role.rateStudio ?? null,
             rateInstruction: role.rateInstruction ?? null,
@@ -133,7 +206,7 @@ export const getStaffAdminData = webMethod(Permissions.SiteMember, async (monthK
     const paddedFromKey = shiftDateKey(fromKey, -6);
     const paddedToKey = shiftDateKey(toKey, 6);
 
-    const [board, settings, submissionsRaw, weeklySubsRaw, vacationsByEmployee, tuftingTypeIds, allRolesResult] = await Promise.all([
+    const [board, settings, submissionsRaw, weeklySubsRaw, vacationsByEmployee, tuftingTypeIds] = await Promise.all([
         buildBoard(fromKey, toKey, { includeOffers: true }),
         loadSettings(),
         // All statuses (incl. REJECTED) so the tracker page shows the full picture;
@@ -148,7 +221,6 @@ export const getStaffAdminData = webMethod(Permissions.SiteMember, async (monthK
             .limit(1000).find(SA).catch(() => ({ items: [] })),
         loadVacationsOverlappingRangeByEmployee(fromKey, toKey),
         loadTuftingTypeIdSet(),
-        wixData.query('Dashboard_Roles').limit(1000).find(SA).catch(() => ({ items: [] })),
     ]);
 
     const weeklySubsByEmployee = {};
@@ -161,11 +233,6 @@ export const getStaffAdminData = webMethod(Permissions.SiteMember, async (monthK
         .filter(r => getRolePermissionValue(r, 'submitAvailability'))
         .map(r => mapEmployeeForAdmin(r, canSeeRates, canManageRoles))
         .sort((a, b) => (a.priorityRank ?? 999) - (b.priorityRank ?? 999));
-
-    const allEmployees = (allRolesResult.items || [])
-        .map(r => mapEmployeeForAdmin(r, canSeeRates, canManageRoles))
-        .sort((a, b) => (a.priorityRank ?? 999) - (b.priorityRank ?? 999)
-            || a.displayName.localeCompare(b.displayName, 'he'));
 
     const submissions = (submissionsRaw.items || []).map(s => {
         const date = toDateKey(s.date);
@@ -257,7 +324,6 @@ export const getStaffAdminData = webMethod(Permissions.SiteMember, async (monthK
             editTimeEntries: getRolePermissionValue(role, 'editTimeEntries'),
         },
         employees,
-        allEmployees,
         workshopTypes: Object.values(board.typesById),
         workTypes: WORK_TYPES.map(value => ({ value, label: WORK_TYPE_LABELS[value] })),
         roleTypes: ROLE_TYPES.map(rt => ({ value: rt, label: ROLE_TYPE_LABELS[rt] })),
@@ -376,6 +442,26 @@ export const saveEmployeeAdmin = webMethod(Permissions.SiteMember, async (roleId
     return { ok: true };
 });
 
+/** Persists manual employee list order via priorityRank (1 = first). */
+export const reorderEmployees = webMethod(Permissions.SiteMember, async (roleIds) => {
+    const { role } = await assertEmployeeAccess('manageEmployees');
+    if (!Array.isArray(roleIds) || !roleIds.length) {
+        throw new Error('BAD_REQUEST: חסרה רשימת עובדים לסידור.');
+    }
+    const unique = [...new Set(roleIds.map(id => String(id || '').trim()).filter(Boolean))];
+    await Promise.all(unique.map(async (roleId, index) => {
+        const existing = await wixData.get('Dashboard_Roles', roleId, SA).catch(() => null);
+        if (!existing) return;
+        await wixData.update('Dashboard_Roles', mergeRoleRowForUpdate(existing, {
+            _id: roleId,
+            priorityRank: index + 1,
+        }), SA);
+    }));
+    await publishSchedulingUpdate('employees-reordered', { count: unique.length });
+    console.log(`[staffAdminService] reorderEmployees: ${unique.length} rows by ${role._id}`);
+    return { ok: true, roleIds: unique };
+});
+
 export const updateEmployeeProfile = webMethod(Permissions.SiteMember, async (roleId, patch) => {
     const { role } = await assertEmployeeAccess('manageEmployees');
     if (!roleId || !patch || typeof patch !== 'object') throw new Error('BAD_REQUEST: חסרים פרטים.');
@@ -418,17 +504,22 @@ export const updateEmployeePermissions = webMethod(Permissions.SiteMember, async
  * Gated by manageEmployees.
  */
 export const listBookingStaff = webMethod(Permissions.SiteMember, async () => {
-    await assertEmployeeAccess('manageEmployees');
+    const { role: caller } = await assertEmployeeAccess('manageEmployees');
+    const canSeeRates = getRolePermissionValue(caller, 'manageRates');
+    const canManageRoles = getRolePermissionValue(caller, 'manageRoles');
 
-    const response = await queryStaffMembers().catch((err) => {
-        console.error('[staffAdminService] listBookingStaff query failed:', err?.message || err);
-        throw new Error('LOAD_FAILED: לא ניתן לטעון את רשימת הצוות מ-Wix Bookings.');
-    });
+    const [staffList, allRolesResult, linkedResult] = await Promise.all([
+        loadAllBookingStaffMembers().catch((err) => {
+            console.error('[staffAdminService] listBookingStaff query failed:', err?.message || err);
+            throw new Error('LOAD_FAILED: לא ניתן לטעון את רשימת הצוות מ-Wix Bookings.');
+        }),
+        wixData.query('Dashboard_Roles').limit(1000).find(SA).catch(() => ({ items: [] })),
+        wixData.query('Dashboard_Roles')
+            .isNotEmpty('connectedStaff')
+            .limit(1000).find(SA).catch(() => ({ items: [] })),
+    ]);
 
-    const staffList = response?.staffMembers || [];
-    const linkedResult = await wixData.query('Dashboard_Roles')
-        .isNotEmpty('connectedStaff')
-        .limit(1000).find(SA).catch(() => ({ items: [] }));
+    const bookingStaffIdSet = buildBookingStaffIdSet(staffList);
 
     const roleByStaffId = {};
     for (const r of (linkedResult.items || [])) {
@@ -437,9 +528,14 @@ export const listBookingStaff = webMethod(Permissions.SiteMember, async () => {
     }
 
     const staffIds = staffList.map(s => s._id).filter(Boolean);
+    const allEmployees = (allRolesResult.items || [])
+        .map(r => mapEmployeeForAdmin(r, canSeeRates, canManageRoles, bookingStaffIdSet))
+        .sort((a, b) => (a.priorityRank ?? 999) - (b.priorityRank ?? 999)
+            || a.displayName.localeCompare(b.displayName, 'he'));
 
     return {
         staffIds,
+        allEmployees,
         staff: staffList.map((s) => {
             const linkedRole = roleByStaffId[s._id];
             return {

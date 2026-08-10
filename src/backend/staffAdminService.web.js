@@ -10,7 +10,6 @@
 import wixData from 'wix-data';
 import { Permissions, webMethod } from 'wix-web-module';
 import { staffMembers } from '@wix/bookings';
-import { auth } from '@wix/essentials';
 import {
     assertEmployeeAccess,
     buildPermissionsFromPreset,
@@ -57,10 +56,9 @@ import {
 
 const SA = { suppressAuth: true };
 
-// Staff members' contact/PII fields are gated behind the Bookings staff-member
-// settings' publiclyAccessible flag; elevation lets the manageEmployees-gated
-// web methods below read them regardless of that setting.
-const elevatedQueryStaffMembers = auth.elevate(staffMembers.queryStaffMembers);
+async function queryStaffMembers(query, options) {
+    return staffMembers.queryStaffMembers(query, options);
+}
 
 // Placeholder — replace with the actual Wix dashboard URL for creating a new
 // Bookings staff member on this site (Bookings > Staff > New staff member).
@@ -418,7 +416,7 @@ export const updateEmployeePermissions = webMethod(Permissions.SiteMember, async
 export const listBookingStaff = webMethod(Permissions.SiteMember, async () => {
     await assertEmployeeAccess('manageEmployees');
 
-    const response = await elevatedQueryStaffMembers(
+    const response = await queryStaffMembers(
         { cursorPaging: { limit: 100 } },
         { fields: ['ASSOCIATED_IDENTITY_STATUS'] },
     ).catch((err) => {
@@ -490,7 +488,7 @@ export const linkEmployeeStaff = webMethod(Permissions.SiteMember, async (staffI
 
     let staffInfo = null;
     try {
-        const response = await elevatedQueryStaffMembers({ filter: { _id: staffId }, cursorPaging: { limit: 1 } }, {});
+        const response = await queryStaffMembers({ filter: { _id: staffId }, cursorPaging: { limit: 1 } }, {});
         staffInfo = response?.staffMembers?.[0] || null;
     } catch (err) {
         console.warn('[staffAdminService] linkEmployeeStaff: could not fetch staff defaults:', err?.message || err);

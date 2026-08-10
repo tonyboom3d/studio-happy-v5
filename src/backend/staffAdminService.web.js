@@ -416,10 +416,7 @@ export const updateEmployeePermissions = webMethod(Permissions.SiteMember, async
 export const listBookingStaff = webMethod(Permissions.SiteMember, async () => {
     await assertEmployeeAccess('manageEmployees');
 
-    const response = await queryStaffMembers(
-        { cursorPaging: { limit: 100 } },
-        { fields: ['ASSOCIATED_IDENTITY_STATUS'] },
-    ).catch((err) => {
+    const response = await queryStaffMembers().catch((err) => {
         console.error('[staffAdminService] listBookingStaff query failed:', err?.message || err);
         throw new Error('LOAD_FAILED: לא ניתן לטעון את רשימת הצוות מ-Wix Bookings.');
     });

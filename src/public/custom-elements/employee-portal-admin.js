@@ -27,6 +27,7 @@ export const ADMIN_STYLE = `
 .epa-day .hol { display: block; font-size: 11px; color: #b45309; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .epa-day .cnt { display: block; font-size: 11.5px; color: #4b5563; line-height: 1.3; margin-top: 1px; }
 .epa-flag { position: absolute; top: 3px; inset-inline-start: 4px; font-size: 10px; }
+.epa-day-plus { position: absolute; top: 3px; inset-inline-end: 4px; width: 15px; height: 15px; line-height: 15px; text-align: center; font-size: 11px; font-weight: 700; border-radius: 50%; background: #dbeafe; color: #1d4ed8; cursor: help; }
 .epa-detail { border: 1px solid #bfdbfe; background: #eff6ff; border-radius: 12px; padding: 12px; margin-top: 12px; font-size: 12.5px; }
 .epa-detail h3 { margin: 0 0 8px; font-size: 14px; }
 .epa-type-row { background: #fff; border: 1px solid #e5e7eb; border-radius: 9px; padding: 8px 10px; margin-bottom: 6px; }
@@ -133,6 +134,15 @@ export const ADMIN_STYLE = `
 .epa-emp-acc .epa-accordion-toggle { color: #1d4ed8; }
 .epa-emp-acc .epa-accordion-toggle:hover { background: rgba(37,99,235,.08); }
 .epa-emp-acc .epa-accordion-body { border-top: 1px solid #dbeafe; }
+.epa-board-acc { border: 1px solid #e5e7eb; border-radius: 10px; overflow: hidden; }
+.epa-board-acc .epa-accordion-toggle { color: #1f2937; }
+.epa-board-acc .epa-accordion-toggle:hover { background: #f9fafb; }
+.epa-board-acc .epa-accordion-body { border-top: 1px solid #e5e7eb; padding: 12px 15px 15px; }
+.epa-filter-row { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; align-items: flex-end; }
+.epa-filter-row label { display: block; font-size: 11px; color: #6b7280; margin-bottom: 3px; }
+.epa-filter-row select { font-size: 12px; padding: 5px 8px; border: 1px solid #d1d5db; border-radius: 7px; min-width: 140px; }
+.epa-pager { display: flex; align-items: center; justify-content: center; gap: 12px; margin-top: 10px; font-size: 12px; }
+.epa-pager-info { color: #6b7280; }
 .epa-detail-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; }
 .epa-detail-item { background: #f8fafc; border-radius: 9px; padding: 8px 10px; }
 .epa-detail-item span { display: block; font-size: 10.5px; color: #64748b; }
@@ -454,23 +464,50 @@ function renderBoardPage(ce, d) {
             ${ce._adminView === 'list' ? renderListView(ce, d) : renderHeatmap(ce, d)}
             ${ce._adminSelectedDay ? renderDayDetail(ce, d) : ''}
         </section>
-        ${d.openOffers?.length ? `<section class="epa-panel">${renderOpenOffers(d)}</section>` : ''}
-        <section class="epa-panel">${renderBoardSubmissions(d)}</section>`;
+        ${d.openOffers?.length ? `<section class="epa-panel">${renderOpenOffers(ce, d)}</section>` : ''}
+        <section class="epa-panel">${renderBoardSubmissions(ce, d)}</section>`;
 }
 
-/** Every request and assignment for the month, always visible below the calendar. */
-function renderBoardSubmissions(d) {
+const BOARD_PAGE_SIZE = 10;
+
+function paginateSlice(items, page, pageSize = BOARD_PAGE_SIZE) {
+    const total = items.length;
+    const totalPages = Math.max(1, Math.ceil(total / pageSize));
+    const safePage = Math.min(Math.max(0, page), totalPages - 1);
+    const start = safePage * pageSize;
+    return { items: items.slice(start, start + pageSize), page: safePage, totalPages, total };
+}
+
+function renderPager(page, totalPages, total, prevAction, nextAction) {
+    if (total <= BOARD_PAGE_SIZE) return '';
+    return `<div class="epa-pager">
+        <button type="button" class="epa-btn" data-action="${prevAction}" ${page <= 0 ? 'disabled' : ''}>הקודם</button>
+        <span class="epa-pager-info">דף ${page + 1} מתוך ${totalPages} (${total} רשומות)</span>
+        <button type="button" class="epa-btn" data-action="${nextAction}" ${page >= totalPages - 1 ? 'disabled' : ''}>הבא</button>
+    </div>`;
+}
+
+/** Every request and assignment for the month — collapsed by default, paginated. */
+function renderBoardSubmissions(ce, d) {
     const statusLabel = { SUBMITTED: 'הוגש', STANDBY: 'בהמתנה', SCHEDULED: 'משובץ' };
     const statusBadge = { SUBMITTED: 'kind', STANDBY: 'kind', SCHEDULED: 'ok' };
-    const subs = (d.submissions || [])
+    const empFilter = ce._boardSubsEmpFilter || '';
+    const open = !!ce._boardSubsOpen;
+    let subs = (d.submissions || [])
         .filter(s => s.status !== 'REJECTED')
         .slice()
         .sort((a, b) => a.date.localeCompare(b.date) || (a.employeeName || '').localeCompare(b.employeeName || ''));
+    if (empFilter) subs = subs.filter(s => s.employeeId === empFilter);
 
     const assigned = subs.filter(s => s.status === 'SCHEDULED').length;
     const waiting = subs.length - assigned;
+    const { items, page, totalPages, total } = paginateSlice(subs, ce._boardSubsPage || 0);
 
-    const rows = subs.map(s => {
+    const employees = (d.employees || []).slice().sort((a, b) => a.displayName.localeCompare(b.displayName, 'he'));
+    const empOptions = `<option value="">כל העובדים</option>` + employees.map(e =>
+        `<option value="${esc(e.id)}" ${empFilter === e.id ? 'selected' : ''}>${esc(e.displayName)}</option>`).join('');
+
+    const rows = items.map(s => {
         const employee = (d.employees || []).find(e => e.id === s.employeeId);
         return `<tr class="epa-row-click" data-action="admin-select-day" data-date="${esc(s.date)}">
             <td>${fmtDate(s.date)}</td>
@@ -481,11 +518,22 @@ function renderBoardSubmissions(d) {
         </tr>`;
     }).join('');
 
-    return `<h2>כל ההגשות והשיבוצים — ${monthTitle(d.monthKey)} (${subs.length})</h2>
-        <div style="font-size:12px;color:#6b7280;margin:2px 0 8px">שובצו ${assigned} · ממתינים ${waiting} — לחיצה על שורה פותחת את פרטי היום בלוח</div>
-        <div class="epa-table-wrap"><table class="epa-table"><thead><tr><th>תאריך</th><th>עובד/ת</th><th>שעות</th><th>סדנה</th><th>סטטוס</th></tr></thead>
-            <tbody>${rows || '<tr><td colspan="5" class="ep-empty">אין הגשות בחודש זה</td></tr>'}</tbody>
-        </table></div>`;
+    return `<div class="epa-board-acc">
+        <button type="button" class="epa-accordion-toggle" data-action="admin-toggle-board-subs">
+            <span>כל ההגשות והשיבוצים — ${monthTitle(d.monthKey)} (${(d.submissions || []).filter(s => s.status !== 'REJECTED').length})</span>
+            <span class="epa-accordion-arrow">${open ? '▲' : '▼'}</span>
+        </button>
+        ${open ? `<div class="epa-accordion-body">
+            <div style="font-size:12px;color:#6b7280;margin-bottom:8px">שובצו ${assigned} · ממתינים ${waiting} — לחיצה על שורה פותחת את פרטי היום בלוח</div>
+            <div class="epa-filter-row">
+                <div><label>עובד/ת</label><select data-action="admin-board-subs-emp-filter">${empOptions}</select></div>
+            </div>
+            <div class="epa-table-wrap"><table class="epa-table"><thead><tr><th>תאריך</th><th>עובד/ת</th><th>שעות</th><th>סדנה</th><th>סטטוס</th></tr></thead>
+                <tbody>${rows || '<tr><td colspan="5" class="ep-empty">אין הגשות התואמות את הסינון</td></tr>'}</tbody>
+            </table></div>
+            ${renderPager(page, totalPages, total, 'admin-board-subs-prev', 'admin-board-subs-next')}
+        </div>` : ''}
+    </div>`;
 }
 
 function renderToolbar(ce, d) {
@@ -539,6 +587,23 @@ function holidayModeMarker(entry) {
     return '';
 }
 
+function fmtTimeHe(iso) {
+    if (!iso) return '';
+    return new Intl.DateTimeFormat('he-IL', { timeZone: 'Asia/Jerusalem', hour: '2-digit', minute: '2-digit' }).format(new Date(iso));
+}
+
+/** "+" icon — hover (desktop) / tap (mobile) lists every workshop's start–end time for that day. */
+function renderDayWorkshopsPlus(info) {
+    const types = info?.types || [];
+    const lines = types.flatMap(t => (t.timeRanges || []).map(r => {
+        const start = fmtTimeHe(r.start);
+        const end = fmtTimeHe(r.end);
+        return `${t.name} — ${end ? `${start}–${end}` : start}`;
+    }));
+    if (!lines.length) return '';
+    return `<span class="epa-day-plus ep-tip-trigger" tabindex="0" data-tip="${esc(lines.join('\n'))}" aria-label="פרטי סדנאות היום">+</span>`;
+}
+
 function renderHeatmap(ce, d) {
     const [y, m] = d.monthKey.split('-').map(Number);
     const firstDow = new Date(y, m - 1, 1).getDay();
@@ -565,6 +630,7 @@ function renderHeatmap(ce, d) {
             : (subs.length ? `<span class="cnt">${subs.length} הגשות</span>` : '');
         cells += `<div class="${cls}" data-action="admin-select-day" data-date="${dateKey}" ${note ? `title="${esc(note.message)}"` : ''}>
             ${flags ? `<span class="epa-flag">${flags}</span>` : ''}
+            ${renderDayWorkshopsPlus(info)}
             <span class="num">${day}</span>
             ${holidays[dateKey] ? `<span class="hol">${esc(holidays[dateKey])}${holidayModeMarker(holidayEntry)}</span>` : ''}
             ${summary}
@@ -606,8 +672,9 @@ function renderListView(ce, d) {
         const typeRows = (info.types || []).map(t => {
             const assigned = subs.filter(s => t.assignedEmployeeIds.includes(s.employeeId)).map(s => esc(s.employeeName));
             const submitted = subs.filter(s => !t.assignedEmployeeIds.includes(s.employeeId) && s.status !== 'STANDBY').map(s => esc(s.employeeName));
+            const times = (t.timeRanges || []).map(r => r.end ? `${fmtTimeHe(r.start)}–${fmtTimeHe(r.end)}` : fmtTimeHe(r.start)).filter(Boolean).join(', ');
             return `<div style="margin-top:5px">
-                <b>${esc(t.name)}</b> — נדרשים ${t.required}, שובצו ${Math.min(t.filled, t.required)}${t.standbyCount ? `, בהמתנה ${t.standbyCount}` : ''}
+                <b>${esc(t.name)}</b> — נדרשים ${t.required}, שובצו ${Math.min(t.filled, t.required)}${t.standbyCount ? `, בהמתנה ${t.standbyCount}` : ''}${times ? ` <span style="color:#6b7280">(${esc(times)})</span>` : ''}
                 <div class="epa-chips">
                     ${assigned.map(n => `<span class="epa-chip assigned">${n}</span>`).join('')}
                     ${submitted.map(n => `<span class="epa-chip">${n}</span>`).join('')}
@@ -767,16 +834,47 @@ function renderSketchDutySection(ce, d, dateKey, info) {
     </div>`;
 }
 
-function renderOpenOffers(d) {
-    const rows = d.openOffers.map(o => `
+function renderOpenOffers(ce, d) {
+    const open = !!ce._openOffersOpen;
+    const wsFilter = ce._openOffersWsFilter || '';
+    const allOffers = d.openOffers || [];
+    let offers = allOffers.slice();
+    if (wsFilter) offers = offers.filter(o => o.workshopTypeId === wsFilter);
+    const { items, page, totalPages, total } = paginateSlice(offers, ce._openOffersPage || 0);
+
+    const typeOptions = [...new Map(allOffers.filter(o => o.workshopTypeId).map(o => [o.workshopTypeId, o.workshopName])).entries()]
+        .sort((a, b) => (a[1] || '').localeCompare(b[1] || '', 'he'));
+    const filterHtml = typeOptions.length > 1 ? `
+        <div class="epa-filter-row">
+            <div><label>סוג סדנה</label>
+                <select data-action="admin-open-offers-ws-filter">
+                    <option value="">כל הסדנאות</option>
+                    ${typeOptions.map(([id, name]) => `<option value="${esc(id)}" ${wsFilter === id ? 'selected' : ''}>${esc(name)}</option>`).join('')}
+                </select>
+            </div>
+        </div>` : '';
+
+    const rows = items.map(o => `
         <tr>
             <td><span class="epa-badge kind">${o.kind === 'OPEN_CALL' ? 'קריאה פתוחה' : 'הצעה ברשימת המתנה'}</span></td>
             <td>${fmtDate(o.date)}</td>
             <td>${esc(o.workshopName)}</td>
             <td>${o.employeeName ? esc(o.employeeName) : '—'}</td>
         </tr>`).join('');
-    return `<h2>הצעות וקריאות פתוחות (${d.openOffers.length})</h2>
-        <table class="epa-table"><thead><tr><th>סוג</th><th>תאריך</th><th>סדנה</th><th>עובד/ת</th></tr></thead><tbody>${rows}</tbody></table>`;
+
+    return `<div class="epa-board-acc">
+        <button type="button" class="epa-accordion-toggle" data-action="admin-toggle-open-offers">
+            <span>הצעות וקריאות פתוחות (${allOffers.length})</span>
+            <span class="epa-accordion-arrow">${open ? '▲' : '▼'}</span>
+        </button>
+        ${open ? `<div class="epa-accordion-body">
+            ${filterHtml}
+            <div class="epa-table-wrap"><table class="epa-table"><thead><tr><th>סוג</th><th>תאריך</th><th>סדנה</th><th>עובד/ת</th></tr></thead>
+                <tbody>${rows || '<tr><td colspan="4" class="ep-empty">אין רשומות התואמות את הסינון</td></tr>'}</tbody>
+            </table></div>
+            ${renderPager(page, totalPages, total, 'admin-open-offers-prev', 'admin-open-offers-next')}
+        </div>` : ''}
+    </div>`;
 }
 
 function renderMonthControls(d) {
@@ -1543,6 +1641,18 @@ function renderModal(ce, d) {
 // ---------------------------------------------------------------------------
 
 export function handleAdminChange(ce, input) {
+    if (input?.dataset?.action === 'admin-open-offers-ws-filter') {
+        ce._openOffersWsFilter = input.value;
+        ce._openOffersPage = 0;
+        ce.render();
+        return true;
+    }
+    if (input?.dataset?.action === 'admin-board-subs-emp-filter') {
+        ce._boardSubsEmpFilter = input.value;
+        ce._boardSubsPage = 0;
+        ce.render();
+        return true;
+    }
     if (input?.dataset?.action === 'admin-vacation-filter') {
         ce._vacationFilter = ce._vacationFilter || { employeeId: '', month: '', from: '', to: '' };
         if (input.id === 'epaVFilterEmp') ce._vacationFilter.employeeId = input.value;
@@ -1620,11 +1730,15 @@ export function handleAdminClick(ce, action, target) {
         case 'admin-month-prev':
             ce._adminMonth = shiftMonth(ce._adminMonth, -1);
             ce._adminSelectedDay = null;
+            ce._openOffersPage = 0;
+            ce._boardSubsPage = 0;
             ce._requestAdminData();
             return true;
         case 'admin-month-next':
             ce._adminMonth = shiftMonth(ce._adminMonth, 1);
             ce._adminSelectedDay = null;
+            ce._openOffersPage = 0;
+            ce._boardSubsPage = 0;
             ce._requestAdminData();
             return true;
         case 'admin-tracker-status':
@@ -1649,6 +1763,37 @@ export function handleAdminClick(ce, action, target) {
             ce._adminDayGlobalOpen = !ce._adminDayGlobalOpen;
             ce.render();
             return true;
+        case 'admin-toggle-open-offers':
+            ce._openOffersOpen = !ce._openOffersOpen;
+            ce.render();
+            return true;
+        case 'admin-open-offers-prev':
+            ce._openOffersPage = Math.max(0, (ce._openOffersPage || 0) - 1);
+            ce.render();
+            return true;
+        case 'admin-open-offers-next': {
+            const offers = (d.openOffers || []).filter(o => !ce._openOffersWsFilter || o.workshopTypeId === ce._openOffersWsFilter);
+            const totalPages = Math.max(1, Math.ceil(offers.length / 10));
+            ce._openOffersPage = Math.min(totalPages - 1, (ce._openOffersPage || 0) + 1);
+            ce.render();
+            return true;
+        }
+        case 'admin-toggle-board-subs':
+            ce._boardSubsOpen = !ce._boardSubsOpen;
+            ce.render();
+            return true;
+        case 'admin-board-subs-prev':
+            ce._boardSubsPage = Math.max(0, (ce._boardSubsPage || 0) - 1);
+            ce.render();
+            return true;
+        case 'admin-board-subs-next': {
+            let subs = (d.submissions || []).filter(s => s.status !== 'REJECTED');
+            if (ce._boardSubsEmpFilter) subs = subs.filter(s => s.employeeId === ce._boardSubsEmpFilter);
+            const totalPages = Math.max(1, Math.ceil(subs.length / 10));
+            ce._boardSubsPage = Math.min(totalPages - 1, (ce._boardSubsPage || 0) + 1);
+            ce.render();
+            return true;
+        }
         case 'admin-open-auto-assign':
             ce._autoAssignSelected = [];
             ce._autoAssignFrom = null;

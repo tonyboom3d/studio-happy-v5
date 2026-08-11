@@ -283,6 +283,7 @@ export async function buildBoard(fromKey, toKey, { consistent = false, includeOf
                 activeCount: 0, standbyQueue: [],
                 assignedCount: 0, assignedEmployeeIds: [],
                 sessions: [], // distinct workshopStart ISO timestamps that day (calendar display)
+                sessionEnds: {}, // startIso -> endIso, resolved from Bookings availability where known
             };
         }
         return days[dateKey].types[typeId];
@@ -300,9 +301,10 @@ export async function buildBoard(fromKey, toKey, { consistent = false, includeOf
         days[dateKey].hasWorkshops = true;
     }
 
-    for (const { dateKey, typeId, startIso } of sessionRows) {
+    for (const { dateKey, typeId, startIso, endIso } of sessionRows) {
         const t = dayType(dateKey, typeId);
         if (!t.sessions.includes(startIso)) t.sessions.push(startIso);
+        if (endIso) t.sessionEnds[startIso] = endIso;
         days[dateKey].hasWorkshops = true;
     }
 

@@ -105,6 +105,7 @@ employee-portal * { box-sizing: border-box; }
 .ep-day.holiday-short { border-color: #fbbf24; background: #fffbeb; }
 .ep-day-num { font-weight: 700; }
 .ep-day-note { position: absolute; top: 4px; inset-inline-start: 5px; font-size: 12px; cursor: help; }
+.ep-day-plus { position: absolute; top: 3px; inset-inline-start: 22px; width: 16px; height: 16px; line-height: 16px; text-align: center; font-size: 12px; font-weight: 700; border-radius: 50%; background: #dbeafe; color: #1d4ed8; cursor: help; }
 .ep-day-ws { margin-top: 3px; display: flex; flex-direction: column; gap: 2px; }
 .ep-day-ws span { display: block; font-size: 11px; line-height: 1.25; color: #1d4ed8; background: #eff6ff; border-radius: 4px; padding: 1px 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ep-day.ep-day-filtered { opacity: .28; filter: grayscale(.4); }
@@ -441,7 +442,13 @@ class EmployeePortal extends HTMLElement {
         this._vacationFilter = { employeeId: '', month: '', from: '', to: '' };
         this._workshopFilter = new Set();       // selected workshop-type ids for calendar filtering
         this._workshopFilterOpen = false;
-        this._shiftSubTab = 'myShifts';         // 'myShifts' | 'mySubmissions' — internal sub-tab
+        this._shiftSubTab = 'myShifts';         // 'myShifts' | 'mySubmissions' | 'myVacations'
+        this._openOffersOpen = false;
+        this._openOffersPage = 0;
+        this._openOffersWsFilter = '';
+        this._boardSubsOpen = false;
+        this._boardSubsPage = 0;
+        this._boardSubsEmpFilter = '';
         this._selectedShiftDate = null;         // dateKey — day workshops modal (from "המשמרות שלי")
         this._wsAccordionOpen = new Set();      // open workshop-accordion keys in day modal
         this._lightboxImage = null;             // full-size sketch image URL shown in the lightbox
@@ -1425,6 +1432,51 @@ class EmployeePortal extends HTMLElement {
         return map;
     }
 
+    _hasVacationsInViewMonth() {
+        const month = this._viewMonth;
+        if (!month) return false;
+        const monthStart = `${month}-01`;
+        const monthEnd = `${month}-31`;
+        return (this._data.myVacations || []).some(v => {
+            if (v.status === 'REJECTED') return false;
+            const end = v.endDate || v.startDate;
+            return v.startDate <= monthEnd && end >= monthStart;
+        });
+    }
+
+    _vacationsInViewMonth() {
+        const month = this._viewMonth;
+        if (!month) return [];
+        const monthStart = `${month}-01`;
+        const monthEnd = `${month}-31`;
+        return (this._data.myVacations || [])
+            .filter(v => v.status !== 'REJECTED')
+            .filter(v => {
+                const end = v.endDate || v.startDate;
+                return v.startDate <= monthEnd && end >= monthStart;
+            })
+            .sort((a, b) => a.startDate.localeCompare(b.startDate));
+    }
+
+    _renderVacationShiftRows(vacations) {
+        const statusLabel = { APPROVED: 'מאושר', PENDING: 'ממתין לאישור' };
+        const statusTip = { APPROVED: 'יום חופש מאושר', PENDING: 'בקשת חופש ממתינה לאישור מנהל/ת' };
+        return vacations.map(v => {
+            const range = v.startDate === v.endDate
+                ? formatDateHe(v.startDate)
+                : `${formatDateHe(v.startDate)} – ${formatDateHe(v.endDate)}`;
+            const statusCls = v.status === 'APPROVED' ? 'SCHEDULED' : 'PENDING';
+            return `<div class="ep-b-row">
+                <div style="flex:1;min-width:0">
+                    <div class="ep-b-date">${range}</div>
+                    ${v.notes ? `<div class="ep-b-time">${escapeHtml(v.notes)}</div>` : ''}
+                    ${v.managerComment ? `<div class="ep-b-time">הערת מנהל/ת: ${escapeHtml(v.managerComment)}</div>` : ''}
+                </div>
+                <span class="ep-status ${statusCls} ep-tip-trigger" data-tip="${escapeHtml(statusTip[v.status] || '')}">${statusLabel[v.status] || v.status}</span>
+            </div>`;
+        }).join('');
+    }
+
     _renderWorkshopFilter() {
         const types = this._data.allWorkshopTypes || [];
         if (!types.length) return '';
@@ -1547,6 +1599,7 @@ class EmployeePortal extends HTMLElement {
                     return `<span>${escapeHtml(w.name)}${countLabel}${timesLabel}</span>`;
                 }).join('')}</div>`
                 : '';
+            const wsPlus = dayWorkshops.length ? this._renderDayWorkshopsPlus(dayWorkshops) : '';
             const filterActive = this._workshopFilter && this._workshopFilter.size > 0;
             if (filterActive && !dayWorkshops.some(w => this._workshopFilter.has(w.id))) cls += ' ep-day-filtered';
 
@@ -1564,6 +1617,7 @@ class EmployeePortal extends HTMLElement {
             cells += `<div class="${cls}" ${clickable ? `data-action="toggle-day" data-date="${dateKey}"` : ''}>
                 <span class="ep-day-num">${day}</span>
                 ${noteIcon}
+                ${wsPlus}
                 ${holidayByDate[dateKey] ? `<span class="ep-day-hol">${escapeHtml(holidayByDate[dateKey])}</span>` : ''}
                 ${wsList}
                 ${sketchDutyRow}
@@ -1739,6 +1793,18 @@ class EmployeePortal extends HTMLElement {
             </button>${body}</div>`;
     }
 
+    /** "+" icon on calendar days — hover (desktop) / tap (mobile) shows every workshop's start–end time that day. */
+    _renderDayWorkshopsPlus(dayWorkshops) {
+        const lines = dayWorkshops.flatMap(w => {
+            const ranges = (w.timeRanges && w.timeRanges.length)
+                ? w.timeRanges
+                : (w.times || []).map(start => ({ start, end: null }));
+            return ranges.map(r => `${w.name} — ${formatTimeRangeHe(r.start, r.end)}`);
+        });
+        if (!lines.length) return '';
+        return `<span class="ep-day-plus ep-tip-trigger" tabindex="0" data-tip="${escapeHtml(lines.join('\n'))}" aria-label="פרטי סדנאות היום">+</span>`;
+    }
+
     _sectionHelp(text) {
         return `<span class="ep-section-help ep-tip-trigger" tabindex="0" data-tip="${escapeHtml(text)}" aria-label="${escapeHtml(text)}">?</span>`;
     }
@@ -1823,13 +1889,17 @@ class EmployeePortal extends HTMLElement {
             ${invalid ? `<div class="ep-banner warn" style="margin-top:8px">יש משמרות קצרות מהמינימום (${rules.minShiftHours} שעות) או עם שעות שגויות.</div>` : ''}`;
     }
 
-    /** "המשמרות שלי" (SCHEDULED+STANDBY) / "ההגשות שלי" (SUBMITTED) — internal tabs. */
+    /** "המשמרות שלי" / "ההגשות שלי" / "החופשות שלי" (when vacations exist in viewed month). */
     _renderShiftsCard() {
-        const subTab = this._shiftSubTab === 'mySubmissions' ? 'mySubmissions' : 'myShifts';
+        const showVacationsTab = this._hasVacationsInViewMonth();
+        if (this._shiftSubTab === 'myVacations' && !showVacationsTab) this._shiftSubTab = 'myShifts';
+        const subTab = this._shiftSubTab === 'mySubmissions' ? 'mySubmissions'
+            : this._shiftSubTab === 'myVacations' ? 'myVacations' : 'myShifts';
         const subs = (this._data.submissions || []).filter(s => s.status !== 'REJECTED');
         const myShifts = subs.filter(s => s.status === 'SCHEDULED' || s.status === 'STANDBY');
         const mySubmissions = subs.filter(s => s.status === 'SUBMITTED');
-        const list = subTab === 'mySubmissions' ? mySubmissions : myShifts;
+        const myVacations = this._vacationsInViewMonth();
+        const list = subTab === 'mySubmissions' ? mySubmissions : subTab === 'myVacations' ? myVacations : myShifts;
 
         const pendingBySubmission = {};
         for (const r of (this._data.changeRequests || [])) {
@@ -1847,9 +1917,13 @@ class EmployeePortal extends HTMLElement {
             }
         }
 
-        const rows = list.length
-            ? list.map(s => this._renderShiftRow(s, pendingBySubmission[s.id], pendingSwapBySubmission[s.id], subTab === 'myShifts')).join('')
-            : `<div class="ep-empty">${subTab === 'mySubmissions' ? 'אין הגשות בהמתנה לאישור' : 'אין משמרות משובצות'}</div>`;
+        const rows = subTab === 'myVacations'
+            ? (list.length
+                ? this._renderVacationShiftRows(list)
+                : `<div class="ep-empty">אין חופשות בחודש ${escapeHtml(monthTitle(this._viewMonth))}</div>`)
+            : list.length
+                ? list.map(s => this._renderShiftRow(s, pendingBySubmission[s.id], pendingSwapBySubmission[s.id], subTab === 'myShifts')).join('')
+                : `<div class="ep-empty">${subTab === 'mySubmissions' ? 'אין הגשות בהמתנה לאישור' : 'אין משמרות משובצות'}</div>`;
 
         const decidedBanners = decided.map(r => `
             <div class="ep-banner ${r.status === 'APPROVED' ? 'info' : 'closed'}" style="align-items:flex-start">
@@ -1873,11 +1947,12 @@ class EmployeePortal extends HTMLElement {
             <div class="ep-tabs" style="margin-top:0">
                 <button class="ep-tabbtn ${subTab === 'myShifts' ? 'active' : ''}" data-action="subtab-myshifts">המשמרות שלי (${myShifts.length})${this._tabHelp('משמרות שכבר שובצו לכם או שנמצאות ברשימת המתנה — ניתן לבקש שינוי, מחיקה או החלפה.')}</button>
                 <button class="ep-tabbtn ${subTab === 'mySubmissions' ? 'active' : ''}" data-action="subtab-mysubmissions">ההגשות שלי (${mySubmissions.length})${this._tabHelp('משמרות שהגשתם וטרם אושרו או שובצו — ממתינות לאישור מנהל/ת או לשיבוץ אוטומטי.')}</button>
+                ${showVacationsTab ? `<button class="ep-tabbtn ${subTab === 'myVacations' ? 'active' : ''}" data-action="subtab-myvacations">החופשות שלי (${myVacations.length})${this._tabHelp('ימי חופש מאושרים או ממתינים לאישור בחודש שמוצג בלוח השנה.')}</button>` : ''}
             </div>
-            ${this._renderEditWindowBanner()}
-            ${this._renderStatusGuide()}
+            ${subTab === 'myVacations' ? '' : this._renderEditWindowBanner()}
+            ${subTab === 'myVacations' ? '' : this._renderStatusGuide()}
             <div style="margin-top:12px">
-                ${decidedBanners}
+                ${subTab === 'myVacations' ? '' : decidedBanners}
                 ${rows}
             </div>`;
     }
@@ -2345,7 +2420,9 @@ class EmployeePortal extends HTMLElement {
                 return;
             case 'subtab-myshifts':
             case 'subtab-mysubmissions':
-                this._shiftSubTab = action === 'subtab-mysubmissions' ? 'mySubmissions' : 'myShifts';
+            case 'subtab-myvacations':
+                this._shiftSubTab = action === 'subtab-mysubmissions' ? 'mySubmissions'
+                    : action === 'subtab-myvacations' ? 'myVacations' : 'myShifts';
                 this.render();
                 return;
             case 'view-day-workshops':

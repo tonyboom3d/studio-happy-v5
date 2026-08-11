@@ -432,6 +432,7 @@ export const getMyPortalData = webMethod(Permissions.Anyone, async () => {
                     id: t.typeId,
                     name: t.name,
                     times: [...t.sessions].sort(),
+                    timeRanges: [...t.sessions].sort().map(start => ({ start, end: t.sessionEnds?.[start] || null })),
                 })),
         };
     }

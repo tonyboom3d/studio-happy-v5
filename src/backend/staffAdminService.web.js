@@ -276,6 +276,7 @@ export const getStaffAdminData = webMethod(Permissions.SiteMember, async (monthK
                 filled: typeFilledCount(t),
                 assignedEmployeeIds: t.assignedEmployeeIds,
                 standbyCount: t.standbyQueue.length,
+                timeRanges: [...t.sessions].sort().map(start => ({ start, end: t.sessionEnds?.[start] || null })),
             })),
         };
     }
@@ -306,6 +307,7 @@ export const getStaffAdminData = webMethod(Permissions.SiteMember, async (monthK
             status: o.status,
             date: o.dateKey || toDateKey(o.date),
             workshopName: o.workshopName || '',
+            workshopTypeId: o.workshopTypeId || null,
             employeeName: o.employeeId ? (board.rolesById[o.employeeId]?.displayName || '—') : null,
             expiresAt: o.expiresAt || null,
         }));

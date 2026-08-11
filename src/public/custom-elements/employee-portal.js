@@ -190,6 +190,23 @@ employee-portal * { box-sizing: border-box; }
 .ep-profile-value { text-align: left; color: #1f2937; word-break: break-word; }
 .ep-board-item.clickable { cursor: pointer; transition: border-color .15s,background .15s; }
 .ep-board-item.clickable:hover { border-color: #93c5fd; background: #f8fafc; }
+.ep-shift-chevron { color: #2563eb; font-size: 16px; font-weight: 700; flex-shrink: 0; line-height: 1; transition: transform .15s; }
+.ep-board-item.clickable:hover .ep-shift-chevron { transform: translateX(-3px); }
+.ep-ws-acc { border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; margin-bottom: 8px; background: #fff; }
+.ep-ws-acc-head { width: 100%; display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 12px; border: none; background: #f8fafc; font-size: 13px; font-weight: 700; color: #1f2937; cursor: pointer; font-family: inherit; text-align: right; }
+.ep-ws-acc-head:hover { background: #f1f5f9; }
+.ep-ws-acc-meta { font-size: 11.5px; font-weight: 600; color: #6b7280; white-space: nowrap; }
+.ep-ws-acc-chevron { font-size: 11px; color: #6b7280; flex-shrink: 0; transition: transform .15s; }
+.ep-ws-acc.open .ep-ws-acc-chevron { transform: rotate(180deg); }
+.ep-ws-acc-body { display: none; padding: 10px 12px 12px; border-top: 1px solid #e2e8f0; font-size: 12.5px; color: #374151; }
+.ep-ws-acc.open .ep-ws-acc-body { display: block; }
+.ep-ws-order-block { padding: 8px 0; border-bottom: 1px solid #f1f5f9; }
+.ep-ws-order-block:last-child { border-bottom: none; padding-bottom: 0; }
+.ep-ws-order-block:first-child { padding-top: 0; }
+.ep-ws-detail-row { display: flex; gap: 8px; margin-bottom: 4px; line-height: 1.45; }
+.ep-ws-detail-row b { color: #6b7280; font-weight: 600; white-space: nowrap; flex-shrink: 0; }
+.ep-ws-detail-row span { color: #1f2937; }
+.ep-ws-participants-inline { margin: 4px 0 0; padding: 0 16px 0 0; }
 .ep-toast { position: fixed; bottom: 22px; right: 50%; transform: translateX(50%); background: #111827; color: #fff; border-radius: 12px; padding: 11px 20px; font-size: 13.5px; z-index: 9999; box-shadow: 0 8px 24px rgba(0,0,0,.25); opacity: 0; pointer-events: none; transition: opacity .2s; max-width: 92vw; }
 .ep-toast.show { opacity: 1; }
 .ep-toast.error { background: #b91c1c; }
@@ -321,6 +338,19 @@ function workshopLabel(name) {
     return `סדנת ${clean}`;
 }
 
+/** Groups workshop orders by type + start time (same session on the same day). */
+function groupWorkshopsBySession(workshops) {
+    const map = new Map();
+    for (const w of workshops) {
+        const key = `${w.workshopType}|${w.workshopStart}`;
+        if (!map.has(key)) {
+            map.set(key, { workshopType: w.workshopType, workshopStart: w.workshopStart, orders: [] });
+        }
+        map.get(key).orders.push(w);
+    }
+    return [...map.values()].sort((a, b) => new Date(a.workshopStart) - new Date(b.workshopStart));
+}
+
 class EmployeePortal extends HTMLElement {
     static get observedAttributes() { return ['portal-data', 'action-result', 'admin-data', 'hours-data', 'templates-data', 'staff-data', 'team-time-data', 'messages-data', 'messages-admin-data', 'vacations-data']; }
 
@@ -369,6 +399,7 @@ class EmployeePortal extends HTMLElement {
         this._workshopFilterOpen = false;
         this._shiftSubTab = 'myShifts';         // 'myShifts' | 'mySubmissions' — internal sub-tab
         this._selectedShiftDate = null;         // dateKey — day workshops modal (from "המשמרות שלי")
+        this._wsAccordionOpen = new Set();      // open workshop-accordion keys in day modal
         this._shiftModal = null;                // { type: 'edit'|'requestEdit'|'requestDelete'|'swap', submissionId }
         this._busy = null;                      // busy-overlay message while a mutation is in flight
         this._editWindowTimer = null;           // 1s ticker for the 30-min free-edit countdown
@@ -1950,8 +1981,9 @@ class EmployeePortal extends HTMLElement {
             : `class="ep-board-item ${s.autoApproved ? 'auto-approved' : ''}"`;
         return `
             <div ${clickAttrs}>
-                <div>
-                    <div class="ep-b-date">${formatDateHe(s.date)}${clickable ? ' <span style="font-size:11px;color:#2563eb;font-weight:600">· סדנאות</span>' : ''}</div>
+                ${clickable ? '<span class="ep-shift-chevron" aria-hidden="true">◂</span>' : ''}
+                <div style="flex:1;min-width:0">
+                    <div class="ep-b-date">${formatDateHe(s.date)}</div>
                     <div class="ep-b-time">${escapeHtml(s.startTime)}–${escapeHtml(s.endTime)}${s.hours ? ` · ${s.hours} ש׳` : ''}</div>
                     ${metaDesktop}
                 </div>
@@ -2045,21 +2077,44 @@ class EmployeePortal extends HTMLElement {
         </div>`;
     }
 
-    _renderWorkshopCards(workshops) {
+    _renderWorkshopOrderBlock(order) {
+        const participantItems = (order.participants || []).filter(p => String(p.name || '').trim());
+        const namesBlock = participantItems.length
+            ? `<ul class="ep-ws-participants-inline">${participantItems.map(p => {
+                return `<li>${escapeHtml(p.name)}${p.childrenCount ? ` (${p.childrenCount} ילדים)` : ''}</li>`;
+            }).join('')}</ul>`
+            : '<span>—</span>';
+        return `<div class="ep-ws-order-block">
+            <div class="ep-ws-detail-row"><b>מזמין/ה</b><span>${escapeHtml(order.organizerName || '—')}</span></div>
+            <div class="ep-ws-detail-row"><b>טלפון לקוח</b><span>${escapeHtml(order.organizerPhone || '—')}</span></div>
+            <div class="ep-ws-detail-row"><b>כמות משתתפים</b><span>${order.quantity || 0} (${order.adults || 0} מבוגרים)</span></div>
+            <div class="ep-ws-detail-row"><b>כמות ילדים</b><span>${order.children || 0}</span></div>
+            <div class="ep-ws-detail-row"><b>שמות משתתפים</b>${namesBlock}</div>
+            <div class="ep-ws-detail-row"><b>הערות לקוח</b><span>${order.customerNotes ? escapeHtml(order.customerNotes) : '—'}</span></div>
+        </div>`;
+    }
+
+    _renderWorkshopCards(workshops, dateKey) {
         if (!workshops.length) {
             return `<div class="ep-empty">אין סדנאות עם הזמנות פעילות ביום זה</div>`;
         }
-        return workshops.map(w => {
-            const participants = (w.participants || []).map(p =>
-                `<li>${escapeHtml(p.name)}${p.childrenCount ? ` (+${p.childrenCount} ילדים)` : ''}</li>`).join('');
-            return `<div class="ep-ws-card">
-                <div class="ep-ws-head">
-                    <span>${escapeHtml(w.workshopType)}</span>
-                    <span>${formatTimeHe(w.workshopStart)}</span>
-                </div>
-                <div class="ep-ws-meta">מזמין/ה: ${escapeHtml(w.organizerName || '—')} · ${w.quantity} משתתפים (${w.adults} מבוגרים, ${w.children} ילדים)</div>
-                ${participants ? `<ul class="ep-ws-participants">${participants}</ul>` : ''}
-                ${w.customerNotes ? `<div class="ep-ws-notes">📝 הערת לקוח: ${escapeHtml(w.customerNotes)}</div>` : ''}
+        const groups = groupWorkshopsBySession(workshops);
+        return groups.map((group, idx) => {
+            const accKey = `${dateKey}|${idx}`;
+            const open = this._wsAccordionOpen.has(accKey);
+            const totalQty = group.orders.reduce((sum, o) => sum + (o.quantity || 0), 0);
+            const totalChildren = group.orders.reduce((sum, o) => sum + (o.children || 0), 0);
+            const body = group.orders.map(o => this._renderWorkshopOrderBlock(o)).join('');
+            const meta = `${formatTimeHe(group.workshopStart)} · ${totalQty} משתתפים${totalChildren ? ` · ${totalChildren} ילדים` : ''}`;
+            return `<div class="ep-ws-acc ${open ? 'open' : ''}">
+                <button type="button" class="ep-ws-acc-head" data-action="toggle-ws-accordion" data-acc-key="${escapeHtml(accKey)}">
+                    <span>${escapeHtml(workshopLabel(group.workshopType))}</span>
+                    <span style="display:flex;align-items:center;gap:8px">
+                        <span class="ep-ws-acc-meta">${escapeHtml(meta)}</span>
+                        <span class="ep-ws-acc-chevron" aria-hidden="true">▼</span>
+                    </span>
+                </button>
+                <div class="ep-ws-acc-body">${body}</div>
             </div>`;
         }).join('');
     }
@@ -2107,7 +2162,7 @@ class EmployeePortal extends HTMLElement {
                     <h2>סדנאות ביום ${escapeHtml(formatDateHe(dateKey))}</h2>
                     <button class="epa-modal-close" data-action="dismiss-day-workshops" aria-label="סגירה">×</button>
                 </div>
-                ${this._renderWorkshopCards(workshops)}
+                ${this._renderWorkshopCards(workshops, dateKey)}
                 <div class="epa-inline" style="margin-top:12px">
                     <button class="epa-btn" data-action="dismiss-day-workshops">סגירה</button>
                 </div>
@@ -2166,13 +2221,23 @@ class EmployeePortal extends HTMLElement {
                 this.render();
                 return;
             case 'view-day-workshops':
+                this._wsAccordionOpen = new Set();
                 this._selectedShiftDate = target.dataset.date || null;
                 this.render();
                 return;
             case 'dismiss-day-workshops':
                 this._selectedShiftDate = null;
+                this._wsAccordionOpen = new Set();
                 this.render();
                 return;
+            case 'toggle-ws-accordion': {
+                const key = target.dataset.accKey;
+                if (!key) return;
+                if (this._wsAccordionOpen.has(key)) this._wsAccordionOpen.delete(key);
+                else this._wsAccordionOpen.add(key);
+                this.render();
+                return;
+            }
             case 'msg-car-prev':
             case 'msg-car-next': {
                 const scope = target.dataset.scope;

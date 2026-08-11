@@ -157,8 +157,8 @@ async function loadWorkshopTypeNamesByServiceId() {
 /**
  * Workshop details for the employee's SCHEDULED dates: paid, non-cancelled
  * WorkshopOrders whose workshopStart falls on one of those dates.
- * Employee-safe payload: participants + customer notes only — no phones,
- * no internal notes, no payment data.
+ * Employee-safe payload: participants, customer notes, and organizer phone
+ * for assigned workshop days — no internal notes or payment data.
  */
 async function loadScheduledWorkshopDetails(scheduledSubmissions) {
     const dateKeys = [...new Set(scheduledSubmissions.map(s => s.date).filter(Boolean))];
@@ -211,6 +211,7 @@ async function loadScheduledWorkshopDetails(scheduledSubmissions) {
         workshopStart: order.workshopStart,
         workshopType: typeNamesByServiceId[order.serviceId] || order.workshopType || 'סדנה',
         organizerName: order.organizerName || '',
+        organizerPhone: order.organizerPhone || '',
         adults: order.adults || 0,
         children: order.children || 0,
         quantity: (order.adults || 0) + (order.children || 0),

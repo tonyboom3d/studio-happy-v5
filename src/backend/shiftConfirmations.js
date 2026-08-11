@@ -23,13 +23,12 @@ import {
     loadSettings,
     loadActiveRoles,
     loadWorkshopTypeMap,
-    notifyManagers,
     publishSchedulingUpdate,
     runScheduling,
 } from 'backend/schedulingEngine.js';
 import { getRolePermissionValue } from 'backend/staffRoles.js';
-import { sendGreenApiWhatsApp } from 'backend/whatsappService.jsw';
 import { loadVacationsOverlappingRangeByEmployee } from 'backend/vacations.js';
+import { sendEmployeeTemplateMessage, sendEmployeeTemplateToManagers } from 'backend/employeeTemplates.js';
 
 const SA = { suppressAuth: true };
 const SAC = { suppressAuth: true, consistentRead: true };
@@ -137,14 +136,15 @@ export async function processDeadlineReminders(now = new Date()) {
     for (const role of roles) {
         const quota = evaluatePeriodQuota(role, settings, period, subsByEmployee[role._id] || [], vacationsByEmployee[role._id]);
         if (quota.met || !role.phone) continue;
-        const msg = [
-            `היי ${role.displayName || ''} 👋`,
-            `תזכורת מסטודיו האפי: נותרו ${daysUntilDeadline} ימים להגשת זמינות לשבועיים ${period.start}–${period.end}.`,
-            `הוגשו ${quota.submitted} מתוך ${quota.required} משמרות נדרשות.`,
-            `להגשה: ${PORTAL_URL}`,
-        ].join('\n');
-        await sendGreenApiWhatsApp(role.phone, msg).catch(err =>
-            console.error('[shiftConfirmations] reminder failed:', err?.message || err));
+        await sendEmployeeTemplateMessage('employee_availability_deadline_reminder', role.phone, {
+            displayName: role.displayName || '',
+            daysUntilDeadline,
+            periodStart: period.start,
+            periodEnd: period.end,
+            quotaSubmitted: quota.submitted,
+            quotaRequired: quota.required,
+            portalLink: PORTAL_URL,
+        }).catch(err => console.error('[shiftConfirmations] reminder failed:', err?.message || err));
         sent++;
     }
     console.log(`[shiftConfirmations] processDeadlineReminders: window=${period.start}..${period.end} sent=${sent}`);
@@ -187,18 +187,19 @@ async function sendConfirmationMessage(role, assignment, workshopStart, stage) {
     const dateKey = assignment.dateKey || toDateKey(assignment.date);
     const link = `${CONFIRM_URL}?token=${assignment.confirmToken}`;
     const prefix = stage === 2 ? '⏰ תזכורת אחרונה — ' : '';
-    const msg = [
-        `${prefix}היי ${role?.displayName || ''} 👋`,
-        `יש לך משמרת בסדנת ${assignment.workshopName || 'סדנה'} בתאריך ${formatDateHe(dateKey)}${workshopStart ? ` בשעה ${formatTimeHe(workshopStart)}` : ''}.`,
-        `נא לאשר הגעה (או לעדכן שלא) בקישור:`,
-        link,
-    ].join('\n');
+    const timeSuffix = workshopStart ? ` בשעה ${formatTimeHe(workshopStart)}` : '';
     if (!role?.phone) {
         console.warn(`[shiftConfirmations] role ${role?._id} has no phone — confirmation not sent`);
         return false;
     }
-    await sendGreenApiWhatsApp(role.phone, msg).catch(err =>
-        console.error('[shiftConfirmations] confirmation send failed:', err?.message || err));
+    await sendEmployeeTemplateMessage('employee_preworkshop_confirm', role.phone, {
+        prefix,
+        displayName: role?.displayName || '',
+        workshopName: assignment.workshopName || 'סדנה',
+        date: formatDateHe(dateKey),
+        timeSuffix,
+        confirmLink: link,
+    }).catch(err => console.error('[shiftConfirmations] confirmation send failed:', err?.message || err));
     return true;
 }
 
@@ -256,9 +257,12 @@ export async function processConfirmations(now = new Date()) {
             report.stage2++;
         } else if (state === CONFIRMATION_STATE.PENDING && stage >= 2 && hoursUntil <= alerts.escalateHoursBeforeWorkshop) {
             await wixData.update('ShiftAssignments', { ...a, confirmationState: CONFIRMATION_STATE.ESCALATED }, SA);
-            await notifyManagers(
-                `⚠️ ${role?.displayName || 'עובד/ת'} לא אישר/ה הגעה למשמרת בסדנת ${a.workshopName || ''} בתאריך ${formatDateHe(dateKey)} (${formatTimeHe(workshopStart)}). מומלץ ליצור קשר.`,
-                rolesById);
+            await sendEmployeeTemplateToManagers('manager_confirmation_escalation', {
+                displayName: role?.displayName || 'עובד/ת',
+                workshopName: a.workshopName || '',
+                date: formatDateHe(dateKey),
+                time: formatTimeHe(workshopStart),
+            }, rolesById);
             report.escalated++;
         }
     }
@@ -347,9 +351,12 @@ export async function respondByToken(token, accept, notes) {
             await wixData.update('AvailabilitySubmissions', { ...sub, status: SUBMISSION_STATUS.SUBMITTED }, SA);
         }
     }
-    await notifyManagers(
-        `❌ ${employeeName} ביטל/ה הגעה למשמרת בסדנת ${a.workshopName || ''} בתאריך ${formatDateHe(dateKey)}.${cleanNotes ? `\nהערה: ${cleanNotes}` : ''}\nהמערכת מחפשת מחליף/ה אוטומטית.`,
-        rolesById);
+    await sendEmployeeTemplateToManagers('manager_employee_declined_confirmation', {
+        employeeName,
+        workshopName: a.workshopName || '',
+        date: formatDateHe(dateKey),
+        notesLine: cleanNotes ? `\nהערה: ${cleanNotes}` : '',
+    }, rolesById);
     await runScheduling(dateKey, dateKey);
     console.log(`[shiftConfirmations] declined: ${a._id} (${employeeName})`);
     return { ok: true, state: CONFIRMATION_STATE.DECLINED };

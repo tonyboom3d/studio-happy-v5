@@ -19,9 +19,11 @@ import { publish } from 'wix-realtime-backend';
 import { SUBMISSION_STATUS, toDateKey, normalizeSettings, DEFAULT_WORK_TYPE } from 'backend/availabilityRules.js';
 import { refIds, getRolePermissionValue } from 'backend/staffRoles.js';
 import { sendGreenApiWhatsApp } from 'backend/whatsappService.jsw';
+import { sendEmployeeTemplateMessage, sendEmployeeTemplateToManagers } from 'backend/employeeTemplates.js';
 
 const SA = { suppressAuth: true };
 const SAC = { suppressAuth: true, consistentRead: true };
+const PORTAL_URL = 'https://www.studiohappy.art/employee-portal';
 
 export const ASSIGNMENT_STATUS = { STANDBY: 'STANDBY', APPROVED: 'APPROVED', CANCELLED: 'CANCELLED' };
 export const OFFER_KIND = { WAITLIST_OFFER: 'WAITLIST_OFFER', OPEN_CALL: 'OPEN_CALL' };
@@ -364,12 +366,6 @@ export function resolvePlacement(day, skillTypeIds) {
 // WhatsApp helpers
 // ---------------------------------------------------------------------------
 
-async function notifyEmployee(role, message) {
-    if (!role?.phone) { console.warn(`[schedulingEngine] role ${role?._id} has no phone — skipping WhatsApp`); return; }
-    await sendGreenApiWhatsApp(role.phone, message).catch(err =>
-        console.error('[schedulingEngine] employee WhatsApp failed:', err?.message || err));
-}
-
 export async function notifyManagers(message, rolesById = null) {
     const roles = rolesById ? Object.values(rolesById) : await loadActiveRoles();
     const managers = roles.filter(r => getRolePermissionValue(r, 'manageScheduling') && r.phone);
@@ -429,8 +425,16 @@ async function ensureShortageHandled(dateKey, t, board) {
             expiresAt: new Date(Date.now() + OFFER_TTL_MS),
         }, SA);
         const role = board.rolesById[next.employeeId];
-        await notifyEmployee(role,
-            `היי ${role?.displayName || ''} 👋\nהתפנתה משמרת בסדנת ${t.name} בתאריך ${formatDateHe(dateKey)}.\nההצעה שמורה לך לשעה הקרובה — לאישור יש להיכנס לפורטל העובדים:\nhttps://www.studiohappy.art/employee-portal`);
+        if (role?.phone) {
+            await sendEmployeeTemplateMessage('employee_shift_offer_standby', role.phone, {
+                displayName: role?.displayName || '',
+                workshopName: t.name,
+                date: formatDateHe(dateKey),
+                portalLink: PORTAL_URL,
+            });
+        } else {
+            console.warn(`[schedulingEngine] role ${role?._id} has no phone — skipping WhatsApp`);
+        }
         board.offers.push(offer);
         return offer;
     }
@@ -443,9 +447,10 @@ async function ensureShortageHandled(dateKey, t, board) {
         submissionId: null,
         expiresAt: null,
     }, SA);
-    await notifyManagers(
-        `⚠️ דרוש/ה עובד/ת לסדנת ${t.name} בתאריך ${formatDateHe(dateKey)} — אין ממתינים ברשימת ההמתנה. נפתחה קריאה פתוחה בפורטל.`,
-        board.rolesById);
+    await sendEmployeeTemplateToManagers('manager_open_call', {
+        workshopName: t.name,
+        date: formatDateHe(dateKey),
+    }, board.rolesById);
     board.offers.push(call);
     return call;
 }
@@ -742,8 +747,16 @@ export async function processBookingPaid(order) {
             shortage--;
             report.assigned++;
             const role = board.rolesById[sub.employeeId];
-            await notifyEmployee(role,
-                `היי ${role?.displayName || ''} 👋\nהתקבלה הזמנה לסדנת ${t.name} בתאריך ${formatDateHe(dateKey)} — שובצת אוטומטית למשמרת! 🎉\nפרטים בפורטל העובדים: https://www.studiohappy.art/employee-portal`);
+            if (role?.phone) {
+                await sendEmployeeTemplateMessage('employee_auto_assigned_booking', role.phone, {
+                    displayName: role?.displayName || '',
+                    workshopName: t.name,
+                    date: formatDateHe(dateKey),
+                    portalLink: PORTAL_URL,
+                });
+            } else {
+                console.warn(`[schedulingEngine] role ${role?._id} has no phone — skipping WhatsApp`);
+            }
         }
     } else {
         // Inside the confirmation window: one pending offer at a time (FIFO);
@@ -765,8 +778,17 @@ export async function processBookingPaid(order) {
                 notifiedAt: new Date(),
             }, SA);
             const role = board.rolesById[first.employeeId];
-            await notifyEmployee(role,
-                `היי ${role?.displayName || ''} 👋\nהתקבלה הזמנה לסדנת ${t.name} בתאריך ${formatDateHe(dateKey)} (פחות מ-${CONFIRM_WINDOW_HOURS} שעות מראש).\nכדי להשלים את השיבוץ נדרש אישורך — ההצעה שמורה לך לשעה הקרובה בפורטל העובדים:\nhttps://www.studiohappy.art/employee-portal`);
+            if (role?.phone) {
+                await sendEmployeeTemplateMessage('employee_confirm_request_shortnotice', role.phone, {
+                    displayName: role?.displayName || '',
+                    workshopName: t.name,
+                    date: formatDateHe(dateKey),
+                    hoursWindow: CONFIRM_WINDOW_HOURS,
+                    portalLink: PORTAL_URL,
+                });
+            } else {
+                console.warn(`[schedulingEngine] role ${role?._id} has no phone — skipping WhatsApp`);
+            }
             report.confirmations++;
         }
     }

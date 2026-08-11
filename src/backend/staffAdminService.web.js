@@ -45,7 +45,6 @@ import {
     OFFER_STATUS,
     ASSIGNMENT_STATUS,
 } from 'backend/schedulingEngine.js';
-import { sendGreenApiWhatsApp } from 'backend/whatsappService.jsw';
 import {
     loadVacationsOverlappingRangeByEmployee,
     listAllVacations,
@@ -58,6 +57,9 @@ import {
     assertTemplateUse,
     mapTemplateRow,
 } from 'backend/whatsappTemplates.js';
+import { sendEmployeeTemplateMessage, EMPLOYEE_ACTION_KEYS } from 'backend/employeeTemplates.js';
+
+const PORTAL_URL = 'https://www.studiohappy.art/employee-portal';
 
 const SA = { suppressAuth: true };
 
@@ -974,7 +976,7 @@ export const rejectEmployeeVacation = webMethod(Permissions.SiteMember, async (v
 export const getStaffTemplates = webMethod(Permissions.SiteMember, async () => {
     await assertEmployeeAccess('manageTemplates');
     const result = await wixData.query('WhatsApp_Templates').ascending('title').limit(1000).find(SA);
-    return (result.items || []).map(mapTemplateRow);
+    return (result.items || []).map(t => mapTemplateRow(t, EMPLOYEE_ACTION_KEYS));
 });
 
 export const saveStaffTemplate = webMethod(Permissions.SiteMember, async (template) => {
@@ -989,11 +991,12 @@ export const saveStaffTemplate = webMethod(Permissions.SiteMember, async (templa
     if (template?.id) {
         const existing = await wixData.get('WhatsApp_Templates', template.id, SA).catch(() => null);
         if (!existing) throw new Error('NOT_FOUND: התבנית לא נמצאה.');
-        saved = await wixData.update('WhatsApp_Templates', { ...existing, ...data }, SA);
+        // actionKey is permanent once set — never let a client-side save clear it.
+        saved = await wixData.update('WhatsApp_Templates', { ...existing, ...data, actionKey: existing.actionKey || null }, SA);
     } else {
         saved = await wixData.insert('WhatsApp_Templates', { ...data, isSystem: false }, SA);
     }
-    return mapTemplateRow(saved);
+    return mapTemplateRow(saved, EMPLOYEE_ACTION_KEYS);
 });
 
 export const deleteStaffTemplate = webMethod(Permissions.SiteMember, async (templateId) => {
@@ -1019,14 +1022,12 @@ export const sendAvailabilityNudge = webMethod(Permissions.SiteMember, async (ro
     for (const id of ids) {
         const target = await wixData.get('Dashboard_Roles', id, SA).catch(() => null);
         if (!target?.phone) { failures.push({ id, reason: 'אין מספר טלפון' }); continue; }
-        const msg = [
-            `היי ${target.displayName || ''} 👋`,
-            `תזכורת מסטודיו האפי: טרם הושלמה הגשת הזמינות לחודש ${monthKey || 'הקרוב'}.`,
-            `להגשה יש להיכנס לפורטל העובדים:`,
-            `https://www.studiohappy.art/employee-portal`,
-        ].join('\n');
         try {
-            await sendGreenApiWhatsApp(target.phone, msg);
+            await sendEmployeeTemplateMessage('employee_availability_nudge', target.phone, {
+                displayName: target.displayName || '',
+                monthKey: monthKey || 'הקרוב',
+                portalLink: PORTAL_URL,
+            });
             sent++;
         } catch (err) {
             failures.push({ id, reason: err?.message || 'שגיאת שליחה' });
@@ -1124,9 +1125,13 @@ export const manualAssign = webMethod(Permissions.SiteMember, async (dateKey, wo
         const dow = new Intl.DateTimeFormat('he-IL', { weekday: 'long' }).format(new Date(Date.UTC(y, m - 1, d)));
         const names = toAssign.map(id => typesById[id]?.name || 'סדנה');
         const detail = names.length ? `בסדנת ${names.join(', ')} ` : '';
-        await sendGreenApiWhatsApp(target.phone,
-            `היי ${target.displayName || ''} 👋\nשובצת למשמרת ${detail}בתאריך ${dow}, ${d}.${m}.${y}.\nפרטים בפורטל העובדים: https://www.studiohappy.art/employee-portal`
-        ).catch(err => console.error('[staffAdminService] assign notify failed:', err?.message || err));
+        await sendEmployeeTemplateMessage('employee_shift_assigned', target.phone, {
+            displayName: target.displayName || '',
+            detail,
+            dow,
+            date: `${d}.${m}.${y}`,
+            portalLink: PORTAL_URL,
+        }).catch(err => console.error('[staffAdminService] assign notify failed:', err?.message || err));
     }
 
     console.log(`[staffAdminService] manualAssign: ${employeeId} → ${dateKey}/[${toAssign.join(',')}] workType=${normalizedWorkType} by ${role._id}`);
@@ -1158,9 +1163,12 @@ export const cancelAssignment = webMethod(Permissions.SiteMember, async (dateKey
     if (target?.phone) {
         const [y, m, d] = dateKey.split('-').map(Number);
         const dow = new Intl.DateTimeFormat('he-IL', { weekday: 'long' }).format(new Date(Date.UTC(y, m - 1, d)));
-        await sendGreenApiWhatsApp(target.phone,
-            `היי ${target.displayName || ''} 👋\nהשיבוץ שלך למשמרת בתאריך ${dow}, ${d}.${m}.${y} בוטל על ידי המנהל/ת.\nלפרטים: https://www.studiohappy.art/employee-portal`
-        ).catch(err => console.error('[staffAdminService] cancel notify failed:', err?.message || err));
+        await sendEmployeeTemplateMessage('employee_shift_cancelled', target.phone, {
+            displayName: target.displayName || '',
+            dow,
+            date: `${d}.${m}.${y}`,
+            portalLink: PORTAL_URL,
+        }).catch(err => console.error('[staffAdminService] cancel notify failed:', err?.message || err));
     }
 
     // Freed capacity: rerun the engine for that day (auto-fill / offers / open call).
@@ -1169,9 +1177,9 @@ export const cancelAssignment = webMethod(Permissions.SiteMember, async (dateKey
     return { ok: true };
 });
 
-async function notifyShiftChange(target, message) {
+async function notifyShiftChange(target, actionKey, vars) {
     if (!target?.phone) return;
-    await sendGreenApiWhatsApp(target.phone, message)
+    await sendEmployeeTemplateMessage(actionKey, target.phone, vars)
         .catch(err => console.error('[staffAdminService] notify failed:', err?.message || err));
 }
 
@@ -1270,9 +1278,13 @@ export const approveSubmission = webMethod(Permissions.SiteMember, async (submis
         const [y, m, d] = dateKey.split('-').map(Number);
         const dow = new Intl.DateTimeFormat('he-IL', { weekday: 'long' }).format(new Date(Date.UTC(y, m - 1, d)));
         const duty = WORK_TYPE_LABELS[normalizedWorkType] || WORK_TYPE_LABELS[DEFAULT_WORK_TYPE];
-        await notifyShiftChange(target,
-            `היי ${target.displayName || ''} 👋\nהמשמרת שלך ב-${dow}, ${d}.${m}.${y} אושרה (${duty}).\nפרטים בפורטל העובדים: https://www.studiohappy.art/employee-portal`
-        );
+        await notifyShiftChange(target, 'employee_submission_approved', {
+            displayName: target.displayName || '',
+            dow,
+            date: `${d}.${m}.${y}`,
+            duty,
+            portalLink: PORTAL_URL,
+        });
     }
 
     console.log(`[staffAdminService] approveSubmission: ${submissionId} by ${role._id}`);
@@ -1302,9 +1314,12 @@ export const rejectSubmission = webMethod(Permissions.SiteMember, async (submiss
     if (target?.phone) {
         const [y, m, d] = dateKey.split('-').map(Number);
         const dow = new Intl.DateTimeFormat('he-IL', { weekday: 'long' }).format(new Date(Date.UTC(y, m - 1, d)));
-        await notifyShiftChange(target,
-            `היי ${target.displayName || ''} 👋\nהמשמרת שהגשת ל-${dow}, ${d}.${m}.${y} לא אושרה.\nלפרטים: https://www.studiohappy.art/employee-portal`
-        );
+        await notifyShiftChange(target, 'employee_submission_rejected', {
+            displayName: target.displayName || '',
+            dow,
+            date: `${d}.${m}.${y}`,
+            portalLink: PORTAL_URL,
+        });
     }
 
     console.log(`[staffAdminService] rejectSubmission: ${submissionId} by ${role._id}`);

@@ -183,6 +183,13 @@ employee-portal * { box-sizing: border-box; }
 .ep-ws-meta { color: #374151; margin-bottom: 4px; }
 .ep-ws-notes { background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px; padding: 6px 9px; margin-top: 6px; color: #92400e; }
 .ep-ws-participants { margin: 6px 0 0; padding: 0 18px 0 0; color: #374151; }
+.ep-profile-grid { display: flex; flex-direction: column; gap: 0; font-size: 12.5px; }
+.ep-profile-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; padding: 7px 0; border-bottom: 1px solid #f1f5f9; }
+.ep-profile-row:last-child { border-bottom: none; }
+.ep-profile-label { color: #6b7280; font-weight: 600; white-space: nowrap; flex-shrink: 0; }
+.ep-profile-value { text-align: left; color: #1f2937; word-break: break-word; }
+.ep-board-item.clickable { cursor: pointer; transition: border-color .15s,background .15s; }
+.ep-board-item.clickable:hover { border-color: #93c5fd; background: #f8fafc; }
 .ep-toast { position: fixed; bottom: 22px; right: 50%; transform: translateX(50%); background: #111827; color: #fff; border-radius: 12px; padding: 11px 20px; font-size: 13.5px; z-index: 9999; box-shadow: 0 8px 24px rgba(0,0,0,.25); opacity: 0; pointer-events: none; transition: opacity .2s; max-width: 92vw; }
 .ep-toast.show { opacity: 1; }
 .ep-toast.error { background: #b91c1c; }
@@ -361,6 +368,7 @@ class EmployeePortal extends HTMLElement {
         this._workshopFilter = new Set();       // selected workshop-type ids for calendar filtering
         this._workshopFilterOpen = false;
         this._shiftSubTab = 'myShifts';         // 'myShifts' | 'mySubmissions' — internal sub-tab
+        this._selectedShiftDate = null;         // dateKey — day workshops modal (from "המשמרות שלי")
         this._shiftModal = null;                // { type: 'edit'|'requestEdit'|'requestDelete'|'swap', submissionId }
         this._busy = null;                      // busy-overlay message while a mutation is in flight
         this._editWindowTimer = null;           // 1s ticker for the 30-min free-edit countdown
@@ -961,13 +969,13 @@ class EmployeePortal extends HTMLElement {
             <div class="ep-grid">
                 <div>
                     <div class="ep-card">${this._renderCalendar()}</div>
-                    <div class="ep-card" style="margin-top:16px">${this._renderSelectionPanel()}</div>
+                    ${this._selected.size ? `<div class="ep-card" style="margin-top:16px">${this._renderSelectionPanel()}</div>` : ''}
                     <div class="ep-card" style="margin-top:16px">${this._renderShiftsCard()}</div>
                 </div>
                 <div>
                     <div class="ep-card">${this._renderMessageCard('personal', 'הודעות אישיות')}</div>
                     <div class="ep-card" style="margin-top:16px">${this._renderMessageCard('system', 'הודעות מערכת')}</div>
-                    <div class="ep-card" style="margin-top:16px">${this._renderScheduledWorkshops()}</div>
+                    <div class="ep-card" style="margin-top:16px">${this._renderUserProfile()}</div>
                 </div>
             </div>`;
 
@@ -990,6 +998,7 @@ class EmployeePortal extends HTMLElement {
             </div>
             ${this._busy ? `<div class="ep-busy"><div class="ep-spinner"></div>${escapeHtml(this._busy)}</div>` : ''}
             ${this._shiftModal ? this._renderShiftModal() : ''}
+            ${this._selectedShiftDate ? this._renderDayWorkshopsModal() : ''}
             ${this._autoApprovedPopup ? this._renderAutoApprovedPopup() : ''}
             ${this._urgentPopupOpen ? this._renderUrgentPopup() : ''}
             ${this._urgentSummary ? this._renderUrgentSummary() : ''}
@@ -1754,7 +1763,7 @@ class EmployeePortal extends HTMLElement {
         }
 
         const rows = list.length
-            ? list.map(s => this._renderShiftRow(s, pendingBySubmission[s.id], pendingSwapBySubmission[s.id])).join('')
+            ? list.map(s => this._renderShiftRow(s, pendingBySubmission[s.id], pendingSwapBySubmission[s.id], subTab === 'myShifts')).join('')
             : `<div class="ep-empty">${subTab === 'mySubmissions' ? 'אין הגשות בהמתנה לאישור' : 'אין משמרות משובצות'}</div>`;
 
         const decidedBanners = decided.map(r => `
@@ -1901,7 +1910,7 @@ class EmployeePortal extends HTMLElement {
     }
 
     /** One shift row: free edit/delete (SUBMITTED, within 30-min window) or request-change/delete otherwise. */
-    _renderShiftRow(s, pendingReq, pendingSwap) {
+    _renderShiftRow(s, pendingReq, pendingSwap, clickable = false) {
         const tKey = todayKey();
         const withinEditWindow = s.status === 'SUBMITTED' && s.editableUntil && new Date(s.editableUntil).getTime() > Date.now();
         let actions = '';
@@ -1936,10 +1945,13 @@ class EmployeePortal extends HTMLElement {
             : '';
         const metaDesktop = this._submissionMetaDesktop(s);
         const metaIcon = this._submissionMetaIcon(s);
+        const clickAttrs = clickable
+            ? `class="ep-board-item clickable ${s.autoApproved ? 'auto-approved' : ''}" data-action="view-day-workshops" data-date="${escapeHtml(s.date)}" title="לחצו לצפייה בסדנאות ביום זה"`
+            : `class="ep-board-item ${s.autoApproved ? 'auto-approved' : ''}"`;
         return `
-            <div class="ep-board-item ${s.autoApproved ? 'auto-approved' : ''}">
+            <div ${clickAttrs}>
                 <div>
-                    <div class="ep-b-date">${formatDateHe(s.date)}</div>
+                    <div class="ep-b-date">${formatDateHe(s.date)}${clickable ? ' <span style="font-size:11px;color:#2563eb;font-weight:600">· סדנאות</span>' : ''}</div>
                     <div class="ep-b-time">${escapeHtml(s.startTime)}–${escapeHtml(s.endTime)}${s.hours ? ` · ${s.hours} ש׳` : ''}</div>
                     ${metaDesktop}
                 </div>
@@ -2033,25 +2045,74 @@ class EmployeePortal extends HTMLElement {
         </div>`;
     }
 
-    _renderScheduledWorkshops() {
-        const list = this._data.scheduledWorkshops || [];
-        let html = `<h2>פרטי הסדנאות שלי</h2>`;
-        if (!list.length) return html + `<div class="ep-empty">אין סדנאות משובצות עם הזמנות פעילות</div>`;
-
-        html += list.map(w => {
+    _renderWorkshopCards(workshops) {
+        if (!workshops.length) {
+            return `<div class="ep-empty">אין סדנאות עם הזמנות פעילות ביום זה</div>`;
+        }
+        return workshops.map(w => {
             const participants = (w.participants || []).map(p =>
                 `<li>${escapeHtml(p.name)}${p.childrenCount ? ` (+${p.childrenCount} ילדים)` : ''}</li>`).join('');
             return `<div class="ep-ws-card">
                 <div class="ep-ws-head">
                     <span>${escapeHtml(w.workshopType)}</span>
-                    <span>${formatDateHe(w.date)} · ${formatTimeHe(w.workshopStart)}</span>
+                    <span>${formatTimeHe(w.workshopStart)}</span>
                 </div>
                 <div class="ep-ws-meta">מזמין/ה: ${escapeHtml(w.organizerName || '—')} · ${w.quantity} משתתפים (${w.adults} מבוגרים, ${w.children} ילדים)</div>
                 ${participants ? `<ul class="ep-ws-participants">${participants}</ul>` : ''}
                 ${w.customerNotes ? `<div class="ep-ws-notes">📝 הערת לקוח: ${escapeHtml(w.customerNotes)}</div>` : ''}
             </div>`;
         }).join('');
-        return html;
+    }
+
+    _renderUserProfile() {
+        const u = this._data.user || {};
+        const rules = this._data.rules || {};
+        const quotaVal = u.minShiftsPerWeek != null
+            ? String(u.minShiftsPerWeek)
+            : `ברירת מחדל (${rules.defaultMinShiftsPerWeek ?? rules.requiredShiftsPerWeek ?? '—'})`;
+        const minHoursVal = u.minShiftHours != null
+            ? `${u.minShiftHours} שעות`
+            : `ברירת מחדל (${rules.defaultMinShiftHours ?? rules.minShiftHours ?? '—'} שעות)`;
+        const certs = (u.certifications || []).length
+            ? u.certifications.map(c => escapeHtml(workshopLabel(c))).join(' · ')
+            : '—';
+        const joined = u.joinedAt ? formatDateHe(u.joinedAt.slice(0, 10)) : '—';
+        const rows = [
+            ['שם מלא', escapeHtml(u.name || '—')],
+            ['טלפון', escapeHtml(u.phone || '—')],
+            ['מייל', escapeHtml(u.email || '—')],
+            ['הכשרות', certs],
+            ['תאריך הצטרפות', escapeHtml(joined)],
+            ['מכסת משמרות שבועית', escapeHtml(quotaVal)],
+            ['אורך משמרת מינימלי', escapeHtml(minHoursVal)],
+            ['תפקיד', escapeHtml(u.roleLabel || '—')],
+        ];
+        return `
+            <h2>פרטי משתמש${this._sectionHelp('הפרטים האישיים וההגדרות השבועיות שלכם במערכת.')}</h2>
+            <div class="ep-profile-grid">
+                ${rows.map(([label, value]) => `
+                    <div class="ep-profile-row">
+                        <span class="ep-profile-label">${label}</span>
+                        <span class="ep-profile-value">${value}</span>
+                    </div>`).join('')}
+            </div>`;
+    }
+
+    _renderDayWorkshopsModal() {
+        const dateKey = this._selectedShiftDate;
+        const workshops = (this._data.scheduledWorkshops || []).filter(w => w.date === dateKey);
+        return `<div class="epa-modal-backdrop">
+            <div class="epa-modal" role="dialog" aria-modal="true" aria-label="סדנאות ביום">
+                <div class="epa-modal-head">
+                    <h2>סדנאות ביום ${escapeHtml(formatDateHe(dateKey))}</h2>
+                    <button class="epa-modal-close" data-action="dismiss-day-workshops" aria-label="סגירה">×</button>
+                </div>
+                ${this._renderWorkshopCards(workshops)}
+                <div class="epa-inline" style="margin-top:12px">
+                    <button class="epa-btn" data-action="dismiss-day-workshops">סגירה</button>
+                </div>
+            </div>
+        </div>`;
     }
 
     // -----------------------------------------------------------------
@@ -2102,6 +2163,14 @@ class EmployeePortal extends HTMLElement {
             case 'subtab-myshifts':
             case 'subtab-mysubmissions':
                 this._shiftSubTab = action === 'subtab-mysubmissions' ? 'mySubmissions' : 'myShifts';
+                this.render();
+                return;
+            case 'view-day-workshops':
+                this._selectedShiftDate = target.dataset.date || null;
+                this.render();
+                return;
+            case 'dismiss-day-workshops':
+                this._selectedShiftDate = null;
                 this.render();
                 return;
             case 'msg-car-prev':

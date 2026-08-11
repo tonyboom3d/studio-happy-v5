@@ -28,10 +28,9 @@ import {
     buildBoard,
     loadActiveRoles,
     loadWorkshopTypeMap,
-    notifyManagers,
     publishSchedulingUpdate,
 } from 'backend/schedulingEngine.js';
-import { sendGreenApiWhatsApp } from 'backend/whatsappService.jsw';
+import { sendEmployeeTemplateMessage, sendEmployeeTemplateToManagers } from 'backend/employeeTemplates.js';
 
 const SA = { suppressAuth: true };
 const SAC = { suppressAuth: true, consistentRead: true };
@@ -138,16 +137,6 @@ export async function listSwapCandidates(role, submissionId) {
     return { candidates };
 }
 
-function buildTargetMessage(swap) {
-    return [
-        `🔄 בקשת החלפת משמרת מ-${swap.requesterName}`,
-        `סדנה: ${swap.workshopName}`,
-        `תאריך ושעה: ${formatDateHe(swap.dateKey)} · ${swap.startTime}–${swap.endTime}`,
-        `לאישור/דחייה יש להיכנס לחשבונך ולפתוח את הקישור:`,
-        `${SWAP_URL}?token=${swap.token}`,
-    ].join('\n');
-}
-
 /** Requester files a swap request; validates skills and notifies the target employee via WhatsApp. */
 export async function createSwapRequest(role, submissionId, targetEmployeeId) {
     if (!targetEmployeeId) throw new Error('BAD_REQUEST: יש לבחור עובד/ת להחלפה.');
@@ -200,8 +189,14 @@ export async function createSwapRequest(role, submissionId, targetEmployeeId) {
     await wixData.insert('ShiftSwapRequests', swap, SA);
 
     if (target.phone) {
-        await sendGreenApiWhatsApp(target.phone, buildTargetMessage(swap)).catch(err =>
-            console.error('[shiftSwaps] target WhatsApp failed:', err?.message || err));
+        await sendEmployeeTemplateMessage('employee_swap_request_target', target.phone, {
+            requesterName: swap.requesterName,
+            workshopName: swap.workshopName,
+            date: formatDateHe(swap.dateKey),
+            startTime: swap.startTime,
+            endTime: swap.endTime,
+            swapLink: `${SWAP_URL}?token=${swap.token}`,
+        }).catch(err => console.error('[shiftSwaps] target WhatsApp failed:', err?.message || err));
     } else {
         console.warn(`[shiftSwaps] target role ${target._id} has no phone — swap request created without WhatsApp`);
     }
@@ -248,9 +243,9 @@ export async function getSwapRequestForViewer(token) {
     return { viewer, ...publicSwapView(swap) };
 }
 
-async function notify(role, message) {
+async function notify(role, actionKey, vars) {
     if (!role?.phone) { console.warn(`[shiftSwaps] role ${role?._id} has no phone — skipping WhatsApp`); return; }
-    await sendGreenApiWhatsApp(role.phone, message).catch(err =>
+    await sendEmployeeTemplateMessage(actionKey, role.phone, vars).catch(err =>
         console.error('[shiftSwaps] WhatsApp failed:', err?.message || err));
 }
 
@@ -273,22 +268,29 @@ export async function respondToSwapAsTarget(viewerRole, token, accept) {
 
     if (!accept) {
         await wixData.update('ShiftSwapRequests', { ...swap, status: SWAP_STATUS.EMPLOYEE_DECLINED, employeeDecidedAt: now }, SA);
-        await notify(requester,
-            `❌ ${swap.targetEmployeeName} לא אישר/ה את בקשת ההחלפה למשמרת בתאריך ${formatDateHe(swap.dateKey)} (${swap.workshopName}).`);
+        await notify(requester, 'employee_swap_declined_by_target', {
+            targetName: swap.targetEmployeeName,
+            date: formatDateHe(swap.dateKey),
+            workshopName: swap.workshopName,
+        });
         return { ok: true, status: SWAP_STATUS.EMPLOYEE_DECLINED };
     }
 
     await wixData.update('ShiftSwapRequests', { ...swap, status: SWAP_STATUS.PENDING_MANAGER, employeeDecidedAt: now }, SA);
-    await notify(requester,
-        `✔ ${swap.targetEmployeeName} אישר/ה את בקשת ההחלפה למשמרת בתאריך ${formatDateHe(swap.dateKey)} (${swap.workshopName}) — הבקשה הועברה לאישור מנהל/ת.`);
-    await notifyManagers(
-        [
-            `🔄 בקשת החלפת משמרת ממתינה לאישורכם`,
-            `בין ${swap.requesterName} (מבקש/ת) ל-${swap.targetEmployeeName} (מחליף/ה)`,
-            `סדנה: ${swap.workshopName}`,
-            `תאריך ושעה: ${formatDateHe(swap.dateKey)} · ${swap.startTime}–${swap.endTime}`,
-            `שני הצדדים אישרו — לאישור סופי: ${SWAP_URL}?token=${swap.token}`,
-        ].join('\n'));
+    await notify(requester, 'employee_swap_accepted_by_target', {
+        targetName: swap.targetEmployeeName,
+        date: formatDateHe(swap.dateKey),
+        workshopName: swap.workshopName,
+    });
+    await sendEmployeeTemplateToManagers('manager_swap_pending_approval', {
+        requesterName: swap.requesterName,
+        targetName: swap.targetEmployeeName,
+        workshopName: swap.workshopName,
+        date: formatDateHe(swap.dateKey),
+        startTime: swap.startTime,
+        endTime: swap.endTime,
+        swapLink: `${SWAP_URL}?token=${swap.token}`,
+    });
 
     console.log(`[shiftSwaps] target accepted: id=${swap._id}`);
     return { ok: true, status: SWAP_STATUS.PENDING_MANAGER };
@@ -346,11 +348,12 @@ export async function decideSwapAsManager(viewerRole, token, decision, comment) 
 
     const [requester, target] = await Promise.all([getRoleById(swap.requesterId), getRoleById(swap.targetEmployeeId)]);
     const detail = `${formatDateHe(swap.dateKey)} · ${swap.startTime}–${swap.endTime} (${swap.workshopName})`;
-    const finalMsg = approve
-        ? `✅ ההחלפה אושרה סופית! המשמרת ${detail} עודכנה במערכת.`
-        : `❌ בקשת ההחלפה למשמרת ${detail} נדחתה על ידי המנהל/ת.${cleanComment ? `\nהערה: ${cleanComment}` : ''}`;
-    await notify(requester, finalMsg);
-    await notify(target, finalMsg);
+    const actionKey = approve ? 'employee_swap_manager_approved' : 'employee_swap_manager_declined';
+    const vars = approve
+        ? { detail }
+        : { detail, commentLine: cleanComment ? `\nהערה: ${cleanComment}` : '' };
+    await notify(requester, actionKey, vars);
+    await notify(target, actionKey, vars);
 
     console.log(`[shiftSwaps] manager decided: id=${swap._id} status=${status}`);
     return { ok: true, status };

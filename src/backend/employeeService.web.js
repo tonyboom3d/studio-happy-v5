@@ -358,6 +358,20 @@ export const getMyPortalData = webMethod(Permissions.Anyone, async () => {
         sketchSewingDays: getRolePermissionValue(roleRow, 'sketchSewingSkill') ? (settings.sketchSewingDays || {}) : {},
         user: {
             name: roleRow.displayName || extractMemberName(member, extractMemberEmail(member)),
+            phone: roleRow.phone || '',
+            email: roleRow.userEmail || extractMemberEmail(member) || '',
+            certifications: getRoleSkillWorkshopIds(roleRow)
+                .map(id => typesById[id]?.name)
+                .filter(Boolean),
+            joinedAt: roleRow._createdDate
+                ? new Date(roleRow._createdDate).toISOString()
+                : null,
+            minShiftsPerWeek: Number.isFinite(Number(roleRow.minShiftsPerWeek)) && Number(roleRow.minShiftsPerWeek) > 0
+                ? Number(roleRow.minShiftsPerWeek)
+                : null,
+            minShiftHours: Number.isFinite(Number(roleRow.minShiftHours)) && Number(roleRow.minShiftHours) > 0
+                ? Number(roleRow.minShiftHours)
+                : null,
             roleType: roleRow.roleType || 'Employee',
             roleLabel: ROLE_TYPE_LABELS[roleRow.roleType] || roleRow.roleType || 'עובד/ת',
             isTrainee: !!roleRow.isTrainee || roleRow.roleType === 'Trainee',
@@ -367,6 +381,8 @@ export const getMyPortalData = webMethod(Permissions.Anyone, async () => {
         rules: {
             minShiftHours: getMinShiftHours(roleRow, settings),
             requiredShiftsPerWeek: getRequiredShiftsPerWeek(roleRow, settings),
+            defaultMinShiftHours: settings.defaultMinShiftHours,
+            defaultMinShiftsPerWeek: settings.defaultMinShiftsPerWeek,
             deadlineDaysBeforeMonthEnd: settings.deadlineDaysBeforeMonthEnd,
             monthsAheadAllowed: settings.monthsAheadAllowed,
             defaultShiftStart: settings.defaultShiftStart,

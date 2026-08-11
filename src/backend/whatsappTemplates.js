@@ -29,8 +29,9 @@ export function resolveTemplateUse(row) {
     return TEMPLATE_USE.ORDERS;
 }
 
-export function mapTemplateRow(t) {
+export function mapTemplateRow(t, actionKeyLabels = {}) {
     const use = resolveTemplateUse(t);
+    const actionKey = t.actionKey || '';
     return {
         id: t._id,
         title: t.title || '',
@@ -38,6 +39,8 @@ export function mapTemplateRow(t) {
         isSystem: !!t.isSystem,
         use,
         useLabel: TEMPLATE_USE_LABELS[use] || use,
+        actionKey,
+        actionKeyLabel: actionKey ? (actionKeyLabels?.[actionKey]?.label || actionKeyLabels?.[actionKey] || actionKey) : '',
     };
 }
 

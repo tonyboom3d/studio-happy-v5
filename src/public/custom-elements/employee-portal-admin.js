@@ -1283,6 +1283,7 @@ function renderTemplatesPage(ce, _d) {
 
     const renderCards = (list) => list.map(t => `<article class="epa-template" data-action="admin-edit-template" data-template="${esc(t.id)}">
         <div class="epa-panel-title"><h3>${esc(t.title)}</h3>${t.isSystem ? '<span class="epa-badge kind">מערכת</span>' : ''}</div>
+        ${t.actionKeyLabel ? `<p style="margin:2px 0 6px;font-size:11px;color:#64748b">פעולה: ${esc(t.actionKeyLabel)}</p>` : ''}
         <p>${esc(t.body)}</p>
     </article>`).join('');
 
@@ -1306,9 +1307,10 @@ function renderTemplateForm(template, defaultUse) {
         `<option value="${k}" ${use === k ? 'selected' : ''}>${label}</option>`).join('');
     return `<div class="epa-field"><label>מערכת (שדה use ב-CMS)</label>
             <select id="epaT_use" ${template?.id && template?.isSystem ? 'disabled' : ''}>${useOptions}</select></div>
+        ${template?.actionKeyLabel ? `<p style="margin:6px 0 0;font-size:12px;color:#334155">תבנית מערכת קבועה לפעולה: <strong>${esc(template.actionKeyLabel)}</strong> — לא ניתן למחוק, ניתן לערוך את התוכן.</p>` : ''}
         <div class="epa-field" style="margin-top:10px"><label>שם התבנית</label><input id="epaT_title" value="${esc(template?.title || '')}" maxlength="120"></div>
         <div class="epa-field" style="margin-top:10px"><label>תוכן ההודעה</label><textarea id="epaT_body">${esc(template?.body || '')}</textarea></div>
-        <p style="margin:8px 0 0;font-size:11px;color:#64748b">תבניות הזמנות: {{Name}}, {{Date}}, {{Time}}, {{OrderUrl}}</p>
+        <p style="margin:8px 0 0;font-size:11px;color:#64748b">תבניות הזמנות: {{Name}}, {{Date}}, {{Time}}, {{OrderUrl}}. תבניות עובדים: השתמשו בשמות המשתנים כפי שמוצגים בכותרת התבנית (למשל {{displayName}}, {{date}}, {{portalLink}}).</p>
         <div class="epa-inline">
             <button class="epa-btn primary" data-action="admin-save-template" data-template="${esc(template?.id || '')}">שמירה</button>
             ${template?.id && !template.isSystem ? `<button class="epa-btn danger" data-action="admin-delete-template" data-template="${esc(template.id)}">מחיקה</button>` : ''}

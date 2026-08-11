@@ -20,7 +20,8 @@ import {
     SHIFT_MIN_TIME,
     SHIFT_MAX_TIME,
 } from 'backend/availabilityRules.js';
-import { notifyManagers, publishSchedulingUpdate, loadSettings } from 'backend/schedulingEngine.js';
+import { publishSchedulingUpdate, loadSettings } from 'backend/schedulingEngine.js';
+import { sendEmployeeTemplateToManagers } from 'backend/employeeTemplates.js';
 
 const SA = { suppressAuth: true };
 const SAC = { suppressAuth: true, consistentRead: true };
@@ -58,20 +59,19 @@ async function findByToken(token) {
     return result.items?.[0] || null;
 }
 
-function buildRequestMessage(employeeName, submission, type, requested, notes, token) {
-    const dateHe = formatDateHe(submission.dateKey);
-    const lines = [
-        `📋 בקשת ${type === REQUEST_TYPE.DELETE ? 'מחיקת' : 'שינוי'} משמרת מ-${employeeName}`,
-        `משמרת קיימת: ${dateHe} · ${submission.startTime}–${submission.endTime}`,
-    ];
-    if (type === REQUEST_TYPE.EDIT) {
-        lines.push(`שעות מבוקשות: ${requested.startTime}–${requested.endTime}`);
-    } else {
-        lines.push(`הבקשה: מחיקת המשמרת`);
-    }
-    if (notes) lines.push(`הערת העובד/ת: ${notes}`);
-    lines.push(`לאישור/דחייה: ${REVIEW_URL}?token=${token}`);
-    return lines.join('\n');
+function buildRequestVars(employeeName, submission, type, requested, notes, token) {
+    return {
+        employeeName,
+        requestTypeLabel: type === REQUEST_TYPE.DELETE ? 'מחיקת' : 'שינוי',
+        date: formatDateHe(submission.dateKey),
+        existingStart: submission.startTime,
+        existingEnd: submission.endTime,
+        requestedLine: type === REQUEST_TYPE.EDIT
+            ? `שעות מבוקשות: ${requested.startTime}–${requested.endTime}`
+            : `הבקשה: מחיקת המשמרת`,
+        notesLine: notes ? `הערת העובד/ת: ${notes}` : '',
+        reviewLink: `${REVIEW_URL}?token=${token}`,
+    };
 }
 
 /**
@@ -140,7 +140,7 @@ export async function createShiftChangeRequest(role, submissionId, payload) {
         token,
     }, SA);
 
-    const message = buildRequestMessage(
+    const vars = buildRequestVars(
         employeeName,
         { dateKey, startTime: submission.startTime, endTime: submission.endTime },
         type,
@@ -148,7 +148,7 @@ export async function createShiftChangeRequest(role, submissionId, payload) {
         notes,
         token,
     );
-    const sentCount = await notifyManagers(message).catch(err => {
+    const sentCount = await sendEmployeeTemplateToManagers('manager_shift_change_request', vars).catch(err => {
         console.error('[shiftChangeRequests] notifyManagers failed:', err?.message || err);
         return 0;
     });

@@ -399,7 +399,7 @@ function offersFor(offers, dateKey, typeId) {
  * Ensures the day/type shortage is being handled: pending offer to next FIFO
  * standby, or an open call when the queue is exhausted/empty.
  */
-async function ensureShortageHandled(dateKey, t, board) {
+async function ensureShortageHandled(dateKey, t, board, { batchNotify = false } = {}) {
     const existing = offersFor(board.offers, dateKey, t.typeId);
     if (existing.some(o => o.status === OFFER_STATUS.PENDING || o.status === OFFER_STATUS.OPEN)) return null;
 
@@ -462,12 +462,16 @@ async function ensureShortageHandled(dateKey, t, board) {
         submissionId: null,
         expiresAt: null,
     }, SA);
+    const openCallLine = `סדנת ${t.name}, ${formatDateHe(dateKey)}`;
     await enqueueManagerNotification('manager_open_call', {
         workshopName: t.name,
         date: formatDateHe(dateKey),
     }, {
-        priority: PRIORITY.URGENT, entityKey: `open-call:${dateKey}:${t.typeId}`, rolesById: board.rolesById,
-        shouldSuppress: maybeSuppressManagerNotification,
+        priority: batchNotify ? PRIORITY.NORMAL : PRIORITY.URGENT,
+        entityKey: `open-call:${dateKey}:${t.typeId}`,
+        rolesById: board.rolesById,
+        shouldSuppress: batchNotify ? undefined : maybeSuppressManagerNotification,
+        digest: batchNotify ? { line: openCallLine, kind: 'open_call' } : undefined,
     });
     board.offers.push(call);
     return call;
@@ -484,7 +488,7 @@ async function ensureShortageHandled(dateKey, t, board) {
  * Fully disabled when the "אישור אוטומטי של משמרות" setting is OFF — in that
  * mode all submissions stay pending until a manager assigns them manually.
  */
-export async function runScheduling(fromKey, toKey) {
+export async function runScheduling(fromKey, toKey, { batchNotify = false } = {}) {
     const settings = await loadSettings();
     if (settings.autoApproveShifts === false) {
         console.log('[schedulingEngine] runScheduling skipped — autoApproveShifts is OFF (manual mode)');
@@ -555,7 +559,7 @@ export async function runScheduling(fromKey, toKey) {
             }
 
             if (shortage > 0) {
-                const created = await ensureShortageHandled(dateKey, t, board);
+                const created = await ensureShortageHandled(dateKey, t, board, { batchNotify });
                 if (created?.kind === OFFER_KIND.WAITLIST_OFFER) report.offers++;
                 if (created?.kind === OFFER_KIND.OPEN_CALL) report.openCalls++;
             }
@@ -565,7 +569,7 @@ export async function runScheduling(fromKey, toKey) {
     if (report.assigned || report.offers || report.openCalls) {
         await publishSchedulingUpdate('engine-run', report);
     }
-    if (report.assigned) {
+    if (report.assigned && !batchNotify) {
         await flushOutbox({ force: true }).catch(err => console.error('[schedulingEngine] flushOutbox failed:', err?.message || err));
     }
     console.log(`[schedulingEngine] runScheduling ${fromKey}..${toKey}:`, JSON.stringify(report));
@@ -693,7 +697,7 @@ export async function runSchedulingForEmployees(fromKey, toKey, employeeIds) {
 }
 
 /** Hourly: expire stale offers and escalate to the next in the FIFO queue. */
-export async function processOfferEscalation(now = new Date()) {
+export async function processOfferEscalation(now = new Date(), { batchNotify = false } = {}) {
     const result = await wixData.query('ShiftOffers')
         .eq('status', OFFER_STATUS.PENDING)
         .lt('expiresAt', now)
@@ -706,7 +710,7 @@ export async function processOfferEscalation(now = new Date()) {
         const board = await buildBoard(dateKey, dateKey, { consistent: true, includeOffers: true });
         const t = board.days[dateKey]?.types?.[offer.workshopTypeId];
         if (t && t.assignedCount < t.required) {
-            await ensureShortageHandled(dateKey, t, board);
+            await ensureShortageHandled(dateKey, t, board, { batchNotify });
             escalated++;
         }
     }

@@ -160,8 +160,9 @@ export async function enqueueNotification(opts) {
  * @param {string|null} [opts.entityKey]
  * @param {object|null} [opts.rolesById]
  * @param {((role: object) => Promise<boolean>)|null} [opts.shouldSuppress]
+ * @param {object|null} [opts.digest] - { line, kind } — eligible for manager digest merge in flushOutbox.
  */
-export async function enqueueManagerNotification(actionKey, vars = {}, { priority = PRIORITY.NORMAL, entityKey = undefined, rolesById = undefined, shouldSuppress = undefined } = {}) {
+export async function enqueueManagerNotification(actionKey, vars = {}, { priority = PRIORITY.NORMAL, entityKey = undefined, rolesById = undefined, shouldSuppress = undefined, digest = undefined } = {}) {
     const roles = rolesById
         ? Object.values(rolesById)
         : (await wixData.query('Dashboard_Roles').ne('active', false).limit(1000).find(SA).catch(() => ({ items: [] }))).items || [];
@@ -171,7 +172,7 @@ export async function enqueueManagerNotification(actionKey, vars = {}, { priorit
     for (const m of managers) {
         if (shouldSuppress && await shouldSuppress(m)) continue;
         const result = await enqueueNotification({
-            actionKey, recipientId: m._id, recipientPhone: m.phone, vars, priority, entityKey,
+            actionKey, recipientId: m._id, recipientPhone: m.phone, vars, priority, entityKey, digest,
             audience: AUDIENCE.MANAGERS,
         });
         if (result.queued) queued++;
@@ -231,6 +232,7 @@ function collapseDigestRows(rows) {
 
     const assignedLines = [];
     const cancelledLines = [];
+    const openCallLines = [];
     const updatedLines = [];
     const consumedIds = [];
 
@@ -248,16 +250,18 @@ function collapseDigestRows(rows) {
     }
     for (const r of ungrouped) {
         consumedIds.push(r._id);
-        if (r.digestKind === 'cancelled') cancelledLines.push(r.digestLine);
-        else updatedLines.push(r.digestLine); // no groupKey → can't net, list as-is under "updated"
+        if (r.digestKind === 'open_call') openCallLines.push(r.digestLine);
+        else if (r.digestKind === 'cancelled') cancelledLines.push(r.digestLine);
+        else updatedLines.push(r.digestLine);
     }
 
     const parts = [];
+    if (openCallLines.length) parts.push(`⚠️ ${openCallLines.length} קריאות פתוחות (אין ממתינים):\n${openCallLines.map(l => `• ${l}`).join('\n')}`);
     if (assignedLines.length) parts.push(`שובצת ל-${assignedLines.length} משמרות:\n${assignedLines.map(l => `• ${l}`).join('\n')}`);
     if (cancelledLines.length) parts.push(`בוטלו ${cancelledLines.length} משמרות:\n${cancelledLines.map(l => `• ${l}`).join('\n')}`);
     if (updatedLines.length) parts.push(updatedLines.map(l => `• ${l}`).join('\n'));
 
-    return { text: parts.join('\n\n'), count: assignedLines.length + cancelledLines.length + updatedLines.length, consumedIds };
+    return { text: parts.join('\n\n'), count: openCallLines.length + assignedLines.length + cancelledLines.length + updatedLines.length, consumedIds };
 }
 
 // ---------------------------------------------------------------------------

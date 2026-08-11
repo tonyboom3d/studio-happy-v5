@@ -25,9 +25,9 @@ import { ADMIN_STYLE, renderAdminTab, handleAdminClick, handleAdminChange, handl
 const EMPLOYEE_SAVE_HOLD_MS = 2000;
 
 const EP_STYLE = `
-employee-portal { display: block; direction: rtl; font-family: 'Heebo', 'Segoe UI', Arial, sans-serif; background: linear-gradient(145deg,#f8fafc,#eff6ff); color: #1f2937; min-height: 100%; }
+employee-portal { display: block; direction: rtl; font-family: 'Heebo', 'Segoe UI', Arial, sans-serif; background: linear-gradient(145deg,#f8fafc,#eff6ff); color: #1f2937; min-height: 100%; max-width: 100%; overflow-x: hidden; }
 employee-portal * { box-sizing: border-box; }
-.ep-wrap { width: 100%; max-width: none; margin: 0; padding: 18px 24px; }
+.ep-wrap { width: 100%; max-width: 100%; margin: 0; padding: 18px 24px; overflow-x: hidden; }
 .ep-header { background: rgba(255,255,255,.96); border: 1px solid #dbeafe; border-radius: 18px; padding: 14px 18px; display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; box-shadow: 0 8px 28px rgba(30,64,175,.07); }
 .ep-user { display: flex; align-items: center; gap: 10px; }
 .ep-avatar { width: 42px; height: 42px; border-radius: 13px; color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 700; background: linear-gradient(135deg,#2563eb,#60a5fa); flex-shrink: 0; box-shadow: 0 5px 16px rgba(37,99,235,.22); }
@@ -44,18 +44,22 @@ employee-portal * { box-sizing: border-box; }
 .ep-banner.warn { background: #fffbeb; border: 1px solid #fde68a; color: #92400e; }
 .ep-banner.closed { background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; }
 .ep-grid { display: grid; grid-template-columns: 1fr; gap: 16px; margin-top: 16px; align-items: start; }
-.ep-card { background: rgba(255,255,255,.98); border: 1px solid #e2e8f0; border-radius: 17px; padding: 16px; box-shadow: 0 6px 22px rgba(15,23,42,.045); transition: box-shadow .18s ease,border-color .18s ease; }
+.ep-card { background: rgba(255,255,255,.98); border: 1px solid #e2e8f0; border-radius: 17px; padding: 16px; box-shadow: 0 6px 22px rgba(15,23,42,.045); transition: box-shadow .18s ease,border-color .18s ease; max-width: 100%; overflow: hidden; }
 .ep-card:hover { border-color: #dbeafe; box-shadow: 0 9px 26px rgba(30,64,175,.065); }
 .ep-card h2 { margin: 0 0 10px; font-size: 15px; font-weight: 700; display: inline-flex; align-items: center; gap: 4px; }
 .ep-section-help { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 50%; background: #e5e7eb; color: #4b5563; font-size: 11px; font-weight: 700; cursor: pointer; flex-shrink: 0; transition: background .12s,color .12s; }
 .ep-section-help:hover,.ep-section-help:focus-visible { background: #dbeafe; color: #1d4ed8; outline: none; }
 .ep-tab-help { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; border-radius: 50%; background: rgba(37,99,235,.12); color: #1d4ed8; font-size: 10px; font-weight: 700; cursor: pointer; margin-inline-start: 4px; vertical-align: middle; transition: background .12s; }
 .ep-tab-help:hover,.ep-tab-help:focus-visible { background: rgba(37,99,235,.22); outline: none; }
-.ep-tip-pop { position: fixed; z-index: 10001; max-width: min(300px, 92vw); background: linear-gradient(145deg,#1e293b,#0f172a); color: #f8fafc; font-size: 12.5px; line-height: 1.5; padding: 9px 13px; border-radius: 11px; box-shadow: 0 10px 28px rgba(15,23,42,.28), 0 0 0 1px rgba(255,255,255,.06) inset; pointer-events: none; opacity: 0; transform: translateY(5px) scale(.98); transition: opacity .1s ease,transform .1s ease; white-space: pre-wrap; text-align: right; }
+.ep-tip-pop { position: fixed; z-index: 10001; max-width: min(300px, calc(100vw - 16px)); background: linear-gradient(145deg,#1e293b,#0f172a); color: #f8fafc; font-size: 12.5px; line-height: 1.5; padding: 9px 13px; border-radius: 11px; box-shadow: 0 10px 28px rgba(15,23,42,.28), 0 0 0 1px rgba(255,255,255,.06) inset; pointer-events: none; opacity: 0; transform: translateY(5px) scale(.98); transition: opacity .1s ease,transform .1s ease; white-space: pre-wrap; text-align: right; }
+.ep-tip-pop.ep-tip-rich { white-space: normal; }
 .ep-tip-pop.show { opacity: 1; transform: none; }
-.ep-tip-pop::after { content: ''; position: absolute; width: 10px; height: 10px; background: #1e293b; transform: rotate(45deg); }
-.ep-tip-pop.ep-tip-above::after { bottom: -5px; inset-inline-end: 18px; }
-.ep-tip-pop.ep-tip-below::after { top: -5px; inset-inline-end: 18px; }
+.ep-tip-pop::after { content: ''; position: absolute; width: 10px; height: 10px; background: #1e293b; transform: translateX(-50%) rotate(45deg); left: var(--ep-tip-arrow-x, 50%); }
+.ep-tip-pop.ep-tip-above::after { bottom: -5px; }
+.ep-tip-pop.ep-tip-below::after { top: -5px; }
+.ep-tip-line { display: flex; align-items: flex-start; gap: 7px; margin-bottom: 5px; line-height: 1.45; }
+.ep-tip-line:last-child { margin-bottom: 0; }
+.ep-tip-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; margin-top: 4px; }
 .ep-cal-acc { margin-bottom: 10px; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; background: #f8fafc; }
 .ep-cal-acc-head { width: 100%; display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 9px 12px; border: none; background: transparent; font-size: 12.5px; font-weight: 700; color: #374151; cursor: pointer; font-family: inherit; text-align: right; }
 .ep-cal-acc-head:hover { background: #f1f5f9; }
@@ -87,7 +91,7 @@ employee-portal * { box-sizing: border-box; }
 .ep-cal-nav button { border: 1px solid #dbeafe; background: #fff; color: #1d4ed8; border-radius: 9px; width: 30px; height: 30px; cursor: pointer; font-size: 14px; line-height: 1; transition: transform .14s,background .14s; }
 .ep-cal-nav button:hover:not(:disabled) { transform: translateY(-1px); background: #eff6ff; }
 .ep-cal-nav button:disabled { opacity: .35; cursor: default; }
-.ep-cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; }
+.ep-cal-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 5px; width: 100%; min-width: 0; }
 .ep-dow { text-align: center; font-size: 13px; color: #9ca3af; font-weight: 600; padding: 4px 0; }
 .ep-day { position: relative; border: 1px solid #e5e7eb; border-radius: 10px; min-height: 96px; padding: 5px; font-size: 14px; cursor: pointer; background: #fff; text-align: right; transition: border-color .15s,background .15s,transform .15s,box-shadow .15s; }
 .ep-day:hover:not(.disabled):not(.submitted) { border-color: #60a5fa; transform: translateY(-1px); box-shadow: 0 4px 10px rgba(37,99,235,.09); }
@@ -108,13 +112,6 @@ employee-portal * { box-sizing: border-box; }
 .ep-day-ws { margin-top: 3px; display: flex; flex-direction: column; gap: 2px; }
 .ep-day-ws span { display: block; font-size: 11px; line-height: 1.25; color: #1d4ed8; background: #eff6ff; border-radius: 4px; padding: 1px 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ep-day.ep-day-filtered { opacity: .28; filter: grayscale(.4); }
-.ep-ws-filter { position: relative; margin-bottom: 10px; }
-.ep-ws-filter-btn { border: 1px solid #dbeafe; background: #fff; color: #1d4ed8; border-radius: 9px; padding: 6px 12px; font-size: 12px; font-weight: 600; cursor: pointer; }
-.ep-ws-filter-btn.active { background: #eff6ff; border-color: #93c5fd; }
-.ep-ws-filter-menu { position: absolute; z-index: 5; top: calc(100% + 4px); inset-inline-start: 0; background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; box-shadow: 0 10px 26px rgba(15,23,42,.12); padding: 8px; min-width: 220px; max-height: 260px; overflow-y: auto; }
-.ep-ws-filter-opt { display: flex; align-items: center; gap: 8px; font-size: 12.5px; padding: 5px 6px; border-radius: 7px; cursor: pointer; }
-.ep-ws-filter-opt:hover { background: #f8fafc; }
-.ep-ws-filter-clear { width: 100%; margin-top: 6px; border: none; background: #fef2f2; color: #b91c1c; border-radius: 7px; padding: 6px; font-size: 12px; font-weight: 600; cursor: pointer; }
 .ep-day-badge { position: absolute; bottom: 4px; inset-inline-start: 5px; font-size: 11px; font-weight: 600; padding: 1px 5px; border-radius: 999px; }
 .ep-badge-standby { background: #e0e7ff; color: #3730a3; }
 .ep-badge-scheduled { background: #d1fae5; color: #065f46; }
@@ -147,7 +144,7 @@ employee-portal * { box-sizing: border-box; }
 .ep-submit-btn:active:not(:disabled) { transform: translateY(0); }
 .ep-submit-btn:disabled { background: #93c5fd; box-shadow: none; cursor: default; }
 .ep-empty { color: #9ca3af; font-size: 12.5px; text-align: center; padding: 14px 0; }
-.ep-board-item { border: 1px solid #e5e7eb; border-radius: 10px; padding: 9px 11px; margin-bottom: 8px; font-size: 12.5px; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.ep-board-item { border: 1px solid #e5e7eb; border-radius: 10px; padding: 9px 11px; margin-bottom: 8px; font-size: 12.5px; display: flex; justify-content: space-between; align-items: center; gap: 8px; max-width: 100%; min-width: 0; }
 .ep-board-item .ep-b-date { font-weight: 700; }
 .ep-board-item .ep-b-time { color: #6b7280; }
 .ep-b-meta { display: none; flex-direction: column; gap: 1px; margin-top: 3px; font-size: 10.5px; color: #9ca3af; font-weight: 500; }
@@ -249,7 +246,7 @@ employee-portal * { box-sizing: border-box; }
 .ep-badge-vacation { background: #fbcfe8; color: #9d174d; }
 .ep-badge-vac-pending { background: #ede9fe; color: #5b21b6; }
 .ep-badge-noskill { background: #f3f4f6; color: #9ca3af; }
-.ep-offer { margin-top: 12px; border-radius: 12px; padding: 12px 14px; font-size: 13px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; border: 1px solid #fbbf24; background: #fffbeb; color: #92400e; }
+.ep-offer { margin-top: 12px; border-radius: 12px; padding: 12px 14px; font-size: 13px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; border: 1px solid #fbbf24; background: #fffbeb; color: #92400e; max-width: 100%; }
 .ep-offer.call { border-color: #93c5fd; background: #eff6ff; color: #1e40af; }
 .ep-offer b { font-size: 13.5px; }
 .ep-offer-btns { display: flex; gap: 6px; margin-inline-start: auto; }
@@ -309,25 +306,40 @@ employee-portal * { box-sizing: border-box; }
 .ep-row-menu-btn:hover { background: #f1f5f9; }
 .ep-row-menu-pop { position: absolute; top: calc(100% + 4px); inset-inline-end: 0; z-index: 10002; background: #fff; border: 1px solid #e2e8f0; border-radius: 11px; box-shadow: 0 10px 26px rgba(15,23,42,.14); padding: 6px; display: flex; flex-direction: column; gap: 5px; min-width: 132px; }
 .ep-row-menu-pop button { width: 100%; text-align: right; white-space: nowrap; }
+.ep-lbl-short { display: none; }
 @media (max-width:700px) {
-  .ep-wrap { padding: 12px; }
-  .ep-tabs { display:flex; overflow-x:auto; width:100%; }
-  .ep-tabbtn { flex:1; white-space:nowrap; padding-inline:11px; }
+  .ep-wrap { padding: 10px; }
+  .ep-tabs { display:flex; overflow-x:auto; width:100%; max-width:100%; }
+  .ep-tabbtn { flex:1; white-space:nowrap; padding-inline:11px; min-width: 0; }
   .ep-subtabs { width: 100%; overflow-x: visible; }
-  .ep-subtabs .ep-tabbtn { flex: 1 1 0; padding-inline: 4px; font-size: 12px; overflow: hidden; text-overflow: ellipsis; }
-  .ep-header { padding: 12px 13px; gap: 10px; }
+  .ep-subtabs .ep-tabbtn { flex: 1 1 0; padding-inline: 4px; font-size: 12px; }
+  .ep-lbl-full { display: none; }
+  .ep-lbl-short { display: inline; }
+  .ep-header { padding: 12px 10px; gap: 10px; }
+  .ep-user { min-width: 0; flex: 1; }
+  .ep-user-name { font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
   .ep-quota { width: 100%; }
-  .ep-quota-chip { flex: 1; min-width: 0; padding: 6px 8px; }
+  .ep-quota-chip { flex: 1; min-width: 0; padding: 6px 6px; font-size: 11px; }
+  .ep-quota-chip b { font-size: 13px; }
+  .ep-card { padding: 12px 10px; border-radius: 14px; }
   .ep-cal-head { flex-wrap: wrap; gap: 8px; }
   .ep-cal-title { font-size: 15px; }
   .ep-cal-grid { gap: 2px; }
-  .ep-dow { font-size: 11px; padding: 2px 0; }
-  .ep-day { min-height: 48px; padding: 3px 2px; border-radius: 8px; text-align: center; font-size: 12.5px; }
+  .ep-dow { font-size: 10px; padding: 2px 0; }
+  .ep-day { min-height: 48px; padding: 3px 1px; border-radius: 8px; text-align: center; font-size: 12.5px; overflow: hidden; }
   .ep-day-ws, .ep-day-hol, .ep-day-sketch, .ep-day-badge, .ep-day-note { display: none; }
   .ep-day-num { display: block; }
   .ep-day-dots { display: flex; justify-content: center; align-items: center; gap: 3px; margin-top: 3px; flex-wrap: wrap; min-height: 6px; }
   .ep-day-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
   .ep-day-plus { position: static; display: inline-flex; align-items: center; justify-content: center; width: 15px; height: 15px; margin-top: 3px; font-size: 11px; line-height: 1; }
+  .ep-sel-row { flex-wrap: wrap; }
+  .ep-sel-row input[type="time"] { width: 72px; }
+  .ep-board-item { flex-wrap: wrap; }
+  .ep-offer-btns { width: 100%; margin-inline-start: 0 !important; }
+  .ep-progress-head { font-size: 11.5px; }
+  .ep-progress-breakdown { gap: 8px; font-size: 10px; }
+  .ep-window-line { font-size: 11px; padding: 7px 9px; }
+  .ep-user-dropdown { inset-inline-start: auto; inset-inline-end: 0; width: min(300px, calc(100vw - 20px)); }
 }
 ${ADMIN_STYLE}
 `;
@@ -473,8 +485,6 @@ class EmployeePortal extends HTMLElement {
         this._adminMessagesData = null;         // admin messages management list
         this._vacationsData = null;             // admin vacations management list
         this._vacationFilter = { employeeId: '', month: '', from: '', to: '' };
-        this._workshopFilter = new Set();       // selected workshop-type ids for calendar filtering
-        this._workshopFilterOpen = false;
         this._shiftSubTab = 'myShifts';         // 'myShifts' | 'mySubmissions' | 'myVacations'
         this._openOffersOpen = false;
         this._openOffersPage = 0;
@@ -595,21 +605,27 @@ class EmployeePortal extends HTMLElement {
         return this._tipEl;
     }
 
+    _tipContentFrom(el) {
+        if (el.hasAttribute('data-tip-html')) return { html: el.getAttribute('data-tip-html'), rich: true };
+        const text = el.getAttribute('data-tip');
+        return text ? { html: text, rich: false } : null;
+    }
+
     _onTipOver(e) {
-        const el = e.target.closest?.('[data-tip]');
+        const el = e.target.closest?.('[data-tip], [data-tip-html]');
         if (!el || !this.contains(el)) return;
         const related = e.relatedTarget;
         if (related && el.contains(related)) return;
         if (this._tipPinned && this._tipPinned !== el) return;
         if (el.classList.contains('ep-b-info') && window.matchMedia('(hover: none)').matches) return;
         clearTimeout(this._tipTimer);
-        const text = el.getAttribute('data-tip');
-        if (!text) return;
-        this._tipTimer = setTimeout(() => this._showTip(el, text), 120);
+        const content = this._tipContentFrom(el);
+        if (!content) return;
+        this._tipTimer = setTimeout(() => this._showTip(el, content), 120);
     }
 
     _onTipOut(e) {
-        const el = e.target.closest?.('[data-tip]');
+        const el = e.target.closest?.('[data-tip], [data-tip-html]');
         if (!el || !this.contains(el)) return;
         const related = e.relatedTarget;
         if (related && el.contains(related)) return;
@@ -619,15 +635,15 @@ class EmployeePortal extends HTMLElement {
     }
 
     _onTipClick(e) {
-        const el = e.target.closest?.('[data-tip]');
+        const el = e.target.closest?.('[data-tip], [data-tip-html]');
         if (!el || !this.contains(el)) return;
         const touchMode = window.matchMedia('(hover: none)').matches;
-        const pin = el.classList.contains('ep-b-info') || (touchMode && el.classList.contains('ep-tip-trigger'));
+        const pin = el.classList.contains('ep-b-info') || el.classList.contains('ep-day-plus') || (touchMode && el.classList.contains('ep-tip-trigger'));
         if (!pin) return;
         e.preventDefault();
         e.stopPropagation();
-        const text = el.getAttribute('data-tip');
-        if (!text) return;
+        const content = this._tipContentFrom(el);
+        if (!content) return;
         if (this._tipPinned === el) {
             this._tipPinned = null;
             this._hideTip();
@@ -635,27 +651,44 @@ class EmployeePortal extends HTMLElement {
         }
         this._tipPinned = el;
         clearTimeout(this._tipTimer);
-        this._showTip(el, text);
+        this._showTip(el, content);
     }
 
-    _showTip(anchor, text) {
+    _showTip(anchor, content) {
         const tip = this._ensureTipEl();
-        tip.textContent = text;
+        const rich = !!content.rich;
+        tip.classList.toggle('ep-tip-rich', rich);
+        if (rich) tip.innerHTML = content.html;
+        else tip.textContent = content.html;
         tip.classList.add('show');
         tip.style.visibility = 'hidden';
         tip.classList.remove('ep-tip-above', 'ep-tip-below');
-        const rect = anchor.getBoundingClientRect();
+
+        const isDayTip = anchor.classList.contains('ep-day-plus');
+        const posEl = isDayTip ? (anchor.closest('.ep-day') || anchor) : anchor;
+        const rect = posEl.getBoundingClientRect();
         const tipRect = tip.getBoundingClientRect();
         const margin = 8;
-        let top = rect.top - tipRect.height - margin;
+        let top;
         let placeBelow = false;
-        if (top < margin) {
-            top = rect.bottom + margin;
-            placeBelow = true;
+
+        if (isDayTip) {
+            top = rect.top - tipRect.height - margin;
+            if (top < margin) top = margin;
+        } else {
+            top = rect.top - tipRect.height - margin;
+            if (top < margin) {
+                top = rect.bottom + margin;
+                placeBelow = true;
+            }
         }
+
         tip.classList.add(placeBelow ? 'ep-tip-below' : 'ep-tip-above');
         let left = rect.left + rect.width / 2 - tipRect.width / 2;
         left = Math.max(margin, Math.min(left, window.innerWidth - tipRect.width - margin));
+        const dayCenterX = rect.left + rect.width / 2;
+        const arrowX = Math.max(14, Math.min(tipRect.width - 14, dayCenterX - left));
+        tip.style.setProperty('--ep-tip-arrow-x', `${arrowX}px`);
         tip.style.top = `${top}px`;
         tip.style.left = `${left}px`;
         tip.style.visibility = '';
@@ -1566,30 +1599,6 @@ class EmployeePortal extends HTMLElement {
         }).join('');
     }
 
-    _renderWorkshopFilter() {
-        const types = this._data.allWorkshopTypes || [];
-        if (!types.length) return '';
-        const filter = this._workshopFilter || new Set();
-        const activeCount = filter.size;
-        const label = activeCount ? `סינון סדנאות (${activeCount})` : 'סינון סדנאות';
-        const options = types.map(t => `
-            <label class="ep-ws-filter-opt">
-                <input type="checkbox" data-action="toggle-ws-filter" data-ws-id="${escapeHtml(t.id)}" ${filter.has(t.id) ? 'checked' : ''}>
-                <span>${escapeHtml(t.name)}</span>
-            </label>`).join('');
-        return `
-            <div class="ep-ws-filter">
-                <button type="button" class="ep-ws-filter-btn ${activeCount ? 'active' : ''}" data-action="toggle-ws-filter-menu">
-                    ${label} ${this._workshopFilterOpen ? '▲' : '▼'}
-                </button>
-                ${this._workshopFilterOpen ? `
-                    <div class="ep-ws-filter-menu">
-                        ${options}
-                        ${activeCount ? `<button type="button" class="ep-ws-filter-clear" data-action="clear-ws-filter">נקה סינון</button>` : ''}
-                    </div>` : ''}
-            </div>`;
-    }
-
     _renderCalendar() {
         const months = (this._data.months || []).map(m => m.monthKey);
         const idx = months.indexOf(this._viewMonth);
@@ -1633,9 +1642,9 @@ class EmployeePortal extends HTMLElement {
             const holidayShort = holidayEntry?.mode === 'SHORT';
 
             let cls = 'ep-day', badge = '', clickable = false;
-            const dots = [];         // colored dots shown instead of text on mobile
-            const detailLines = [];  // full day details shown in the "+" tooltip
-            const addDot = (color, line) => { dots.push(color); if (line) detailLines.push(line); };
+            const dots = [];
+            const detailItems = [];
+            const addDot = (color, line) => { dots.push(color); if (line) detailItems.push({ color, text: line }); };
             if (vacation?.status === 'APPROVED') {
                 cls += ' vacation';
                 badge = `<span class="ep-day-badge ep-badge-vacation">יום חופש</span>`;
@@ -1711,10 +1720,7 @@ class EmployeePortal extends HTMLElement {
                     : (w.times || []).map(start => ({ start, end: null }));
                 return ranges.map(r => `${w.name} — ${formatTimeRangeHe(r.start, r.end)}`);
             });
-            if (wsLines.length) addDot('#2563eb', null);
-            detailLines.push(...wsLines);
-            const filterActive = this._workshopFilter && this._workshopFilter.size > 0;
-            if (filterActive && !dayWorkshops.some(w => this._workshopFilter.has(w.id))) cls += ' ep-day-filtered';
+            wsLines.forEach(line => { dots.push('#2563eb'); detailItems.push({ color: '#2563eb', text: line }); });
 
             const note = dayNoteByDate[dateKey];
             const noteIcon = note
@@ -1732,7 +1738,7 @@ class EmployeePortal extends HTMLElement {
             const dotsHtml = dots.length
                 ? `<span class="ep-day-dots">${dots.slice(0, 5).map(c => `<span class="ep-day-dot" style="background:${c}"></span>`).join('')}</span>`
                 : '';
-            const dayPlus = detailLines.length ? this._renderDayPlus(detailLines) : '';
+            const dayPlus = detailItems.length ? this._renderDayPlus(detailItems) : '';
 
             cells += `<div class="${cls}" ${clickable ? `data-action="toggle-day" data-date="${dateKey}"` : ''}>
                 <span class="ep-day-num">${day}</span>
@@ -1757,7 +1763,6 @@ class EmployeePortal extends HTMLElement {
             ${this._renderUpcomingWindow()}
             ${this._renderMonthProgress()}
             ${this._renderCalLegendAccordion()}
-            ${this._renderWorkshopFilter()}
             <div class="ep-cal-grid">${cells}</div>`;
     }
 
@@ -1914,10 +1919,13 @@ class EmployeePortal extends HTMLElement {
             </button>${body}</div>`;
     }
 
-    /** "+" icon on calendar days — hover (desktop) / tap (mobile) shows all details for that day. */
-    _renderDayPlus(lines) {
-        if (!lines.length) return '';
-        return `<span class="ep-day-plus ep-tip-trigger" tabindex="0" data-tip="${escapeHtml(lines.join('\n'))}" aria-label="פרטי היום">+</span>`;
+    /** "+" icon on calendar days — hover (desktop) / tap (mobile) shows all details for that day with colored dots. */
+    _renderDayPlus(items) {
+        if (!items.length) return '';
+        const html = items.map(({ color, text }) =>
+            `<div class="ep-tip-line"><span class="ep-tip-dot" style="background:${escapeHtml(color)}"></span><span>${escapeHtml(text)}</span></div>`
+        ).join('');
+        return `<span class="ep-day-plus ep-tip-trigger" tabindex="0" data-tip-html="${escapeHtml(html)}" aria-label="פרטי היום">+</span>`;
     }
 
     _sectionHelp(text) {
@@ -2060,9 +2068,9 @@ class EmployeePortal extends HTMLElement {
 
         return `
             <div class="ep-tabs ep-subtabs" style="margin-top:0">
-                <button class="ep-tabbtn ${subTab === 'myShifts' ? 'active' : ''}" data-action="subtab-myshifts">המשמרות שלי (${myShifts.length})${this._tabHelp('משמרות שכבר שובצו לכם או שנמצאות ברשימת המתנה — ניתן לבקש שינוי, מחיקה או החלפה.')}</button>
-                <button class="ep-tabbtn ${subTab === 'mySubmissions' ? 'active' : ''}" data-action="subtab-mysubmissions">ההגשות שלי (${mySubmissions.length})${this._tabHelp('משמרות שהגשתם וטרם אושרו או שובצו — ממתינות לאישור מנהל/ת או לשיבוץ אוטומטי.')}</button>
-                ${showVacationsTab ? `<button class="ep-tabbtn ${subTab === 'myVacations' ? 'active' : ''}" data-action="subtab-myvacations">החופשות שלי (${myVacations.length})${this._tabHelp('ימי חופש מאושרים או ממתינים לאישור בחודש שמוצג בלוח השנה.')}</button>` : ''}
+                <button class="ep-tabbtn ${subTab === 'myShifts' ? 'active' : ''}" data-action="subtab-myshifts"><span class="ep-lbl-full">המשמרות שלי (${myShifts.length})</span><span class="ep-lbl-short">משמרות (${myShifts.length})</span>${this._tabHelp('משמרות שכבר שובצו לכם או שנמצאות ברשימת המתנה — ניתן לבקש שינוי, מחיקה או החלפה.')}</button>
+                <button class="ep-tabbtn ${subTab === 'mySubmissions' ? 'active' : ''}" data-action="subtab-mysubmissions"><span class="ep-lbl-full">ההגשות שלי (${mySubmissions.length})</span><span class="ep-lbl-short">זמינות (${mySubmissions.length})</span>${this._tabHelp('משמרות שהגשתם וטרם אושרו או שובצו — ממתינות לאישור מנהל/ת או לשיבוץ אוטומטי.')}</button>
+                ${showVacationsTab ? `<button class="ep-tabbtn ${subTab === 'myVacations' ? 'active' : ''}" data-action="subtab-myvacations"><span class="ep-lbl-full">החופשות שלי (${myVacations.length})</span><span class="ep-lbl-short">חופשות (${myVacations.length})</span>${this._tabHelp('ימי חופש מאושרים או ממתינים לאישור בחודש שמוצג בלוח השנה.')}</button>` : ''}
             </div>
             ${subTab === 'myVacations' ? '' : this._renderEditWindowBanner()}
             ${subTab === 'myVacations' ? '' : this._renderStatusGuide()}
@@ -2765,20 +2773,12 @@ class EmployeePortal extends HTMLElement {
             case 'month-next':
                 if (idx >= 0 && idx < months.length - 1) { this._viewMonth = months[idx + 1]; this.render(); }
                 break;
-            case 'toggle-ws-filter-menu':
-                this._workshopFilterOpen = !this._workshopFilterOpen;
-                this.render();
-                break;
             case 'toggle-cal-legend':
                 this._calLegendOpen = !this._calLegendOpen;
                 this.render();
                 break;
             case 'toggle-status-guide':
                 this._statusGuideOpen = !this._statusGuideOpen;
-                this.render();
-                break;
-            case 'clear-ws-filter':
-                this._workshopFilter.clear();
                 this.render();
                 break;
             case 'toggle-day': {
@@ -2850,13 +2850,6 @@ class EmployeePortal extends HTMLElement {
             return;
         }
         if (input?.dataset?.action?.startsWith('admin-') && handleAdminChange(this, input)) return;
-        if (input?.dataset?.action === 'toggle-ws-filter') {
-            const wsId = input.dataset.wsId;
-            if (input.checked) this._workshopFilter.add(wsId);
-            else this._workshopFilter.delete(wsId);
-            this.render();
-            return;
-        }
         if (input?.dataset?.action === 'urgent-toggle') {
             const id = input.dataset.id;
             if (input.checked) {

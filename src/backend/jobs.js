@@ -21,7 +21,8 @@ const STUCK_ORDER_ABANDONED_AGE_MS = 24 * 60 * 60 * 1000; // 24 hours
  *    orders (higher required-instructor counts) trigger assignments/offers.
  */
 export async function processSchedulingHourly() {
-    const escalation = await processOfferEscalation().catch(err => {
+    const batchOpts = { batchNotify: true };
+    const escalation = await processOfferEscalation(new Date(), batchOpts).catch(err => {
         console.error('[jobs] processOfferEscalation failed:', err?.message || err);
         return { expired: 0, escalated: 0 };
     });
@@ -29,13 +30,18 @@ export async function processSchedulingHourly() {
     const now = new Date();
     const fromKey = toDateKey(now);
     const toKey = toDateKey(new Date(now.getTime() + SCHEDULING_HORIZON_DAYS * 86400000));
-    const engine = await runScheduling(fromKey, toKey).catch(err => {
+    const engine = await runScheduling(fromKey, toKey, batchOpts).catch(err => {
         console.error('[jobs] runScheduling failed:', err?.message || err);
         return { assigned: 0, offers: 0, openCalls: 0 };
     });
 
-    console.log('[jobs] processSchedulingHourly:', JSON.stringify({ escalation, engine }));
-    return { escalation, engine };
+    const outbox = await flushOutbox({ force: true }).catch(err => {
+        console.error('[jobs] flushOutbox failed:', err?.message || err);
+        return { sent: 0, merged: 0, skipped: 0 };
+    });
+
+    console.log('[jobs] processSchedulingHourly:', JSON.stringify({ escalation, engine, outbox }));
+    return { escalation, engine, outbox };
 }
 
 /**

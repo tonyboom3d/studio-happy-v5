@@ -10,6 +10,7 @@
  * priorityRank are NEVER included in any payload returned to employees.
  */
 import wixData from 'wix-data';
+import { availabilityCalendar } from 'wix-bookings.v2';
 import { Permissions, webMethod } from 'wix-web-module';
 import {
     assertEmployeeAccess,
@@ -57,6 +58,7 @@ import { loadMySwapRequests } from 'backend/shiftSwaps.js';
 import { loadVacationsForEmployee, loadVacationHistoryForEmployee, requestEmployeeDaysOff } from 'backend/vacations.js';
 
 const SA = { suppressAuth: true };
+const SESSION_MATCH_TOLERANCE_MS = 5 * 60 * 1000;
 // Free edit/delete window for a just-submitted (SUBMITTED) shift. After this,
 // changes must go through the manager-approval request flow (shiftChangeRequests.js).
 const EDIT_WINDOW_MS = 30 * 60 * 1000;
@@ -154,6 +156,47 @@ async function loadWorkshopTypeNamesByServiceId() {
     return map;
 }
 
+/** Bookings session end times keyed by serviceId — matched to orders by start tolerance. */
+async function loadSessionSlotsByService(serviceIds, rangeStart, rangeEnd) {
+    const slotsByService = {};
+    if (!serviceIds.length) return slotsByService;
+
+    const options = { slotsPerDay: 100 };
+    await Promise.all(serviceIds.map(async (serviceId) => {
+        try {
+            const availability = await availabilityCalendar.queryAvailability({
+                filter: {
+                    serviceId,
+                    startDate: rangeStart.toISOString(),
+                    endDate: rangeEnd.toISOString(),
+                },
+            }, options);
+            slotsByService[serviceId] = (availability.availabilityEntries || [])
+                .map(entry => entry.slot || {})
+                .filter(slot => slot.startDate && slot.endDate)
+                .map(slot => ({
+                    startMs: new Date(slot.startDate).getTime(),
+                    endIso: new Date(slot.endDate).toISOString(),
+                }));
+        } catch (_) {
+            slotsByService[serviceId] = [];
+        }
+    }));
+    return slotsByService;
+}
+
+function resolveWorkshopEnd(order, slotsByService) {
+    const slots = slotsByService[order.serviceId];
+    if (!slots?.length || !order.workshopStart) return null;
+    const orderStart = new Date(order.workshopStart).getTime();
+    for (const slot of slots) {
+        if (Math.abs(slot.startMs - orderStart) <= SESSION_MATCH_TOLERANCE_MS) {
+            return slot.endIso;
+        }
+    }
+    return null;
+}
+
 /**
  * Workshop details for the employee's SCHEDULED dates: paid, non-cancelled
  * WorkshopOrders whose workshopStart falls on one of those dates.
@@ -186,6 +229,8 @@ async function loadScheduledWorkshopDetails(scheduledSubmissions) {
     const orders = (ordersResult.items || []).filter(o => !o.cancelledAt);
     const dateKeySet = new Set(dateKeys);
     const relevant = orders.filter(o => dateKeySet.has(toDateKey(o.workshopStart)));
+    const serviceIds = [...new Set(relevant.map(o => o.serviceId).filter(Boolean))];
+    const slotsByService = await loadSessionSlotsByService(serviceIds, rangeStart, rangeEnd);
 
     const orderIds = relevant.map(o => o._id);
     const participantsByOrderId = {};
@@ -209,6 +254,7 @@ async function loadScheduledWorkshopDetails(scheduledSubmissions) {
     return relevant.map(order => ({
         date: toDateKey(order.workshopStart),
         workshopStart: order.workshopStart,
+        workshopEnd: resolveWorkshopEnd(order, slotsByService),
         workshopType: typeNamesByServiceId[order.serviceId] || order.workshopType || 'סדנה',
         organizerName: order.organizerName || '',
         organizerPhone: order.organizerPhone || '',
@@ -340,12 +386,25 @@ export const getMyPortalData = webMethod(Permissions.Anyone, async () => {
             if (t?.assignedEmployeeIds?.includes(roleRow._id)) return false;
             return true;
         })
-        .map(o => ({
-            id: o._id,
-            date: o.dateKey || toDateKey(o.date),
-            workshopTypeId: o.workshopTypeId || null,
-            workshopName: o.workshopName || 'סדנה',
-        }));
+        .map(o => {
+            const dateKey = o.dateKey || toDateKey(o.date);
+            const sessions = board.days[dateKey]?.types?.[o.workshopTypeId]?.sessions || [];
+            const sessionTime = [...sessions].sort()[0] || null;
+            return {
+                id: o._id,
+                date: dateKey,
+                workshopTypeId: o.workshopTypeId || null,
+                workshopName: o.workshopName || 'סדנה',
+                sessionTime,
+            };
+        })
+        .sort((a, b) => {
+            const byDate = (a.date || '').localeCompare(b.date || '');
+            if (byDate) return byDate;
+            const byTime = (a.sessionTime || '').localeCompare(b.sessionTime || '');
+            if (byTime) return byTime;
+            return (a.workshopName || '').localeCompare(b.workshopName || '', 'he');
+        });
 
     return {
         dayStates,

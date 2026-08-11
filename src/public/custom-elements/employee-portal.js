@@ -206,6 +206,9 @@ employee-portal * { box-sizing: border-box; }
 .ep-ws-detail-row { display: flex; gap: 8px; margin-bottom: 4px; line-height: 1.45; }
 .ep-ws-detail-row b { color: #6b7280; font-weight: 600; white-space: nowrap; flex-shrink: 0; }
 .ep-ws-detail-row span { color: #1f2937; }
+.ep-ws-customer-line span { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.ep-ws-phone-link { color: #1d4ed8; text-decoration: none; display: inline-flex; align-items: center; gap: 4px; }
+.ep-ws-phone-link:hover { text-decoration: underline; }
 .ep-ws-participants-inline { margin: 4px 0 0; padding: 0 16px 0 0; }
 .ep-toast { position: fixed; bottom: 22px; right: 50%; transform: translateX(50%); background: #111827; color: #fff; border-radius: 12px; padding: 11px 20px; font-size: 13.5px; z-index: 9999; box-shadow: 0 8px 24px rgba(0,0,0,.25); opacity: 0; pointer-events: none; transition: opacity .2s; max-width: 92vw; }
 .ep-toast.show { opacity: 1; }
@@ -321,6 +324,18 @@ function formatTimeHe(iso) {
     if (!iso) return '';
     return new Intl.DateTimeFormat('he-IL', { timeZone: 'Asia/Jerusalem', hour: '2-digit', minute: '2-digit' }).format(new Date(iso));
 }
+function formatTimeRangeHe(startIso, endIso) {
+    const start = formatTimeHe(startIso);
+    if (!endIso) return start;
+    const end = formatTimeHe(endIso);
+    return end ? `${start}–${end}` : start;
+}
+function formatParticipantBreakdown(adults, children) {
+    const parts = [];
+    if (adults > 0) parts.push(`${adults} מבוגרים`);
+    if (children > 0) parts.push(`${children} ילדים`);
+    return parts.length ? `(${parts.join(' + ')})` : '';
+}
 function hoursBetween(start, end) {
     const p = t => { const m = /^(\d{1,2}):(\d{2})$/.exec(t || ''); return m ? Number(m[1]) * 60 + Number(m[2]) : null; };
     const s = p(start), e = p(end);
@@ -344,9 +359,16 @@ function groupWorkshopsBySession(workshops) {
     for (const w of workshops) {
         const key = `${w.workshopType}|${w.workshopStart}`;
         if (!map.has(key)) {
-            map.set(key, { workshopType: w.workshopType, workshopStart: w.workshopStart, orders: [] });
+            map.set(key, {
+                workshopType: w.workshopType,
+                workshopStart: w.workshopStart,
+                workshopEnd: w.workshopEnd || null,
+                orders: [],
+            });
         }
-        map.get(key).orders.push(w);
+        const group = map.get(key);
+        if (!group.workshopEnd && w.workshopEnd) group.workshopEnd = w.workshopEnd;
+        group.orders.push(w);
     }
     return [...map.values()].sort((a, b) => new Date(a.workshopStart) - new Date(b.workshopStart));
 }
@@ -1276,6 +1298,12 @@ class EmployeePortal extends HTMLElement {
         return (this._data.openCalls || []).filter(c => {
             if (c.workshopTypeId) return skillTypeIds.has(c.workshopTypeId);
             return skillNames.has(workshopLabel(c.workshopName));
+        }).sort((a, b) => {
+            const byDate = (a.date || '').localeCompare(b.date || '');
+            if (byDate) return byDate;
+            const byTime = (a.sessionTime || '').localeCompare(b.sessionTime || '');
+            if (byTime) return byTime;
+            return workshopLabel(a.workshopName).localeCompare(workshopLabel(b.workshopName), 'he');
         });
     }
 
@@ -2078,19 +2106,19 @@ class EmployeePortal extends HTMLElement {
     }
 
     _renderWorkshopOrderBlock(order) {
-        const participantItems = (order.participants || []).filter(p => String(p.name || '').trim());
-        const namesBlock = participantItems.length
-            ? `<ul class="ep-ws-participants-inline">${participantItems.map(p => {
-                return `<li>${escapeHtml(p.name)}${p.childrenCount ? ` (${p.childrenCount} ילדים)` : ''}</li>`;
-            }).join('')}</ul>`
+        const name = order.organizerName || '—';
+        const phone = (order.organizerPhone || '').trim();
+        const phoneHtml = phone
+            ? `<a class="ep-ws-phone-link" href="tel:${escapeHtml(phone)}">📱 ${escapeHtml(phone)}</a>`
             : '<span>—</span>';
+        const breakdown = formatParticipantBreakdown(order.adults || 0, order.children || 0);
+        const notesRow = order.customerNotes
+            ? `<div class="ep-ws-detail-row"><b>הערות לקוח</b><span>${escapeHtml(order.customerNotes)}</span></div>`
+            : '';
         return `<div class="ep-ws-order-block">
-            <div class="ep-ws-detail-row"><b>מזמין/ה</b><span>${escapeHtml(order.organizerName || '—')}</span></div>
-            <div class="ep-ws-detail-row"><b>טלפון לקוח</b><span>${escapeHtml(order.organizerPhone || '—')}</span></div>
-            <div class="ep-ws-detail-row"><b>כמות משתתפים</b><span>${order.quantity || 0} (${order.adults || 0} מבוגרים)</span></div>
-            <div class="ep-ws-detail-row"><b>כמות ילדים</b><span>${order.children || 0}</span></div>
-            <div class="ep-ws-detail-row"><b>שמות משתתפים</b>${namesBlock}</div>
-            <div class="ep-ws-detail-row"><b>הערות לקוח</b><span>${order.customerNotes ? escapeHtml(order.customerNotes) : '—'}</span></div>
+            <div class="ep-ws-detail-row ep-ws-customer-line"><b>לקוח/ה</b><span>${escapeHtml(name)} <span aria-hidden="true">|</span> ${phoneHtml}</span></div>
+            <div class="ep-ws-detail-row"><b>כמות משתתפים</b><span>${order.quantity || 0} ${escapeHtml(breakdown)}</span></div>
+            ${notesRow}
         </div>`;
     }
 
@@ -2105,7 +2133,8 @@ class EmployeePortal extends HTMLElement {
             const totalQty = group.orders.reduce((sum, o) => sum + (o.quantity || 0), 0);
             const totalChildren = group.orders.reduce((sum, o) => sum + (o.children || 0), 0);
             const body = group.orders.map(o => this._renderWorkshopOrderBlock(o)).join('');
-            const meta = `${formatTimeHe(group.workshopStart)} · ${totalQty} משתתפים${totalChildren ? ` · ${totalChildren} ילדים` : ''}`;
+            const timeRange = formatTimeRangeHe(group.workshopStart, group.workshopEnd);
+            const meta = `${timeRange} · ${totalQty} משתתפים${totalChildren ? ` · ${totalChildren} ילדים` : ''}`;
             return `<div class="ep-ws-acc ${open ? 'open' : ''}">
                 <button type="button" class="ep-ws-acc-head" data-action="toggle-ws-accordion" data-acc-key="${escapeHtml(accKey)}">
                     <span>${escapeHtml(workshopLabel(group.workshopType))}</span>
@@ -2233,9 +2262,14 @@ class EmployeePortal extends HTMLElement {
             case 'toggle-ws-accordion': {
                 const key = target.dataset.accKey;
                 if (!key) return;
-                if (this._wsAccordionOpen.has(key)) this._wsAccordionOpen.delete(key);
-                else this._wsAccordionOpen.add(key);
-                this.render();
+                const acc = target.closest('.ep-ws-acc');
+                if (this._wsAccordionOpen.has(key)) {
+                    this._wsAccordionOpen.delete(key);
+                    acc?.classList.remove('open');
+                } else {
+                    this._wsAccordionOpen.add(key);
+                    acc?.classList.add('open');
+                }
                 return;
             }
             case 'msg-car-prev':

@@ -209,6 +209,20 @@ employee-portal * { box-sizing: border-box; }
 .ep-ws-customer-line span { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .ep-ws-phone-link { color: #1d4ed8; text-decoration: none; display: inline-flex; align-items: center; gap: 4px; }
 .ep-ws-phone-link:hover { text-decoration: underline; }
+.ep-sketch-gallery { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 2px; }
+.ep-sketch-thumb-btn { width: 46px; height: 46px; border-radius: 8px; border: 1px solid #e2e8f0; padding: 0; cursor: pointer; overflow: hidden; background: #f8fafc; flex-shrink: 0; transition: transform .12s,border-color .12s; }
+.ep-sketch-thumb-btn:hover { transform: scale(1.08); border-color: #93c5fd; }
+.ep-sketch-thumb-btn img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.ep-sketch-more-btn { width: 46px; height: 46px; border-radius: 8px; border: 1px solid #e2e8f0; background: #eff6ff; color: #1d4ed8; font-size: 11px; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: background .12s; }
+.ep-sketch-more-btn:hover { background: #dbeafe; }
+.ep-lightbox-backdrop { position: fixed; inset: 0; background: rgba(15,23,42,.86); z-index: 10050; display: flex; align-items: center; justify-content: center; padding: 24px; }
+.ep-lightbox-img { max-width: min(92vw, 700px); max-height: 86vh; border-radius: 12px; box-shadow: 0 20px 60px rgba(0,0,0,.4); }
+.ep-lightbox-close { position: absolute; top: 18px; inset-inline-end: 18px; width: 38px; height: 38px; border-radius: 50%; border: none; background: rgba(255,255,255,.15); color: #fff; font-size: 20px; cursor: pointer; line-height: 1; }
+.ep-lightbox-close:hover { background: rgba(255,255,255,.28); }
+.ep-sketch-gallery-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 10px; max-height: 60vh; overflow-y: auto; padding: 4px; }
+.ep-sketch-gallery-grid button { border: 1px solid #e2e8f0; border-radius: 10px; padding: 0; cursor: pointer; overflow: hidden; aspect-ratio: 1; background: #f8fafc; transition: transform .12s,border-color .12s; }
+.ep-sketch-gallery-grid button:hover { transform: scale(1.05); border-color: #93c5fd; }
+.ep-sketch-gallery-grid img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .ep-ws-participants-inline { margin: 4px 0 0; padding: 0 16px 0 0; }
 .ep-toast { position: fixed; bottom: 22px; right: 50%; transform: translateX(50%); background: #111827; color: #fff; border-radius: 12px; padding: 11px 20px; font-size: 13.5px; z-index: 9999; box-shadow: 0 8px 24px rgba(0,0,0,.25); opacity: 0; pointer-events: none; transition: opacity .2s; max-width: 92vw; }
 .ep-toast.show { opacity: 1; }
@@ -256,7 +270,14 @@ employee-portal * { box-sizing: border-box; }
 .ep-urgent-row:hover { background: #f8fafc; }
 .ep-urgent-row input { flex-shrink: 0; width: 16px; height: 16px; cursor: pointer; }
 .ep-urgent-row-date { font-weight: 700; color: #1f2937; white-space: nowrap; }
+.ep-urgent-row-time { font-weight: 700; color: #1f2937; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .ep-urgent-row-name { color: #1e40af; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ep-urgent-day-group:not(:first-child) { border-top: 1px solid #e2e8f0; }
+.ep-urgent-day-head { font-weight: 700; font-size: 12.5px; color: #1f2937; padding: 8px 11px 4px; background: #f8fafc; }
+.ep-urgent-parallel-hint { font-size: 11px; font-weight: 600; color: #b45309; padding: 6px 11px 2px; }
+.ep-urgent-parallel-row { display: flex; gap: 8px; padding: 2px 11px 6px; }
+.ep-urgent-parallel-col { flex: 1; min-width: 0; border: 1px solid #fde68a; border-radius: 9px; background: #fffbeb; }
+.ep-urgent-parallel-col .ep-urgent-row { border-bottom: none; }
 .ep-urgent-submit:disabled { opacity: .5; cursor: default; }
 .ep-msg-card { border: 1px solid #e5e7eb; background: #fff; border-radius: 12px; padding: 12px 14px; margin-bottom: 10px; }
 .ep-msg-card.system { border-color: #bfdbfe; background: #f5f9ff; }
@@ -417,11 +438,14 @@ class EmployeePortal extends HTMLElement {
         this._msgCarTouchX = null;              // swipe start X
         this._adminMessagesData = null;         // admin messages management list
         this._vacationsData = null;             // admin vacations management list
+        this._vacationFilter = { employeeId: '', month: '', from: '', to: '' };
         this._workshopFilter = new Set();       // selected workshop-type ids for calendar filtering
         this._workshopFilterOpen = false;
         this._shiftSubTab = 'myShifts';         // 'myShifts' | 'mySubmissions' — internal sub-tab
         this._selectedShiftDate = null;         // dateKey — day workshops modal (from "המשמרות שלי")
         this._wsAccordionOpen = new Set();      // open workshop-accordion keys in day modal
+        this._lightboxImage = null;             // full-size sketch image URL shown in the lightbox
+        this._sketchGalleryOrderId = null;      // orderId whose full sketch grid is open (overflow view)
         this._shiftModal = null;                // { type: 'edit'|'requestEdit'|'requestDelete'|'swap', submissionId }
         this._busy = null;                      // busy-overlay message while a mutation is in flight
         this._editWindowTimer = null;           // 1s ticker for the 30-min free-edit countdown
@@ -1055,6 +1079,8 @@ class EmployeePortal extends HTMLElement {
             ${this._autoApprovedPopup ? this._renderAutoApprovedPopup() : ''}
             ${this._urgentPopupOpen ? this._renderUrgentPopup() : ''}
             ${this._urgentSummary ? this._renderUrgentSummary() : ''}
+            ${this._sketchGalleryOrderId ? this._renderSketchGalleryModal() : ''}
+            ${this._lightboxImage ? this._renderLightbox() : ''}
             <div class="ep-toast" id="epToast"></div>
         `;
         this._restoreToast();
@@ -1920,21 +1946,52 @@ class EmployeePortal extends HTMLElement {
         </div>`;
     }
 
-    /** Compact selection popup for all pending urgent open calls. */
-    _renderUrgentPopup() {
+    /** Groups open calls by date, then by exact session start time — same-time calls are mutually-exclusive (parallel) slots. */
+    _groupOpenCallsForUrgentPopup() {
         const calls = this._skillMatchedOpenCalls();
-        const rows = calls.map(c => `
+        const byDate = new Map();
+        for (const c of calls) {
+            if (!byDate.has(c.date)) byDate.set(c.date, new Map());
+            const byTime = byDate.get(c.date);
+            const timeKey = c.sessionTime || '';
+            if (!byTime.has(timeKey)) byTime.set(timeKey, []);
+            byTime.get(timeKey).push(c);
+        }
+        return [...byDate.entries()].map(([date, byTime]) => ({
+            date,
+            slots: [...byTime.entries()].map(([sessionTime, items]) => ({ sessionTime, items })),
+        }));
+    }
+
+    /** Compact selection popup for all pending urgent open calls, grouped by date/time so parallel slots are visually distinct. */
+    _renderUrgentPopup() {
+        const dayGroups = this._groupOpenCallsForUrgentPopup();
+        const renderCall = (c, showTime) => `
             <label class="ep-urgent-row">
                 <input type="checkbox" data-action="urgent-toggle" data-id="${escapeHtml(c.id)}" ${this._urgentSelected.has(c.id) ? 'checked' : ''}>
-                <span class="ep-urgent-row-date">${formatDateHe(c.date)}</span>
+                ${showTime && c.sessionTime ? `<span class="ep-urgent-row-time">${escapeHtml(formatTimeHe(c.sessionTime))}</span>` : ''}
                 <span class="ep-urgent-row-name">${escapeHtml(workshopLabel(c.workshopName))}</span>
-            </label>`).join('');
+            </label>`;
+        const body = dayGroups.map(({ date, slots }) => {
+            const slotsHtml = slots.map(({ sessionTime, items }) => {
+                if (items.length > 1) {
+                    // Parallel workshops at the same time — side-by-side columns; only one may be picked.
+                    return `<div class="ep-urgent-parallel-hint">⚡ ${sessionTime ? escapeHtml(formatTimeHe(sessionTime)) : ''} — סדנאות מקבילות, ניתן לבחור רק אחת</div>
+                        <div class="ep-urgent-parallel-row">${items.map(c => `<div class="ep-urgent-parallel-col">${renderCall(c, false)}</div>`).join('')}</div>`;
+                }
+                return renderCall(items[0], true);
+            }).join('');
+            return `<div class="ep-urgent-day-group">
+                <div class="ep-urgent-day-head">${escapeHtml(formatDateHe(date))}</div>
+                ${slotsHtml}
+            </div>`;
+        }).join('');
         const hasSelection = this._urgentSelected.size > 0;
         return `<div class="epa-modal-backdrop">
             <div class="epa-modal" role="dialog" aria-modal="true" aria-label="משמרות דחופות פתוחות">
                 <div class="epa-modal-head"><h2>📣 משמרות דחופות פתוחות</h2><button class="epa-modal-close" data-action="urgent-close" aria-label="סגירה">×</button></div>
-                <div class="ep-empty" style="text-align:right;margin-bottom:6px">סמנו את המשמרות שתרצו לקחת — כל הקודם/ת זוכה. הרשימה כבר מסוננת לפי ההכשרות שלכם.</div>
-                <div class="ep-urgent-list">${rows || '<div class="ep-empty">אין כרגע משמרות דחופות פתוחות.</div>'}</div>
+                <div class="ep-empty" style="text-align:right;margin-bottom:6px">סמנו את המשמרות שתרצו לקחת — כל הקודם/ת זוכה. הרשימה כבר מסוננת לפי ההכשרות שלכם ומקובצת לפי תאריך.</div>
+                <div class="ep-urgent-list">${body || '<div class="ep-empty">אין כרגע משמרות דחופות פתוחות.</div>'}</div>
                 <div class="epa-inline">
                     <button type="button" class="epa-btn primary ep-urgent-submit" data-action="urgent-submit" ${hasSelection ? '' : 'disabled'}>✅ שיבוץ המשמרות שנבחרו</button>
                     <button type="button" class="epa-btn" data-action="urgent-close">ביטול</button>
@@ -2105,6 +2162,22 @@ class EmployeePortal extends HTMLElement {
         </div>`;
     }
 
+    /** Sketch thumbnails for one order — capped inline, with an overflow tile opening the full grid. */
+    _renderSketchGallery(order, maxInline = 5) {
+        const sketches = order.sketches || [];
+        if (!sketches.length) return '';
+        const visible = sketches.slice(0, maxInline);
+        const overflow = sketches.length - visible.length;
+        const thumbs = visible.map(s => `
+            <button type="button" class="ep-sketch-thumb-btn" data-action="open-sketch-lightbox" data-img="${escapeHtml(s.full || s.thumb)}" title="הגדלת סקיצה">
+                <img src="${escapeHtml(s.thumb)}" alt="סקיצה" loading="lazy">
+            </button>`).join('');
+        const moreBtn = overflow > 0
+            ? `<button type="button" class="ep-sketch-more-btn" data-action="open-sketch-gallery" data-order-id="${escapeHtml(order.orderId || '')}" title="הצגת כל הסקיצות">+${overflow}</button>`
+            : '';
+        return `<div class="ep-ws-detail-row"><b>סקיצות</b><div class="ep-sketch-gallery">${thumbs}${moreBtn}</div></div>`;
+    }
+
     _renderWorkshopOrderBlock(order) {
         const name = order.organizerName || '—';
         const phone = (order.organizerPhone || '').trim();
@@ -2118,7 +2191,33 @@ class EmployeePortal extends HTMLElement {
         return `<div class="ep-ws-order-block">
             <div class="ep-ws-detail-row ep-ws-customer-line"><b>לקוח/ה</b><span>${escapeHtml(name)} <span aria-hidden="true">|</span> ${phoneHtml}</span></div>
             <div class="ep-ws-detail-row"><b>כמות משתתפים</b><span>${order.quantity || 0} ${escapeHtml(breakdown)}</span></div>
+            ${this._renderSketchGallery(order)}
             ${notesRow}
+        </div>`;
+    }
+
+    _renderLightbox() {
+        if (!this._lightboxImage) return '';
+        return `<div class="ep-lightbox-backdrop" data-action="close-lightbox">
+            <button type="button" class="ep-lightbox-close" data-action="close-lightbox" aria-label="סגירה">×</button>
+            <img class="ep-lightbox-img" src="${escapeHtml(this._lightboxImage)}" alt="סקיצה מוגדלת">
+        </div>`;
+    }
+
+    _renderSketchGalleryModal() {
+        const orderId = this._sketchGalleryOrderId;
+        if (!orderId) return '';
+        const order = (this._data.scheduledWorkshops || []).find(w => w.orderId === orderId);
+        const sketches = order?.sketches || [];
+        const tiles = sketches.map(s => `
+            <button type="button" data-action="open-sketch-lightbox" data-img="${escapeHtml(s.full || s.thumb)}" title="הגדלת סקיצה">
+                <img src="${escapeHtml(s.thumb)}" alt="סקיצה" loading="lazy">
+            </button>`).join('');
+        return `<div class="epa-modal-backdrop">
+            <div class="epa-modal" role="dialog" aria-modal="true" aria-label="כל הסקיצות">
+                <div class="epa-modal-head"><h2>כל הסקיצות (${sketches.length})</h2><button class="epa-modal-close" data-action="close-sketch-gallery" aria-label="סגירה">×</button></div>
+                <div class="ep-sketch-gallery-grid">${tiles}</div>
+            </div>
         </div>`;
     }
 
@@ -2257,6 +2356,22 @@ class EmployeePortal extends HTMLElement {
             case 'dismiss-day-workshops':
                 this._selectedShiftDate = null;
                 this._wsAccordionOpen = new Set();
+                this.render();
+                return;
+            case 'open-sketch-lightbox':
+                this._lightboxImage = target.dataset.img || null;
+                this.render();
+                return;
+            case 'close-lightbox':
+                this._lightboxImage = null;
+                this.render();
+                return;
+            case 'open-sketch-gallery':
+                this._sketchGalleryOrderId = target.dataset.orderId || null;
+                this.render();
+                return;
+            case 'close-sketch-gallery':
+                this._sketchGalleryOrderId = null;
                 this.render();
                 return;
             case 'toggle-ws-accordion': {
@@ -2510,10 +2625,23 @@ class EmployeePortal extends HTMLElement {
         }
         if (input?.dataset?.action === 'urgent-toggle') {
             const id = input.dataset.id;
-            if (input.checked) this._urgentSelected.add(id);
-            else this._urgentSelected.delete(id);
-            const submitBtn = this.querySelector('.ep-urgent-submit');
-            if (submitBtn) submitBtn.disabled = this._urgentSelected.size === 0;
+            if (input.checked) {
+                this._urgentSelected.add(id);
+                // Parallel-slot rule: picking one workshop at a given date+time
+                // auto-deselects any other workshop starting at that same instant.
+                const calls = this._skillMatchedOpenCalls();
+                const picked = calls.find(c => c.id === id);
+                if (picked?.sessionTime) {
+                    for (const c of calls) {
+                        if (c.id !== id && c.date === picked.date && c.sessionTime === picked.sessionTime) {
+                            this._urgentSelected.delete(c.id);
+                        }
+                    }
+                }
+            } else {
+                this._urgentSelected.delete(id);
+            }
+            this.render();
             return;
         }
         if (input?.dataset?.action === 'toggle-day-off') {

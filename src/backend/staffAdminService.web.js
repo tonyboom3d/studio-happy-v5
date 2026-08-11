@@ -47,6 +47,7 @@ import {
 } from 'backend/schedulingEngine.js';
 import {
     loadVacationsOverlappingRangeByEmployee,
+    loadVacationsForEmployee,
     listAllVacations,
     saveVacation as saveVacationRow,
     deleteVacation as deleteVacationRow,
@@ -1060,6 +1061,12 @@ export const manualAssign = webMethod(Permissions.SiteMember, async (dateKey, wo
 
     const target = await wixData.get('Dashboard_Roles', employeeId, SA).catch(() => null);
     if (!target) throw new Error('NOT_FOUND: העובד/ת לא נמצא/ה.');
+
+    const approvedVacations = await loadVacationsForEmployee(employeeId);
+    const onVacation = approvedVacations.some(v => v.startDate <= dateKey && dateKey <= v.endDate);
+    if (onVacation) {
+        throw new Error(`CONFLICT: לא ניתן לשבץ את ${target.displayName || 'העובד/ת'} בתאריך זה — יש לו/ה חופשה מאושרת ביום זה.`);
+    }
 
     const board = await buildBoard(dateKey, dateKey, { consistent: true });
     const alreadyAssigned = typeIds.filter(id => board.days[dateKey]?.types?.[id]?.assignedEmployeeIds.includes(employeeId));

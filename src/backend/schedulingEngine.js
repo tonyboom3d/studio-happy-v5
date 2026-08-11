@@ -196,6 +196,7 @@ async function loadBookingsSessions(fromKey, toKey, serviceIdToTypeId) {
                     dateKey,
                     typeId,
                     startIso: new Date(slot.startDate).toISOString(),
+                    endIso: slot.endDate ? new Date(slot.endDate).toISOString() : null,
                 });
             }
         } catch (err) {

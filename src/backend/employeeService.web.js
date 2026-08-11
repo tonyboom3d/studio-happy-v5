@@ -197,6 +197,72 @@ function resolveWorkshopEnd(order, slotsByService) {
     return null;
 }
 
+/** Converts a Wix media URL (wix:image://…) to a browser-displayable HTTPS thumbnail URL. */
+function convertWixImageUrl(wixUrl, width = 200, height = 200, quality = 75) {
+    if (!wixUrl) return null;
+    const raw = String(wixUrl).trim();
+    if (!raw) return null;
+    if (raw.startsWith('http') || raw.startsWith('data:')) return raw;
+    const match = raw.match(/wix:image:\/\/v1\/([^/]+)/);
+    if (match && match[1]) {
+        return `https://static.wixstatic.com/media/${match[1]}/v1/fill/w_${width},h_${height},q_${quality}/${match[1]}`;
+    }
+    return null;
+}
+
+function parseProductSnapshot(raw) {
+    if (!raw) return null;
+    if (typeof raw === 'string') {
+        try { return JSON.parse(raw); } catch { return null; }
+    }
+    return raw;
+}
+
+/** Employee-safe sketch thumbnails (small + full-size) grouped by orderId — no status/internal fields. */
+async function loadSketchImagesByOrderId(orderIds) {
+    const byOrderId = {};
+    if (!orderIds.length) return byOrderId;
+    const result = await wixData.query('SketchSelections')
+        .hasSome('orderId', orderIds)
+        .limit(1000)
+        .find(SA)
+        .catch(() => ({ items: [] }));
+    const sels = (result.items || []).filter(s => !s.cancelledAt);
+
+    const productIds = [...new Set(sels.map(s => s.productId).filter(Boolean))];
+    const productImageById = {};
+    if (productIds.length) {
+        const productsResult = await wixData.query('bookingProducts')
+            .hasSome('_id', productIds)
+            .limit(1000)
+            .find(SA)
+            .catch(() => ({ items: [] }));
+        for (const p of (productsResult.items || [])) {
+            productImageById[p._id] = String(p?.image || '').trim() || null;
+        }
+    }
+
+    for (const sel of sels) {
+        const snapshot = parseProductSnapshot(sel.productSnapshot);
+        const candidates = [
+            sel.sketchImage,
+            sel.imageUrl,
+            snapshot?.imageUrl,
+            snapshot?.image,
+            productImageById[sel.productId],
+        ];
+        let thumb = null, full = null;
+        for (const url of candidates) {
+            const converted = convertWixImageUrl(url, 220, 220, 75);
+            if (converted) { thumb = converted; full = convertWixImageUrl(url, 1200, 1200, 90); break; }
+        }
+        if (!thumb) continue;
+        if (!byOrderId[sel.orderId]) byOrderId[sel.orderId] = [];
+        byOrderId[sel.orderId].push({ id: sel._id, thumb, full: full || thumb });
+    }
+    return byOrderId;
+}
+
 /**
  * Workshop details for the employee's SCHEDULED dates: paid, non-cancelled
  * WorkshopOrders whose workshopStart falls on one of those dates.
@@ -250,8 +316,10 @@ async function loadScheduledWorkshopDetails(scheduledSubmissions) {
             });
         }
     }
+    const sketchesByOrderId = await loadSketchImagesByOrderId(orderIds);
 
     return relevant.map(order => ({
+        orderId: order._id,
         date: toDateKey(order.workshopStart),
         workshopStart: order.workshopStart,
         workshopEnd: resolveWorkshopEnd(order, slotsByService),
@@ -263,6 +331,7 @@ async function loadScheduledWorkshopDetails(scheduledSubmissions) {
         quantity: (order.adults || 0) + (order.children || 0),
         customerNotes: order.customerNotes || '',
         participants: participantsByOrderId[order._id] || [],
+        sketches: sketchesByOrderId[order._id] || [],
     })).sort((a, b) => new Date(a.workshopStart) - new Date(b.workshopStart));
 }
 

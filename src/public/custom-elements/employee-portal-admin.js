@@ -1365,6 +1365,30 @@ function renderMessageForm(ce, d, message, prefill) {
         </div>`;
 }
 
+/** True when date ranges [aStart,aEnd] and [bStart,bEnd] (YYYY-MM-DD strings) overlap. */
+function dateRangesOverlap(aStart, aEnd, bStart, bEnd) {
+    if (bStart && aEnd < bStart) return false;
+    if (bEnd && aStart > bEnd) return false;
+    return true;
+}
+
+function renderVacationFilters(ce, d) {
+    const f = ce._vacationFilter || { employeeId: '', month: '', from: '', to: '' };
+    const employees = (d.employees || []).slice().sort((a, b) => a.displayName.localeCompare(b.displayName, 'he'));
+    const empOptions = `<option value="">כל העובדים</option>` + employees.map(e =>
+        `<option value="${esc(e.id)}" ${f.employeeId === e.id ? 'selected' : ''}>${esc(e.displayName)}</option>`).join('');
+    const hasFilter = !!(f.employeeId || f.month || f.from || f.to);
+    return `<div class="epa-panel">
+        <div class="epa-form">
+            <div><label>עובד/ת</label><select id="epaVFilterEmp" data-action="admin-vacation-filter">${empOptions}</select></div>
+            <div><label>חודש</label><input type="month" id="epaVFilterMonth" data-action="admin-vacation-filter" value="${esc(f.month)}"></div>
+            <div><label>מתאריך</label><input type="date" id="epaVFilterFrom" data-action="admin-vacation-filter" value="${esc(f.from)}"></div>
+            <div><label>עד תאריך</label><input type="date" id="epaVFilterTo" data-action="admin-vacation-filter" value="${esc(f.to)}"></div>
+        </div>
+        ${hasFilter ? `<div class="epa-inline" style="margin-top:8px"><button type="button" class="epa-btn" data-action="admin-vacation-filter-clear">איפוס סינון</button></div>` : ''}
+    </div>`;
+}
+
 function renderVacationsPage(ce, d) {
     const head = `<div class="epa-page-head"><div><h2>חופשות</h2><p>חופשות מאושרות ופטורות מדרישת הגשה — ובקשות חופש ממתינות לאישור מעובדים</p></div>
         ${ce._vacationsData ? `<button class="epa-btn primary" data-action="admin-new-vacation">חופשה חדשה +</button>` : ''}</div>`;
@@ -1372,7 +1396,20 @@ function renderVacationsPage(ce, d) {
         return `${head}<section class="epa-panel"><div class="ep-loading"><div class="ep-spinner"></div>טוען חופשות…</div></section>`;
     }
     const statusLabel = { APPROVED: 'מאושר', PENDING: 'ממתין', REJECTED: 'נדחה' };
-    const pending = ce._vacationsData.filter(v => v.status === 'PENDING');
+    const filters = renderVacationFilters(ce, d);
+
+    const f = ce._vacationFilter || { employeeId: '', month: '', from: '', to: '' };
+    const monthStart = f.month ? `${f.month}-01` : '';
+    const monthEnd = f.month ? `${f.month}-31` : '';
+    const rangeFrom = [f.from, monthStart].filter(Boolean).sort().pop() || '';
+    const rangeTo = [f.to, monthEnd].filter(Boolean).sort()[0] || '';
+    const matchesFilter = (v) => {
+        if (f.employeeId && v.employeeId !== f.employeeId) return false;
+        if ((rangeFrom || rangeTo) && !dateRangesOverlap(v.startDate, v.endDate, rangeFrom, rangeTo)) return false;
+        return true;
+    };
+
+    const pending = ce._vacationsData.filter(v => v.status === 'PENDING' && matchesFilter(v));
     const pendingSection = pending.length ? `
         <section class="epa-panel">
             <div class="epa-panel-title"><h3>בקשות ממתינות (${pending.length})</h3></div>
@@ -1391,7 +1428,8 @@ function renderVacationsPage(ce, d) {
                 </tbody>
             </table></div>
         </section>` : '';
-    const rows = ce._vacationsData.filter(v => v.status !== 'PENDING').slice().sort((a, b) => b.startDate.localeCompare(a.startDate)).map(v => `
+    const filtered = ce._vacationsData.filter(v => v.status !== 'PENDING' && matchesFilter(v));
+    const rows = filtered.slice().sort((a, b) => b.startDate.localeCompare(a.startDate)).map(v => `
         <tr class="epa-row-click" data-action="admin-edit-vacation" data-vacation="${esc(v.id)}">
             <td>${esc(v.employeeName)}</td>
             <td>${fmtDate(v.startDate)} – ${fmtDate(v.endDate)}</td>
@@ -1399,11 +1437,11 @@ function renderVacationsPage(ce, d) {
             <td><span class="epa-badge ${v.status === 'APPROVED' ? 'ok' : 'miss'}">${statusLabel[v.status] || esc(v.status)}</span></td>
             <td><button class="epa-btn danger" data-action="admin-delete-vacation" data-vacation="${esc(v.id)}">מחיקה</button></td>
         </tr>`).join('');
-    return `${head}${pendingSection}
+    return `${head}${filters}${pendingSection}
         <section class="epa-panel">
-            <div class="epa-panel-title"><h3>כל החופשות (${ce._vacationsData.length})</h3></div>
+            <div class="epa-panel-title"><h3>חופשות (${filtered.length})</h3></div>
             <div class="epa-table-wrap"><table class="epa-table"><thead><tr><th>עובד/ת</th><th>טווח תאריכים</th><th>הערות</th><th>סטטוס</th><th></th></tr></thead>
-                <tbody>${rows || '<tr><td colspan="5" class="ep-empty">אין חופשות מוגדרות</td></tr>'}</tbody>
+                <tbody>${rows || '<tr><td colspan="5" class="ep-empty">אין חופשות התואמות את הסינון</td></tr>'}</tbody>
             </table></div>
         </section>`;
 }
@@ -1505,6 +1543,15 @@ function renderModal(ce, d) {
 // ---------------------------------------------------------------------------
 
 export function handleAdminChange(ce, input) {
+    if (input?.dataset?.action === 'admin-vacation-filter') {
+        ce._vacationFilter = ce._vacationFilter || { employeeId: '', month: '', from: '', to: '' };
+        if (input.id === 'epaVFilterEmp') ce._vacationFilter.employeeId = input.value;
+        if (input.id === 'epaVFilterMonth') ce._vacationFilter.month = input.value;
+        if (input.id === 'epaVFilterFrom') ce._vacationFilter.from = input.value;
+        if (input.id === 'epaVFilterTo') ce._vacationFilter.to = input.value;
+        ce.render();
+        return true;
+    }
     if (input?.classList?.contains('epaAutoEmp')) {
         ce._autoAssignSelected = ce._autoAssignSelected || [];
         if (input.checked) {
@@ -2060,6 +2107,10 @@ export function handleAdminClick(ce, action, target) {
             return true;
         case 'admin-new-vacation':
             ce._adminModal = { type: 'vacation', id: null };
+            ce.render();
+            return true;
+        case 'admin-vacation-filter-clear':
+            ce._vacationFilter = { employeeId: '', month: '', from: '', to: '' };
             ce.render();
             return true;
         case 'admin-edit-vacation':

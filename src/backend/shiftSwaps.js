@@ -30,7 +30,9 @@ import {
     loadWorkshopTypeMap,
     publishSchedulingUpdate,
 } from 'backend/schedulingEngine.js';
-import { sendEmployeeTemplateMessage, sendEmployeeTemplateToManagers } from 'backend/employeeTemplates.js';
+import { enqueueNotification, enqueueManagerNotification, flushOutbox, PRIORITY } from 'backend/notificationOutbox.js';
+import { maybeSuppressForPendingBacklog } from 'backend/pendingItemsQuery.js';
+import { maybeSuppressManagerNotification } from 'backend/managerPendingQuery.js';
 
 const SA = { suppressAuth: true };
 const SAC = { suppressAuth: true, consistentRead: true };
@@ -189,14 +191,25 @@ export async function createSwapRequest(role, submissionId, targetEmployeeId) {
     await wixData.insert('ShiftSwapRequests', swap, SA);
 
     if (target.phone) {
-        await sendEmployeeTemplateMessage('employee_swap_request_target', target.phone, {
-            requesterName: swap.requesterName,
-            workshopName: swap.workshopName,
-            date: formatDateHe(swap.dateKey),
-            startTime: swap.startTime,
-            endTime: swap.endTime,
-            swapLink: `${SWAP_URL}?token=${swap.token}`,
-        }).catch(err => console.error('[shiftSwaps] target WhatsApp failed:', err?.message || err));
+        const suppressed = await maybeSuppressForPendingBacklog(target);
+        if (!suppressed) {
+            await enqueueNotification({
+                actionKey: 'employee_swap_request_target',
+                recipientId: target._id,
+                recipientPhone: target.phone,
+                priority: PRIORITY.NORMAL,
+                entityKey: `swap-request:${swap.token}`,
+                vars: {
+                    requesterName: swap.requesterName,
+                    workshopName: swap.workshopName,
+                    date: formatDateHe(swap.dateKey),
+                    startTime: swap.startTime,
+                    endTime: swap.endTime,
+                    swapLink: `${SWAP_URL}?token=${swap.token}`,
+                },
+            }).catch(err => console.error('[shiftSwaps] target WhatsApp failed:', err?.message || err));
+        }
+        await flushOutbox({ force: true }).catch(err => console.error('[shiftSwaps] flushOutbox failed:', err?.message || err));
     } else {
         console.warn(`[shiftSwaps] target role ${target._id} has no phone — swap request created without WhatsApp`);
     }
@@ -243,10 +256,12 @@ export async function getSwapRequestForViewer(token) {
     return { viewer, ...publicSwapView(swap) };
 }
 
-async function notify(role, actionKey, vars) {
+async function notify(role, actionKey, vars, entityKey = null) {
     if (!role?.phone) { console.warn(`[shiftSwaps] role ${role?._id} has no phone — skipping WhatsApp`); return; }
-    await sendEmployeeTemplateMessage(actionKey, role.phone, vars).catch(err =>
-        console.error('[shiftSwaps] WhatsApp failed:', err?.message || err));
+    await enqueueNotification({
+        actionKey, recipientId: role._id, recipientPhone: role.phone, priority: PRIORITY.NORMAL, entityKey, vars,
+    }).catch(err => console.error('[shiftSwaps] WhatsApp failed:', err?.message || err));
+    await flushOutbox({ force: true }).catch(err => console.error('[shiftSwaps] flushOutbox failed:', err?.message || err));
 }
 
 /**
@@ -282,7 +297,7 @@ export async function respondToSwapAsTarget(viewerRole, token, accept) {
         date: formatDateHe(swap.dateKey),
         workshopName: swap.workshopName,
     });
-    await sendEmployeeTemplateToManagers('manager_swap_pending_approval', {
+    await enqueueManagerNotification('manager_swap_pending_approval', {
         requesterName: swap.requesterName,
         targetName: swap.targetEmployeeName,
         workshopName: swap.workshopName,
@@ -290,7 +305,8 @@ export async function respondToSwapAsTarget(viewerRole, token, accept) {
         startTime: swap.startTime,
         endTime: swap.endTime,
         swapLink: `${SWAP_URL}?token=${swap.token}`,
-    });
+    }, { priority: PRIORITY.NORMAL, entityKey: `swap-manager:${swap.token}`, shouldSuppress: maybeSuppressManagerNotification });
+    await flushOutbox({ force: true }).catch(err => console.error('[shiftSwaps] flushOutbox failed:', err?.message || err));
 
     console.log(`[shiftSwaps] target accepted: id=${swap._id}`);
     return { ok: true, status: SWAP_STATUS.PENDING_MANAGER };

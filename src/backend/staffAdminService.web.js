@@ -58,7 +58,8 @@ import {
     assertTemplateUse,
     mapTemplateRow,
 } from 'backend/whatsappTemplates.js';
-import { sendEmployeeTemplateMessage, EMPLOYEE_ACTION_KEYS } from 'backend/employeeTemplates.js';
+import { EMPLOYEE_ACTION_KEYS } from 'backend/employeeTemplates.js';
+import { enqueueNotification, flushOutbox, PRIORITY } from 'backend/notificationOutbox.js';
 
 const PORTAL_URL = 'https://www.studiohappy.art/employee-portal';
 
@@ -1026,17 +1027,27 @@ export const sendAvailabilityNudge = webMethod(Permissions.SiteMember, async (ro
         const target = await wixData.get('Dashboard_Roles', id, SA).catch(() => null);
         if (!target?.phone) { failures.push({ id, reason: 'אין מספר טלפון' }); continue; }
         try {
-            await sendEmployeeTemplateMessage('employee_availability_nudge', target.phone, {
-                displayName: target.displayName || '',
-                monthKey: monthKey || 'הקרוב',
-                portalLink: PORTAL_URL,
+            const result = await enqueueNotification({
+                actionKey: 'employee_availability_nudge',
+                recipientId: target._id,
+                recipientPhone: target.phone,
+                priority: PRIORITY.NORMAL,
+                entityKey: `nudge:${monthKey || 'הקרוב'}:${target._id}`,
+                vars: {
+                    displayName: target.displayName || '',
+                    monthKey: monthKey || 'הקרוב',
+                    portalLink: PORTAL_URL,
+                },
             });
-            sent++;
+            if (result.queued) sent++;
+            else failures.push({ id, reason: result.reason === 'duplicate' ? 'כבר נשלחה תזכורת לאחרונה' : 'שגיאת שליחה' });
         } catch (err) {
             failures.push({ id, reason: err?.message || 'שגיאת שליחה' });
         }
     }
-    console.log(`[staffAdminService] sendAvailabilityNudge: sent=${sent} failures=${failures.length} by ${role._id}`);
+    // Bulk manager action — flush right away (rate limit/quiet hours still apply per recipient).
+    await flushOutbox({ force: true }).catch(err => console.error('[staffAdminService] flushOutbox failed:', err?.message || err));
+    console.log(`[staffAdminService] sendAvailabilityNudge: queued=${sent} failures=${failures.length} by ${role._id}`);
     return { ok: true, sent, failures };
 });
 
@@ -1134,13 +1145,16 @@ export const manualAssign = webMethod(Permissions.SiteMember, async (dateKey, wo
         const dow = new Intl.DateTimeFormat('he-IL', { weekday: 'long' }).format(new Date(Date.UTC(y, m - 1, d)));
         const names = toAssign.map(id => typesById[id]?.name || 'סדנה');
         const detail = names.length ? `בסדנת ${names.join(', ')} ` : '';
-        await sendEmployeeTemplateMessage('employee_shift_assigned', target.phone, {
-            displayName: target.displayName || '',
-            detail,
-            dow,
-            date: `${d}.${m}.${y}`,
-            portalLink: PORTAL_URL,
-        }).catch(err => console.error('[staffAdminService] assign notify failed:', err?.message || err));
+        await enqueueNotification({
+            actionKey: 'employee_shift_assigned',
+            recipientId: target._id,
+            recipientPhone: target.phone,
+            priority: PRIORITY.NORMAL,
+            entityKey: `shift:${dateKey}:${target._id}`,
+            digest: { line: `${dow}, ${d}.${m}.${y} — ${names.join(', ') || 'סדנה'}`, kind: 'assigned' },
+            vars: { displayName: target.displayName || '', detail, dow, date: `${d}.${m}.${y}`, portalLink: PORTAL_URL },
+        });
+        await flushOutbox({ force: true }).catch(err => console.error('[staffAdminService] flushOutbox failed:', err?.message || err));
     }
 
     console.log(`[staffAdminService] manualAssign: ${employeeId} → ${dateKey}/[${toAssign.join(',')}] workType=${normalizedWorkType} by ${role._id}`);
@@ -1172,24 +1186,42 @@ export const cancelAssignment = webMethod(Permissions.SiteMember, async (dateKey
     if (target?.phone) {
         const [y, m, d] = dateKey.split('-').map(Number);
         const dow = new Intl.DateTimeFormat('he-IL', { weekday: 'long' }).format(new Date(Date.UTC(y, m - 1, d)));
-        await sendEmployeeTemplateMessage('employee_shift_cancelled', target.phone, {
-            displayName: target.displayName || '',
-            dow,
-            date: `${d}.${m}.${y}`,
-            portalLink: PORTAL_URL,
-        }).catch(err => console.error('[staffAdminService] cancel notify failed:', err?.message || err));
+        await enqueueNotification({
+            actionKey: 'employee_shift_cancelled',
+            recipientId: target._id,
+            recipientPhone: target.phone,
+            priority: PRIORITY.NORMAL,
+            entityKey: `shift:${dateKey}:${target._id}`,
+            digest: { line: `${dow}, ${d}.${m}.${y}`, kind: 'cancelled' },
+            vars: { displayName: target.displayName || '', dow, date: `${d}.${m}.${y}`, portalLink: PORTAL_URL },
+        });
     }
 
-    // Freed capacity: rerun the engine for that day (auto-fill / offers / open call).
+    // Freed capacity: rerun the engine for that day (auto-fill / offers / open call);
+    // its own flushOutbox handles both this cancellation and any resulting refill notice.
     await runScheduling(dateKey, dateKey);
+    await flushOutbox({ force: true }).catch(err => console.error('[staffAdminService] flushOutbox failed:', err?.message || err));
     console.log(`[staffAdminService] cancelAssignment: ${employeeId} @ ${dateKey}/${workshopTypeId} by ${role._id}`);
     return { ok: true };
 });
 
-async function notifyShiftChange(target, actionKey, vars) {
+async function notifyShiftChange(target, actionKey, vars, dateKey) {
     if (!target?.phone) return;
-    await sendEmployeeTemplateMessage(actionKey, target.phone, vars)
-        .catch(err => console.error('[staffAdminService] notify failed:', err?.message || err));
+    const isApproval = actionKey === 'employee_submission_approved';
+    const isRejection = actionKey === 'employee_submission_rejected';
+    const digest = dateKey && (isApproval || isRejection)
+        ? { line: `${vars.dow || ''}, ${vars.date || ''}`, kind: isApproval ? 'assigned' : 'cancelled' }
+        : null;
+    await enqueueNotification({
+        actionKey,
+        recipientId: target._id,
+        recipientPhone: target.phone,
+        priority: PRIORITY.NORMAL,
+        entityKey: dateKey ? `shift:${dateKey}:${target._id}` : null,
+        digest,
+        vars,
+    });
+    await flushOutbox({ force: true }).catch(err => console.error('[staffAdminService] flushOutbox failed:', err?.message || err));
 }
 
 async function cancelAssignmentsForSubmission(submissionId) {
@@ -1293,7 +1325,7 @@ export const approveSubmission = webMethod(Permissions.SiteMember, async (submis
             date: `${d}.${m}.${y}`,
             duty,
             portalLink: PORTAL_URL,
-        });
+        }, dateKey);
     }
 
     console.log(`[staffAdminService] approveSubmission: ${submissionId} by ${role._id}`);
@@ -1328,7 +1360,7 @@ export const rejectSubmission = webMethod(Permissions.SiteMember, async (submiss
             dow,
             date: `${d}.${m}.${y}`,
             portalLink: PORTAL_URL,
-        });
+        }, dateKey);
     }
 
     console.log(`[staffAdminService] rejectSubmission: ${submissionId} by ${role._id}`);

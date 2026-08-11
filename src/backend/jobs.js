@@ -4,6 +4,7 @@ import { runScheduling, processOfferEscalation } from 'backend/schedulingEngine.
 import { processDeadlineReminders, processConfirmations } from 'backend/shiftConfirmations.js';
 import { fetchEcomOrderByCheckoutId, reconcileEcomOrder } from 'backend/orderReconciliation.js';
 import { ensureHolidaysSynced } from 'backend/holidayService.js';
+import { flushOutbox } from 'backend/notificationOutbox.js';
 
 const SA = { suppressAuth: true, suppressHooks: true };
 
@@ -42,7 +43,10 @@ export async function processSchedulingHourly() {
  * 1) availability-deadline WhatsApp reminders (fires only at the configured
  *    Israel hour on the configured days before the deadline),
  * 2) 2-stage pre-workshop confirmation loop + escalation to managers,
- * 3) auto-close time entries whose clock-out was forgotten (>12h open).
+ * 3) auto-close time entries whose clock-out was forgotten (>12h open),
+ * 4) notification outbox flush — safety net for any queued messages that
+ *    weren't force-flushed inline by the action that created them (e.g.
+ *    rate-limited/deferred-past-quiet-hours rows from earlier in the hour).
  */
 export async function processAlertsHourly() {
     const holidays = await ensureHolidaysSynced().catch(err => {
@@ -65,8 +69,13 @@ export async function processAlertsHourly() {
         return { closed: 0 };
     });
 
-    console.log('[jobs] processAlertsHourly:', JSON.stringify({ holidays, reminders, confirmations, staleEntries }));
-    return { holidays, reminders, confirmations, staleEntries };
+    const outbox = await flushOutbox().catch(err => {
+        console.error('[jobs] flushOutbox failed:', err?.message || err);
+        return { sent: 0, merged: 0, skipped: 0 };
+    });
+
+    console.log('[jobs] processAlertsHourly:', JSON.stringify({ holidays, reminders, confirmations, staleEntries, outbox }));
+    return { holidays, reminders, confirmations, staleEntries, outbox };
 }
 
 /** Closes TimeEntries left open longer than TIME_ENTRY_MAX_OPEN_HOURS. */

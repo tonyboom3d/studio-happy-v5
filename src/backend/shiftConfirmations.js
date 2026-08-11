@@ -28,7 +28,9 @@ import {
 } from 'backend/schedulingEngine.js';
 import { getRolePermissionValue } from 'backend/staffRoles.js';
 import { loadVacationsOverlappingRangeByEmployee } from 'backend/vacations.js';
-import { sendEmployeeTemplateMessage, sendEmployeeTemplateToManagers } from 'backend/employeeTemplates.js';
+import { enqueueNotification, enqueueManagerNotification, flushOutbox, PRIORITY } from 'backend/notificationOutbox.js';
+import { maybeSuppressForPendingBacklog } from 'backend/pendingItemsQuery.js';
+import { maybeSuppressManagerNotification } from 'backend/managerPendingQuery.js';
 
 const SA = { suppressAuth: true };
 const SAC = { suppressAuth: true, consistentRead: true };
@@ -136,17 +138,25 @@ export async function processDeadlineReminders(now = new Date()) {
     for (const role of roles) {
         const quota = evaluatePeriodQuota(role, settings, period, subsByEmployee[role._id] || [], vacationsByEmployee[role._id]);
         if (quota.met || !role.phone) continue;
-        await sendEmployeeTemplateMessage('employee_availability_deadline_reminder', role.phone, {
-            displayName: role.displayName || '',
-            daysUntilDeadline,
-            periodStart: period.start,
-            periodEnd: period.end,
-            quotaSubmitted: quota.submitted,
-            quotaRequired: quota.required,
-            portalLink: PORTAL_URL,
+        await enqueueNotification({
+            actionKey: 'employee_availability_deadline_reminder',
+            recipientId: role._id,
+            recipientPhone: role.phone,
+            priority: PRIORITY.LOW,
+            entityKey: `deadline-reminder:${period.start}:${daysUntilDeadline}:${role._id}`,
+            vars: {
+                displayName: role.displayName || '',
+                daysUntilDeadline,
+                periodStart: period.start,
+                periodEnd: period.end,
+                quotaSubmitted: quota.submitted,
+                quotaRequired: quota.required,
+                portalLink: PORTAL_URL,
+            },
         }).catch(err => console.error('[shiftConfirmations] reminder failed:', err?.message || err));
         sent++;
     }
+    await flushOutbox({ force: true }).catch(err => console.error('[shiftConfirmations] flushOutbox failed:', err?.message || err));
     console.log(`[shiftConfirmations] processDeadlineReminders: window=${period.start}..${period.end} sent=${sent}`);
     return { sent, window: { start: period.start, end: period.end }, daysUntilDeadline };
 }
@@ -192,14 +202,25 @@ async function sendConfirmationMessage(role, assignment, workshopStart, stage) {
         console.warn(`[shiftConfirmations] role ${role?._id} has no phone — confirmation not sent`);
         return false;
     }
-    await sendEmployeeTemplateMessage('employee_preworkshop_confirm', role.phone, {
-        prefix,
-        displayName: role?.displayName || '',
-        workshopName: assignment.workshopName || 'סדנה',
-        date: formatDateHe(dateKey),
-        timeSuffix,
-        confirmLink: link,
-    }).catch(err => console.error('[shiftConfirmations] confirmation send failed:', err?.message || err));
+    // Stage 2 (24h before) stays urgent and always individual regardless of backlog.
+    const suppressed = stage === 1 && await maybeSuppressForPendingBacklog(role);
+    if (!suppressed) {
+        await enqueueNotification({
+            actionKey: 'employee_preworkshop_confirm',
+            recipientId: role._id,
+            recipientPhone: role.phone,
+            priority: stage === 2 ? PRIORITY.URGENT : PRIORITY.NORMAL,
+            entityKey: `confirm:${assignment._id}:stage${stage}`,
+            vars: {
+                prefix,
+                displayName: role?.displayName || '',
+                workshopName: assignment.workshopName || 'סדנה',
+                date: formatDateHe(dateKey),
+                timeSuffix,
+                confirmLink: link,
+            },
+        }).catch(err => console.error('[shiftConfirmations] confirmation send failed:', err?.message || err));
+    }
     return true;
 }
 
@@ -257,18 +278,22 @@ export async function processConfirmations(now = new Date()) {
             report.stage2++;
         } else if (state === CONFIRMATION_STATE.PENDING && stage >= 2 && hoursUntil <= alerts.escalateHoursBeforeWorkshop) {
             await wixData.update('ShiftAssignments', { ...a, confirmationState: CONFIRMATION_STATE.ESCALATED }, SA);
-            await sendEmployeeTemplateToManagers('manager_confirmation_escalation', {
+            await enqueueManagerNotification('manager_confirmation_escalation', {
                 displayName: role?.displayName || 'עובד/ת',
                 workshopName: a.workshopName || '',
                 date: formatDateHe(dateKey),
                 time: formatTimeHe(workshopStart),
-            }, rolesById);
+            }, {
+                priority: PRIORITY.URGENT, entityKey: `escalation:${a._id}`, rolesById,
+                shouldSuppress: maybeSuppressManagerNotification,
+            });
             report.escalated++;
         }
     }
 
     if (report.stage1 || report.stage2 || report.escalated) {
         await publishSchedulingUpdate('confirmations', report);
+        await flushOutbox({ force: true }).catch(err => console.error('[shiftConfirmations] flushOutbox failed:', err?.message || err));
         console.log('[shiftConfirmations] processConfirmations:', JSON.stringify(report));
     }
     return report;
@@ -308,11 +333,11 @@ export async function getShiftDetailsByToken(token) {
 }
 
 /**
- * Applies the employee's response. Decline cancels the assignment, frees the
- * submission, reruns the engine for that day and alerts managers.
+ * Applies a confirm/decline decision to an already-loaded assignment row.
+ * Decline cancels the assignment, frees the submission, reruns the engine
+ * for that day and (optionally) alerts managers.
  */
-export async function respondByToken(token, accept, notes) {
-    const a = await findByToken(token);
+async function applyConfirmationResponse(a, accept, notes, { notifyManagers = true } = {}) {
     if (!a || a.status === ASSIGNMENT_STATUS.CANCELLED) {
         throw new Error('NOT_FOUND: הקישור אינו תקף או שהמשמרת בוטלה.');
     }
@@ -351,13 +376,32 @@ export async function respondByToken(token, accept, notes) {
             await wixData.update('AvailabilitySubmissions', { ...sub, status: SUBMISSION_STATUS.SUBMITTED }, SA);
         }
     }
-    await sendEmployeeTemplateToManagers('manager_employee_declined_confirmation', {
-        employeeName,
-        workshopName: a.workshopName || '',
-        date: formatDateHe(dateKey),
-        notesLine: cleanNotes ? `\nהערה: ${cleanNotes}` : '',
-    }, rolesById);
+    if (notifyManagers) {
+        await enqueueManagerNotification('manager_employee_declined_confirmation', {
+            employeeName,
+            workshopName: a.workshopName || '',
+            date: formatDateHe(dateKey),
+            notesLine: cleanNotes ? `\nהערה: ${cleanNotes}` : '',
+        }, { priority: PRIORITY.URGENT, entityKey: `decline:${a._id}`, rolesById });
+        await flushOutbox({ force: true }).catch(err => console.error('[shiftConfirmations] flushOutbox failed:', err?.message || err));
+    }
     await runScheduling(dateKey, dateKey);
     console.log(`[shiftConfirmations] declined: ${a._id} (${employeeName})`);
     return { ok: true, state: CONFIRMATION_STATE.DECLINED };
+}
+
+/** Employee's own response, resolved from their per-shift confirmation token. */
+export async function respondByToken(token, accept, notes) {
+    const a = await findByToken(token);
+    return applyConfirmationResponse(a, accept, notes);
+}
+
+/**
+ * Manager resolves an ESCALATED confirmation directly (from the manager
+ * pending-items page) — same effect as the employee's own response, minus
+ * the "employee declined" manager alert (the manager is the one acting).
+ */
+export async function resolveEscalationByManager(assignmentId, accept, notes) {
+    const a = await wixData.get('ShiftAssignments', assignmentId, SA).catch(() => null);
+    return applyConfirmationResponse(a, accept, notes, { notifyManagers: false });
 }

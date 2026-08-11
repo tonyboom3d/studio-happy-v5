@@ -43,8 +43,7 @@ employee-portal * { box-sizing: border-box; }
 .ep-banner.info { background: #eff6ff; border: 1px solid #bfdbfe; color: #1e40af; }
 .ep-banner.warn { background: #fffbeb; border: 1px solid #fde68a; color: #92400e; }
 .ep-banner.closed { background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; }
-.ep-grid { display: grid; grid-template-columns: 1fr 340px; gap: 16px; margin-top: 16px; align-items: start; }
-@media (max-width: 860px) { .ep-grid { grid-template-columns: 1fr; } }
+.ep-grid { display: grid; grid-template-columns: 1fr; gap: 16px; margin-top: 16px; align-items: start; }
 .ep-card { background: rgba(255,255,255,.98); border: 1px solid #e2e8f0; border-radius: 17px; padding: 16px; box-shadow: 0 6px 22px rgba(15,23,42,.045); transition: box-shadow .18s ease,border-color .18s ease; }
 .ep-card:hover { border-color: #dbeafe; box-shadow: 0 9px 26px rgba(30,64,175,.065); }
 .ep-card h2 { margin: 0 0 10px; font-size: 15px; font-weight: 700; display: inline-flex; align-items: center; gap: 4px; }
@@ -295,7 +294,41 @@ employee-portal * { box-sizing: border-box; }
 .ep-msg-car-dots { display: inline-flex; gap: 5px; }
 .ep-msg-car-dot { width: 8px; height: 8px; border-radius: 50%; border: none; background: #d1d5db; cursor: pointer; padding: 0; transition: background .15s, transform .15s; }
 .ep-msg-car-dot.active { background: #2563eb; transform: scale(1.25); }
-@media (max-width:700px) { .ep-wrap { padding: 12px; } .ep-tabs { display:flex; overflow-x:auto; } .ep-tabbtn { flex:1; white-space:nowrap; padding-inline:11px; } }
+.ep-header-icons { display: flex; gap: 8px; align-items: center; flex-shrink: 0; }
+.ep-icon-btn { position: relative; width: 38px; height: 38px; border-radius: 11px; border: 1px solid #dbeafe; background: #fff; font-size: 16px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; transition: background .14s,transform .14s; }
+.ep-icon-btn:hover { background: #eff6ff; transform: translateY(-1px); }
+.ep-icon-badge { position: absolute; top: -6px; inset-inline-start: -6px; min-width: 17px; height: 17px; padding: 0 4px; border-radius: 999px; background: #dc2626; color: #fff; font-size: 10.5px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; line-height: 1; box-shadow: 0 0 0 2px #fff; }
+.ep-user-menu { position: relative; flex-shrink: 0; }
+.ep-user-menu-btn { border: 1px solid #e2e8f0; background: #fff; color: #374151; border-radius: 8px; width: 26px; height: 26px; cursor: pointer; font-size: 13px; line-height: 1; padding: 0; transition: background .12s; }
+.ep-user-menu-btn:hover { background: #f1f5f9; }
+.ep-user-dropdown { position: absolute; top: calc(100% + 10px); inset-inline-start: 0; z-index: 10002; background: #fff; border: 1px solid #e2e8f0; border-radius: 14px; box-shadow: 0 14px 34px rgba(15,23,42,.14); padding: 14px 16px; width: 300px; max-width: calc(100vw - 24px); }
+.ep-menu-backdrop { position: fixed; inset: 0; z-index: 10000; background: transparent; }
+.ep-day-dots { display: none; }
+.ep-row-menu { position: relative; display: inline-flex; }
+.ep-row-menu-btn { border: 1px solid #e2e8f0; background: #fff; color: #374151; border-radius: 8px; width: 26px; height: 26px; cursor: pointer; font-size: 15px; line-height: 1; padding: 0; transition: background .12s; }
+.ep-row-menu-btn:hover { background: #f1f5f9; }
+.ep-row-menu-pop { position: absolute; top: calc(100% + 4px); inset-inline-end: 0; z-index: 10002; background: #fff; border: 1px solid #e2e8f0; border-radius: 11px; box-shadow: 0 10px 26px rgba(15,23,42,.14); padding: 6px; display: flex; flex-direction: column; gap: 5px; min-width: 132px; }
+.ep-row-menu-pop button { width: 100%; text-align: right; white-space: nowrap; }
+@media (max-width:700px) {
+  .ep-wrap { padding: 12px; }
+  .ep-tabs { display:flex; overflow-x:auto; width:100%; }
+  .ep-tabbtn { flex:1; white-space:nowrap; padding-inline:11px; }
+  .ep-subtabs { width: 100%; overflow-x: visible; }
+  .ep-subtabs .ep-tabbtn { flex: 1 1 0; padding-inline: 4px; font-size: 12px; overflow: hidden; text-overflow: ellipsis; }
+  .ep-header { padding: 12px 13px; gap: 10px; }
+  .ep-quota { width: 100%; }
+  .ep-quota-chip { flex: 1; min-width: 0; padding: 6px 8px; }
+  .ep-cal-head { flex-wrap: wrap; gap: 8px; }
+  .ep-cal-title { font-size: 15px; }
+  .ep-cal-grid { gap: 2px; }
+  .ep-dow { font-size: 11px; padding: 2px 0; }
+  .ep-day { min-height: 48px; padding: 3px 2px; border-radius: 8px; text-align: center; font-size: 12.5px; }
+  .ep-day-ws, .ep-day-hol, .ep-day-sketch, .ep-day-badge, .ep-day-note { display: none; }
+  .ep-day-num { display: block; }
+  .ep-day-dots { display: flex; justify-content: center; align-items: center; gap: 3px; margin-top: 3px; flex-wrap: wrap; min-height: 6px; }
+  .ep-day-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+  .ep-day-plus { position: static; display: inline-flex; align-items: center; justify-content: center; width: 15px; height: 15px; margin-top: 3px; font-size: 11px; line-height: 1; }
+}
 ${ADMIN_STYLE}
 `;
 
@@ -462,6 +495,10 @@ class EmployeePortal extends HTMLElement {
         this._urgentSummary = null;             // bulk-claim result array shown after submission
         this._swapCandidates = null;            // { submissionId, candidates: [{id,name}] } for the swap modal
         this._calLegendOpen = false;            // calendar color legend accordion
+        this._statusGuideOpen = false;          // status guide accordion
+        this._msgPopup = null;                  // 'personal' | 'system' — messages popup open in top bar
+        this._userMenuOpen = false;             // user details dropdown in header
+        this._rowMenuOpen = null;               // submission id whose record-options dropdown is open
         this._tipTimer = null;
         this._tipEl = null;
         this._tipPinned = null;
@@ -1056,11 +1093,6 @@ class EmployeePortal extends HTMLElement {
                     ${this._selected.size ? `<div class="ep-card" style="margin-top:16px">${this._renderSelectionPanel()}</div>` : ''}
                     <div class="ep-card" style="margin-top:16px">${this._renderShiftsCard()}</div>
                 </div>
-                <div>
-                    <div class="ep-card">${this._renderMessageCard('personal', 'הודעות אישיות')}</div>
-                    <div class="ep-card" style="margin-top:16px">${this._renderMessageCard('system', 'הודעות מערכת')}</div>
-                    <div class="ep-card" style="margin-top:16px">${this._renderUserProfile()}</div>
-                </div>
             </div>`;
 
         let tabContent;
@@ -1088,6 +1120,8 @@ class EmployeePortal extends HTMLElement {
             ${this._urgentSummary ? this._renderUrgentSummary() : ''}
             ${this._sketchGalleryOrderId ? this._renderSketchGalleryModal() : ''}
             ${this._lightboxImage ? this._renderLightbox() : ''}
+            ${this._msgPopup ? this._renderMessagesPopup() : ''}
+            ${(this._userMenuOpen || this._rowMenuOpen) ? `<div class="ep-menu-backdrop" data-action="close-menus"></div>` : ''}
             <div class="ep-toast" id="epToast"></div>
         `;
         this._restoreToast();
@@ -1168,9 +1202,42 @@ class EmployeePortal extends HTMLElement {
             </div>`;
     }
 
-    /** Separate card per message scope (personal / system). */
-    _renderMessageCard(scope, title) {
-        return `<h2 class="ep-msg-card-title">${escapeHtml(title)}</h2>${this._renderMessagesTab(scope)}`;
+    /** Messages popup opened from the top-bar icons (personal / system). */
+    _renderMessagesPopup() {
+        const scope = this._msgPopup;
+        const title = scope === 'system' ? 'הודעות מערכת' : 'הודעות אישיות';
+        return `<div class="epa-modal-backdrop" data-action="close-msg-popup">
+            <div class="epa-modal" role="dialog" aria-modal="true" aria-label="${title}">
+                <div class="epa-modal-head"><h2>${scope === 'system' ? '🔔' : '✉️'} ${title}</h2><button class="epa-modal-close" data-action="close-msg-popup" aria-label="סגירה">×</button></div>
+                ${this._renderMessagesTab(scope)}
+            </div>
+        </div>`;
+    }
+
+    _msgSeenKey() {
+        const u = this._data?.user || {};
+        return `epSeenMsgs:${u.id || u.email || u.name || 'anon'}`;
+    }
+
+    _msgId(m) {
+        return m.id || `${m.title}|${m.createdAt || ''}`;
+    }
+
+    _getSeenMsgs() {
+        try { return new Set(JSON.parse(localStorage.getItem(this._msgSeenKey()) || '[]')); } catch (_) { return new Set(); }
+    }
+
+    _markMsgsSeen(scope) {
+        try {
+            const seen = this._getSeenMsgs();
+            for (const m of this._msgListFor(scope)) seen.add(this._msgId(m));
+            localStorage.setItem(this._msgSeenKey(), JSON.stringify([...seen].slice(-500)));
+        } catch (_) { /* storage unavailable */ }
+    }
+
+    _unreadCount(scope) {
+        const seen = this._getSeenMsgs();
+        return this._msgListFor(scope).filter(m => !seen.has(this._msgId(m))).length;
     }
 
     _renderStatusGuide() {
@@ -1180,8 +1247,16 @@ class EmployeePortal extends HTMLElement {
             { key: 'SCHEDULED', show: true },
             { key: 'PENDING', show: true },
         ];
-        return `<div class="ep-status-guide">${items.map(({ key }) =>
-            `<div><b>${STATUS_LABELS[key]}:</b> ${STATUS_HINTS[key]}</div>`).join('')}</div>`;
+        const open = this._statusGuideOpen;
+        const body = open
+            ? `<div class="ep-status-guide" style="margin-bottom:0;border:none;border-top:1px solid #e2e8f0;border-radius:0">${items.map(({ key }) =>
+                `<div><b>${STATUS_LABELS[key]}:</b> ${STATUS_HINTS[key]}</div>`).join('')}</div>`
+            : '';
+        return `<div class="ep-cal-acc ${open ? 'open' : ''}" style="margin-bottom:12px">
+            <button type="button" class="ep-cal-acc-head" data-action="toggle-status-guide" aria-expanded="${open}">
+                <span>מדריך סטטוסים</span>
+                <span class="ep-cal-acc-chevron" aria-hidden="true">${open ? '▲' : '▼'}</span>
+            </button>${body}</div>`;
     }
 
     _renderMessagesTab(scope) {
@@ -1390,6 +1465,12 @@ class EmployeePortal extends HTMLElement {
                 ${m.quota.met ? 'המכסה השבועית הושלמה ✓' : 'משמרות שהוגשו (שבועי)'}
             </div>`;
         }).join('');
+        const msgIcon = (scope, icon, label) => {
+            const unread = this._unreadCount(scope);
+            return `<button type="button" class="ep-icon-btn" data-action="open-msg-popup" data-scope="${scope}" aria-label="${label}" title="${label}">
+                <span aria-hidden="true">${icon}</span>${unread ? `<span class="ep-icon-badge">${unread > 99 ? '99+' : unread}</span>` : ''}
+            </button>`;
+        };
         return `
             <div class="ep-header">
                 <div class="ep-user">
@@ -1398,6 +1479,14 @@ class EmployeePortal extends HTMLElement {
                         <div class="ep-user-name">${escapeHtml(u.name || '')}${u.isTrainee ? '<span class="ep-tag">חניכה</span>' : ''}</div>
                         <div class="ep-user-role">${escapeHtml(u.roleLabel || '')}</div>
                     </div>
+                    <div class="ep-user-menu">
+                        <button type="button" class="ep-user-menu-btn" data-action="toggle-user-menu" aria-label="פרטי משתמש" aria-expanded="${this._userMenuOpen}">${this._userMenuOpen ? '▴' : '▾'}</button>
+                        ${this._userMenuOpen ? `<div class="ep-user-dropdown">${this._renderUserProfile()}</div>` : ''}
+                    </div>
+                </div>
+                <div class="ep-header-icons">
+                    ${msgIcon('personal', '✉️', 'הודעות אישיות')}
+                    ${msgIcon('system', '🔔', 'הודעות מערכת')}
                 </div>
                 <div class="ep-quota">${chips}</div>
             </div>`;
@@ -1544,51 +1633,68 @@ class EmployeePortal extends HTMLElement {
             const holidayShort = holidayEntry?.mode === 'SHORT';
 
             let cls = 'ep-day', badge = '', clickable = false;
+            const dots = [];         // colored dots shown instead of text on mobile
+            const detailLines = [];  // full day details shown in the "+" tooltip
+            const addDot = (color, line) => { dots.push(color); if (line) detailLines.push(line); };
             if (vacation?.status === 'APPROVED') {
                 cls += ' vacation';
                 badge = `<span class="ep-day-badge ep-badge-vacation">יום חופש</span>`;
+                addDot('#ec4899', 'יום חופש מאושר');
             } else if (vacation?.status === 'PENDING') {
                 cls += ' vac-pending';
                 badge = `<span class="ep-day-badge ep-badge-vac-pending">ממתין לאישור</span>`;
+                addDot('#a855f7', 'בקשת יום חופש — ממתינה לאישור');
             } else if (isPast) cls += ' disabled';
             else if (holidayClosed && !sub) {
                 cls += ' blocked holiday-closed';
                 badge = `<span class="ep-day-badge ep-badge-blocked">סגור — ${escapeHtml(holidayEntry.name || 'חג')}</span>`;
+                addDot('#ef4444', `סגור — ${holidayEntry.name || 'חג'}`);
             } else if (sub) {
                 cls += sub.status === 'SCHEDULED' ? ' scheduled' : ' submitted';
+                const subRange = `${sub.startTime || ''}–${sub.endTime || ''}`;
                 if (sub.status === 'SCHEDULED') {
                     badge = `<span class="ep-day-badge ep-badge-scheduled">משובץ</span>`;
+                    addDot('#10b981', `משובץ: ${subRange}`);
                 } else if (sub.status === 'STANDBY') {
                     badge = `<span class="ep-day-badge ep-badge-waitlist">בהמתנה</span>`;
+                    addDot('#f59e0b', `בהמתנה (רשימת המתנה): ${subRange}`);
                 } else {
                     badge = `<span class="ep-day-badge ep-badge-standby">הוגש</span>`;
+                    addDot('#6366f1', `הוגש: ${subRange}`);
                 }
             } else if (blocked) {
                 cls += ' blocked';
                 badge = `<span class="ep-day-badge ep-badge-blocked">חסום</span>`;
+                addDot('#ef4444', 'חסום להגשה');
             } else if (!monthOpen) {
                 cls += ' disabled';
             } else if (skillState === 'NO_SKILL') {
                 cls += ' noskill';
                 badge = `<span class="ep-day-badge ep-badge-noskill">לא בהכשרה</span>`;
+                addDot('#d1d5db', 'אין הכשרה מתאימה ליום זה');
             } else if (fullLocked) {
                 cls += ' full locked';
                 badge = `<span class="ep-day-badge ep-badge-full">מאויש</span>`;
+                addDot('#9ca3af', 'מאויש — אין מקומות פנויים');
             } else if (skillState === 'WAITLIST') {
                 clickable = true;
                 cls += ' waitlist';
                 badge = `<span class="ep-day-badge ep-badge-waitlist">רשימת המתנה</span>`;
+                addDot('#fbbf24', 'רשימת המתנה — ניתן להגיש');
                 if (selected) cls += ' selected';
             } else {
                 clickable = true;
-                if (full) { cls += ' full'; badge = `<span class="ep-day-badge ep-badge-full">מאויש</span>`; }
-                if (promoted) { cls += ' promoted'; badge = `<span class="ep-day-badge ep-badge-promoted">דרושים ⭐</span>`; }
+                if (full) { cls += ' full'; badge = `<span class="ep-day-badge ep-badge-full">מאויש</span>`; addDot('#9ca3af', 'מאויש — ניתן להגיש רק לאחר השלמת המכסה'); }
+                if (promoted) { cls += ' promoted'; badge = `<span class="ep-day-badge ep-badge-promoted">דרושים ⭐</span>`; addDot('#f59e0b', 'דרושים עובדים ⭐'); }
                 if (holidayShort) {
                     cls += ' holiday-short';
                     badge = `<span class="ep-day-badge ep-badge-short">מקוצר ${escapeHtml(holidayEntry.shortStart || '')}–${escapeHtml(holidayEntry.shortEnd || '')}</span>`;
+                    addDot('#fbbf24', `יום מקוצר: ${holidayEntry.shortStart || ''}–${holidayEntry.shortEnd || ''}`);
                 }
                 if (selected) cls += ' selected';
             }
+
+            if (holidayByDate[dateKey] && !holidayClosed) addDot('#b45309', `חג: ${holidayByDate[dateKey]}`);
 
             const dayWorkshops = this._data.dayStates?.[dateKey]?.workshops || [];
             const wsList = dayWorkshops.length
@@ -1599,7 +1705,14 @@ class EmployeePortal extends HTMLElement {
                     return `<span>${escapeHtml(w.name)}${countLabel}${timesLabel}</span>`;
                 }).join('')}</div>`
                 : '';
-            const wsPlus = dayWorkshops.length ? this._renderDayWorkshopsPlus(dayWorkshops) : '';
+            const wsLines = dayWorkshops.flatMap(w => {
+                const ranges = (w.timeRanges && w.timeRanges.length)
+                    ? w.timeRanges
+                    : (w.times || []).map(start => ({ start, end: null }));
+                return ranges.map(r => `${w.name} — ${formatTimeRangeHe(r.start, r.end)}`);
+            });
+            if (wsLines.length) addDot('#2563eb', null);
+            detailLines.push(...wsLines);
             const filterActive = this._workshopFilter && this._workshopFilter.size > 0;
             if (filterActive && !dayWorkshops.some(w => this._workshopFilter.has(w.id))) cls += ' ep-day-filtered';
 
@@ -1607,20 +1720,28 @@ class EmployeePortal extends HTMLElement {
             const noteIcon = note
                 ? `<span class="ep-day-note ep-tip-trigger" data-tip="${escapeHtml(note.message)}">✉</span>`
                 : '';
+            if (note) addDot('#0ea5e9', `✉ ${note.message}`);
 
             // Only ever present for employees holding the sketchSewingSkill flag (server-gated).
             const sketchDuty = (this._data.sketchSewingDays || {})[dateKey];
             const sketchDutyRow = sketchDuty
                 ? `<div class="ep-day-sketch">🧵 תפירת סקיצות ${escapeHtml(sketchDuty.startTime || '')}–${escapeHtml(sketchDuty.endTime || '')}</div>`
                 : '';
+            if (sketchDuty) addDot('#7c3aed', `🧵 תפירת סקיצות ${sketchDuty.startTime || ''}–${sketchDuty.endTime || ''}`);
+
+            const dotsHtml = dots.length
+                ? `<span class="ep-day-dots">${dots.slice(0, 5).map(c => `<span class="ep-day-dot" style="background:${c}"></span>`).join('')}</span>`
+                : '';
+            const dayPlus = detailLines.length ? this._renderDayPlus(detailLines) : '';
 
             cells += `<div class="${cls}" ${clickable ? `data-action="toggle-day" data-date="${dateKey}"` : ''}>
                 <span class="ep-day-num">${day}</span>
                 ${noteIcon}
-                ${wsPlus}
+                ${dayPlus}
                 ${holidayByDate[dateKey] ? `<span class="ep-day-hol">${escapeHtml(holidayByDate[dateKey])}</span>` : ''}
                 ${wsList}
                 ${sketchDutyRow}
+                ${dotsHtml}
                 ${badge}
             </div>`;
         }
@@ -1793,16 +1914,10 @@ class EmployeePortal extends HTMLElement {
             </button>${body}</div>`;
     }
 
-    /** "+" icon on calendar days — hover (desktop) / tap (mobile) shows every workshop's start–end time that day. */
-    _renderDayWorkshopsPlus(dayWorkshops) {
-        const lines = dayWorkshops.flatMap(w => {
-            const ranges = (w.timeRanges && w.timeRanges.length)
-                ? w.timeRanges
-                : (w.times || []).map(start => ({ start, end: null }));
-            return ranges.map(r => `${w.name} — ${formatTimeRangeHe(r.start, r.end)}`);
-        });
+    /** "+" icon on calendar days — hover (desktop) / tap (mobile) shows all details for that day. */
+    _renderDayPlus(lines) {
         if (!lines.length) return '';
-        return `<span class="ep-day-plus ep-tip-trigger" tabindex="0" data-tip="${escapeHtml(lines.join('\n'))}" aria-label="פרטי סדנאות היום">+</span>`;
+        return `<span class="ep-day-plus ep-tip-trigger" tabindex="0" data-tip="${escapeHtml(lines.join('\n'))}" aria-label="פרטי היום">+</span>`;
     }
 
     _sectionHelp(text) {
@@ -1944,7 +2059,7 @@ class EmployeePortal extends HTMLElement {
             </div>`).join('');
 
         return `
-            <div class="ep-tabs" style="margin-top:0">
+            <div class="ep-tabs ep-subtabs" style="margin-top:0">
                 <button class="ep-tabbtn ${subTab === 'myShifts' ? 'active' : ''}" data-action="subtab-myshifts">המשמרות שלי (${myShifts.length})${this._tabHelp('משמרות שכבר שובצו לכם או שנמצאות ברשימת המתנה — ניתן לבקש שינוי, מחיקה או החלפה.')}</button>
                 <button class="ep-tabbtn ${subTab === 'mySubmissions' ? 'active' : ''}" data-action="subtab-mysubmissions">ההגשות שלי (${mySubmissions.length})${this._tabHelp('משמרות שהגשתם וטרם אושרו או שובצו — ממתינות לאישור מנהל/ת או לשיבוץ אוטומטי.')}</button>
                 ${showVacationsTab ? `<button class="ep-tabbtn ${subTab === 'myVacations' ? 'active' : ''}" data-action="subtab-myvacations">החופשות שלי (${myVacations.length})${this._tabHelp('ימי חופש מאושרים או ממתינים לאישור בחודש שמוצג בלוח השנה.')}</button>` : ''}
@@ -2105,10 +2220,11 @@ class EmployeePortal extends HTMLElement {
         const tKey = todayKey();
         const withinEditWindow = s.status === 'SUBMITTED' && s.editableUntil && new Date(s.editableUntil).getTime() > Date.now();
         let actions = '';
+        let pendingChip = '';
         if (pendingReq) {
-            actions = `<span class="ep-status PENDING">🕐 בקשת ${pendingReq.type === 'DELETE' ? 'מחיקה' : 'שינוי'} בטיפול</span>`;
+            pendingChip = `<span class="ep-status PENDING">🕐 בקשת ${pendingReq.type === 'DELETE' ? 'מחיקה' : 'שינוי'} בטיפול</span>`;
         } else if (pendingSwap) {
-            actions = `<span class="ep-swap-pending">🔄 החלפה עם ${escapeHtml(pendingSwap.targetEmployeeName || 'עובד/ת')} בטיפול</span>`;
+            pendingChip = `<span class="ep-swap-pending">🔄 החלפה עם ${escapeHtml(pendingSwap.targetEmployeeName || 'עובד/ת')} בטיפול</span>`;
         } else if (s.date > tKey) {
             if (s.status === 'SUBMITTED' && withinEditWindow) {
                 actions = `
@@ -2139,6 +2255,12 @@ class EmployeePortal extends HTMLElement {
         const clickAttrs = clickable
             ? `class="ep-board-item clickable ${s.autoApproved ? 'auto-approved' : ''}" data-action="view-day-workshops" data-date="${escapeHtml(s.date)}" title="לחצו לצפייה בסדנאות ביום זה"`
             : `class="ep-board-item ${s.autoApproved ? 'auto-approved' : ''}"`;
+        const actionsMenu = actions
+            ? `<span class="ep-row-menu">
+                    <button type="button" class="ep-row-menu-btn" data-action="toggle-row-menu" data-id="${escapeHtml(s.id)}" aria-label="אפשרויות" aria-expanded="${this._rowMenuOpen === s.id}">⋮</button>
+                    ${this._rowMenuOpen === s.id ? `<span class="ep-row-menu-pop">${actions}</span>` : ''}
+                </span>`
+            : '';
         return `
             <div ${clickAttrs}>
                 ${clickable ? '<span class="ep-shift-chevron" aria-hidden="true">◂</span>' : ''}
@@ -2152,7 +2274,8 @@ class EmployeePortal extends HTMLElement {
                     ${workTypeChip}
                     ${lockBadge}
                     <span class="ep-status ${escapeHtml(s.status)} ep-tip-trigger" data-tip="${escapeHtml(STATUS_HINTS[s.status] || '')}">${STATUS_LABELS[s.status] || s.status}</span>
-                    ${actions}
+                    ${pendingChip}
+                    ${actionsMenu}
                 </div>
             </div>`;
     }
@@ -2603,7 +2726,37 @@ class EmployeePortal extends HTMLElement {
                 this._urgentSummary = null;
                 this.render();
                 return;
+            case 'open-msg-popup':
+                this._msgPopup = target.dataset.scope || 'personal';
+                this._markMsgsSeen(this._msgPopup);
+                this.render();
+                return;
+            case 'close-msg-popup':
+                if (target.classList.contains('epa-modal-backdrop') && e.target !== target) return;
+                this._msgPopup = null;
+                this.render();
+                return;
+            case 'toggle-user-menu':
+                this._userMenuOpen = !this._userMenuOpen;
+                this._rowMenuOpen = null;
+                this.render();
+                return;
+            case 'toggle-row-menu': {
+                const id = target.dataset.id;
+                this._rowMenuOpen = this._rowMenuOpen === id ? null : id;
+                this._userMenuOpen = false;
+                this.render();
+                return;
+            }
+            case 'close-menus':
+                this._userMenuOpen = false;
+                this._rowMenuOpen = null;
+                this.render();
+                return;
         }
+
+        // Any real action launched from inside a record-options dropdown closes it.
+        if (this._rowMenuOpen && target.closest('.ep-row-menu-pop')) this._rowMenuOpen = null;
 
         switch (action) {
             case 'month-prev':
@@ -2618,6 +2771,10 @@ class EmployeePortal extends HTMLElement {
                 break;
             case 'toggle-cal-legend':
                 this._calLegendOpen = !this._calLegendOpen;
+                this.render();
+                break;
+            case 'toggle-status-guide':
+                this._statusGuideOpen = !this._statusGuideOpen;
                 this.render();
                 break;
             case 'clear-ws-filter':

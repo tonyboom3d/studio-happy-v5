@@ -21,7 +21,8 @@ import {
     SHIFT_MAX_TIME,
 } from 'backend/availabilityRules.js';
 import { publishSchedulingUpdate, loadSettings } from 'backend/schedulingEngine.js';
-import { sendEmployeeTemplateToManagers } from 'backend/employeeTemplates.js';
+import { enqueueManagerNotification, flushOutbox, PRIORITY } from 'backend/notificationOutbox.js';
+import { maybeSuppressManagerNotification } from 'backend/managerPendingQuery.js';
 
 const SA = { suppressAuth: true };
 const SAC = { suppressAuth: true, consistentRead: true };
@@ -148,10 +149,13 @@ export async function createShiftChangeRequest(role, submissionId, payload) {
         notes,
         token,
     );
-    const sentCount = await sendEmployeeTemplateToManagers('manager_shift_change_request', vars).catch(err => {
+    const sentCount = await enqueueManagerNotification('manager_shift_change_request', vars, {
+        priority: PRIORITY.NORMAL, entityKey: `change-request:${token}`, shouldSuppress: maybeSuppressManagerNotification,
+    }).catch(err => {
         console.error('[shiftChangeRequests] notifyManagers failed:', err?.message || err);
         return 0;
     });
+    await flushOutbox({ force: true }).catch(err => console.error('[shiftChangeRequests] flushOutbox failed:', err?.message || err));
 
     console.log(`[shiftChangeRequests] request created: submission=${submissionId} type=${type} notified=${sentCount}`);
     return { ok: true };

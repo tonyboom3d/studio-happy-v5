@@ -19,7 +19,9 @@ import { publish } from 'wix-realtime-backend';
 import { SUBMISSION_STATUS, toDateKey, normalizeSettings, DEFAULT_WORK_TYPE } from 'backend/availabilityRules.js';
 import { refIds, getRolePermissionValue } from 'backend/staffRoles.js';
 import { sendGreenApiWhatsApp } from 'backend/whatsappService.jsw';
-import { sendEmployeeTemplateMessage, sendEmployeeTemplateToManagers } from 'backend/employeeTemplates.js';
+import { enqueueNotification, enqueueManagerNotification, flushOutbox, PRIORITY } from 'backend/notificationOutbox.js';
+import { maybeSuppressForPendingBacklog } from 'backend/pendingItemsQuery.js';
+import { maybeSuppressManagerNotification } from 'backend/managerPendingQuery.js';
 
 const SA = { suppressAuth: true };
 const SAC = { suppressAuth: true, consistentRead: true };
@@ -429,12 +431,22 @@ async function ensureShortageHandled(dateKey, t, board) {
         }, SA);
         const role = board.rolesById[next.employeeId];
         if (role?.phone) {
-            await sendEmployeeTemplateMessage('employee_shift_offer_standby', role.phone, {
-                displayName: role?.displayName || '',
-                workshopName: t.name,
-                date: formatDateHe(dateKey),
-                portalLink: PORTAL_URL,
-            });
+            const suppressed = await maybeSuppressForPendingBacklog(role);
+            if (!suppressed) {
+                await enqueueNotification({
+                    actionKey: 'employee_shift_offer_standby',
+                    recipientId: role._id,
+                    recipientPhone: role.phone,
+                    priority: PRIORITY.NORMAL,
+                    entityKey: `offer:${dateKey}:${t.typeId}:${role._id}`,
+                    vars: {
+                        displayName: role?.displayName || '',
+                        workshopName: t.name,
+                        date: formatDateHe(dateKey),
+                        portalLink: PORTAL_URL,
+                    },
+                });
+            }
         } else {
             console.warn(`[schedulingEngine] role ${role?._id} has no phone — skipping WhatsApp`);
         }
@@ -450,10 +462,13 @@ async function ensureShortageHandled(dateKey, t, board) {
         submissionId: null,
         expiresAt: null,
     }, SA);
-    await sendEmployeeTemplateToManagers('manager_open_call', {
+    await enqueueManagerNotification('manager_open_call', {
         workshopName: t.name,
         date: formatDateHe(dateKey),
-    }, board.rolesById);
+    }, {
+        priority: PRIORITY.URGENT, entityKey: `open-call:${dateKey}:${t.typeId}`, rolesById: board.rolesById,
+        shouldSuppress: maybeSuppressManagerNotification,
+    });
     board.offers.push(call);
     return call;
 }
@@ -524,6 +539,19 @@ export async function runScheduling(fromKey, toKey) {
                 if (t.activeCount > 0) t.activeCount--;
                 shortage--;
                 report.assigned++;
+
+                const role = board.rolesById[sub.employeeId];
+                if (role?.phone) {
+                    await enqueueNotification({
+                        actionKey: 'employee_shift_assigned',
+                        recipientId: role._id,
+                        recipientPhone: role.phone,
+                        priority: PRIORITY.NORMAL,
+                        entityKey: `shift:${dateKey}:${role._id}`,
+                        digest: { line: `${formatDateHe(dateKey)} — ${t.name}`, kind: 'assigned' },
+                        vars: { displayName: role.displayName || '', portalLink: PORTAL_URL },
+                    });
+                }
             }
 
             if (shortage > 0) {
@@ -536,6 +564,9 @@ export async function runScheduling(fromKey, toKey) {
 
     if (report.assigned || report.offers || report.openCalls) {
         await publishSchedulingUpdate('engine-run', report);
+    }
+    if (report.assigned) {
+        await flushOutbox({ force: true }).catch(err => console.error('[schedulingEngine] flushOutbox failed:', err?.message || err));
     }
     console.log(`[schedulingEngine] runScheduling ${fromKey}..${toKey}:`, JSON.stringify(report));
     return report;
@@ -624,6 +655,19 @@ export async function runSchedulingForEmployees(fromKey, toKey, employeeIds) {
                     t.assignedCount++;
                     t.assignedEmployeeIds.push(sub.employeeId);
                     rep.shifts.push({ dateKey, workshopTypeId: t.typeId, workshopName: t.name, status: 'ASSIGNED' });
+
+                    const role = board.rolesById[sub.employeeId];
+                    if (role?.phone) {
+                        await enqueueNotification({
+                            actionKey: 'employee_shift_assigned',
+                            recipientId: role._id,
+                            recipientPhone: role.phone,
+                            priority: PRIORITY.NORMAL,
+                            entityKey: `shift:${dateKey}:${role._id}`,
+                            digest: { line: `${formatDateHe(dateKey)} — ${t.name}`, kind: 'assigned' },
+                            vars: { displayName: role.displayName || '', portalLink: PORTAL_URL },
+                        });
+                    }
                 } else {
                     rep.shifts.push({ dateKey, workshopTypeId: t.typeId, workshopName: t.name, status: 'FULL' });
                 }
@@ -639,7 +683,10 @@ export async function runSchedulingForEmployees(fromKey, toKey, employeeIds) {
 
     const employees = ids.map(id => reportByEmployee[id]);
     const totalAssigned = employees.reduce((sum, e) => sum + e.shifts.filter(s => s.status === 'ASSIGNED').length, 0);
-    if (totalAssigned) await publishSchedulingUpdate('manual-batch-scheduling', { fromKey, toKey, employeeIds: ids });
+    if (totalAssigned) {
+        await publishSchedulingUpdate('manual-batch-scheduling', { fromKey, toKey, employeeIds: ids });
+        await flushOutbox({ force: true }).catch(err => console.error('[schedulingEngine] flushOutbox failed:', err?.message || err));
+    }
 
     console.log(`[schedulingEngine] runSchedulingForEmployees ${fromKey}..${toKey} employees=${ids.join(',')}: assigned=${totalAssigned}`);
     return { ok: true, fromKey, toKey, employees };
@@ -751,15 +798,21 @@ export async function processBookingPaid(order) {
             report.assigned++;
             const role = board.rolesById[sub.employeeId];
             if (role?.phone) {
-                await sendEmployeeTemplateMessage('employee_auto_assigned_booking', role.phone, {
-                    displayName: role?.displayName || '',
-                    workshopName: t.name,
-                    date: formatDateHe(dateKey),
-                    portalLink: PORTAL_URL,
+                await enqueueNotification({
+                    actionKey: 'employee_auto_assigned_booking',
+                    recipientId: role._id,
+                    recipientPhone: role.phone,
+                    priority: PRIORITY.NORMAL,
+                    entityKey: `shift:${dateKey}:${role._id}`,
+                    digest: { line: `${formatDateHe(dateKey)} — ${t.name}`, kind: 'assigned' },
+                    vars: { displayName: role?.displayName || '', portalLink: PORTAL_URL },
                 });
             } else {
                 console.warn(`[schedulingEngine] role ${role?._id} has no phone — skipping WhatsApp`);
             }
+        }
+        if (report.assigned) {
+            await flushOutbox({ force: true }).catch(err => console.error('[schedulingEngine] flushOutbox failed:', err?.message || err));
         }
     } else {
         // Inside the confirmation window: one pending offer at a time (FIFO);
@@ -782,12 +835,20 @@ export async function processBookingPaid(order) {
             }, SA);
             const role = board.rolesById[first.employeeId];
             if (role?.phone) {
-                await sendEmployeeTemplateMessage('employee_confirm_request_shortnotice', role.phone, {
-                    displayName: role?.displayName || '',
-                    workshopName: t.name,
-                    date: formatDateHe(dateKey),
-                    hoursWindow: CONFIRM_WINDOW_HOURS,
-                    portalLink: PORTAL_URL,
+                // Short-notice confirmations stay urgent even with a backlog — always sent individually.
+                await enqueueNotification({
+                    actionKey: 'employee_confirm_request_shortnotice',
+                    recipientId: role._id,
+                    recipientPhone: role.phone,
+                    priority: PRIORITY.URGENT,
+                    entityKey: `offer:${dateKey}:${typeId}:${role._id}`,
+                    vars: {
+                        displayName: role?.displayName || '',
+                        workshopName: t.name,
+                        date: formatDateHe(dateKey),
+                        hoursWindow: CONFIRM_WINDOW_HOURS,
+                        portalLink: PORTAL_URL,
+                    },
                 });
             } else {
                 console.warn(`[schedulingEngine] role ${role?._id} has no phone — skipping WhatsApp`);

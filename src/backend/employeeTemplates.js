@@ -100,6 +100,22 @@ export const EMPLOYEE_ACTION_KEYS = {
         label: 'בקשת שינוי/מחיקת משמרת למנהלים',
         placeholders: ['employeeName', 'requestTypeLabel', 'date', 'existingStart', 'existingEnd', 'requestedLine', 'notesLine', 'reviewLink'],
     },
+    employee_shifts_digest: {
+        label: 'סיכום שיבוצים מרוכז (אוטומטי — נשלח במקום כמה הודעות בודדות)',
+        placeholders: ['displayName', 'count', 'shiftList', 'portalLink'],
+    },
+    manager_notifications_digest: {
+        label: 'סיכום התראות מרוכז למנהלים (אוטומטי)',
+        placeholders: ['count', 'itemList'],
+    },
+    employee_pending_items_alert: {
+        label: 'התראה על פריטים ממתינים לאישור (קישור מרוכז)',
+        placeholders: ['displayName', 'count', 'pendingLink'],
+    },
+    manager_pending_items_alert: {
+        label: 'התראה למנהלים על פריטים ממתינים לאישור (קישור מרוכז)',
+        placeholders: ['count', 'pendingLink'],
+    },
 };
 
 /** Replaces {{key}} tokens; unknown/missing vars render as empty string. */

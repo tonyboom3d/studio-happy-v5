@@ -78,10 +78,26 @@ const EMPLOYEE_TEMPLATE_SEEDS = {
 {{requestedLine}}
 {{notesLine}}
 לאישור/דחייה: {{reviewLink}}`,
+    employee_shifts_digest: `היי {{displayName}} 👋
+עדכון מרוכז על {{count}} שינויי שיבוץ:
+
+{{shiftList}}
+
+פרטים בפורטל העובדים: {{portalLink}}`,
+    manager_notifications_digest: `📋 סיכום {{count}} התראות ממתינות:
+
+{{itemList}}`,
+    employee_pending_items_alert: `היי {{displayName}} 👋
+יש לך {{count}} פריטים ממתינים לאישור (אישורי הגעה / הצעות / החלפות).
+לטיפול מרוכז בקישור אחד:
+{{pendingLink}}`,
+    manager_pending_items_alert: `📋 יש {{count}} בקשות ממתינות לאישור מנהל/ת.
+לטיפול מרוכז בקישור אחד:
+{{pendingLink}}`,
 };
 
 /**
- * Inserts (or optionally updates) all 20 employee-system WhatsApp templates
+ * Inserts (or optionally updates) all employee-system WhatsApp templates
  * into WhatsApp_Templates. Idempotent: skips rows that already exist unless
  * overwrite=true.
  *

@@ -54,7 +54,7 @@ function getServiceIdsGroupFor(serviceId) {
 
 // A parent can accompany up to 2 children (first child = shared "הורה+ילד"
 // candle/ticket, additional children up to this cap = "תוספת ילד").
-const CANDLES_MAX_CHILDREN_PER_ADULT = 2;
+const CANDLES_MAX_CHILDREN_PER_ADULT = 5;
 
 // "נר נוסף" — a candles-only add-on. Carries its own price (independent of
 // the "יחיד"/"ילד"/"תוספת ילד" ticket prices) and never occupies a Wix

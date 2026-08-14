@@ -10,7 +10,7 @@ import OrderSummarySection from '../components/booking/OrderSummarySection';
 import { submitBooking, subscribeToWix, notifyProgress, isWixEditorOrPreview } from '@/api/wixBridge';
 import { addLog } from '@/components/VersionLogger';
 
-const SESSION_TIMEOUT_MS = 8 * 60 * 1000; // 8 דקות
+const SESSION_TIMEOUT_MS = 10 * 60 * 1000; // 10 דקות
 
 export default function WorkshopBooking() {
   const navigate = useNavigate();

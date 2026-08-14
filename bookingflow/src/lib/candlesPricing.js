@@ -6,9 +6,9 @@
 // - Solo adult (no child): 1 seat, 1 candle, "יחיד" ticket.
 // - Parent+child pair (first child under an adult): 2 seats (1 "יחיד" +
 //   1 "ילד"), 1 shared candle, priced as "ילד".
-// - Extra child (2nd child under the same adult, up to MAX_CHILDREN_PER_ADULT):
+// - Extra child (additional children under the same adult, up to MAX_CHILDREN_PER_ADULT):
 //   1 seat ("תוספת ילד" ticket), 1 own candle, priced like a solo ticket.
-export const MAX_CHILDREN_PER_ADULT = 2;
+export const MAX_CHILDREN_PER_ADULT = 5;
 
 /**
  * @param {{ adults: number, children: number }} params

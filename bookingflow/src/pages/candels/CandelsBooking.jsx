@@ -15,7 +15,7 @@ import { computeCandlesCounts, computeCandlesPrice, getMaxExtraCandles, computeE
 // as Tufting's WorkshopBooking, with a cup-selection step instead of the
 // sketch-info step, and cup pricing folded into the order total/checkout
 // payload. Kept in its own file/route so the Tufting flow is never touched.
-const SESSION_TIMEOUT_MS = 8 * 60 * 1000; // 8 דקות
+const SESSION_TIMEOUT_MS = 10 * 60 * 1000; // 10 דקות
 
 export default function CandelsBooking() {
   const navigate = useNavigate();
@@ -138,7 +138,7 @@ export default function CandelsBooking() {
 
   // חישוב מספר יחידות (נרות): הילד הראשון תחת כל מבוגר מלווה = כרטיס הורה+ילד
   // (נר אחד), כל ילד נוסף תחת אותו מבוגר = "תוספת ילד". מבוגר אחד יכול ללוות
-  // עד 2 ילדים. מבוגר שלא מלווה ילדים = כרטיס יחיד (נר אחד).
+  // עד MAX_CHILDREN_PER_ADULT ילדים למבוגר. מבוגר שלא מלווה ילדים = כרטיס יחיד (נר אחד).
   const { soloAdults, parentChildPairs, extraChildren, totalCandles: baseCandles } = useMemo(
     () => computeCandlesCounts({ adults, children }),
     [adults, children]

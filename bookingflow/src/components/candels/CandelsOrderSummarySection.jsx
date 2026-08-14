@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useEffect } from 'react';
-import { Calendar, Clock, Users, Baby, Flame, ArrowLeft } from 'lucide-react';
+import { Calendar, Clock, Users, Baby, Flame, CupSoda, ArrowLeft } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { format } from 'date-fns';
 import { he } from 'date-fns/locale';
@@ -92,7 +92,10 @@ export default function CandelsOrderSummarySection({
       <div className="border-t border-[#e8e8e8] pt-3 space-y-2 text-base text-[#464646]">
         {soloAdults > 0 && (
           <div className="flex justify-between gap-3">
-            <span>{soloAdults} × כרטיס יחיד</span>
+            <span className="flex items-center gap-1.5">
+              <Users className="w-4 h-4" />
+              {soloAdults} × כרטיס יחיד
+            </span>
             <span className="font-medium tabular-nums">₪{soloAdults * soloUnitPrice}</span>
           </div>
         )}
@@ -125,7 +128,10 @@ export default function CandelsOrderSummarySection({
         )}
         {selectedCups.length > 0 && (
           <div className="flex justify-between gap-3">
-            <span>{selectedCups.reduce((sum, c) => sum + (c.quantity || 1), 0)} × כוס לנר</span>
+            <span className="flex items-center gap-1.5">
+              <CupSoda className="w-4 h-4" />
+              {selectedCups.reduce((sum, c) => sum + (c.quantity || 1), 0)} × כוס לנר
+            </span>
             <span className="font-medium tabular-nums">
               {cupsExtraTotal > 0 ? `₪${cupsExtraTotal}` : 'כלול במחיר'}
             </span>

@@ -61,8 +61,8 @@ const CANDLES_MAX_CHILDREN_PER_ADULT = 5;
 // Bookings seat. Run `listCandlesAddOns` from backend/TEST.web.js to find
 // the real addOnId/groupId per service, then fill them in below.
 const EXTRA_CANDLE_ADDON_BY_SERVICE = {
-    'eb8fec0e-5d04-48a3-a795-e3e8051d07da': { addOnId: '84fd7faa-aeee-4ea2-8b14-e966bf3f1848', groupId: 'c917292b-8fb9-4e0e-b181-fe14f3bf5f68', price: 210 }, // נרות אמצע שבוע
-    'f0f6e447-02d8-4808-80ba-3c380ce9eae8': { addOnId: '08b64e92-6b95-46b0-9e83-9d3762a98584', groupId: '637c0d34-fdc1-475e-8340-f75e3cc5266d', price: 250 }, // נרות סופ"ש
+    'eb8fec0e-5d04-48a3-a795-e3e8051d07da': { addOnId: '08b64e92-6b95-46b0-9e83-9d3762a98584', groupId: 'c917292b-8fb9-4e0e-b181-fe14f3bf5f68', price: 250 }, // נרות שבת — כרטיס יחיד ₪250
+    'f0f6e447-02d8-4808-80ba-3c380ce9eae8': { addOnId: '84fd7faa-aeee-4ea2-8b14-e966bf3f1848', groupId: '637c0d34-fdc1-475e-8340-f75e3cc5266d', price: 210 }, // נרות א'-ו' — כרטיס יחיד ₪210
 };
 
 const FIRST_ORDER_MIN_TICKETS = 2;

@@ -339,6 +339,8 @@ export default function CandelsParticipantsSection({
                 <Users className="w-3.5 h-3.5 shrink-0" />
                 <span>
                   סה״כ {seatsUsed} {seatsUsed === 1 ? 'משתתף' : 'משתתפים'} מגיעים לסדנה
+                  ({adults} {adults === 1 ? 'מבוגר' : 'מבוגרים'}
+                  {children > 0 && ` + ${children} ${children === 1 ? 'ילד' : 'ילדים'}`})
                 </span>
               </div>
               <p className="text-[12px] text-[#464646]/75 leading-relaxed pr-0.5">

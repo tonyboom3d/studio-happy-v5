@@ -20,10 +20,15 @@ export const MAX_CHILDREN_PER_ADULT = 2;
  * }}
  */
 export function computeCandlesCounts({ adults, children }) {
-  const accompanyingAdults = Math.min(adults, Math.ceil(children / MAX_CHILDREN_PER_ADULT));
-  const parentChildPairs = accompanyingAdults;
-  const extraChildren = children - accompanyingAdults;
-  const soloAdults = adults - accompanyingAdults;
+  // First child per adult → parent+child pair; second child under same adult → extra child.
+  const parentChildPairs = Math.min(adults, children);
+  const remainingChildren = children - parentChildPairs;
+  const maxExtraPerPairedAdult = MAX_CHILDREN_PER_ADULT - 1;
+  const extraChildren = Math.min(
+    remainingChildren,
+    parentChildPairs * maxExtraPerPairedAdult
+  );
+  const soloAdults = adults - parentChildPairs;
   const baseCandles = soloAdults + children;
 
   // Wix Bookings seats — every adult and every child occupies one seat,
@@ -38,7 +43,7 @@ export function computeCandlesCounts({ adults, children }) {
   const extraChildTickets = extraChildren;
 
   return {
-    accompanyingAdults,
+    accompanyingAdults: parentChildPairs,
     soloAdults,
     parentChildPairs,
     extraChildren,

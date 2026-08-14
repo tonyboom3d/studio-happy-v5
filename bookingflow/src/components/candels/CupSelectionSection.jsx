@@ -162,7 +162,7 @@ export default function CupSelectionSection({
           className="bg-[#5E2F88] hover:bg-[#7B3DB0] hover:scale-[1.02] text-white px-8 py-3 rounded-lg
                      transition-all duration-200 text-lg disabled:opacity-50"
         >
-          המשך לפרטים אישיים
+          המשך לסיכום
         </Button>
 
         <AnimatePresence>

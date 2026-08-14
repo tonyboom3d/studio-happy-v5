@@ -146,6 +146,8 @@ export default function CandelsOrderSummarySection({
               <Users className="w-4 h-4 shrink-0" />
               <span>
                 סה״כ {seatsUsed} {seatsUsed === 1 ? 'משתתף' : 'משתתפים'} מגיעים לסדנה
+                ({adults} {adults === 1 ? 'מבוגר' : 'מבוגרים'}
+                {children > 0 && ` + ${children} ${children === 1 ? 'ילד' : 'ילדים'}`})
               </span>
             </div>
             <p className="text-[13px] text-[#464646]/75 leading-relaxed">

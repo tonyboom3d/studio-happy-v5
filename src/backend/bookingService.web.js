@@ -575,10 +575,12 @@ export const createAndCheckout = webMethod(Permissions.Anyone, async (orderData)
     // טאפטינג: הורה+ילד = זוג אחד (לוגיקה קיימת ללא שינוי).
     let parentChildPairs, extraChildren, soloAdults, rugCount, baseCandles = 0, extraCandles = 0, extraCandlePrice = 0, extraCandleAddOnId = null, extraCandleGroupId = null;
     if (isCandles) {
-        const accompanyingAdults = Math.min(numAdults, Math.ceil(numChildren / CANDLES_MAX_CHILDREN_PER_ADULT));
-        parentChildPairs = accompanyingAdults;
-        extraChildren = numChildren - accompanyingAdults;
-        soloAdults = numAdults - accompanyingAdults;
+        const parentChildPairsCalc = Math.min(numAdults, numChildren);
+        const remainingChildren = numChildren - parentChildPairsCalc;
+        const maxExtraPerPairedAdult = CANDLES_MAX_CHILDREN_PER_ADULT - 1;
+        parentChildPairs = parentChildPairsCalc;
+        extraChildren = Math.min(remainingChildren, parentChildPairs * maxExtraPerPairedAdult);
+        soloAdults = numAdults - parentChildPairs;
         baseCandles = soloAdults + numChildren; // מספר נרות בסיס
 
         const extraCandleConfig = EXTRA_CANDLE_ADDON_BY_SERVICE[serviceId] || null;

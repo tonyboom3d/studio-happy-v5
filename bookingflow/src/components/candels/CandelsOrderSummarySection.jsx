@@ -97,7 +97,7 @@ export default function CandelsOrderSummarySection({
           <div className="flex justify-between gap-3">
             <span className="flex items-center gap-1.5">
               <Users className="w-4 h-4" />
-              {soloAdults} × כרטיס מבוגר
+              {soloAdults} × {soloAdults === 1 ? 'כרטיס מבוגר' : 'כרטיסי מבוגרים'}
             </span>
             <span className="font-medium tabular-nums">₪{soloAdults * soloUnitPrice}</span>
           </div>

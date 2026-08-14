@@ -94,15 +94,11 @@ export default function CandelsOrderSummarySection({
 
       {/* פירוט מחיר */}
       <div className="border-t border-[#e8e8e8] pt-3 space-y-2 text-base text-[#464646]">
-        {(soloAdults > 0 || parentChildPairs > 0 || extraChildren > 0) && (
-          <p className="text-[13px] font-medium text-[#464646]/70">כרטיסים ({seatsUsed} משתתפים)</p>
-        )}
         {soloAdults > 0 && (
           <div className="flex justify-between gap-3">
             <span className="flex items-center gap-1.5">
               <Users className="w-4 h-4" />
               {soloAdults} × {soloAdults === 1 ? 'כרטיס מבוגר' : 'כרטיסי מבוגרים'}
-              {parentChildPairs > 0 && ' (מבוגר בלי ילד)'}
             </span>
             <span className="font-medium tabular-nums">₪{soloAdults * soloUnitPrice}</span>
           </div>
@@ -111,7 +107,7 @@ export default function CandelsOrderSummarySection({
           <div className="flex justify-between gap-3">
             <span className="flex items-center gap-1.5">
               <Baby className="w-4 h-4" />
-              {parentChildPairs} × הורה + ילד (1 מבוגר + 1 ילד)
+              {parentChildPairs} × הורה + ילד
             </span>
             <span className="font-medium tabular-nums">₪{parentChildPairs * parentChildUnitPrice}</span>
           </div>
@@ -126,30 +122,24 @@ export default function CandelsOrderSummarySection({
           </div>
         )}
         {extraCandles > 0 && (
-          <>
-            <p className="text-[13px] font-medium text-[#464646]/70 pt-1">תוספות (לא מוסיפות משתתפים)</p>
-            <div className="flex justify-between gap-3">
-              <span className="flex items-center gap-1.5">
-                <Flame className="w-4 h-4" />
-                {extraCandles} × נר נוסף (נר שני — לא מוסיף משתתף)
-              </span>
-              <span className="font-medium tabular-nums">₪{extraCandlesTotal}</span>
-            </div>
-          </>
+          <div className="flex justify-between gap-3">
+            <span className="flex items-center gap-1.5">
+              <Flame className="w-4 h-4" />
+              {extraCandles} × נר נוסף
+            </span>
+            <span className="font-medium tabular-nums">₪{extraCandlesTotal}</span>
+          </div>
         )}
         {selectedCups.length > 0 && (
-          <>
-            <p className="text-[13px] font-medium text-[#464646]/70 pt-1">כוסות (לכל הנרות בהזמנה)</p>
-            <div className="flex justify-between gap-3">
-              <span className="flex items-center gap-1.5">
-                <CupSoda className="w-4 h-4" />
-                {selectedCups.reduce((sum, c) => sum + (c.quantity || 1), 0)} × כוס לנר
-              </span>
-              <span className="font-medium tabular-nums">
-                {cupsExtraTotal > 0 ? `₪${cupsExtraTotal}` : 'כלול במחיר'}
-              </span>
-            </div>
-          </>
+          <div className="flex justify-between gap-3">
+            <span className="flex items-center gap-1.5">
+              <CupSoda className="w-4 h-4" />
+              {selectedCups.reduce((sum, c) => sum + (c.quantity || 1), 0)} × כוס לנר
+            </span>
+            <span className="font-medium tabular-nums">
+              {cupsExtraTotal > 0 ? `₪${cupsExtraTotal}` : 'כלול במחיר'}
+            </span>
+          </div>
         )}
         {hasTicketLines && (
           <div className="mt-2 pt-2 border-t border-[#e8e8e8]">

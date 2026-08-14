@@ -789,12 +789,17 @@ export const createAndCheckout = webMethod(Permissions.Anyone, async (orderData)
             const product = productsById.get(productId);
             const quantity = Math.max(1, Number(sel.quantity) || 1);
             const price = parseFloat(product.productName) || 0;
+            const difficultyLines = Array.isArray(product.difficulty) ? product.difficulty : (product.difficulty ? [product.difficulty] : []);
+            const descriptionLines = difficultyLines
+                .filter((line) => typeof line === 'string' && line.trim())
+                .map((line) => ({ name: { original: '' }, plainText: { original: line.trim() } }));
             return {
                 quantity,
                 price: price.toFixed(2),
                 productName: { original: 'כוס לנר' },
                 itemType: { preset: 'PHYSICAL' },
                 media: product.image || undefined,
+                ...(descriptionLines.length > 0 ? { descriptionLines } : {}),
                 // Do not set physicalProperties.sku — Wix checkout displays it as מק"ט.
                 // Cup selections are persisted on WorkshopOrders.selectedProducts before checkout.
                 _productId: productId,

@@ -220,6 +220,16 @@ export default function CandelsParticipantsSection({
         </div>
       </div>
 
+      {/* אין עוד מקומות פנויים — מתחת לבחירת מבוגרים/ילדים */}
+      {!isGroupTooLarge && !spotsExceeded && seatsUsed >= maxParticipants && (
+        <div className="w-full max-w-md mb-3 rounded-lg border border-amber-300 bg-amber-50 p-2.5">
+          <div className="flex items-start gap-2">
+            <AlertTriangle className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
+            <p className="text-xs font-medium text-amber-800">אין עוד מקומות פנויים לסדנה בתאריך שנבחר</p>
+          </div>
+        </div>
+      )}
+
       {/* נר נוסף — מתחת לבחירת כמות הכרטיסים */}
       {!isGroupTooLarge && maxExtraCandles > 0 && (
         <div className="w-full max-w-md rounded-xl border border-[#e8e8e8] bg-white p-3 mb-3">
@@ -300,7 +310,7 @@ export default function CandelsParticipantsSection({
                 <div className="flex justify-between gap-3">
                   <span className="flex items-center gap-1.5">
                     <Users className="w-3.5 h-3.5" />
-                    {soloAdults} × כרטיס יחיד
+                    {soloAdults} × כרטיס מבוגר
                   </span>
                   <span className="font-medium tabular-nums">₪{soloAdults * soloUnitPrice}</span>
                 </div>
@@ -360,16 +370,6 @@ export default function CandelsParticipantsSection({
               <p className="text-[12px] text-[#464646]/60 text-left mt-0.5">כולל מע״מ 18%</p>
             </div>
           )}
-        </div>
-      )}
-
-      {/* אין עוד מקומות פנויים */}
-      {!isGroupTooLarge && !spotsExceeded && seatsUsed >= maxParticipants && (
-        <div className="w-full max-w-md mb-3 rounded-lg border border-red-300 bg-red-50 p-2.5">
-          <div className="flex items-start gap-2">
-            <AlertTriangle className="w-4 h-4 text-red-500 mt-0.5 shrink-0" />
-            <p className="text-xs font-medium text-red-700">אין עוד מקומות פנויים לסדנה בתאריך שנבחר</p>
-          </div>
         </div>
       )}
 

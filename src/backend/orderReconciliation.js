@@ -180,9 +180,9 @@ export async function fetchEcomOrderByCheckoutId(checkoutId) {
 /**
  * Reconstructs selectedProducts (cups) from the eCom order's custom line
  * items when the CMS row is missing them. The productId is preserved via
- * customLineItems[].physicalProperties.sku (see createAndCheckout in
- * bookingService.web.js) — this is what makes the backfill possible, since
- * eCom custom line items otherwise carry no reference back to our CMS.
+ * customLineItems[].physicalProperties.sku on legacy orders (pre-2026-08-14).
+ * New checkouts store cups on WorkshopOrders.selectedProducts before payment;
+ * sku is no longer sent to checkout (it was shown to customers as מק"ט).
  */
 export function backfillCupsFromEcomOrder(ecomOrder) {
     const items = (ecomOrder?.lineItems || []).filter((li) => li?.physicalProperties?.sku && !li.catalogReference);

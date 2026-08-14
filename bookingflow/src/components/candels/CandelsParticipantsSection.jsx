@@ -294,6 +294,9 @@ export default function CandelsParticipantsSection({
               <Flame className="w-5 h-5 text-[#581E83]" />
               <span className="text-[20px] font-bold text-[#581E83]">{displayCandleCount}</span>
               <span className="text-[16px] text-[#464646]/60">{displayCandleCount === 1 ? 'נר' : 'נרות'}</span>
+              {extraCandles > 0 && (
+                <span className="text-[11px] text-[#464646]/50 leading-tight">כולל {extraCandles} נר נוסף</span>
+              )}
             </div>
 
             {/* ילדים */}
@@ -306,11 +309,15 @@ export default function CandelsParticipantsSection({
 
           {totalPrice > 0 && (soloAdults > 0 || parentChildPairs > 0 || extraChildren > 0 || extraCandles > 0) && (
             <div className="mt-3 pt-3 border-t border-[#e8e8e8] space-y-1.5 text-[14px] text-[#464646]">
+              {(soloAdults > 0 || parentChildPairs > 0 || extraChildren > 0) && (
+                <p className="text-[12px] font-medium text-[#464646]/70">כרטיסים ({seatsUsed} משתתפים)</p>
+              )}
               {soloAdults > 0 && (
                 <div className="flex justify-between gap-3">
                   <span className="flex items-center gap-1.5">
                     <Users className="w-3.5 h-3.5" />
                     {soloAdults} × {soloAdults === 1 ? 'כרטיס מבוגר' : 'כרטיסי מבוגרים'}
+                    {parentChildPairs > 0 && ' (מבוגר בלי ילד)'}
                   </span>
                   <span className="font-medium tabular-nums">₪{soloAdults * soloUnitPrice}</span>
                 </div>
@@ -319,7 +326,7 @@ export default function CandelsParticipantsSection({
                 <div className="flex justify-between gap-3">
                   <span className="flex items-center gap-1.5">
                     <Baby className="w-3.5 h-3.5" />
-                    {parentChildPairs} × הורה + ילד
+                    {parentChildPairs} × הורה + ילד (1 מבוגר + 1 ילד)
                   </span>
                   <span className="font-medium tabular-nums">₪{parentChildPairs * parentChildUnitPrice}</span>
                 </div>
@@ -334,13 +341,16 @@ export default function CandelsParticipantsSection({
                 </div>
               )}
               {extraCandles > 0 && (
-                <div className="flex justify-between gap-3">
-                  <span className="flex items-center gap-1.5">
-                    <Flame className="w-3.5 h-3.5" />
-                    {extraCandles} × נר נוסף
-                  </span>
-                  <span className="font-medium tabular-nums">₪{extraCandlesTotal}</span>
-                </div>
+                <>
+                  <p className="text-[12px] font-medium text-[#464646]/70 pt-0.5">תוספות (לא מוסיפות משתתפים)</p>
+                  <div className="flex justify-between gap-3">
+                    <span className="flex items-center gap-1.5">
+                      <Flame className="w-3.5 h-3.5" />
+                      {extraCandles} × נר נוסף (נר שני — לא מוסיף משתתף)
+                    </span>
+                    <span className="font-medium tabular-nums">₪{extraCandlesTotal}</span>
+                  </div>
+                </>
               )}
             </div>
           )}

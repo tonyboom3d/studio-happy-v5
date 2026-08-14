@@ -795,11 +795,8 @@ export const createAndCheckout = webMethod(Permissions.Anyone, async (orderData)
                 productName: { original: 'כוס לנר' },
                 itemType: { preset: 'PHYSICAL' },
                 media: product.image || undefined,
-                // Preserves the CMS productId on the eCom order itself (max 40
-                // chars — Wix Data ids are 36-char UUIDs) so a post-payment
-                // reconciliation pass can reconstruct selectedProducts even if
-                // the pre-payment CMS write below never happened.
-                physicalProperties: { sku: productId },
+                // Do not set physicalProperties.sku — Wix checkout displays it as מק"ט.
+                // Cup selections are persisted on WorkshopOrders.selectedProducts before checkout.
                 _productId: productId,
                 _price: price,
                 _product: product,

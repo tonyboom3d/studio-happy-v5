@@ -156,6 +156,11 @@ var __wdTemplateHtml = `
                         <span class="wd-toggle-track"></span>
                         <span>כולל מבוטלות</span>
                     </label>
+                    <label class="wd-toggle" title="הצג סדנאות שהסתיימו ב-30 הימים האחרונים (לפי שעון ישראל)">
+                        <input type="checkbox" id="showPastWorkshopsFilter" onchange="onShowPastWorkshopsChange()">
+                        <span class="wd-toggle-track"></span>
+                        <span>סדנאות שעברו</span>
+                    </label>
                 </div>
                 <div class="wd-selected-range">
                     <i class="ph ph-calendar-check"></i>
@@ -892,6 +897,64 @@ var __wdCustomCss = `
         border-radius: 0.75rem;
     }
 
+    ${__wdTagName} .wd-ws-status-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        font-size: 10px;
+        font-weight: 700;
+        line-height: 1.2;
+        padding: 2px 7px;
+        border-radius: 9999px;
+        white-space: nowrap;
+        margin-top: 4px;
+    }
+    ${__wdTagName} .wd-ws-status-dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 9999px;
+        flex-shrink: 0;
+    }
+    ${__wdTagName} .wd-ws-status-dot-pulse {
+        position: relative;
+    }
+    ${__wdTagName} .wd-ws-status-dot-pulse::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        border-radius: 9999px;
+        background: inherit;
+        animation: wd-ws-pulse 1.4s ease-out infinite;
+    }
+    @keyframes wd-ws-pulse {
+        0% { transform: scale(1); opacity: 0.75; }
+        100% { transform: scale(2.2); opacity: 0; }
+    }
+    ${__wdTagName} .wd-ws-status-live {
+        background: #dcfce7;
+        color: #15803d;
+        border: 1px solid #86efac;
+    }
+    ${__wdTagName} .wd-ws-status-live .wd-ws-status-dot { background: #22c55e; }
+    ${__wdTagName} .wd-ws-status-soon {
+        background: #fef3c7;
+        color: #b45309;
+        border: 1px solid #fcd34d;
+    }
+    ${__wdTagName} .wd-ws-status-soon .wd-ws-status-dot { background: #f59e0b; }
+    ${__wdTagName} .wd-ws-status-ended {
+        background: #f3f4f6;
+        color: #6b7280;
+        border: 1px solid #e5e7eb;
+    }
+    ${__wdTagName} .wd-ws-status-ended .wd-ws-status-dot { background: #9ca3af; }
+    ${__wdTagName} .wd-ws-row-live {
+        background: linear-gradient(to left, rgba(34, 197, 94, 0.06), transparent 40%);
+    }
+    ${__wdTagName} .wd-ws-row-ended {
+        opacity: 0.72;
+    }
+
     ${__wdTagName} .wd-access-denied-overlay {
         position: absolute;
         inset: 0;
@@ -1067,6 +1130,16 @@ var __wdCustomCss = `
         ${__wdTagName} .wd-ws-table th,
         ${__wdTagName} .wd-ws-table td {
             padding: 8px 10px !important;
+        }
+        ${__wdTagName} .wd-ws-status-badge {
+            font-size: 9px !important;
+            padding: 1px 5px !important;
+            gap: 3px !important;
+            margin-top: 3px !important;
+        }
+        ${__wdTagName} .wd-ws-status-dot {
+            width: 5px !important;
+            height: 5px !important;
         }
 
         /* --- Pagination --- */
@@ -1286,6 +1359,13 @@ function __wdInjectGlobalAssets() {
         // shown greyed-out with a "בוטל" badge when this toggle is on.
         let showCancelledOrders = false;
 
+        // Past workshops (ended sessions) are hidden by default; toggling on
+        // extends the server date-range start 30 days back (Israel calendar).
+        let showPastWorkshops = false;
+        const __wdIsraelTz = 'Asia/Jerusalem';
+        const __wdPastDaysLookback = 30;
+        const __wdSoonWindowMs = 2 * 60 * 60 * 1000;
+
         let currentWorkshopId = null;
         let currentOrderId = null;
         let currentSketchId = null;
@@ -1296,6 +1376,7 @@ function __wdInjectGlobalAssets() {
 
         const __wdAutoRefreshMs = 5 * 60 * 1000;
         let __wdAutoRefreshTimerId = null;
+        let __wdTimeStatusTimerId = null;
         let __wdLastDataRefreshAt = null;
         let __wdPreserveUiOnNextApply = false;
         let __wdIsDataRefreshing = false;
@@ -1315,6 +1396,7 @@ function __wdInjectGlobalAssets() {
             renderTemplatesManager();
             renderLastDataRefreshLabel();
             startAutoDataRefresh();
+            startWorkshopTimeStatusTick();
         }
 
         // Host element reference, set in connectedCallback, used to dispatch
@@ -1376,7 +1458,8 @@ function __wdInjectGlobalAssets() {
             if (overlay) overlay.style.display = isBusy ? 'flex' : 'none';
 
             ['searchInput', 'typeFilter', 'instructorFilter', 'dateRangeFromFilter', 'dateRangeToFilter',
-                'missingSketchesFilter', 'showAllOrdersToggle', 'showCancelledOrdersFilter', 'clearFiltersBtn']
+                'missingSketchesFilter', 'showAllOrdersToggle', 'showCancelledOrdersFilter',
+                'showPastWorkshopsFilter', 'clearFiltersBtn']
                 .forEach((id) => {
                     const el = document.getElementById(id);
                     if (el) el.disabled = isBusy;
@@ -1412,7 +1495,11 @@ function __wdInjectGlobalAssets() {
         /** Mirrors the backend's own default when no explicit range is supplied: today → +30 days. */
         function getDefaultDateRange() {
             const start = getMidnight(new Date());
-            const end = getMidnight(new Date(start.getTime() + 30 * 24 * 60 * 60 * 1000));
+            if (showPastWorkshops) {
+                start.setDate(start.getDate() - __wdPastDaysLookback);
+            }
+            const end = getMidnight(new Date());
+            end.setDate(end.getDate() + 30);
             return { start, end };
         }
 
@@ -1421,6 +1508,108 @@ function __wdInjectGlobalAssets() {
             return __wdDateRangeStart && __wdDateRangeEnd
                 && __wdDateRangeStart.getTime() === def.start.getTime()
                 && __wdDateRangeEnd.getTime() === def.end.getTime();
+        }
+
+        function getIsraelDateKey(date) {
+            return new Intl.DateTimeFormat('en-CA', {
+                timeZone: __wdIsraelTz,
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+            }).format(date);
+        }
+
+        function workshopDateToKey(dateStr) {
+            if (!dateStr) return '';
+            const parts = dateStr.split('/');
+            if (parts.length !== 3) return '';
+            const [dd, mm, yyyy] = parts;
+            return `${yyyy}-${mm}-${dd}`;
+        }
+
+        function getWorkshopEndTimestamp(workshop) {
+            if (typeof workshop.endTimestamp === 'number') return workshop.endTimestamp;
+            if (typeof workshop.startTimestamp !== 'number' || !workshop.time || !workshop.endTime) {
+                return workshop.startTimestamp;
+            }
+            const parseHm = (value) => {
+                const [h, m] = String(value).split(':').map(Number);
+                return (Number.isFinite(h) ? h : 0) * 60 + (Number.isFinite(m) ? m : 0);
+            };
+            const startMinutes = parseHm(workshop.time);
+            const endMinutes = parseHm(workshop.endTime);
+            let durationMs = (endMinutes - startMinutes) * 60 * 1000;
+            if (durationMs <= 0) durationMs += 24 * 60 * 60 * 1000;
+            return workshop.startTimestamp + durationMs;
+        }
+
+        function computeWorkshopTimeStatuses(workshops) {
+            const now = Date.now();
+            const todayKey = getIsraelDateKey(new Date());
+            const statusMap = {};
+
+            const todayWorkshops = workshops
+                .filter((w) => workshopDateToKey(w.date) === todayKey && typeof w.startTimestamp === 'number')
+                .slice()
+                .sort((a, b) => a.startTimestamp - b.startTimestamp);
+
+            const liveIds = new Set();
+            const endedTodayIds = new Set();
+            const upcomingToday = [];
+
+            for (const w of todayWorkshops) {
+                const end = getWorkshopEndTimestamp(w);
+                if (now >= w.startTimestamp && now < end) liveIds.add(w.id);
+                else if (now >= end) endedTodayIds.add(w.id);
+                else upcomingToday.push(w);
+            }
+
+            const soonIds = new Set();
+            if (upcomingToday.length > 0) {
+                soonIds.add(upcomingToday[0].id);
+                for (const w of upcomingToday) {
+                    if (w.startTimestamp - now <= __wdSoonWindowMs) soonIds.add(w.id);
+                }
+            }
+
+            for (const w of workshops) {
+                if (typeof w.startTimestamp !== 'number') continue;
+                const dateKey = workshopDateToKey(w.date);
+                const end = getWorkshopEndTimestamp(w);
+                const isToday = dateKey === todayKey;
+                const isPastDay = dateKey && dateKey < todayKey;
+
+                if (liveIds.has(w.id)) {
+                    statusMap[w.id] = 'live';
+                } else if (isToday && soonIds.has(w.id)) {
+                    statusMap[w.id] = 'soon';
+                } else if (isToday && endedTodayIds.has(w.id)) {
+                    statusMap[w.id] = 'ended';
+                } else if (showPastWorkshops && isPastDay && now >= end) {
+                    statusMap[w.id] = 'ended';
+                }
+            }
+            return statusMap;
+        }
+
+        function buildWorkshopTimeStatusBadge(status) {
+            if (!status) return '';
+            const labels = {
+                live: 'מתרחש עכשיו',
+                soon: 'בקרוב',
+                ended: 'הסתיים',
+            };
+            const label = labels[status];
+            if (!label) return '';
+            const pulseClass = status === 'live' ? ' wd-ws-status-dot-pulse' : '';
+            return `<span class="wd-ws-status-badge wd-ws-status-${status}"><span class="wd-ws-status-dot${pulseClass}"></span>${label}</span>`;
+        }
+
+        function startWorkshopTimeStatusTick() {
+            if (__wdTimeStatusTimerId != null) clearInterval(__wdTimeStatusTimerId);
+            __wdTimeStatusTimerId = setInterval(() => {
+                if (__wdDataLoaded) applyFilters();
+            }, 60000);
         }
 
         function renderDateRangeLabel() {
@@ -1524,6 +1713,23 @@ function __wdInjectGlobalAssets() {
         function onShowAllOrdersChange() {
             const checkbox = document.getElementById('showAllOrdersToggle');
             showAllOrders = checkbox.checked;
+            triggerFilterRefresh();
+        }
+
+        /** Extends/shrinks the server date-range start when showing past workshops. */
+        function onShowPastWorkshopsChange() {
+            const checkbox = document.getElementById('showPastWorkshopsFilter');
+            showPastWorkshops = checkbox.checked;
+
+            const def = getDefaultDateRange();
+            __wdDateRangeStart = def.start;
+            __wdDateRangeEnd = def.end;
+            const fromInput = document.getElementById('dateRangeFromFilter');
+            const toInput = document.getElementById('dateRangeToFilter');
+            if (fromInput) fromInput.value = formatDateForInput(def.start);
+            if (toInput) toInput.value = formatDateForInput(def.end);
+            renderDateRangeLabel();
+            __wdCurrentPage = 1;
             triggerFilterRefresh();
         }
 
@@ -2105,13 +2311,15 @@ function __wdInjectGlobalAssets() {
                 return a.startTimestamp - b.startTimestamp;
             });
 
-            if (search || type || instructor || onlyMissingSketches || isAlertFilterActive || !isDefaultDateRange()) {
+            if (search || type || instructor || onlyMissingSketches || isAlertFilterActive
+                || !isDefaultDateRange() || showPastWorkshops) {
                 clearBtn.classList.remove('hidden');
             } else {
                 clearBtn.classList.add('hidden');
             }
 
-            renderWorkshopsTable(filtered);
+            const timeStatuses = computeWorkshopTimeStatuses(filtered);
+            renderWorkshopsTable(filtered, timeStatuses);
         }
 
         /** Expands/collapses the filters panel body on mobile (hidden by default there via CSS; no-op/invisible button on desktop). */
@@ -2134,6 +2342,10 @@ function __wdInjectGlobalAssets() {
 
             const wasDefaultRange = isDefaultDateRange();
             const wasShowAllOrders = showAllOrders;
+            const wasShowPastWorkshops = showPastWorkshops;
+            showPastWorkshops = false;
+            const showPastWorkshopsCheckbox = document.getElementById('showPastWorkshopsFilter');
+            if (showPastWorkshopsCheckbox) showPastWorkshopsCheckbox.checked = false;
             initDateRangeFilter();
             showAllOrders = false;
             const showAllOrdersCheckbox = document.getElementById('showAllOrdersToggle');
@@ -2143,12 +2355,12 @@ function __wdInjectGlobalAssets() {
 
             // Only the server-side filters (date range / include-all-orders)
             // require a fresh fetch — everything else is filtered client-side above.
-            if (!wasDefaultRange || wasShowAllOrders) {
+            if (!wasDefaultRange || wasShowAllOrders || wasShowPastWorkshops) {
                 triggerFilterRefresh();
             }
         }
 
-        function renderWorkshopsTable(allFilteredWorkshops) {
+        function renderWorkshopsTable(allFilteredWorkshops, timeStatuses) {
             const tbody = document.getElementById('workshopsTableBody');
             tbody.innerHTML = '';
             document.getElementById('workshopsCount').innerText = `מציג ${allFilteredWorkshops.length} סדנאות`;
@@ -2240,15 +2452,22 @@ function __wdInjectGlobalAssets() {
                     ? `<div class="mt-2 flex flex-col items-start gap-1">${alertTags.join('')}</div>`
                     : '';
 
+                const timeStatus = (timeStatuses && timeStatuses[w.id]) || null;
+                const timeStatusHtml = buildWorkshopTimeStatusBadge(timeStatus);
+
                 const tr = document.createElement('tr');
-                tr.className = "wd-ws-row hover:bg-gray-50/80 cursor-pointer transition-colors group";
+                let rowClass = 'wd-ws-row hover:bg-gray-50/80 cursor-pointer transition-colors group';
+                if (timeStatus === 'live') rowClass += ' wd-ws-row-live';
+                else if (timeStatus === 'ended') rowClass += ' wd-ws-row-ended';
+                tr.className = rowClass;
                 tr.onclick = () => openSidePanel(w.id);
                 
                 tr.innerHTML = `
                     <td class="px-6 py-4 whitespace-nowrap" data-label="תאריך ושעות">
-                        <div class="flex flex-col">
+                        <div class="flex flex-col items-start">
                             <span class="text-sm font-bold text-gray-900">${w.date}</span>
                             <span class="text-xs text-gray-500 flex items-center gap-1 mt-0.5"><i class="ph ph-clock"></i> ${w.time} - ${w.endTime}</span>
+                            ${timeStatusHtml}
                         </div>
                     </td>
                     <td class="px-6 py-4 whitespace-nowrap" data-label="סוג סדנה">
@@ -3689,6 +3908,7 @@ window.saveTemplate = saveTemplate;
 window.scrollCarousel = scrollCarousel;
 window.sendWhatsApp = sendWhatsApp;
 window.onShowAllOrdersChange = onShowAllOrdersChange;
+window.onShowPastWorkshopsChange = onShowPastWorkshopsChange;
 window.onDateRangeFilterChange = onDateRangeFilterChange;
 window.toggleAlertFilter = toggleAlertFilter;
 window.toggleInlineLogs = toggleInlineLogs;

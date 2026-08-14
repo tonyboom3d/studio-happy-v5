@@ -76,6 +76,7 @@ export default function CandelsParticipantsSection({
 
   const extraCandlesTotal = computeExtraCandlesPrice(extraCandlePrice, extraCandles);
   const totalPrice = ticketsPrice + extraCandlesTotal;
+  const displayCandleCount = totalCandles + extraCandles;
 
   const handleExtraCandlesDecrease = () => {
     if (extraCandles > 0) setExtraCandles(extraCandles - 1);
@@ -134,7 +135,7 @@ export default function CandelsParticipantsSection({
     <div className="flex flex-col items-center py-4">
       <p className="text-[16px] text-[#464646]/70 mb-1">כמה משתתפים יהיו בסדנה?</p>
       <p className="text-[13px] text-[#464646]/50 mb-1">גיל מינימלי להשתתפות בסדנה: 4</p>
-      <p className="text-[15px] text-[#5E2F88]/80 mb-4 font-medium">כל מבוגר יכול ללוות עד {MAX_CHILDREN_PER_ADULT} ילדים בהזמנה</p>
+      <p className="text-[17px] text-[#5E2F88] mb-4 font-semibold">כל מבוגר יכול ללוות עד {MAX_CHILDREN_PER_ADULT} ילדים בהזמנה</p>
 
       {/* מבוגרים + ילדים בשורה אחת */}
       <div className="w-full max-w-md grid grid-cols-2 gap-3 mb-2">
@@ -276,11 +277,11 @@ export default function CandelsParticipantsSection({
               <span className="text-[16px] text-[#464646]/60">{adults === 1 ? 'מבוגר' : 'מבוגרים'}</span>
             </div>
 
-            {/* נרות */}
+            {/* נרות (בסיס + נוספים) */}
             <div className="flex flex-col items-center gap-1">
               <Flame className="w-5 h-5 text-[#581E83]" />
-              <span className="text-[20px] font-bold text-[#581E83]">{totalCandles}</span>
-              <span className="text-[16px] text-[#464646]/60">{totalCandles === 1 ? 'נר' : 'נרות'}</span>
+              <span className="text-[20px] font-bold text-[#581E83]">{displayCandleCount}</span>
+              <span className="text-[16px] text-[#464646]/60">{displayCandleCount === 1 ? 'נר' : 'נרות'}</span>
             </div>
 
             {/* ילדים */}
@@ -291,7 +292,7 @@ export default function CandelsParticipantsSection({
             </div>
           </div>
 
-          {totalPrice > 0 && (soloAdults > 0 || parentChildPairs > 0 || extraChildren > 0) && (
+          {totalPrice > 0 && (soloAdults > 0 || parentChildPairs > 0 || extraChildren > 0 || extraCandles > 0) && (
             <div className="mt-3 pt-3 border-t border-[#e8e8e8] space-y-1.5 text-[14px] text-[#464646]">
               {soloAdults > 0 && (
                 <div className="flex justify-between gap-3">
@@ -329,6 +330,20 @@ export default function CandelsParticipantsSection({
                   <span className="font-medium tabular-nums">₪{extraCandlesTotal}</span>
                 </div>
               )}
+            </div>
+          )}
+
+          {seatsUsed > 0 && (
+            <div className="mt-3 pt-3 border-t border-[#e8e8e8] space-y-1">
+              <div className="flex items-center gap-1.5 font-medium text-[#581E83] text-[14px]">
+                <Users className="w-3.5 h-3.5 shrink-0" />
+                <span>
+                  סה״כ {seatsUsed} {seatsUsed === 1 ? 'משתתף' : 'משתתפים'} מגיעים לסדנה
+                </span>
+              </div>
+              <p className="text-[12px] text-[#464646]/75 leading-relaxed pr-0.5">
+                מקומות הישיבה מוגבלים — לא ניתן להביא מלווים מעבר למשתתפים שנרשמו; מלווה נוסף יוכל להישאר רק אם יישאר מקום פנוי.
+              </p>
             </div>
           )}
 

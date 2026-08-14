@@ -28,6 +28,7 @@ export default function CandelsOrderSummarySection({
 }) {
   const selectedCupCount = selectedCups.reduce((sum, c) => sum + (c.quantity || 1), 0);
   const cupsIncomplete = totalCups > 0 && selectedCupCount < totalCups;
+  const cupsMissingMessage = 'יש לבחור כוסות בשלב 3 לנרות לפני המשך לתשלום';
   const [cupSelectionError, setCupSelectionError] = useState(null);
 
   useEffect(() => {
@@ -36,12 +37,7 @@ export default function CandelsOrderSummarySection({
 
   const handlePayClick = () => {
     if (cupsIncomplete) {
-      const cupsWord = totalCups === 1 ? 'כוס' : 'כוסות';
-      setCupSelectionError(
-        selectedCupCount === 0
-          ? `יש לבחור ${cupsWord} לנרות לפני המשך לתשלום`
-          : `יש להשלים בחירת הכוסות (${selectedCupCount}/${totalCups} ${cupsWord}) לפני המשך לתשלום`
-      );
+      setCupSelectionError(cupsMissingMessage);
       return;
     }
     setCupSelectionError(null);
@@ -64,6 +60,13 @@ export default function CandelsOrderSummarySection({
   // "תוספת ילד" is priced like a solo ticket (own candle), not like the
   // parent+child package.
   const extraChildUnitPrice = pricing?.extraChild || soloUnitPrice;
+  const seatsUsed = adults + children;
+  const hasTicketLines =
+    soloAdults > 0 ||
+    parentChildPairs > 0 ||
+    extraChildren > 0 ||
+    extraCandles > 0 ||
+    selectedCups.length > 0;
 
   return (
     <div className="flex flex-col py-3 px-1 space-y-3" dir="rtl">
@@ -137,6 +140,19 @@ export default function CandelsOrderSummarySection({
             </span>
           </div>
         )}
+        {hasTicketLines && (
+          <div className="mt-2 pt-2 border-t border-[#e8e8e8] space-y-1.5">
+            <div className="flex items-center gap-1.5 font-medium text-[#581E83]">
+              <Users className="w-4 h-4 shrink-0" />
+              <span>
+                סה״כ {seatsUsed} {seatsUsed === 1 ? 'משתתף' : 'משתתפים'} מגיעים לסדנה
+              </span>
+            </div>
+            <p className="text-[13px] text-[#464646]/75 leading-relaxed">
+              מקומות הישיבה מוגבלים — לא ניתן להביא מלווים מעבר למשתתפים שנרשמו; מלווה נוסף יוכל להישאר רק אם יישאר מקום פנוי.
+            </p>
+          </div>
+        )}
       </div>
 
       {/* סה"כ */}
@@ -158,8 +174,8 @@ export default function CandelsOrderSummarySection({
         <motion.button
           type="button"
           onClick={handlePayClick}
-          disabled={isProcessing || totalPrice <= 0}
-          animate={isProcessing ? {} : {
+          disabled={isProcessing || totalPrice <= 0 || cupsIncomplete}
+          animate={isProcessing || cupsIncomplete ? {} : {
             scale: [1, 1.02, 1],
             boxShadow: [
               '0 0 0 0 rgba(94,47,136,0)',
@@ -182,6 +198,8 @@ export default function CandelsOrderSummarySection({
               <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
               מעביר לדף התשלום...
             </>
+          ) : cupsIncomplete ? (
+            cupsMissingMessage
           ) : (
             <>
               המשך להשלמת פרטים ותשלום

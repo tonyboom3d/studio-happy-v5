@@ -44,8 +44,13 @@ export default function CupSelectionSection({
 
   return (
     <div className="py-4" dir="rtl">
-      {/* כותרת משנה */}
-      <div className="mb-6 text-center">
+      {/* כותרת משנה + כמה כוסות נדרשות */}
+      <div className="mb-6 text-center space-y-2">
+        <p className="text-base font-semibold text-[#581E83]">
+          {totalCups === 1
+            ? 'יש לבחור כוס אחת לנר שבהזמנה'
+            : `יש לבחור ${totalCups} כוסות — אחת לכל נר שבהזמנה`}
+        </p>
         <p className="text-sm text-[#464646]/80 leading-relaxed">
           בוחרים את הכוס שתשמש לנר שלכם בסדנה
         </p>

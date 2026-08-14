@@ -49,6 +49,10 @@ export default function CandelsParticipantsSection({
   // חריגה מהמקומות הפנויים
   const spotsExceeded = spotsUsed > maxParticipants;
 
+  const maxChildren = adults * MAX_CHILDREN_PER_ADULT;
+  const childrenAtMax = children >= maxChildren;
+  const childrenIncreaseBlockedBySeats = seatsUsed >= maxParticipants;
+
   const slotPricing = useMemo(() => {
     if (!selectedSlot?.serviceId || !servicePricing) return null;
     return servicePricing[selectedSlot.serviceId] || null;
@@ -82,11 +86,17 @@ export default function CandelsParticipantsSection({
 
   const handleAdultsDecrease = () => {
     if (adults > 1) {
-      setAdults(adults - 1);
+      const nextAdults = adults - 1;
+      setAdults(nextAdults);
+      const nextMaxChildren = nextAdults * MAX_CHILDREN_PER_ADULT;
+      if (children > nextMaxChildren) {
+        setChildren(nextMaxChildren);
+      }
       setValidationError(null);
     }
   };
   const handleAdultsIncrease = () => {
+    if (seatsUsed >= maxParticipants) return;
     setAdults(adults + 1);
     setValidationError(null);
   };
@@ -97,6 +107,7 @@ export default function CandelsParticipantsSection({
     }
   };
   const handleChildrenIncrease = () => {
+    if (childrenAtMax || childrenIncreaseBlockedBySeats) return;
     setChildren(children + 1);
     setValidationError(null);
   };
@@ -123,7 +134,7 @@ export default function CandelsParticipantsSection({
     <div className="flex flex-col items-center py-4">
       <p className="text-[16px] text-[#464646]/70 mb-1">כמה משתתפים יהיו בסדנה?</p>
       <p className="text-[13px] text-[#464646]/50 mb-1">גיל מינימלי להשתתפות בסדנה: 4</p>
-      <p className="text-[13px] text-[#5E2F88]/70 mb-4">כל מבוגר יכול ללוות עד {MAX_CHILDREN_PER_ADULT} ילדים בהזמנה</p>
+      <p className="text-[15px] text-[#5E2F88]/80 mb-4 font-medium">כל מבוגר יכול ללוות עד {MAX_CHILDREN_PER_ADULT} ילדים בהזמנה</p>
 
       {/* מבוגרים + ילדים בשורה אחת */}
       <div className="w-full max-w-md grid grid-cols-2 gap-3 mb-2">
@@ -156,8 +167,10 @@ export default function CandelsParticipantsSection({
             <button
               type="button"
               onClick={handleAdultsIncrease}
+              disabled={seatsUsed >= maxParticipants}
               className="w-8 h-8 rounded-full border-2 border-[#5E2F88] flex items-center justify-center
-                         text-[#5E2F88] hover:bg-[#5E2F88] hover:text-white transition-colors"
+                         text-[#5E2F88] hover:bg-[#5E2F88] hover:text-white transition-colors
+                         disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-[#5E2F88]"
             >
               <Plus className="w-3 h-3" />
             </button>
@@ -193,14 +206,64 @@ export default function CandelsParticipantsSection({
             <button
               type="button"
               onClick={handleChildrenIncrease}
+              disabled={childrenAtMax || childrenIncreaseBlockedBySeats}
               className="w-8 h-8 rounded-full border-2 border-[#5E2F88] flex items-center justify-center
-                         text-[#5E2F88] hover:bg-[#5E2F88] hover:text-white transition-colors"
+                         text-[#5E2F88] hover:bg-[#5E2F88] hover:text-white transition-colors
+                         disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-[#5E2F88]"
             >
               <Plus className="w-3 h-3" />
             </button>
           </div>
         </div>
       </div>
+
+      {/* נר נוסף — מתחת לבחירת כמות הכרטיסים */}
+      {!isGroupTooLarge && maxExtraCandles > 0 && (
+        <div className="w-full max-w-md rounded-xl border border-[#e8e8e8] bg-white p-3 mb-3">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-1.5">
+              <Flame className="w-5 h-5 text-[#581E83]" />
+              <div>
+                <p className="text-[16px] font-medium text-[#581E83]">נר נוסף</p>
+                <p className="text-[12px] text-[#464646]/60">
+                  לכל מי שרוצה להכין {maxExtraCandles === 1 ? 'נר שני' : 'נרות נוספים'} (עד {maxExtraCandles})
+                  {extraCandlePrice > 0 && ` · ₪${extraCandlePrice} לנר`}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={handleExtraCandlesDecrease}
+                disabled={extraCandles <= 0}
+                className="w-8 h-8 rounded-full border-2 border-[#5E2F88] flex items-center justify-center
+                           text-[#5E2F88] hover:bg-[#5E2F88] hover:text-white transition-colors
+                           disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-[#5E2F88]"
+              >
+                <Minus className="w-3 h-3" />
+              </button>
+              <motion.div
+                key={extraCandles}
+                initial={{ scale: 0.8, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                className="text-2xl font-bold text-[#581E83] w-7 text-center"
+              >
+                {extraCandles}
+              </motion.div>
+              <button
+                type="button"
+                onClick={handleExtraCandlesIncrease}
+                disabled={extraCandles >= maxExtraCandles}
+                className="w-8 h-8 rounded-full border-2 border-[#5E2F88] flex items-center justify-center
+                           text-[#5E2F88] hover:bg-[#5E2F88] hover:text-white transition-colors
+                           disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-[#5E2F88]"
+              >
+                <Plus className="w-3 h-3" />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* סיכום ויזואלי עם אייקונים — סדר: מבוגר | נר | ילד */}
       {!isGroupTooLarge && (
@@ -278,54 +341,6 @@ export default function CandelsParticipantsSection({
         </div>
       )}
 
-      {/* נר נוסף — עד נר אחד נוסף לכל נר בסיס, בלי מקום נוסף */}
-      {!isGroupTooLarge && maxExtraCandles > 0 && (
-        <div className="w-full max-w-md rounded-xl border border-[#e8e8e8] bg-white p-3 mb-3">
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-1.5">
-              <Flame className="w-5 h-5 text-[#581E83]" />
-              <div>
-                <p className="text-[16px] font-medium text-[#581E83]">נר נוסף</p>
-                <p className="text-[12px] text-[#464646]/60">
-                  לכל מי שרוצה להכין {maxExtraCandles === 1 ? 'נר שני' : 'נרות נוספים'} (עד {maxExtraCandles})
-                  {extraCandlePrice > 0 && ` · ₪${extraCandlePrice} לנר`}
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2 shrink-0">
-              <button
-                type="button"
-                onClick={handleExtraCandlesDecrease}
-                disabled={extraCandles <= 0}
-                className="w-8 h-8 rounded-full border-2 border-[#5E2F88] flex items-center justify-center
-                           text-[#5E2F88] hover:bg-[#5E2F88] hover:text-white transition-colors
-                           disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-[#5E2F88]"
-              >
-                <Minus className="w-3 h-3" />
-              </button>
-              <motion.div
-                key={extraCandles}
-                initial={{ scale: 0.8, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                className="text-2xl font-bold text-[#581E83] w-7 text-center"
-              >
-                {extraCandles}
-              </motion.div>
-              <button
-                type="button"
-                onClick={handleExtraCandlesIncrease}
-                disabled={extraCandles >= maxExtraCandles}
-                className="w-8 h-8 rounded-full border-2 border-[#5E2F88] flex items-center justify-center
-                           text-[#5E2F88] hover:bg-[#5E2F88] hover:text-white transition-colors
-                           disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-[#5E2F88]"
-              >
-                <Plus className="w-3 h-3" />
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* שגיאת חריגה מהמקומות הפנויים */}
       {spotsExceeded && (
         <div className="w-full max-w-md mb-3 rounded-lg border border-red-300 bg-red-50 p-2.5">
@@ -359,12 +374,12 @@ export default function CandelsParticipantsSection({
 
       {/* כפתור המשך + שגיאת ולידציה */}
       {!isGroupTooLarge && (
-        <div className="flex flex-col items-center gap-2">
+        <div className="w-full max-w-md flex flex-col gap-2">
           <Button
             onClick={handleContinue}
-            className="bg-[#5E2F88] hover:bg-[#7B3DB0] text-white px-8 py-2.5 rounded-lg text-base"
+            className="w-full bg-[#5E2F88] hover:bg-[#7B3DB0] text-white py-2.5 rounded-lg text-base"
           >
-          המשך לשלב הבא
+            המשך לבחירת כוסות
           </Button>
 
           <AnimatePresence>

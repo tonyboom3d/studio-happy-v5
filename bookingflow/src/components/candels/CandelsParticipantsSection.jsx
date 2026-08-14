@@ -135,7 +135,9 @@ export default function CandelsParticipantsSection({
     <div className="flex flex-col items-center py-4">
       <p className="text-[16px] text-[#464646]/70 mb-1">כמה משתתפים יהיו בסדנה?</p>
       <p className="text-[13px] text-[#464646]/50 mb-1">גיל מינימלי להשתתפות בסדנה: 4</p>
-      <p className="text-[17px] text-[#5E2F88] mb-4 font-semibold">כל מבוגר יכול ללוות עד {MAX_CHILDREN_PER_ADULT} ילדים בהזמנה</p>
+      <p className="text-[17px] text-[#5E2F88] mb-4 font-semibold">
+        כל מבוגר יכול ללוות <span className="underline underline-offset-2">עד {MAX_CHILDREN_PER_ADULT} ילדים</span> בהזמנה
+      </p>
 
       {/* מבוגרים + ילדים בשורה אחת */}
       <div className="w-full max-w-md grid grid-cols-2 gap-3 mb-2">
@@ -350,11 +352,24 @@ export default function CandelsParticipantsSection({
           )}
 
           {totalPrice > 0 && (
-            <div className="mt-3 pt-3 border-t-2 border-[#5E2F88]/25 flex items-center justify-between">
-              <span className="text-[16px] font-bold text-[#581E83]">סה״כ עלות כרטיסים:</span>
-              <span className="text-[20px] font-bold text-[#5E2F88] tabular-nums">₪{totalPrice}</span>
+            <div className="mt-3 pt-3 border-t-2 border-[#5E2F88]/25">
+              <div className="flex items-center justify-between">
+                <span className="text-[16px] font-bold text-[#581E83]">סה״כ עלות כרטיסים:</span>
+                <span className="text-[20px] font-bold text-[#5E2F88] tabular-nums">₪{totalPrice}</span>
+              </div>
+              <p className="text-[12px] text-[#464646]/60 text-left mt-0.5">כולל מע״מ 18%</p>
             </div>
           )}
+        </div>
+      )}
+
+      {/* אין עוד מקומות פנויים */}
+      {!isGroupTooLarge && !spotsExceeded && seatsUsed >= maxParticipants && (
+        <div className="w-full max-w-md mb-3 rounded-lg border border-red-300 bg-red-50 p-2.5">
+          <div className="flex items-start gap-2">
+            <AlertTriangle className="w-4 h-4 text-red-500 mt-0.5 shrink-0" />
+            <p className="text-xs font-medium text-red-700">אין עוד מקומות פנויים לסדנה בתאריך שנבחר</p>
+          </div>
         </div>
       )}
 

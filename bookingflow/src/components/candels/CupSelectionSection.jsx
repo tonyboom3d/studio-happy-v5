@@ -74,9 +74,6 @@ export default function CupSelectionSection({
           animate={{ opacity: 1, y: 0 }}
           className="mb-6"
         >
-          <h4 className="font-medium text-[#581E83] mb-3">
-            הכוסות שנבחרו: ({totalItems}/{totalCups} {cupsWord})
-          </h4>
           <div className="space-y-2">
             {cart.map((product) => {
               const pid = product._id || product.id;
@@ -156,6 +153,9 @@ export default function CupSelectionSection({
 
       {/* כפתור המשך + שגיאת ולידציה */}
       <div className="flex flex-col items-center gap-2 mt-8">
+        <p className="text-center font-medium text-[#581E83] mb-1">
+          הכוסות שנבחרו: ({totalItems}/{totalCups} {cupsWord})
+        </p>
         <Button
           onClick={handleContinue}
           disabled={cart.length === 0}

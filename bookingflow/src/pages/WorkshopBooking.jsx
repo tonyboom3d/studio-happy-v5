@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ArrowRight, CreditCard, RefreshCw } from 'lucide-react';
+import { ArrowRight, CreditCard, RefreshCw, AlertTriangle } from 'lucide-react';
 import AccordionSection from '../components/booking/AccordionSection';
 import TimeSlotsSection from '../components/booking/TimeSlotsSection';
 import ParticipantsSection from '../components/booking/ParticipantsSection';
@@ -25,6 +25,10 @@ export default function WorkshopBooking() {
   const [selectedSlot, setSelectedSlot] = useState(null);
   const [adults, setAdults] = useState(1);
   const [children, setChildren] = useState(0);
+
+  // אישור איפוס בחירות כשמשנים תאריך/שעה אחרי שכבר התקדמנו הלאה
+  const [pendingSlot, setPendingSlot] = useState(null);
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
 
   // נתונים מ-Wix
   const [wixProducts, setWixProducts] = useState(null);
@@ -184,6 +188,37 @@ export default function WorkshopBooking() {
     }
     setActiveSection(sectionNum + 1);
     addLog(`Section ${sectionNum} completed, moving to section ${sectionNum + 1}`, 'success');
+  };
+
+  // בחירת תאריך/שעה חדשים בשלב 1. אם המשתמש כבר התקדם הלאה (עם בחירות
+  // קיימות של משתתפים) ומנסה לשנות תאריך למועד אחר — מציגים אישור לפני
+  // שמאפסים את הבחירות, כדי שלא יאבדו בטעות.
+  const handleSelectSlot = (slot) => {
+    const isDifferentSlot = selectedSlot && slot && selectedSlot.sessionId !== slot.sessionId;
+    const hasProgressed = completedSections.length > 0;
+    if (isDifferentSlot && hasProgressed) {
+      setPendingSlot(slot);
+      setShowResetConfirm(true);
+      return;
+    }
+    setSelectedSlot(slot);
+  };
+
+  const confirmSlotChange = () => {
+    setSelectedSlot(pendingSlot);
+    setAdults(1);
+    setChildren(0);
+    setCompletedSections([]);
+    setActiveSection(1);
+    setSummaryExpanded(false);
+    setPendingSlot(null);
+    setShowResetConfirm(false);
+    addLog('Date changed — selections reset', 'info');
+  };
+
+  const cancelSlotChange = () => {
+    setPendingSlot(null);
+    setShowResetConfirm(false);
   };
 
   const canOpenSection = (sectionNum) => {
@@ -398,7 +433,7 @@ export default function WorkshopBooking() {
                 {section.id === 1 && (
                   <TimeSlotsSection
                     selectedSlot={selectedSlot}
-                    setSelectedSlot={setSelectedSlot}
+                    setSelectedSlot={handleSelectSlot}
                     availableSlots={wixSlots}
                     servicePricing={servicePricing}
                     onContinue={() => completeSection(1)}
@@ -440,6 +475,41 @@ export default function WorkshopBooking() {
           })}
         </div>
       </main>
+
+      {/* אישור איפוס בחירות בעת שינוי תאריך */}
+      {showResetConfirm && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 p-4" dir="rtl">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-white rounded-2xl shadow-2xl p-6 max-w-sm w-full text-center"
+          >
+            <div className="w-14 h-14 mx-auto mb-3 rounded-full bg-amber-50 flex items-center justify-center">
+              <AlertTriangle className="w-7 h-7 text-amber-500" />
+            </div>
+            <h2 className="text-lg font-bold text-[#581E83] mb-2">שינוי תאריך יאפס את הבחירות שלך</h2>
+            <p className="text-sm text-[#464646] mb-6 leading-relaxed">
+              בחרתם משתתפים למועד הקודם. שינוי התאריך יאפס את הבחירות הללו והן ייקבעו מחדש.
+            </p>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={cancelSlotChange}
+                className="flex-1 border-2 border-[#5E2F88] text-[#5E2F88] font-semibold py-2.5 rounded-xl transition-colors hover:bg-[#5E2F88]/5"
+              >
+                ביטול
+              </button>
+              <button
+                type="button"
+                onClick={confirmSlotChange}
+                className="flex-1 bg-[#5E2F88] hover:bg-[#7B3DB0] text-white font-semibold py-2.5 rounded-xl transition-colors"
+              >
+                כן, המשך
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
     </div>
   );
 }

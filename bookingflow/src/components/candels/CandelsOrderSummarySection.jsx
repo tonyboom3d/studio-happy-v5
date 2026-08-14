@@ -1,19 +1,22 @@
 import React, { useMemo, useState, useEffect } from 'react';
-import { Calendar, Clock, Users, Baby, ArrowLeft } from 'lucide-react';
+import { Calendar, Clock, Users, Baby, Flame, ArrowLeft } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { format } from 'date-fns';
 import { he } from 'date-fns/locale';
 import { getSlotLocalDate, getSlotTimeRange } from '@/lib/slotTime';
 
 // Order summary for the candles workshop — ticket lines (identical to
-// Tufting's solo / parent+child breakdown) plus the selected cups line
-// (only shown if any cup carries an extra price beyond the base ticket).
+// Tufting's solo / parent+child breakdown) plus the "נר נוסף" add-on line
+// and the selected cups line (only shown if any cup carries an extra price
+// beyond the base ticket).
 export default function CandelsOrderSummarySection({
   adults,
   children,
   soloAdults,
   parentChildPairs,
   extraChildren = 0,
+  extraCandles = 0,
+  extraCandlesTotal = 0,
   selectedSlot,
   servicePricing,
   selectedCups = [],
@@ -58,7 +61,9 @@ export default function CandelsOrderSummarySection({
   const pricing = servicePricing?.[selectedSlot?.serviceId];
   const soloUnitPrice = pricing?.solo || 0;
   const parentChildUnitPrice = pricing?.parentChild || soloUnitPrice;
-  const extraChildUnitPrice = pricing?.extraChild || parentChildUnitPrice;
+  // "תוספת ילד" is priced like a solo ticket (own candle), not like the
+  // parent+child package.
+  const extraChildUnitPrice = pricing?.extraChild || soloUnitPrice;
 
   return (
     <div className="flex flex-col py-3 px-1 space-y-3" dir="rtl">
@@ -107,6 +112,15 @@ export default function CandelsOrderSummarySection({
               {extraChildren} × תוספת ילד
             </span>
             <span className="font-medium tabular-nums">₪{extraChildren * extraChildUnitPrice}</span>
+          </div>
+        )}
+        {extraCandles > 0 && (
+          <div className="flex justify-between gap-3">
+            <span className="flex items-center gap-1.5">
+              <Flame className="w-4 h-4" />
+              {extraCandles} × נר נוסף
+            </span>
+            <span className="font-medium tabular-nums">₪{extraCandlesTotal}</span>
           </div>
         )}
         {selectedCups.length > 0 && (

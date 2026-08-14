@@ -1,20 +1,55 @@
 // Shared ticket-count/price logic for the candles ("סדנת נרות") workshop.
 // Keeps CandelsParticipantsSection and CandelsBooking in sync with the
 // backend formula in bookingService.web.js (createAndCheckout).
-export const MAX_CHILDREN_PER_ADULT = 4;
+//
+// Model: price is per candle; Wix Bookings seats are per person.
+// - Solo adult (no child): 1 seat, 1 candle, "יחיד" ticket.
+// - Parent+child pair (first child under an adult): 2 seats (1 "יחיד" +
+//   1 "ילד"), 1 shared candle, priced as "ילד".
+// - Extra child (2nd child under the same adult, up to MAX_CHILDREN_PER_ADULT):
+//   1 seat ("תוספת ילד" ticket), 1 own candle, priced like a solo ticket.
+export const MAX_CHILDREN_PER_ADULT = 2;
 
 /**
  * @param {{ adults: number, children: number }} params
- * @returns {{ accompanyingAdults: number, soloAdults: number, parentChildPairs: number, extraChildren: number, totalCandles: number }}
+ * @returns {{
+ *   accompanyingAdults: number, soloAdults: number, parentChildPairs: number,
+ *   extraChildren: number, baseCandles: number, seatsUsed: number,
+ *   soloTickets: number, childTickets: number, extraChildTickets: number,
+ *   totalCandles: number,
+ * }}
  */
 export function computeCandlesCounts({ adults, children }) {
   const accompanyingAdults = Math.min(adults, Math.ceil(children / MAX_CHILDREN_PER_ADULT));
   const parentChildPairs = accompanyingAdults;
   const extraChildren = children - accompanyingAdults;
   const soloAdults = adults - accompanyingAdults;
-  const totalCandles = soloAdults + children;
+  const baseCandles = soloAdults + children;
 
-  return { accompanyingAdults, soloAdults, parentChildPairs, extraChildren, totalCandles };
+  // Wix Bookings seats — every adult and every child occupies one seat,
+  // regardless of how many candles/tickets they share.
+  const seatsUsed = adults + children;
+
+  // Wix Bookings ticket (variant) counts — what gets sent as
+  // participantsChoices. A parent+child pair sends one "יחיד" seat (the
+  // adult) + one "ילד" seat (the child), never a single doubled "ילד" seat.
+  const soloTickets = soloAdults + parentChildPairs;
+  const childTickets = parentChildPairs;
+  const extraChildTickets = extraChildren;
+
+  return {
+    accompanyingAdults,
+    soloAdults,
+    parentChildPairs,
+    extraChildren,
+    baseCandles,
+    seatsUsed,
+    soloTickets,
+    childTickets,
+    extraChildTickets,
+    // kept for backward compat with existing callers expecting totalCandles
+    totalCandles: baseCandles,
+  };
 }
 
 /**
@@ -24,7 +59,9 @@ export function computeCandlesCounts({ adults, children }) {
 export function computeCandlesPrice(pricing, counts) {
   const soloUnitPrice = pricing?.solo || 0;
   const parentChildUnitPrice = pricing?.parentChild || soloUnitPrice;
-  const extraChildUnitPrice = pricing?.extraChild || parentChildUnitPrice;
+  // "תוספת ילד" is priced like a solo ticket — falls back to the solo price,
+  // never to the (more expensive) parent+child package price.
+  const extraChildUnitPrice = pricing?.extraChild || soloUnitPrice;
   const { soloAdults, parentChildPairs, extraChildren } = counts;
 
   const totalPrice =
@@ -33,4 +70,14 @@ export function computeCandlesPrice(pricing, counts) {
     extraChildren * extraChildUnitPrice;
 
   return { soloUnitPrice, parentChildUnitPrice, extraChildUnitPrice, totalPrice };
+}
+
+/** Extra candles ("נר נוסף") never exceed one per base candle already ordered. */
+export function getMaxExtraCandles(baseCandles) {
+  return Math.max(0, Number(baseCandles) || 0);
+}
+
+/** @param {number} extraCandlePrice @param {number} extraCandles */
+export function computeExtraCandlesPrice(extraCandlePrice, extraCandles) {
+  return (Number(extraCandlePrice) || 0) * (Number(extraCandles) || 0);
 }

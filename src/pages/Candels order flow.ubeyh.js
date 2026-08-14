@@ -96,6 +96,7 @@ async function handleBookingSubmit(bookingData, iframe) {
             participants: (bookingData.adults || 0) + (bookingData.children || 0) || 1,
             adults: bookingData.adults,
             children: bookingData.children,
+            extraCandles: bookingData.extraCandles || 0,
             slots: slots,
             totalSessions: 1,
             products: bookingData.products || bookingData.selectedProducts || [],

@@ -52,6 +52,19 @@ function getServiceIdsGroupFor(serviceId) {
     return Object.values(TUFTING_SERVICE_IDS);
 }
 
+// A parent can accompany up to 2 children (first child = shared "הורה+ילד"
+// candle/ticket, additional children up to this cap = "תוספת ילד").
+const CANDLES_MAX_CHILDREN_PER_ADULT = 2;
+
+// "נר נוסף" — a candles-only add-on. Carries its own price (independent of
+// the "יחיד"/"ילד"/"תוספת ילד" ticket prices) and never occupies a Wix
+// Bookings seat. Run `listCandlesAddOns` from backend/TEST.web.js to find
+// the real addOnId/groupId per service, then fill them in below.
+const EXTRA_CANDLE_ADDON_BY_SERVICE = {
+    'eb8fec0e-5d04-48a3-a795-e3e8051d07da': { addOnId: '', groupId: '', price: 210 }, // נרות אמצע שבוע
+    'f0f6e447-02d8-4808-80ba-3c380ce9eae8': { addOnId: '', groupId: '', price: 270 }, // נרות סופ"ש
+};
+
 const FIRST_ORDER_MIN_TICKETS = 2;
 
 /** Booked headcount for a specific session (0 = no prior orders on this slot). */
@@ -530,7 +543,7 @@ async function hashAccessToken(token) {
 export const createAndCheckout = webMethod(Permissions.Anyone, async (orderData) => {
     console.log('[createAndCheckout] orderData received:', JSON.stringify(orderData, null, 2));
 
-    const { adults, children, slots: rawSlots, userDetails: rawUser, products: rawProducts } = orderData;
+    const { adults, children, extraCandles: rawExtraCandles, slots: rawSlots, userDetails: rawUser, products: rawProducts } = orderData;
     const userDetails = rawUser || orderData.customerInfo || {};
     const numAdults = Number(adults) || 1;
     const numChildren = Number(children) || 0;
@@ -549,16 +562,32 @@ export const createAndCheckout = webMethod(Permissions.Anyone, async (orderData)
         throw new Error(`No pricing found for service: ${serviceId}. Make sure Wix Bookings variants are configured.`);
     }
 
-    // נרות: הילד הראשון תחת כל מבוגר מלווה = כרטיס הורה+ילד מלא, וכל ילד נוסף
-    // תחת אותו מבוגר (עד 4 ילדים) = "תוספת ילד" (מחיר מוזל). מבוגר מלווה עד 4 ילדים.
+    if (isCandles && numChildren > numAdults * CANDLES_MAX_CHILDREN_PER_ADULT) {
+        throw new Error('CHILDREN_NEED_ADULT');
+    }
+
+    // נרות — מודל מחיר-לפי-נר / מושב-לפי-אדם:
+    // · מבוגר יחיד (בלי ילד) = מושב "יחיד" אחד, נר אחד, מחיר יחיד.
+    // · הורה+ילד (הילד הראשון תחת מבוגר מלווה) = 2 מושבים ("יחיד"+"ילד"),
+    //   נר אחד משותף, מחיר "ילד". מבוגר יכול ללוות עד CANDLES_MAX_CHILDREN_PER_ADULT ילדים.
+    // · ילד נוסף תחת אותו מבוגר = מושב "תוספת ילד" אחד, נר משלו, מחיר כמו יחיד.
+    // · "נר נוסף" (add-on נפרד, בלי מושב) — עד נר נוסף אחד לכל נר בסיס.
     // טאפטינג: הורה+ילד = זוג אחד (לוגיקה קיימת ללא שינוי).
-    let parentChildPairs, extraChildren, soloAdults, rugCount;
+    let parentChildPairs, extraChildren, soloAdults, rugCount, baseCandles = 0, extraCandles = 0, extraCandlePrice = 0, extraCandleAddOnId = null, extraCandleGroupId = null;
     if (isCandles) {
-        const accompanyingAdults = Math.min(numAdults, Math.ceil(numChildren / 4));
+        const accompanyingAdults = Math.min(numAdults, Math.ceil(numChildren / CANDLES_MAX_CHILDREN_PER_ADULT));
         parentChildPairs = accompanyingAdults;
         extraChildren = numChildren - accompanyingAdults;
         soloAdults = numAdults - accompanyingAdults;
-        rugCount = soloAdults + numChildren; // מספר נרות
+        baseCandles = soloAdults + numChildren; // מספר נרות בסיס
+
+        const extraCandleConfig = EXTRA_CANDLE_ADDON_BY_SERVICE[serviceId] || null;
+        extraCandlePrice = extraCandleConfig?.price || 0;
+        extraCandleAddOnId = extraCandleConfig?.addOnId || null;
+        extraCandleGroupId = extraCandleConfig?.groupId || null;
+        extraCandles = Math.max(0, Math.min(Number(rawExtraCandles) || 0, baseCandles));
+
+        rugCount = baseCandles + extraCandles; // מספר נרות כולל (למכסת כוסות/דשבורד)
     } else {
         parentChildPairs = Math.min(numAdults, numChildren);
         extraChildren = 0;
@@ -566,9 +595,11 @@ export const createAndCheckout = webMethod(Permissions.Anyone, async (orderData)
         rugCount = numAdults;
     }
     const pricePerAdult = servicePricing.solo;
-    const parentChildPrice = servicePricing.parentChild || pricePerAdult;
-    const extraChildPrice = servicePricing.extraChild || parentChildPrice;
-    const basePrice = (soloAdults * pricePerAdult) + (parentChildPairs * parentChildPrice) + (extraChildren * extraChildPrice);
+    // מחיר כרטיס "ילד" (זוג הורה+ילד) — נופל חזרה למחיר יחיד אם לא הוגדר.
+    const childTicketPrice = servicePricing.parentChild || pricePerAdult;
+    // מחיר "תוספת ילד" — כרטיס בפני עצמו, מתומחר כמו יחיד (לא כמו חבילת הורה+ילד).
+    const extraChildTicketPrice = servicePricing.extraChild || pricePerAdult;
+    const basePrice = (soloAdults * pricePerAdult) + (parentChildPairs * childTicketPrice) + (extraChildren * extraChildTicketPrice) + (extraCandles * extraCandlePrice);
 
     // --- נרמול פרטי משתמש ---
     const fullName = (userDetails?.name || userDetails?.full_name || '').trim();
@@ -596,15 +627,49 @@ export const createAndCheckout = webMethod(Permissions.Anyone, async (orderData)
         throw new Error('Slot is missing sessionId');
     }
 
+    // מושבי Wix בפועל — לפי אנשים, לא לפי נרות (הורה+ילד = 2 מושבים, נר אחד).
+    const seatsUsed = isCandles ? (numAdults + numChildren) : numAdults;
+    if (isCandles && typeof slot.openSpots === 'number' && seatsUsed > slot.openSpots) {
+        throw new Error('CAPACITY_EXCEEDED');
+    }
+
     const slotStartIso = slot.date || slot.startDate || slot.start?.timestamp || slot.start;
     const bookedParticipants = await getSlotBookedParticipants(sessionId, serviceId, slotStartIso);
-    if (bookedParticipants === 0 && rugCount < FIRST_ORDER_MIN_TICKETS) {
+    // מינימום הזמנה ראשונה נשאר לפי נרות בסיס — הורה+ילד לבד עדיין לא פותח סשן,
+    // ונר נוסף לא "עוזר" לעבור את הסף.
+    const firstOrderTicketCount = isCandles ? baseCandles : rugCount;
+    if (bookedParticipants === 0 && firstOrderTicketCount < FIRST_ORDER_MIN_TICKETS) {
         throw new Error('FIRST_ORDER_MIN_TICKETS');
     }
 
     // Build participantsChoices when we have variant info, otherwise fall back to totalParticipants
     let participantField;
-    if (servicePricing.soloOptionId && numChildren > 0) {
+    if (isCandles && servicePricing.soloOptionId && numChildren > 0) {
+        // נרות: 3 וריאנטים נפרדים — "יחיד" (כולל המבוגר בכל זוג הורה+ילד),
+        // "ילד" (חלקו של הילד בזוג), ו"תוספת ילד" (ילד נוסף, מושב משלו).
+        const soloSeats = soloAdults + parentChildPairs;
+        const serviceChoices = [];
+        if (soloSeats > 0) {
+            serviceChoices.push({
+                numberOfParticipants: soloSeats,
+                choices: [{ custom: servicePricing.soloChoice, optionId: servicePricing.soloOptionId }]
+            });
+        }
+        if (parentChildPairs > 0 && servicePricing.parentChildOptionId) {
+            serviceChoices.push({
+                numberOfParticipants: parentChildPairs,
+                choices: [{ custom: servicePricing.parentChildChoice, optionId: servicePricing.parentChildOptionId }]
+            });
+        }
+        if (extraChildren > 0 && servicePricing.extraChildOptionId) {
+            serviceChoices.push({
+                numberOfParticipants: extraChildren,
+                choices: [{ custom: servicePricing.extraChildChoice, optionId: servicePricing.extraChildOptionId }]
+            });
+        }
+        participantField = { participantsChoices: { serviceChoices } };
+    } else if (!isCandles && servicePricing.soloOptionId && numChildren > 0) {
+        // טאפטינג — לוגיקה קיימת ללא שינוי: זוג הורה+ילד = מושב אחד.
         const serviceChoices = [];
         if (soloAdults > 0) {
             serviceChoices.push({
@@ -620,8 +685,8 @@ export const createAndCheckout = webMethod(Permissions.Anyone, async (orderData)
         }
         participantField = { participantsChoices: { serviceChoices } };
     } else {
-        // rugCount = number of tickets/spots (tufting: adults; candles: solo adults + children)
-        participantField = { totalParticipants: rugCount };
+        // rugCount = number of candles (candles: base + extra); seatsUsed = actual Wix seats.
+        participantField = { totalParticipants: isCandles ? seatsUsed : rugCount };
     }
 
     const bookingPayload = {
@@ -646,6 +711,15 @@ export const createAndCheckout = webMethod(Permissions.Anyone, async (orderData)
             metadata: { channels: 'EMAIL, SMS' }
         }
     };
+
+    // "נר נוסף" — add-on בלבד, בלי מושב נוסף.
+    if (isCandles && extraCandles > 0 && extraCandleAddOnId) {
+        bookingPayload.bookedAddOns = [{
+            _id: extraCandleAddOnId,
+            ...(extraCandleGroupId ? { groupId: extraCandleGroupId } : {}),
+            quantity: extraCandles,
+        }];
+    }
 
     console.log('[createAndCheckout] createBooking payload:', JSON.stringify(bookingPayload, null, 2));
     const elevatedCreateBooking = auth.elevate(bookings.createBooking);
@@ -750,6 +824,7 @@ export const createAndCheckout = webMethod(Permissions.Anyone, async (orderData)
         adults: numAdults,
         children: numChildren,
         rugCount,
+        extraCandleCount: isCandles ? extraCandles : 0,
         basePrice: effectivePrice,
         organizerName: fullName,
         organizerEmail: email,
@@ -1977,11 +2052,13 @@ async function _fetchServicePricingInternal(serviceIds) {
             parentChildChoice = soloChoice;
             parentChildOptionId = soloOptionId;
         }
-        // No dedicated "extra child" variant configured for this service — fall back to the parent+child price.
+        // No dedicated "extra child" ("תוספת ילד") variant configured for this
+        // service — fall back to the solo price. "תוספת ילד" is priced like a
+        // solo ticket (its own candle), never like the parent+child package.
         if (extraChildPrice === null) {
-            extraChildPrice = parentChildPrice;
-            extraChildChoice = parentChildChoice;
-            extraChildOptionId = parentChildOptionId;
+            extraChildPrice = soloPrice;
+            extraChildChoice = soloChoice;
+            extraChildOptionId = soloOptionId;
         }
 
         result[item.serviceId] = {
@@ -2028,7 +2105,16 @@ async function getServicePricingCached(serviceIds) {
  */
 export const getServicePricing = webMethod(Permissions.Anyone, async (serviceIds) => {
     try {
-        return await getServicePricingCached(serviceIds);
+        const pricing = await getServicePricingCached(serviceIds);
+        // "נר נוסף" — candles-only add-on price, not a Wix Bookings ticket
+        // variant, so it doesn't come from _fetchServicePricingInternal.
+        for (const [svcId, entry] of Object.entries(pricing)) {
+            const extraCandleConfig = EXTRA_CANDLE_ADDON_BY_SERVICE[svcId];
+            if (extraCandleConfig) {
+                entry.extraCandle = extraCandleConfig.price || 0;
+            }
+        }
+        return pricing;
     } catch (error) {
         console.error('[ServicePricing] Error:', error?.message || error);
         return {};

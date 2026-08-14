@@ -9,7 +9,7 @@ import CupSelectionSection from '@/components/candels/CupSelectionSection';
 import CandelsOrderSummarySection from '@/components/candels/CandelsOrderSummarySection';
 import { submitBooking, subscribeToWix, notifyProgress, isWixEditorOrPreview } from '@/api/wixBridge';
 import { addLog } from '@/components/VersionLogger';
-import { computeCandlesCounts, computeCandlesPrice } from '@/lib/candlesPricing';
+import { computeCandlesCounts, computeCandlesPrice, getMaxExtraCandles, computeExtraCandlesPrice } from '@/lib/candlesPricing';
 
 // Candles workshop ("סדנת נרות") booking flow — same 4-step accordion shape
 // as Tufting's WorkshopBooking, with a cup-selection step instead of the
@@ -30,6 +30,7 @@ export default function CandelsBooking() {
   const [selectedSlot, setSelectedSlot] = useState(null);
   const [adults, setAdults] = useState(1);
   const [children, setChildren] = useState(0);
+  const [extraCandles, setExtraCandles] = useState(0);
   const [cupCart, setCupCart] = useState([]);
 
   // נתונים מ-Wix
@@ -121,8 +122,8 @@ export default function CandelsBooking() {
   // עדכון Wix על התקדמות
   useEffect(() => {
     addLog(`[Candels] Active section changed to: ${activeSection}`, 'info');
-    notifyProgress(activeSection, { adults, children, hasSelectedSlot: !!selectedSlot });
-  }, [activeSection, adults, children, selectedSlot]);
+    notifyProgress(activeSection, { adults, children, extraCandles, hasSelectedSlot: !!selectedSlot });
+  }, [activeSection, adults, children, extraCandles, selectedSlot]);
 
   // פתיחה/סגירה אוטומטית של סיכום הזמנה
   useEffect(() => {
@@ -137,11 +138,14 @@ export default function CandelsBooking() {
 
   // חישוב מספר יחידות (נרות): הילד הראשון תחת כל מבוגר מלווה = כרטיס הורה+ילד
   // (נר אחד), כל ילד נוסף תחת אותו מבוגר = "תוספת ילד". מבוגר אחד יכול ללוות
-  // עד 4 ילדים. מבוגר שלא מלווה ילדים = כרטיס יחיד (נר אחד).
-  const { soloAdults, parentChildPairs, extraChildren, totalCandles: totalCups } = useMemo(
+  // עד 2 ילדים. מבוגר שלא מלווה ילדים = כרטיס יחיד (נר אחד).
+  const { soloAdults, parentChildPairs, extraChildren, totalCandles: baseCandles } = useMemo(
     () => computeCandlesCounts({ adults, children }),
     [adults, children]
   );
+
+  // מכסת כוסות = נרות בסיס + נרות נוספים (כל נר, בסיס או נוסף, צריך כוס).
+  const totalCups = baseCandles + extraCandles;
 
   // מחיר כרטיסים
   const slotPricing = useMemo(
@@ -153,12 +157,38 @@ export default function CandelsBooking() {
     [slotPricing, soloAdults, parentChildPairs, extraChildren]
   );
 
+  // "נר נוסף" — עד נר אחד נוסף לכל נר בסיס; חותכים אוטומטית אם הבסיס יורד.
+  const maxExtraCandles = getMaxExtraCandles(baseCandles);
+  useEffect(() => {
+    if (extraCandles > maxExtraCandles) {
+      setExtraCandles(maxExtraCandles);
+    }
+  }, [extraCandles, maxExtraCandles]);
+  const extraCandlesTotal = computeExtraCandlesPrice(slotPricing?.extraCandle, extraCandles);
+
   // מחיר תוספת כוסות
   const cupsExtraTotal = useMemo(() => {
     return cupCart.reduce((sum, c) => sum + (Number(c.price) || 0) * (c.quantity || 1), 0);
   }, [cupCart]);
 
-  const orderTotalPreview = ticketPrice + cupsExtraTotal;
+  const orderTotalPreview = ticketPrice + extraCandlesTotal + cupsExtraTotal;
+
+  // איפוס בחירת כוסות שחורגת מהמכסה החדשה (למשל אחרי הפחתת נרות נוספים).
+  useEffect(() => {
+    setCupCart((prevCart) => {
+      const totalItems = prevCart.reduce((sum, p) => sum + (p.quantity || 1), 0);
+      if (totalItems <= totalCups) return prevCart;
+      let remaining = totalCups;
+      const next = [];
+      for (const p of prevCart) {
+        if (remaining <= 0) break;
+        const qty = Math.min(p.quantity || 1, remaining);
+        next.push({ ...p, quantity: qty });
+        remaining -= qty;
+      }
+      return next;
+    });
+  }, [totalCups]);
 
   // עדכון כמות כוס נבחרת (עד למכסת totalCups)
   const updateCupQuantity = (productId, delta) => {
@@ -223,6 +253,7 @@ export default function CandelsBooking() {
     const bookingData = {
       adults,
       children,
+      extraCandles,
       selectedSlot: selectedSlot ? {
         slot_id: selectedSlot._id || selectedSlot.sessionId,
         date: selectedSlot.start?.timestamp,
@@ -431,6 +462,8 @@ export default function CandelsBooking() {
                     setAdults={setAdults}
                     children={children}
                     setChildren={setChildren}
+                    extraCandles={extraCandles}
+                    setExtraCandles={setExtraCandles}
                     maxParticipants={selectedSlot?.openSpots || 10}
                     servicePricing={servicePricing}
                     selectedSlot={selectedSlot}
@@ -454,6 +487,8 @@ export default function CandelsBooking() {
                     soloAdults={soloAdults}
                     parentChildPairs={parentChildPairs}
                     extraChildren={extraChildren}
+                    extraCandles={extraCandles}
+                    extraCandlesTotal={extraCandlesTotal}
                     selectedSlot={selectedSlot}
                     servicePricing={servicePricing}
                     selectedCups={cupCart}

@@ -1,20 +1,30 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Minus, Plus, Users, Baby, MessageCircle, AlertTriangle, Flame } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { validateFirstOrderMinimum, FIRST_ORDER_MIN_TICKETS_MESSAGE } from '@/lib/firstOrderMinimum';
-import { MAX_CHILDREN_PER_ADULT, computeCandlesCounts, computeCandlesPrice } from '@/lib/candlesPricing';
+import {
+  MAX_CHILDREN_PER_ADULT,
+  computeCandlesCounts,
+  computeCandlesPrice,
+  getMaxExtraCandles,
+  computeExtraCandlesPrice,
+} from '@/lib/candlesPricing';
 
 // Candles workshop ("סדנת נרות") participants step.
 // Minimum age is 4. The first child grouped under an accompanying adult
-// books a "הורה+ילד" ticket (one candle); every additional child under that
-// same adult (up to MAX_CHILDREN_PER_ADULT) books a cheaper "תוספת ילד"
-// ticket. Adults not accompanying children get a solo ticket (one candle).
+// books a "הורה+ילד" ticket (one candle, priced as "ילד"); every additional
+// child under that same adult (up to MAX_CHILDREN_PER_ADULT) books a
+// "תוספת ילד" ticket (own candle, priced like a solo ticket). Adults not
+// accompanying children get a solo ticket (one candle). "נר נוסף" is a
+// separate add-on — extra candle, no extra Wix Bookings seat.
 export default function CandelsParticipantsSection({
   adults,
   setAdults,
   children,
   setChildren,
+  extraCandles,
+  setExtraCandles,
   maxParticipants = 10,
   servicePricing,
   selectedSlot,
@@ -22,16 +32,17 @@ export default function CandelsParticipantsSection({
 }) {
   const [validationError, setValidationError] = useState(null);
 
-  const { soloAdults, parentChildPairs, extraChildren, totalCandles } = useMemo(
+  const { soloAdults, parentChildPairs, extraChildren, totalCandles, seatsUsed } = useMemo(
     () => computeCandlesCounts({ adults, children }),
     [adults, children]
   );
-  // מקומות תפוסים: כל כרטיס (יחיד / הורה+ילד / תוספת ילד) = מקום אחד
-  const spotsUsed = totalCandles;
+  // מקומות תפוסים ב-Wix Bookings: כל אדם (מבוגר או ילד) = מקום אחד, בלי קשר
+  // לכמה נרות/כרטיסים הם חולקים.
+  const spotsUsed = seatsUsed;
   const totalParticipants = adults + children;
   const isGroupTooLarge = totalParticipants > 9;
 
-  // ילדים בלי מספיק מבוגרים מלווים (מבוגר אחד עד 4 ילדים)
+  // ילדים בלי מספיק מבוגרים מלווים (מבוגר אחד עד MAX_CHILDREN_PER_ADULT ילדים)
   const childrenNeedAdult = children > adults * MAX_CHILDREN_PER_ADULT;
   const missingAdults = childrenNeedAdult ? Math.ceil(children / MAX_CHILDREN_PER_ADULT) - adults : 0;
 
@@ -43,10 +54,31 @@ export default function CandelsParticipantsSection({
     return servicePricing[selectedSlot.serviceId] || null;
   }, [selectedSlot, servicePricing]);
 
-  const { totalPrice, soloUnitPrice, parentChildUnitPrice, extraChildUnitPrice } = useMemo(
+  const { totalPrice: ticketsPrice, soloUnitPrice, parentChildUnitPrice, extraChildUnitPrice } = useMemo(
     () => computeCandlesPrice(slotPricing, { soloAdults, parentChildPairs, extraChildren }),
     [slotPricing, soloAdults, parentChildPairs, extraChildren]
   );
+
+  // "נר נוסף" — עד נר אחד נוסף לכל נר בסיס שהוזמן.
+  const maxExtraCandles = getMaxExtraCandles(totalCandles);
+  const extraCandlePrice = slotPricing?.extraCandle || 0;
+
+  // כשמספר הנרות הבסיסי יורד (הפחתת מבוגרים/ילדים), חותכים את נרות הנוספים בהתאם.
+  useEffect(() => {
+    if (extraCandles > maxExtraCandles) {
+      setExtraCandles(maxExtraCandles);
+    }
+  }, [extraCandles, maxExtraCandles, setExtraCandles]);
+
+  const extraCandlesTotal = computeExtraCandlesPrice(extraCandlePrice, extraCandles);
+  const totalPrice = ticketsPrice + extraCandlesTotal;
+
+  const handleExtraCandlesDecrease = () => {
+    if (extraCandles > 0) setExtraCandles(extraCandles - 1);
+  };
+  const handleExtraCandlesIncrease = () => {
+    if (extraCandles < maxExtraCandles) setExtraCandles(extraCandles + 1);
+  };
 
   const handleAdultsDecrease = () => {
     if (adults > 1) {
@@ -225,6 +257,15 @@ export default function CandelsParticipantsSection({
                   <span className="font-medium tabular-nums">₪{extraChildren * extraChildUnitPrice}</span>
                 </div>
               )}
+              {extraCandles > 0 && (
+                <div className="flex justify-between gap-3">
+                  <span className="flex items-center gap-1.5">
+                    <Flame className="w-3.5 h-3.5" />
+                    {extraCandles} × נר נוסף
+                  </span>
+                  <span className="font-medium tabular-nums">₪{extraCandlesTotal}</span>
+                </div>
+              )}
             </div>
           )}
 
@@ -234,6 +275,54 @@ export default function CandelsParticipantsSection({
               <span className="text-[20px] font-bold text-[#5E2F88] tabular-nums">₪{totalPrice}</span>
             </div>
           )}
+        </div>
+      )}
+
+      {/* נר נוסף — עד נר אחד נוסף לכל נר בסיס, בלי מקום נוסף */}
+      {!isGroupTooLarge && maxExtraCandles > 0 && (
+        <div className="w-full max-w-md rounded-xl border border-[#e8e8e8] bg-white p-3 mb-3">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-1.5">
+              <Flame className="w-5 h-5 text-[#581E83]" />
+              <div>
+                <p className="text-[16px] font-medium text-[#581E83]">נר נוסף</p>
+                <p className="text-[12px] text-[#464646]/60">
+                  לכל מי שרוצה להכין {maxExtraCandles === 1 ? 'נר שני' : 'נרות נוספים'} (עד {maxExtraCandles})
+                  {extraCandlePrice > 0 && ` · ₪${extraCandlePrice} לנר`}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={handleExtraCandlesDecrease}
+                disabled={extraCandles <= 0}
+                className="w-8 h-8 rounded-full border-2 border-[#5E2F88] flex items-center justify-center
+                           text-[#5E2F88] hover:bg-[#5E2F88] hover:text-white transition-colors
+                           disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-[#5E2F88]"
+              >
+                <Minus className="w-3 h-3" />
+              </button>
+              <motion.div
+                key={extraCandles}
+                initial={{ scale: 0.8, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                className="text-2xl font-bold text-[#581E83] w-7 text-center"
+              >
+                {extraCandles}
+              </motion.div>
+              <button
+                type="button"
+                onClick={handleExtraCandlesIncrease}
+                disabled={extraCandles >= maxExtraCandles}
+                className="w-8 h-8 rounded-full border-2 border-[#5E2F88] flex items-center justify-center
+                           text-[#5E2F88] hover:bg-[#5E2F88] hover:text-white transition-colors
+                           disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-[#5E2F88]"
+              >
+                <Plus className="w-3 h-3" />
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

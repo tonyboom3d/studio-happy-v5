@@ -11,7 +11,8 @@
  */
 import wixData from 'wix-data';
 import { Permissions, webMethod } from 'wix-web-module';
-import { staffMembers } from '@wix/bookings';
+import { staffMembers, addOns, services } from '@wix/bookings';
+import { auth } from '@wix/essentials';
 import { listBookingStaff } from 'backend/staffAdminService.web.js';
 import { EMPLOYEE_ACTION_KEYS } from 'backend/employeeTemplates.js';
 import { TEMPLATE_USE } from 'backend/whatsappTemplates.js';
@@ -210,4 +211,56 @@ export const testBookingsStaffLink = webMethod(Permissions.Admin, async () => {
         employees,
         staffSample: (data?.staff || []).slice(0, 5),
     };
+});
+
+// Candles workshop ("סדנת נרות") service IDs — used only to look up which
+// add-on groups belong to each candles service (see bookingService.web.js
+// for the canonical copy).
+const CANDLES_SERVICE_IDS_FOR_TEST = {
+    a: 'eb8fec0e-5d04-48a3-a795-e3e8051d07da',
+    b: 'f0f6e447-02d8-4808-80ba-3c380ce9eae8',
+};
+
+/**
+ * Lists every add-on in the site (up to 100) plus, for each candles service,
+ * which add-on groups/add-ons are already attached to it. Run this once from
+ * the Velo backend console to find the "נר נוסף" add-on's _id per service:
+ *
+ *   import { listCandlesAddOns } from 'backend/TEST.web.js';
+ *   listCandlesAddOns().then(console.log);
+ */
+export const listCandlesAddOns = webMethod(Permissions.Admin, async () => {
+    const elevatedQueryAddOns = auth.elevate(addOns.queryAddOns);
+    const elevatedListGroups = auth.elevate(services.listAddOnGroupsByServiceId);
+
+    const allAddOnsResult = await elevatedQueryAddOns({ cursorPaging: { limit: 100 } });
+    const allAddOns = (allAddOnsResult?.addOns || []).map((a) => ({
+        _id: a._id,
+        name: a.name,
+        price: a.price,
+        maxQuantity: a.maxQuantity,
+        durationInMinutes: a.durationInMinutes,
+    }));
+
+    const byService = {};
+    for (const [key, serviceId] of Object.entries(CANDLES_SERVICE_IDS_FOR_TEST)) {
+        try {
+            const groupsResult = await elevatedListGroups(serviceId);
+            byService[key] = {
+                serviceId,
+                addOnGroups: (groupsResult?.addOnGroups || []).map((g) => ({
+                    _id: g._id,
+                    name: g.name,
+                    addOns: (g.addOns || []).map((a) => ({ _id: a._id, name: a.name, price: a.price })),
+                })),
+            };
+        } catch (err) {
+            byService[key] = { serviceId, error: err?.message || String(err) };
+        }
+    }
+
+    console.log('[TEST] listCandlesAddOns — allAddOns:', JSON.stringify(allAddOns));
+    console.log('[TEST] listCandlesAddOns — byService:', JSON.stringify(byService));
+
+    return { ok: true, allAddOns, byService };
 });

@@ -655,6 +655,7 @@ async function handlePortalAction(portalEl, detail) {
 
         case 'adminUpdateRule': {
             const result = await updateSchedulingRule(payload?.workshopTypeId, payload?.patch);
+            __epSuppressRealtimeUntil = Date.now() + 4000;
             pushActionResult(portalEl, { type, ...result });
             refreshPortal = false;
             refreshAdmin = true;

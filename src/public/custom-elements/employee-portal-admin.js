@@ -1663,16 +1663,42 @@ const RULE_FIELD_META = {
     ],
 };
 
+/**
+ * Persists in-progress rule-card edits across forced re-renders (e.g. a realtime
+ * scheduling-update refresh firing while a manager is mid-edit). Mirrors
+ * captureEmployeeFormDraft: reads whatever is currently in the DOM for any open
+ * rule card, before that DOM gets wiped by the next render.
+ */
+export function captureRuleFormDraft(ce) {
+    const openRows = ce._adminRuleOpenRows;
+    if (!openRows || !openRows.size) return;
+    for (const workshopTypeId of openRows) {
+        const card = ce.querySelector?.(`.epa-rule-card[data-type="${cssEsc(workshopTypeId)}"]`);
+        if (!card) continue;
+        const fields = card.querySelectorAll('[data-field]');
+        if (!fields.length) continue;
+        if (!ce._ruleFormDraft) ce._ruleFormDraft = {};
+        const draft = ce._ruleFormDraft[workshopTypeId] || {};
+        fields.forEach((input) => { draft[input.dataset.field] = input.value; });
+        ce._ruleFormDraft[workshopTypeId] = draft;
+    }
+}
+
+function cssEsc(value) {
+    return String(value).replace(/["\\]/g, '\\$&');
+}
+
 function renderRules(ce, d) {
     const openRows = ce._adminRuleOpenRows || new Set();
     const cards = (d.rules || []).map(r => {
         const ruleType = r.ruleType || 'SIMPLE';
         const open = openRows.has(r.workshopTypeId);
+        const draft = ce._ruleFormDraft?.[r.workshopTypeId];
         const fields = RULE_FIELD_META[ruleType] || RULE_FIELD_META.SIMPLE;
         const inputs = [...fields, { key: 'minInstructors', label: 'מינימום מדריכים' }].map(f => `
             <div class="epa-field" ${f.title ? `title="${esc(f.title)}"` : ''}>
                 <label>${esc(f.label)}</label>
-                <input type="number" min="0" data-field="${f.key}" value="${r[f.key] ?? ''}">
+                <input type="number" min="0" data-field="${f.key}" value="${draft?.[f.key] ?? r[f.key] ?? ''}">
             </div>`).join('');
         return `<div class="epa-rule-card" data-type="${r.workshopTypeId}" style="padding:0;overflow:hidden">
             <button type="button" class="epa-accordion-toggle" data-action="admin-toggle-rule" data-type="${r.workshopTypeId}">
@@ -2251,7 +2277,12 @@ export function handleAdminClick(ce, action, target) {
         case 'admin-toggle-rule': {
             ce._adminRuleOpenRows = ce._adminRuleOpenRows || new Set();
             const id = target.dataset.type;
-            if (ce._adminRuleOpenRows.has(id)) ce._adminRuleOpenRows.delete(id); else ce._adminRuleOpenRows.add(id);
+            if (ce._adminRuleOpenRows.has(id)) {
+                ce._adminRuleOpenRows.delete(id);
+                if (ce._ruleFormDraft) delete ce._ruleFormDraft[id]; // discard unsaved edits on close
+            } else {
+                ce._adminRuleOpenRows.add(id);
+            }
             ce.render();
             return true;
         }
@@ -2910,6 +2941,7 @@ export function handleAdminClick(ce, action, target) {
             card?.querySelectorAll('[data-field]').forEach((input) => {
                 patch[input.dataset.field] = Number(input.value);
             });
+            if (ce._ruleFormDraft) delete ce._ruleFormDraft[target.dataset.type]; // values are on their way to the server
             ce._startBusy('שומר כלל…');
             ce._dispatch('adminUpdateRule', {
                 workshopTypeId: target.dataset.type,

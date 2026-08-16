@@ -20,7 +20,7 @@
  * טאב ניהול (Module B): נטען מ-employee-portal-admin.js ומוצג רק לבעלי
  * הרשאת manageEmployeeSystem. קלט נוסף: attribute בשם `admin-data`.
  */
-import { ADMIN_STYLE, renderAdminTab, handleAdminClick, handleAdminChange, handleAdminDragStart, handleAdminDragEnd, handleAdminDragOver, handleAdminDrop, captureEmployeeFormDraft } from './employee-portal-admin.js';
+import { ADMIN_STYLE, renderAdminTab, handleAdminClick, handleAdminChange, handleAdminDragStart, handleAdminDragEnd, handleAdminDragOver, handleAdminDrop, captureEmployeeFormDraft, captureRuleFormDraft } from './employee-portal-admin.js';
 
 const EMPLOYEE_SAVE_HOLD_MS = 2000;
 
@@ -1170,6 +1170,7 @@ class EmployeePortal extends HTMLElement {
         const d = this._data;
         if (!d?.user) { this.renderLoading(); return; }
         captureEmployeeFormDraft(this, this._adminData);
+        captureRuleFormDraft(this);
         this._tipPinned = null;
         this._hideTip();
 

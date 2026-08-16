@@ -836,6 +836,58 @@ async function assertPermission(key) {
     return role;
 }
 
+/** Paginated load — default wixData.find() caps at 50 rows. */
+async function loadPaidWorkshopOrdersInRange(startDate, endDate) {
+    const items = [];
+    let result = await wixData.query('WorkshopOrders')
+        .eq('status', 'paid')
+        .ge('workshopStart', startDate)
+        .le('workshopStart', endDate)
+        .ascending('workshopStart')
+        .limit(100)
+        .find(SA);
+    items.push(...(result.items || []));
+    while (typeof result.hasNext === 'function' && result.hasNext()) {
+        result = await result.next();
+        items.push(...(result.items || []));
+    }
+    return { items, queryReturned: items.length };
+}
+
+/** Authoritative workshop bucket key — CMS sessionId groups all ticket variants. */
+function cmsWorkshopKey(order) {
+    if (order.sessionId) return `sid:${order.sessionId}`;
+    const t = order.workshopStart ? new Date(order.workshopStart).getTime() : null;
+    if (t && !Number.isNaN(t) && order.serviceId) return `slot:${order.serviceId}_${t}`;
+    return null;
+}
+
+function workshopIdFromCmsKey(cmsKey, sampleOrder) {
+    if (sampleOrder?.sessionId) return sampleOrder.sessionId;
+    return cmsKey.replace(/^(sid:|slot:)/, '');
+}
+
+function findCalendarSessionForOrder(order, idLookup, sessions) {
+    if (order.sessionId && idLookup[order.sessionId]) {
+        const id = idLookup[order.sessionId];
+        return sessions.find((s) => s.id === id) || null;
+    }
+    const match = inspectOrderSessionMatch(order, { ...idLookup }, sessions);
+    if (!match.resolvedId) return null;
+    return sessions.find((s) => s.id === match.resolvedId) || null;
+}
+
+/** Pick the richest calendar slot metadata for a CMS order group. */
+function pickCalendarSessionForOrderGroup(groupOrders, idLookup, sessions) {
+    let best = null;
+    for (const order of groupOrders) {
+        const cal = findCalendarSessionForOrder(order, idLookup, sessions);
+        if (!cal) continue;
+        if (!best || (cal.totalSpots || 0) > (best.totalSpots || 0)) best = cal;
+    }
+    return best;
+}
+
 export const getInitialDashboardData = webMethod(Permissions.SiteMember, async (filters) => {
     const dashboardRole = await assertDashboardAccess();
     const canManageOrdersSystem = hasPermission(dashboardRole, 'manageOrdersSystem');
@@ -858,19 +910,14 @@ export const getInitialDashboardData = webMethod(Permissions.SiteMember, async (
     console.log(`[dashboardService] Loaded ${Object.keys(typesMap).length} workshop type(s), serviceIds:`, allServiceIds);
     console.log(`[dashboardService] Loaded ${Object.keys(staffNamesById).length} staff member(s):`, staffNamesById);
 
-    const [{ sessions, idLookup }, ordersResult] = await Promise.all([
+    const [{ sessions, idLookup }, ordersLoad] = await Promise.all([
         loadSessions(allServiceIds, startDate, endDate),
-        wixData.query('WorkshopOrders')
-            .eq('status', 'paid')
-            .ge('workshopStart', startDate)
-            .le('workshopStart', endDate)
-            .find(SA),
+        loadPaidWorkshopOrdersInRange(startDate, endDate),
     ]);
-    const orders = ordersResult.items || [];
-    const ordersQueryTotal = typeof ordersResult.totalCount === 'number' ? ordersResult.totalCount : orders.length;
-    const queryLimitHit = (typeof ordersResult.hasNext === 'function' && ordersResult.hasNext())
-        || (orders.length >= 50 && ordersQueryTotal > orders.length);
-    console.log(`[dashboardService] Loaded ${sessions.length} Bookings session(s) and ${orders.length} paid WorkshopOrders record(s) in range (totalCount=${ordersQueryTotal}, limitHit=${queryLimitHit}).`);
+    const orders = ordersLoad.items || [];
+    const ordersQueryTotal = ordersLoad.queryReturned;
+    const queryLimitHit = false;
+    console.log(`[dashboardService] Loaded ${sessions.length} Bookings session(s) and ${orders.length} paid WorkshopOrders record(s) in range.`);
     if (!refreshOnly) console.warn('📦 [dashboardService] Raw WorkshopOrders from CMS:', orders);
 
     const orderIds = orders.map(o => o._id);
@@ -891,117 +938,75 @@ export const getInitialDashboardData = webMethod(Permissions.SiteMember, async (
     ];
     const productWixImageById = await loadProductWixImagesById(allProductIds);
 
-    // Group orders by session. The CMS sessionId is the primary grouping key:
-    // all WorkshopOrders sharing a sessionId MUST land on the same workshop row,
-    // even when the calendar returns a different id variant for the slot.
-    //
-    // Pass 1 — resolve each order individually (idLookup / datetime fallback)
-    // and learn which stored sessionId maps to which canonical session.
-    const matchByOrderId = {};
-    const resolvedByStoredSessionId = {};
-    for (const order of orders) {
-        const match = inspectOrderSessionMatch(order, idLookup, sessions);
-        matchByOrderId[order._id] = match;
-        if (match.resolvedId && order.sessionId && !resolvedByStoredSessionId[order.sessionId]) {
-            resolvedByStoredSessionId[order.sessionId] = match.resolvedId;
-        }
-    }
-
-    // Pass 2 — assign every order to a session: own match → shared stored
-    // sessionId → synthetic session built from the order itself (so paid CMS
-    // orders are never dropped from the UI).
-    const ordersBySessionId = {};
-    const orderMatchLog = [];
+    // CMS sessionId is the authoritative grouping key. Orders that share a
+    // sessionId must land on one workshop row even when they were booked via
+    // different ticket/service variants (e.g. parent+child vs regular adult).
+    const ordersByCmsKey = {};
     const unmatchedOrders = [];
-    const syntheticSessionsByKey = new Map();
     for (const order of orders) {
-        const match = matchByOrderId[order._id];
-        let resolvedId = match.resolvedId;
-        let method = match.method;
-
-        if (!resolvedId && order.sessionId && resolvedByStoredSessionId[order.sessionId]) {
-            resolvedId = resolvedByStoredSessionId[order.sessionId];
-            method = 'shared-cms-sessionId';
-            idLookup[order.sessionId] = resolvedId;
-        }
-
-        const participants = participantsByOrderId[order._id] || [];
-        if (!resolvedId) {
-            // Surface in the debug panel, then keep the order visible via a
-            // synthetic workshop row keyed by the CMS sessionId (or service+time).
+        const cmsKey = cmsWorkshopKey(order);
+        if (!cmsKey) {
             unmatchedOrders.push({
                 orderId: order._id,
                 organizerName: order.organizerName || 'ללא שם',
-                storedSessionId: order.sessionId || null,
-                serviceId: order.serviceId || null,
-                workshopStart: order.workshopStart || null,
-                workshopStartLabel: order.workshopStart
-                    ? `${formatDateIL(order.workshopStart)} ${formatTimeIL(order.workshopStart)}`
-                    : null,
-                status: order.status || null,
-                cancelledAt: order.cancelledAt || null,
-                selectionMode: order.selectionMode || null,
-                participantCount: participants.filter((p) => !p.cancelledAt).length,
-                failReason: match.failReason || 'unmatched',
-                closestSession: match.closestSession || null,
-                diagnosis: buildOrderMatchDiagnosis({
-                    order,
-                    participants,
-                    match,
-                    inDateRange: true,
-                    queryLimitHit: false,
-                }),
+                failReason: 'missing-sessionId-and-slot',
             });
+            continue;
+        }
+        if (!ordersByCmsKey[cmsKey]) ordersByCmsKey[cmsKey] = [];
+        ordersByCmsKey[cmsKey].push(order);
+    }
 
-            const orderStart = order.workshopStart ? new Date(order.workshopStart) : null;
-            const syntheticKey = order.sessionId
-                || (orderStart && order.serviceId ? `${order.serviceId}_${orderStart.getTime()}` : null);
-            if (syntheticKey) {
-                let synthetic = syntheticSessionsByKey.get(syntheticKey);
-                if (!synthetic) {
-                    synthetic = {
-                        id: order.sessionId || `cms_${syntheticKey}`,
-                        sessionId: order.sessionId || null,
-                        eventId: null,
-                        serviceId: order.serviceId || null,
-                        start: orderStart,
-                        end: null,
-                        totalSpots: 0,
-                        openSpots: 0,
-                        staffId: null,
-                        isSynthetic: true,
-                    };
-                    syntheticSessionsByKey.set(syntheticKey, synthetic);
-                    idLookup[synthetic.id] = synthetic.id;
-                    if (order.sessionId) idLookup[order.sessionId] = synthetic.id;
-                }
-                resolvedId = synthetic.id;
-                method = 'synthetic-cms-row';
-            }
+    const workshopSessions = [];
+    const ordersBySessionId = {};
+    const orderMatchLog = [];
+
+    for (const [cmsKey, groupOrders] of Object.entries(ordersByCmsKey)) {
+        const sample = groupOrders[0];
+        const workshopId = workshopIdFromCmsKey(cmsKey, sample);
+        const calSession = pickCalendarSessionForOrderGroup(groupOrders, idLookup, sessions);
+        const start = sample.workshopStart
+            ? new Date(sample.workshopStart)
+            : (calSession?.start || null);
+
+        if (sample.sessionId) idLookup[sample.sessionId] = workshopId;
+        if (calSession) {
+            idLookup[calSession.id] = workshopId;
+            if (calSession.sessionId) idLookup[calSession.sessionId] = workshopId;
+            if (calSession.eventId) idLookup[calSession.eventId] = workshopId;
         }
 
-        orderMatchLog.push({
-            orderId: order._id,
-            storedSessionId: order.sessionId,
-            resolvedSessionId: resolvedId,
-            matchMethod: method,
-            failReason: match.failReason || null,
-            serviceId: order.serviceId,
-            workshopStart: order.workshopStart,
-            organizerName: order.organizerName,
+        workshopSessions.push({
+            id: workshopId,
+            sessionId: sample.sessionId || calSession?.sessionId || null,
+            eventId: calSession?.eventId || null,
+            serviceId: sample.serviceId || calSession?.serviceId || null,
+            start,
+            end: calSession?.end || null,
+            totalSpots: calSession?.totalSpots || 0,
+            openSpots: calSession?.openSpots || 0,
+            staffId: calSession?.staffId || null,
+            isSynthetic: !calSession,
+            cmsKey,
         });
-        if (!resolvedId) continue;
-        if (!ordersBySessionId[resolvedId]) ordersBySessionId[resolvedId] = [];
-        ordersBySessionId[resolvedId].push(order);
+
+        ordersBySessionId[workshopId] = groupOrders;
+        for (const order of groupOrders) {
+            orderMatchLog.push({
+                orderId: order._id,
+                storedSessionId: order.sessionId,
+                resolvedSessionId: workshopId,
+                matchMethod: 'cms-sessionId',
+                serviceId: order.serviceId,
+                workshopStart: order.workshopStart,
+                organizerName: order.organizerName,
+            });
+        }
     }
-    const syntheticSessions = [...syntheticSessionsByKey.values()];
-    if (syntheticSessions.length) {
-        sessions.push(...syntheticSessions);
-        console.warn(`🧩 [dashboardService] Created ${syntheticSessions.length} synthetic workshop row(s) from CMS orders with no calendar session.`);
-    }
-    console.warn('🔗 [dashboardService] Order → session matching:', orderMatchLog);
+
+    console.warn('🔗 [dashboardService] Order → session matching (CMS sessionId first):', orderMatchLog);
     if (unmatchedOrders.length) {
-        console.warn(`⚠️ [dashboardService] ${unmatchedOrders.length} paid WorkshopOrders did not match a Bookings session (now shown via synthetic rows):`, unmatchedOrders);
+        console.warn(`⚠️ [dashboardService] ${unmatchedOrders.length} paid WorkshopOrders missing sessionId/slot key:`, unmatchedOrders);
     }
 
     const ecomBuyerByOrderId = refreshOnly ? {} : await loadEcomBuyerByOrderId(orders);
@@ -1014,7 +1019,7 @@ export const getInitialDashboardData = webMethod(Permissions.SiteMember, async (
     // employee's own sessions when they lack the manageOrdersSystem permission.
     const sessionStaffMap = {};
 
-    for (const session of sessions) {
+    for (const session of workshopSessions) {
         const sessionId = session.id;
         sessionStaffMap[sessionId] = session.staffId || null;
         const typeId = serviceIdToTypeId[session.serviceId] || 'unknown';

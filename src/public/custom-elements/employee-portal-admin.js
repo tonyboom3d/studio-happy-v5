@@ -54,10 +54,11 @@ export const ADMIN_STYLE = `
 .epa-inline select, .epa-inline input { border: 1px solid #d1d5db; border-radius: 7px; padding: 5px 7px; font-size: 12px; font-family: inherit; }
 .epa-section { margin-top: 16px; }
 .epa-rule-inputs input { width: 60px; border: 1px solid #d1d5db; border-radius: 7px; padding: 4px 6px; font-size: 12px; font-family: inherit; }
-.epa-rule-card { border: 1px solid #e2e8f0; border-radius: 12px; padding: 12px; margin-bottom: 10px; background: #f8fafc; }
-.epa-rule-card-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
-.epa-rule-card-head b { font-size: 13px; }
-.epa-rule-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(150px,1fr)); gap: 8px; }
+.epa-rule-card { border: 1px solid #e2e8f0; border-radius: 12px; margin-bottom: 10px; background: #f8fafc; }
+.epa-rule-card .epa-accordion-toggle { color: #1f2937; }
+.epa-rule-card .epa-accordion-toggle:hover { background: rgba(15,23,42,.04); }
+.epa-rule-card .epa-accordion-body { border-top: 1px solid #e2e8f0; }
+.epa-rule-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(150px,1fr)); gap: 8px; margin-bottom: 10px; }
 .epa-list-day { border: 1px solid #e5e7eb; border-radius: 10px; padding: 9px 11px; margin-bottom: 8px; font-size: 12.5px; background: #fff; }
 .epa-list-day.no-ws { background: #f9fafb; color: #9ca3af; }
 .epa-list-head { display: flex; justify-content: space-between; font-weight: 700; }
@@ -1662,24 +1663,28 @@ const RULE_FIELD_META = {
     ],
 };
 
-function renderRules(d) {
+function renderRules(ce, d) {
+    const openRows = ce._adminRuleOpenRows || new Set();
     const cards = (d.rules || []).map(r => {
         const ruleType = r.ruleType || 'SIMPLE';
+        const open = openRows.has(r.workshopTypeId);
         const fields = RULE_FIELD_META[ruleType] || RULE_FIELD_META.SIMPLE;
         const inputs = [...fields, { key: 'minInstructors', label: 'מינימום מדריכים' }].map(f => `
             <div class="epa-field" ${f.title ? `title="${esc(f.title)}"` : ''}>
                 <label>${esc(f.label)}</label>
                 <input type="number" min="0" data-field="${f.key}" value="${r[f.key] ?? ''}">
             </div>`).join('');
-        return `<div class="epa-rule-card" data-type="${r.workshopTypeId}">
-            <div class="epa-rule-card-head">
-                <b>${esc(r.workshopName)}</b>
-                <span class="epa-badge kind">${esc(RULE_TYPE_LABELS[ruleType] || ruleType)}</span>
-            </div>
-            <div class="epa-rule-grid">${inputs}</div>
-            <div class="epa-inline">
-                <button class="epa-btn" data-action="admin-save-rule" data-type="${r.workshopTypeId}">שמירה</button>
-            </div>
+        return `<div class="epa-rule-card" data-type="${r.workshopTypeId}" style="padding:0;overflow:hidden">
+            <button type="button" class="epa-accordion-toggle" data-action="admin-toggle-rule" data-type="${r.workshopTypeId}">
+                <span>${esc(r.workshopName)} <span class="epa-badge kind" style="margin-inline-start:8px">${esc(RULE_TYPE_LABELS[ruleType] || ruleType)}</span></span>
+                <span class="epa-accordion-arrow">${open ? '▲' : '▼'}</span>
+            </button>
+            ${open ? `<div class="epa-accordion-body">
+                <div class="epa-rule-grid">${inputs}</div>
+                <div class="epa-inline">
+                    <button class="epa-btn primary" data-action="admin-save-rule" data-type="${r.workshopTypeId}">שמירה</button>
+                </div>
+            </div>` : ''}
         </div>`;
     }).join('');
     return `<div class="epa-rule-cards">${cards || '<div class="ep-empty">אין סדנאות מוגדרות</div>'}</div>`;
@@ -1737,7 +1742,7 @@ function renderSettingsPage(ce, d) {
         </section>
         <section class="epa-panel">
             <div class="epa-panel-title"><h3>כללי שיבוץ לפי סוג סדנה</h3></div>
-            ${renderRules(d)}
+            ${renderRules(ce, d)}
         </section>
         <section class="epa-panel" style="padding:0;overflow:hidden">
             <button type="button" class="epa-accordion-toggle" data-action="admin-toggle-holidays">
@@ -2243,6 +2248,13 @@ export function handleAdminClick(ce, action, target) {
             ce._adminHolidaysOpen = !ce._adminHolidaysOpen;
             ce.render();
             return true;
+        case 'admin-toggle-rule': {
+            ce._adminRuleOpenRows = ce._adminRuleOpenRows || new Set();
+            const id = target.dataset.type;
+            if (ce._adminRuleOpenRows.has(id)) ce._adminRuleOpenRows.delete(id); else ce._adminRuleOpenRows.add(id);
+            ce.render();
+            return true;
+        }
         case 'admin-toggle-day-global':
             ce._adminDayGlobalOpen = !ce._adminDayGlobalOpen;
             ce.render();

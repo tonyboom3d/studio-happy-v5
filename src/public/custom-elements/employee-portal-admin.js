@@ -104,6 +104,9 @@ export const ADMIN_STYLE = `
 .epa-settings-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(180px,1fr)); gap: 10px; }
 .epa-field label { display: block; font-size: 11px; color: #64748b; margin-bottom: 4px; }
 .epa-field input,.epa-field select,.epa-field textarea { width: 100%; border: 1px solid #cbd5e1; border-radius: 9px; padding: 8px 9px; font: inherit; font-size: 12px; background: #fff; transition: border-color .15s,box-shadow .15s; }
+.epa-time-input { border: 1px solid #cbd5e1; border-radius: 9px; padding: 7px 9px; font: inherit; font-size: 12px; background: #fff; width: 92px; text-align: center; letter-spacing: .5px; }
+.epa-time-input:disabled { background: #f1f5f9; color: #94a3b8; }
+.epa-time-input:focus { outline: 0; border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,.12); }
 .epa-field textarea { min-height: 170px; resize: vertical; }
 .epa-field input:focus,.epa-field select:focus,.epa-field textarea:focus { outline: 0; border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,.12); }
 .epa-toggle { display: flex; align-items: center; gap: 8px; min-height: 36px; font-size: 12px; }
@@ -808,8 +811,8 @@ function renderDayGlobalSection(ce, d, dateKey, blocked, promoted, info) {
                     <option value="CLOSED" ${mode === 'CLOSED' ? 'selected' : ''}>עסק סגור</option>
                     <option value="SHORT" ${mode === 'SHORT' ? 'selected' : ''}>יום מקוצר</option>
                 </select>
-                <input type="time" id="epaHolStart" value="${esc(holidayEntry?.shortStart || '')}" placeholder="שעת פתיחה" ${mode === 'SHORT' ? '' : 'disabled'}>
-                <input type="time" id="epaHolEnd" value="${esc(holidayEntry?.shortEnd || '')}" placeholder="שעת סגירה" ${mode === 'SHORT' ? '' : 'disabled'}>
+                <input type="text" inputmode="numeric" maxlength="5" class="epa-time-input" id="epaHolStart" value="${esc(holidayEntry?.shortStart || '')}" placeholder="שעת פתיחה HH:MM" ${mode === 'SHORT' ? '' : 'disabled'}>
+                <input type="text" inputmode="numeric" maxlength="5" class="epa-time-input" id="epaHolEnd" value="${esc(holidayEntry?.shortEnd || '')}" placeholder="שעת סגירה HH:MM" ${mode === 'SHORT' ? '' : 'disabled'}>
                 <button class="epa-btn primary" data-action="admin-save-holiday-mode" data-date="${dateKey}">שמירה</button>
             </div>
         </div>` : '';
@@ -854,8 +857,8 @@ function renderSketchDutySection(ce, d, dateKey, info) {
         <b>🧵 תפירת סקיצות (סקאלה — מוצג רק לעובדים עם ההרשאה)</b>
         ${warning}
         <div class="epa-inline" style="margin-top:0">
-            <input type="time" id="epaSketchStart" value="${startVal}" placeholder="שעת התחלה">
-            <input type="time" id="epaSketchEnd" value="${endVal}" placeholder="שעת סיום">
+            <input type="text" inputmode="numeric" maxlength="5" class="epa-time-input" id="epaSketchStart" value="${startVal}" placeholder="שעת התחלה HH:MM">
+            <input type="text" inputmode="numeric" maxlength="5" class="epa-time-input" id="epaSketchEnd" value="${endVal}" placeholder="שעת סיום HH:MM">
             <button class="epa-btn primary" data-action="admin-save-sketch-duty" data-date="${dateKey}">שמירה</button>
             ${duty ? `<button class="epa-btn danger" data-action="admin-delete-sketch-duty" data-date="${dateKey}">מחיקה</button>` : ''}
             ${confirmButton}
@@ -1408,8 +1411,8 @@ function renderSettingsPage(ce, d) {
                 ${settingsField(ce, 'epaS_monthsAhead', SETTINGS_FIELD_LABELS.epaS_monthsAhead, `<input id="epaS_monthsAhead" type="number" min="1" value="${s.monthsAheadAllowed ?? 1}">`)}
                 ${settingsField(ce, 'epaS_minShifts', SETTINGS_FIELD_LABELS.epaS_minShifts, `<input id="epaS_minShifts" type="number" min="1" value="${s.defaultMinShiftsPerWeek ?? 1}">`)}
                 ${settingsField(ce, 'epaS_minHours', SETTINGS_FIELD_LABELS.epaS_minHours, `<input id="epaS_minHours" type="number" min="0.5" step="0.5" value="${s.defaultMinShiftHours ?? 4}">`)}
-                ${settingsField(ce, 'epaS_start', SETTINGS_FIELD_LABELS.epaS_start, `<input id="epaS_start" type="time" value="${esc(s.defaultShiftStart || '10:00')}">`)}
-                ${settingsField(ce, 'epaS_end', SETTINGS_FIELD_LABELS.epaS_end, `<input id="epaS_end" type="time" value="${esc(s.defaultShiftEnd || '16:00')}">`)}
+                ${settingsField(ce, 'epaS_start', SETTINGS_FIELD_LABELS.epaS_start, `<input id="epaS_start" class="epa-time-input" type="text" inputmode="numeric" maxlength="5" placeholder="HH:MM" value="${esc(s.defaultShiftStart || '10:00')}">`)}
+                ${settingsField(ce, 'epaS_end', SETTINGS_FIELD_LABELS.epaS_end, `<input id="epaS_end" class="epa-time-input" type="text" inputmode="numeric" maxlength="5" placeholder="HH:MM" value="${esc(s.defaultShiftEnd || '16:00')}">`)}
                 ${settingsField(ce, 'epaS_reqFri', SETTINGS_FIELD_LABELS.epaS_reqFri, `<input id="epaS_reqFri" type="number" min="0" value="${s.requiredFridaysPerMonth ?? 2}">`, 'מספר ימי שישי שיש להגיש לחודש (חופשה מאושרת על יום שישי מקטינה את הדרישה)')}
                 ${settingsField(ce, 'epaS_reqSat', SETTINGS_FIELD_LABELS.epaS_reqSat, `<input id="epaS_reqSat" type="number" min="0" value="${s.requiredSaturdaysPerMonth ?? 2}">`, 'מספר ימי שבת שיש להגיש לחודש (חופשה מאושרת על יום שבת מקטינה את הדרישה)')}
                 <label class="epa-toggle"><input id="epaS_bonus" type="checkbox" ${s.bonusUnlockEnabled !== false ? 'checked' : ''}> פתיחת משמרות נוספות לאחר השלמת מכסה השבועית</label>
@@ -1417,7 +1420,7 @@ function renderSettingsPage(ce, d) {
             </div>
             <div class="epa-inline">
                 <button class="epa-btn primary" data-action="admin-save-settings" ${savingSettings ? 'disabled' : ''}>${savingSettings ? '<span class="epa-save-spin"></span>שומר הגדרות…' : 'שמירת הגדרות'}</button>
-                ${ce._settingsSavedAt && !savingSettings ? `<span style="color:#16a34a;font-size:12px;font-weight:600">✓ נשמר בהצלחה</span>` : ''}
+                <span id="epaSettingsSavedMark" style="color:#16a34a;font-size:12px;font-weight:600;${ce._settingsSavedAt && !savingSettings ? '' : 'display:none'}">✓ נשמר בהצלחה</span>
             </div>
         </section>
         <section class="epa-panel">
@@ -2316,8 +2319,19 @@ export function handleAdminClick(ce, action, target) {
             }
             ce._settingsSaving = true;
             ce._settingsSavedAt = null;
-            ce.render();
-            ce._startBusy('שומר הגדרות…');
+            // Patch just the save button + any stale error markup in place
+            // instead of a full page re-render, which was visibly
+            // flashing/resetting the whole tab on every save.
+            ce.querySelectorAll('.epa-settings-grid .epa-field.has-error').forEach((el) => {
+                el.classList.remove('has-error');
+                const errEl = el.querySelector('.epa-field-error');
+                if (errEl) errEl.textContent = '';
+            });
+            const settingsSaveBtn = ce.querySelector('[data-action="admin-save-settings"]');
+            if (settingsSaveBtn) {
+                settingsSaveBtn.disabled = true;
+                settingsSaveBtn.innerHTML = '<span class="epa-save-spin"></span>שומר הגדרות…';
+            }
             ce._dispatch('adminUpdateSettings', {
                 patch: {
                     deadlineDaysBeforeMonthEnd,

@@ -363,6 +363,17 @@ const STATUS_HINTS = {
     PENDING: 'ימים שבחרת בלוח — טרם נשלחו להגשה',
 };
 
+/**
+ * Free-typing "HH:MM" mask for `.epa-time-input` text fields — native
+ * `<input type="time">` widgets don't reliably accept keyboard typing inside
+ * this custom element's embed context, so plain-text fields with a digit
+ * mask are used instead. Formats in place; doesn't touch focus/selection.
+ */
+function maskTimeInput(input) {
+    const digits = input.value.replace(/\D/g, '').slice(0, 4);
+    input.value = digits.length > 2 ? `${digits.slice(0, 2)}:${digits.slice(2)}` : digits;
+}
+
 function pad2(n) { return String(n).padStart(2, '0'); }
 function todayKey() {
     const now = new Date();
@@ -532,6 +543,10 @@ class EmployeePortal extends HTMLElement {
         this.addEventListener('change', (e) => this._onChange(e));
         this.addEventListener('input', (e) => {
             const input = e.target;
+            if (input?.classList?.contains('epa-time-input')) {
+                maskTimeInput(input);
+                return;
+            }
             if (this._adminModal?.type === 'employee' && input?.id?.startsWith('epaF_')) {
                 captureEmployeeFormDraft(this, this._adminData);
             }
@@ -966,7 +981,17 @@ class EmployeePortal extends HTMLElement {
             this._settingsFieldErrors = null;
             this._settingsSavedAt = Date.now();
             this._toast('הגדרות הזמינות נשמרו בהצלחה.', 'success');
-            this.render();
+            // Patch the save button/confirmation in place — avoid rebuilding
+            // the whole settings tab (was resetting scroll/state on every save).
+            const saveBtn = this.querySelector('[data-action="admin-save-settings"]');
+            const savedMark = this.querySelector('#epaSettingsSavedMark');
+            if (saveBtn && savedMark) {
+                saveBtn.disabled = false;
+                saveBtn.textContent = 'שמירת הגדרות';
+                savedMark.style.display = '';
+            } else {
+                this.render();
+            }
             return;
         }
         if (result.type === 'adminUpdateHolidays' && result.ok) {
@@ -2885,6 +2910,9 @@ class EmployeePortal extends HTMLElement {
         }
         if (input?.dataset?.action === 'urgent-toggle') {
             const id = input.dataset.id;
+            // Update the checkboxes/button in place instead of a full re-render —
+            // a full innerHTML rebuild on every click was flickering the popup.
+            const urgentInputs = [...this.querySelectorAll('input[data-action="urgent-toggle"]')];
             if (input.checked) {
                 this._urgentSelected.add(id);
                 // Parallel-slot rule: picking one workshop at a given date+time
@@ -2895,13 +2923,16 @@ class EmployeePortal extends HTMLElement {
                     for (const c of calls) {
                         if (c.id !== id && c.date === picked.date && c.sessionTime === picked.sessionTime) {
                             this._urgentSelected.delete(c.id);
+                            const other = urgentInputs.find(el => el.dataset.id === c.id);
+                            if (other) other.checked = false;
                         }
                     }
                 }
             } else {
                 this._urgentSelected.delete(id);
             }
-            this.render();
+            const submitBtn = this.querySelector('.ep-urgent-submit');
+            if (submitBtn) submitBtn.disabled = this._urgentSelected.size === 0;
             return;
         }
         if (input?.dataset?.action === 'toggle-day-off') {

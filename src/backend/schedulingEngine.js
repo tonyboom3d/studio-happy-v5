@@ -130,13 +130,19 @@ export function requiredInstructorsFor(rule, adults, children) {
 
 /** Active Dashboard_Roles rows; skills expanded when the field is a multi-ref. */
 export async function loadActiveRoles() {
-    let result;
-    try {
-        result = await wixData.query('Dashboard_Roles').ne('active', false).include('skills').limit(1000).find(SA);
-    } catch (_) {
-        result = await wixData.query('Dashboard_Roles').ne('active', false).limit(1000).find(SA).catch(() => ({ items: [] }));
-    }
-    return result.items || [];
+    const result = await wixData.query('Dashboard_Roles').ne('active', false).limit(1000).find(SA).catch(() => ({ items: [] }));
+    const roles = result.items || [];
+    // `.include()` on a multi-reference field is only reliable for single-item
+    // lookups (`.eq('_id', ...)`) — over a bulk list query it silently drops
+    // or omits referenced items, so `skills` were coming back empty here.
+    // Resolve each role's skills individually instead.
+    await Promise.all(roles.map(async (r) => {
+        try {
+            const single = await wixData.query('Dashboard_Roles').eq('_id', r._id).include('skills').limit(1).find(SA);
+            r.skills = single.items?.[0]?.skills ?? r.skills;
+        } catch (_) { /* keep whatever `skills` the bulk query returned */ }
+    }));
+    return roles;
 }
 
 function dateRangeFilter(query, fromKey, toKey) {

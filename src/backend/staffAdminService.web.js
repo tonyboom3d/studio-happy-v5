@@ -52,6 +52,7 @@ import {
     saveVacation as saveVacationRow,
     deleteVacation as deleteVacationRow,
     decideVacationRequest,
+    VACATION_STATUS,
 } from 'backend/vacations.js';
 import {
     TEMPLATE_USE,
@@ -218,7 +219,7 @@ export const getStaffAdminData = webMethod(Permissions.SiteMember, async (monthK
     const paddedToKey = shiftDateKey(toKey, 6);
 
     const canManageEmployees = getRolePermissionValue(role, 'manageEmployees');
-    const [board, settings, submissionsRaw, weeklySubsRaw, vacationsByEmployee, tuftingTypeIds, pendingVacationsCount] = await Promise.all([
+    const [board, settings, submissionsRaw, weeklySubsRaw, vacationsByEmployee, tuftingTypeIds, pendingVacationsResult] = await Promise.all([
         buildBoard(fromKey, toKey, { includeOffers: true }),
         loadSettings(),
         // All statuses (incl. REJECTED) so the tracker page shows the full picture;
@@ -234,9 +235,10 @@ export const getStaffAdminData = webMethod(Permissions.SiteMember, async (monthK
         loadVacationsOverlappingRangeByEmployee(fromKey, toKey),
         loadTuftingTypeIdSet(),
         canManageEmployees
-            ? wixData.query('EmployeeVacations').eq('status', 'PENDING').count(SA).catch(() => 0)
-            : Promise.resolve(0),
+            ? wixData.query('EmployeeVacations').eq('status', VACATION_STATUS.PENDING).limit(1).find(SA).catch(() => null)
+            : Promise.resolve(null),
     ]);
+    const pendingVacationsTotal = pendingVacationsResult?.totalCount ?? 0;
 
     const weeklySubsByEmployee = {};
     for (const s of (weeklySubsRaw.items || [])) {
@@ -341,7 +343,7 @@ export const getStaffAdminData = webMethod(Permissions.SiteMember, async (monthK
             editTimeEntries: getRolePermissionValue(role, 'editTimeEntries'),
         },
         employees,
-        pendingVacationsCount: canManageEmployees ? (Number(pendingVacationsCount) || 0) : 0,
+        pendingVacationsCount: canManageEmployees ? pendingVacationsTotal : 0,
         workshopTypes: Object.values(board.typesById),
         workTypes: WORK_TYPES.map(value => ({ value, label: WORK_TYPE_LABELS[value] })),
         roleTypes: ROLE_TYPES.map(rt => ({ value: rt, label: ROLE_TYPE_LABELS[rt] })),

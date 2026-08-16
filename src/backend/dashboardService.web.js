@@ -211,23 +211,117 @@ async function loadSessions(serviceIds, startDate, endDate) {
 
 const SESSION_MATCH_TOLERANCE_MS = 5 * 60 * 1000;
 
-/** Resolves a WorkshopOrders row to the canonical Bookings session id. */
-function resolveOrderSessionId(order, idLookup, sessions) {
-    const storedId = order.sessionId;
-    if (storedId && idLookup[storedId]) return idLookup[storedId];
+function summarizeSession(session, extra) {
+    if (!session) return null;
+    return {
+        id: session.id,
+        sessionId: session.sessionId || null,
+        eventId: session.eventId || null,
+        serviceId: session.serviceId || null,
+        start: session.start ? session.start.toISOString() : null,
+        startLabel: session.start ? `${formatDateIL(session.start)} ${formatTimeIL(session.start)}` : null,
+        ...(extra || {}),
+    };
+}
+
+/**
+ * Same matching rules as the dashboard, plus why a match succeeded/failed.
+ * Mutates idLookup on a datetime hit (same as the live grouping path).
+ */
+function inspectOrderSessionMatch(order, idLookup, sessions) {
+    const storedId = order.sessionId || null;
+    if (storedId && idLookup[storedId]) {
+        return { resolvedId: idLookup[storedId], method: 'idLookup', storedId };
+    }
 
     const orderStart = order.workshopStart ? new Date(order.workshopStart).getTime() : null;
-    if (!orderStart || !order.serviceId) return null;
+    if (!orderStart || Number.isNaN(orderStart)) {
+        return { resolvedId: null, method: null, storedId, failReason: 'missing-workshopStart' };
+    }
+    if (!order.serviceId) {
+        return { resolvedId: null, method: null, storedId, failReason: 'missing-serviceId' };
+    }
 
+    let closest = null;
     for (const session of sessions) {
         if (session.serviceId !== order.serviceId || !session.start) continue;
-        if (Math.abs(session.start.getTime() - orderStart) <= SESSION_MATCH_TOLERANCE_MS) {
-            // Cache the legacy stored id so subsequent lookups are direct.
+        const diffMs = Math.abs(session.start.getTime() - orderStart);
+        if (!closest || diffMs < closest.diffMs) closest = { session, diffMs };
+        if (diffMs <= SESSION_MATCH_TOLERANCE_MS) {
             if (storedId) idLookup[storedId] = session.id;
-            return session.id;
+            return {
+                resolvedId: session.id,
+                method: 'datetime',
+                storedId,
+                timeDiffMs: diffMs,
+                closestSession: summarizeSession(session, { diffMs }),
+            };
         }
     }
-    return null;
+
+    return {
+        resolvedId: null,
+        method: null,
+        storedId,
+        failReason: closest
+            ? 'datetime-out-of-tolerance'
+            : (storedId ? 'sessionId-not-in-calendar' : 'no-session-for-service'),
+        closestSession: closest ? summarizeSession(closest.session, { diffMs: closest.diffMs }) : null,
+    };
+}
+
+/** Resolves a WorkshopOrders row to the canonical Bookings session id. */
+function resolveOrderSessionId(order, idLookup, sessions) {
+    return inspectOrderSessionMatch(order, idLookup, sessions).resolvedId;
+}
+
+function buildOrderMatchDiagnosis({ order, participants, match, inDateRange, queryLimitHit }) {
+    const reasons = [];
+    if (order.status && order.status !== 'paid') {
+        reasons.push({
+            code: 'not-paid',
+            text: `סטטוס ב-CMS הוא "${order.status}" — הדאשבורד טוען רק הזמנות paid.`,
+        });
+    }
+    if (order.cancelledAt) {
+        reasons.push({
+            code: 'cancelled',
+            text: 'ההזמנה מבוטלת — מוסתרת בטבלה אלא אם מסומן "הצג הזמנות מבוטלות".',
+        });
+    }
+    if (inDateRange === false) {
+        reasons.push({
+            code: 'out-of-range',
+            text: 'workshopStart מחוץ לטווח התאריכים שנטען בדאשבורד.',
+        });
+    }
+    if (queryLimitHit) {
+        reasons.push({
+            code: 'query-limit',
+            text: 'ייתכן שההזמנה לא נטענה — שאילתת WorkshopOrders מוגבלת ל-50 רשומות.',
+        });
+    }
+    if (!match?.resolvedId) {
+        const failMap = {
+            'missing-workshopStart': 'אין workshopStart — אי אפשר להתאים לסשן לפי זמן.',
+            'missing-serviceId': 'אין serviceId — אי אפשר להתאים לסשן.',
+            'sessionId-not-in-calendar': 'sessionId מה-CMS לא נמצא ביומן Bookings של הטווח, וגם fallback לפי תאריך נכשל.',
+            'datetime-out-of-tolerance': 'נמצא סשן קרוב לאותו serviceId, אבל הפרש הזמן גדול מ-5 דקות.',
+            'no-session-for-service': 'אין סשן ביומן Bookings עם אותו serviceId בטווח שנטען.',
+        };
+        reasons.push({
+            code: match?.failReason || 'unmatched',
+            text: failMap[match?.failReason] || 'ההזמנה לא הותאמה לאף סשן — לכן לא תופיע בטבלה.',
+        });
+    }
+    const participantCount = (participants || []).filter((p) => !p.cancelledAt).length;
+    if (order.selectionMode === 'participants' && participantCount === 0) {
+        reasons.push({
+            code: 'no-participants',
+            text: 'selectionMode=participants אבל אין רשומות פעילות ב-WorkshopParticipants — ספירת הקבוצות נופלת ל-1 (ההזמנה עצמה).',
+        });
+    }
+    return reasons;
 }
 
 /**
@@ -737,7 +831,10 @@ export const getInitialDashboardData = webMethod(Permissions.SiteMember, async (
             .find(SA),
     ]);
     const orders = ordersResult.items || [];
-    console.log(`[dashboardService] Loaded ${sessions.length} Bookings session(s) and ${orders.length} paid WorkshopOrders record(s) in range.`);
+    const ordersQueryTotal = typeof ordersResult.totalCount === 'number' ? ordersResult.totalCount : orders.length;
+    const queryLimitHit = (typeof ordersResult.hasNext === 'function' && ordersResult.hasNext())
+        || (orders.length >= 50 && ordersQueryTotal > orders.length);
+    console.log(`[dashboardService] Loaded ${sessions.length} Bookings session(s) and ${orders.length} paid WorkshopOrders record(s) in range (totalCount=${ordersQueryTotal}, limitHit=${queryLimitHit}).`);
     if (!refreshOnly) console.warn('📦 [dashboardService] Raw WorkshopOrders from CMS:', orders);
 
     const orderIds = orders.map(o => o._id);
@@ -761,21 +858,54 @@ export const getInitialDashboardData = webMethod(Permissions.SiteMember, async (
     // Group orders by resolved session id (handles sessionId/eventId mismatch + datetime fallback).
     const ordersBySessionId = {};
     const orderMatchLog = [];
+    const unmatchedOrders = [];
     for (const order of orders) {
-        const resolvedId = resolveOrderSessionId(order, idLookup, sessions);
+        const match = inspectOrderSessionMatch(order, idLookup, sessions);
+        const resolvedId = match.resolvedId;
+        const participants = participantsByOrderId[order._id] || [];
         orderMatchLog.push({
             orderId: order._id,
             storedSessionId: order.sessionId,
             resolvedSessionId: resolvedId,
+            matchMethod: match.method,
+            failReason: match.failReason || null,
             serviceId: order.serviceId,
             workshopStart: order.workshopStart,
             organizerName: order.organizerName,
         });
-        if (!resolvedId) continue;
+        if (!resolvedId) {
+            unmatchedOrders.push({
+                orderId: order._id,
+                organizerName: order.organizerName || 'ללא שם',
+                storedSessionId: order.sessionId || null,
+                serviceId: order.serviceId || null,
+                workshopStart: order.workshopStart || null,
+                workshopStartLabel: order.workshopStart
+                    ? `${formatDateIL(order.workshopStart)} ${formatTimeIL(order.workshopStart)}`
+                    : null,
+                status: order.status || null,
+                cancelledAt: order.cancelledAt || null,
+                selectionMode: order.selectionMode || null,
+                participantCount: participants.filter((p) => !p.cancelledAt).length,
+                failReason: match.failReason || 'unmatched',
+                closestSession: match.closestSession || null,
+                diagnosis: buildOrderMatchDiagnosis({
+                    order,
+                    participants,
+                    match,
+                    inDateRange: true,
+                    queryLimitHit: false,
+                }),
+            });
+            continue;
+        }
         if (!ordersBySessionId[resolvedId]) ordersBySessionId[resolvedId] = [];
         ordersBySessionId[resolvedId].push(order);
     }
     console.warn('🔗 [dashboardService] Order → session matching:', orderMatchLog);
+    if (unmatchedOrders.length) {
+        console.warn(`⚠️ [dashboardService] ${unmatchedOrders.length} paid WorkshopOrders did not match a Bookings session:`, unmatchedOrders);
+    }
 
     const ecomBuyerByOrderId = refreshOnly ? {} : await loadEcomBuyerByOrderId(orders);
 
@@ -1001,6 +1131,12 @@ export const getInitialDashboardData = webMethod(Permissions.SiteMember, async (
         alertsSummary: { count: missingSketchesCount, workshopIds: alertWorkshopIds },
         ...(currentUser ? { currentUser } : {}),
         includeAllOrders: !!filters?.includeAllOrders,
+        ordersDebug: {
+            queryReturned: orders.length,
+            queryTotal: ordersQueryTotal,
+            queryLimitHit,
+            unmatched: unmatchedOrders,
+        },
     };
 });
 
@@ -1030,6 +1166,112 @@ async function resolveCurrentDashboardUser() {
 export const getCurrentDashboardUser = webMethod(Permissions.SiteMember, async () => {
     await assertDashboardAccess();
     return resolveCurrentDashboardUser();
+});
+
+const DEBUG_SESSION_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+
+function isWorkshopStartInRange(workshopStart, startDate, endDate) {
+    if (!workshopStart) return false;
+    const t = new Date(workshopStart).getTime();
+    if (Number.isNaN(t)) return false;
+    return t >= startDate.getTime() && t <= endDate.getTime();
+}
+
+/** On-demand CMS + session-match report for a single WorkshopOrders row. */
+export const debugOrderMatch = webMethod(Permissions.SiteMember, async (orderId) => {
+    await assertDashboardAccess();
+    if (!orderId) throw new Error('MISSING_ORDER_ID');
+
+    const order = await getItemWithRetry('WorkshopOrders', orderId, { callerLabel: 'debugOrderMatch' });
+    if (!order) {
+        return { ok: false, orderId, error: 'ORDER_NOT_FOUND', diagnosis: [{ code: 'not-found', text: 'לא נמצאה רשומה ב-WorkshopOrders עם המזהה הזה.' }] };
+    }
+
+    const [{ allServiceIds }, participantsByOrderId, sketchesByOrderId] = await Promise.all([
+        loadWorkshopTypes(),
+        loadParticipantsForOrders([orderId]),
+        loadSketchesForOrders([orderId]),
+    ]);
+    const participants = participantsByOrderId[orderId] || [];
+    const sketches = sketchesByOrderId[orderId] || [];
+
+    const now = new Date();
+    const workshopStart = order.workshopStart ? new Date(order.workshopStart) : null;
+    const windowCenter = workshopStart && !Number.isNaN(workshopStart.getTime()) ? workshopStart : now;
+    const startDate = new Date(windowCenter.getTime() - DEBUG_SESSION_WINDOW_MS);
+    const endDate = new Date(windowCenter.getTime() + DEBUG_SESSION_WINDOW_MS);
+    const { sessions, idLookup } = await loadSessions(allServiceIds, startDate, endDate);
+    const match = inspectOrderSessionMatch(order, idLookup, sessions);
+
+    const dashboardStart = now;
+    const dashboardEnd = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+    const inDefaultDashboardRange = isWorkshopStartInRange(order.workshopStart, dashboardStart, dashboardEnd);
+
+    const nearbySessions = sessions
+        .filter((s) => !order.serviceId || s.serviceId === order.serviceId)
+        .map((s) => {
+            const orderTs = workshopStart && !Number.isNaN(workshopStart.getTime()) ? workshopStart.getTime() : null;
+            const diffMs = orderTs && s.start ? Math.abs(s.start.getTime() - orderTs) : null;
+            return summarizeSession(s, { diffMs });
+        })
+        .sort((a, b) => (a.diffMs ?? Infinity) - (b.diffMs ?? Infinity))
+        .slice(0, 8);
+
+    const diagnosis = buildOrderMatchDiagnosis({
+        order,
+        participants,
+        match,
+        inDateRange: inDefaultDashboardRange,
+        queryLimitHit: false,
+    });
+    if (!diagnosis.length && match.resolvedId) {
+        diagnosis.push({ code: 'matched', text: 'ההזמנה מותאמת לסשן. אם קבוצות חסרות — בדקו WorkshopParticipants / selectionMode.' });
+    }
+
+    return {
+        ok: true,
+        orderId,
+        cms: {
+            id: order._id,
+            status: order.status || null,
+            sessionId: order.sessionId || null,
+            serviceId: order.serviceId || null,
+            workshopStart: order.workshopStart || null,
+            workshopStartLabel: order.workshopStart
+                ? `${formatDateIL(order.workshopStart)} ${formatTimeIL(order.workshopStart)}`
+                : null,
+            selectionMode: order.selectionMode || null,
+            adults: order.adults || 0,
+            children: order.children || 0,
+            rugCount: order.rugCount || 0,
+            cancelledAt: order.cancelledAt || null,
+            organizerName: order.organizerName || '',
+            organizerEmail: order.organizerEmail || '',
+            organizerPhone: order.organizerPhone || '',
+            ecomOrderId: order.ecomOrderId || null,
+            bookingIds: order.bookingIds || [],
+        },
+        match: {
+            resolvedSessionId: match.resolvedId,
+            method: match.method,
+            failReason: match.failReason || null,
+            storedSessionId: match.storedId,
+            timeDiffMs: match.timeDiffMs ?? null,
+            closestSession: match.closestSession || null,
+            inDefaultDashboardRange,
+            sessionsLoaded: sessions.length,
+        },
+        participants: participants.map((p) => ({
+            id: p._id,
+            name: p.name || '',
+            phone: p.phone || p.rawPhone || '',
+            childrenCount: p.childrenCount || 0,
+            cancelledAt: p.cancelledAt || null,
+        })),
+        sketchesCount: sketches.length,
+        nearbySessions,
+        diagnosis,
+    };
 });
 
 async function logOrderAction(orderId, action, userOverride) {

@@ -74,6 +74,8 @@ var __wdTemplateHtml = `
             </div>
         </div>
 
+        <div id="ordersDebugBanner" class="mb-4 hidden shrink-0"></div>
+
         <!-- Filters Bar -->
         <section class="wd-filters-panel" aria-label="סינון הזמנות">
             <div class="wd-filters-header">
@@ -356,6 +358,17 @@ var __wdTemplateHtml = `
                     <i class="ph ph-paper-plane-right"></i> שלח עכשיו
                 </button>
             </div>
+        </div>
+    </div>
+
+    <!-- Order match debug -->
+    <div id="orderDebugModal" class="modal fixed inset-0 z-[70] items-center justify-center p-4">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-2xl modal-content border border-gray-200 max-h-[90vh] flex flex-col">
+            <div class="px-5 py-3 border-b flex justify-between items-center bg-slate-50 rounded-t-xl shrink-0">
+                <h3 class="font-bold text-slate-800 flex items-center gap-2"><i class="ph ph-bug text-amber-600"></i> דיבאג הזמנה / קבוצות</h3>
+                <button onclick="closeModal('orderDebugModal')" class="text-gray-400 hover:text-gray-700"><i class="ph ph-x"></i></button>
+            </div>
+            <div class="p-5 overflow-y-auto custom-scrollbar" id="orderDebugBody"></div>
         </div>
     </div>
 
@@ -1303,6 +1316,7 @@ function __wdInjectGlobalAssets() {
         let waTemplates = [];
         let mockWorkshops = [];
         let mockOrders = [];
+        let ordersDebug = { queryReturned: 0, queryTotal: 0, queryLimitHit: false, unmatched: [] };
         let currentDashboardUser = null;
         let __wdDataLoaded = false;
         let __wdAccessDenied = false;
@@ -1775,6 +1789,7 @@ function __wdInjectGlobalAssets() {
             if (data.workshopTypes) workshopTypes = data.workshopTypes;
             if (data.workshops) mockWorkshops = data.workshops;
             if (data.orders) mockOrders = data.orders;
+            if (data.ordersDebug) ordersDebug = data.ordersDebug;
             if (data.templates) waTemplates = data.templates;
             if (data.currentUser) currentDashboardUser = data.currentUser;
             if (!isLightRefresh) {
@@ -1813,6 +1828,7 @@ function __wdInjectGlobalAssets() {
                 applyFilters();
                 renderTemplatesManager();
             }
+            renderOrdersDebugBanner();
             __wdHideLoadingOverlay();
 
             // Refreshing data (e.g. after toggling "show all orders") should also
@@ -2784,6 +2800,7 @@ function __wdInjectGlobalAssets() {
                                 ${buildPaymentSummaryHtml(o)}
                                 ${buildEcomOrderLinkHtml(o)}
                                 ${orderAlertsHtml}
+                                ${buildOrderDebugTriggerHtml(o)}
                             </div>
                         </div>
                     </td>
@@ -3039,6 +3056,206 @@ function __wdInjectGlobalAssets() {
                 detailTr.innerHTML = `<td colspan="3" class="p-0 w-full max-w-0">${innerContent}</td>`;
                 tbody.appendChild(detailTr);
             });
+        }
+
+        function orderLooksMissingGroups(o) {
+            if (!o || o.isLegacyOrder) return false;
+            const groups = o.participantGroups || [];
+            return o.selectionMode === 'participants' && groups.length === 0;
+        }
+
+        function canUseOrderDebug() {
+            return hasDashboardPermission('viewDashboard');
+        }
+
+        function buildOrderDebugTriggerHtml(o) {
+            if (!canUseOrderDebug()) return '';
+            const missing = orderLooksMissingGroups(o);
+            const cls = missing
+                ? 'mt-2 inline-flex items-center gap-1 text-[10px] font-bold text-amber-800 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-md hover:bg-amber-100'
+                : 'mt-2 inline-flex items-center gap-1 text-[10px] font-bold text-slate-600 bg-slate-50 border border-slate-200 px-2 py-0.5 rounded-md hover:bg-slate-100';
+            const label = missing ? 'חסרות קבוצות — דיבאג' : 'דיבאג התאמה';
+            return `<button type="button" onclick="openOrderDebug('${o.id}', event)" class="${cls}"><i class="ph ph-bug"></i>${label}</button>`;
+        }
+
+        function escapeHtml(value) {
+            return String(value ?? '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;');
+        }
+
+        function renderOrdersDebugBanner() {
+            const el = document.getElementById('ordersDebugBanner');
+            if (!el) return;
+            if (!canUseOrderDebug()) {
+                el.classList.add('hidden');
+                el.innerHTML = '';
+                return;
+            }
+
+            const unmatched = ordersDebug.unmatched || [];
+            const missingOnVisible = getVisibleOrders().filter(orderLooksMissingGroups);
+            const showLimit = !!ordersDebug.queryLimitHit;
+            if (!unmatched.length && !missingOnVisible.length && !showLimit) {
+                el.classList.add('hidden');
+                el.innerHTML = '';
+                return;
+            }
+
+            const unmatchedRows = unmatched.map((u) => `
+                <button type="button" onclick="openOrderDebug('${u.orderId}', event)" class="w-full text-right px-3 py-2 rounded-lg border border-amber-200 bg-white hover:bg-amber-50 transition-colors">
+                    <div class="text-xs font-bold text-gray-900">${escapeHtml(u.organizerName || 'ללא שם')}</div>
+                    <div class="text-[11px] text-gray-500 mt-0.5">${escapeHtml(u.workshopStartLabel || 'ללא תאריך')} · ${escapeHtml(u.failReason || 'unmatched')} · קבוצות CMS: ${u.participantCount || 0}</div>
+                </button>
+            `).join('');
+
+            const missingRows = missingOnVisible.map((o) => `
+                <button type="button" onclick="openOrderDebug('${o.id}', event)" class="w-full text-right px-3 py-2 rounded-lg border border-orange-200 bg-white hover:bg-orange-50 transition-colors">
+                    <div class="text-xs font-bold text-gray-900">${escapeHtml(o.organizerName || 'ללא שם')}</div>
+                    <div class="text-[11px] text-gray-500 mt-0.5">מופיעה בטבלה אבל selectionMode=participants בלי WorkshopParticipants</div>
+                </button>
+            `).join('');
+
+            el.classList.remove('hidden');
+            el.innerHTML = `
+                <div class="bg-amber-50 border border-amber-200 rounded-lg p-3 shadow-sm">
+                    <div class="flex items-start justify-between gap-3">
+                        <div class="flex items-start gap-2 text-amber-900">
+                            <i class="ph-fill ph-bug text-lg text-amber-600 mt-0.5"></i>
+                            <div>
+                                <p class="text-sm font-bold">דיבאג הזמנות / קבוצות חסרות</p>
+                                <p class="text-xs mt-0.5">
+                                    ${showLimit ? `נטענו ${ordersDebug.queryReturned} מתוך ${ordersDebug.queryTotal} הזמנות paid (מגבלת 50). ` : ''}
+                                    ${unmatched.length ? `${unmatched.length} הזמנות ב-CMS לא הותאמו לסשן. ` : ''}
+                                    ${missingOnVisible.length ? `${missingOnVisible.length} הזמנות בטבלה בלי קבוצות משתתפים. ` : ''}
+                                    לחצו על הזמנה לבדיקה.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mt-3 flex gap-2">
+                        <input id="orderDebugLookupInput" type="text" placeholder="הדבק _id מ-WorkshopOrders" class="flex-1 compact-input bg-white text-xs" />
+                        <button type="button" onclick="lookupOrderDebugFromInput()" class="px-3 py-1.5 rounded-md bg-amber-600 text-white text-xs font-bold hover:bg-amber-700">בדוק</button>
+                    </div>
+                    ${unmatchedRows || missingRows ? `<div class="mt-3 grid gap-2 sm:grid-cols-2">${unmatchedRows}${missingRows}</div>` : ''}
+                </div>
+            `;
+        }
+
+        function lookupOrderDebugFromInput() {
+            const input = document.getElementById('orderDebugLookupInput');
+            const orderId = (input?.value || '').trim();
+            if (!orderId) return;
+            openOrderDebug(orderId);
+        }
+
+        function debugFieldRow(label, value) {
+            return `<div class="flex justify-between gap-3 py-1 border-b border-slate-100 text-xs"><span class="text-slate-500 shrink-0">${escapeHtml(label)}</span><span class="font-mono text-slate-800 break-all text-left">${escapeHtml(value ?? '—')}</span></div>`;
+        }
+
+        function renderOrderDebugModal(view) {
+            const body = document.getElementById('orderDebugBody');
+            if (!body) return;
+            const orderId = view.orderId || view.cms?.id || '';
+            const diagnosis = view.diagnosis || [];
+            const participants = view.participants || view.local?.participantGroups || [];
+            const nearby = view.nearbySessions || [];
+
+            const diagnosisHtml = diagnosis.length
+                ? diagnosis.map((d) => `<li class="text-sm text-slate-800">${escapeHtml(d.text)}</li>`).join('')
+                : '<li class="text-sm text-slate-500">אין אבחון עדיין.</li>';
+
+            const participantsHtml = participants.length
+                ? participants.map((p) => `<li class="text-xs text-slate-700">${escapeHtml(p.name || 'ללא שם')} · ${escapeHtml(p.phone || '—')} · ילדים: ${p.childrenCount || 0}${p.cancelledAt ? ' · בוטל' : ''}</li>`).join('')
+                : '<li class="text-xs text-slate-500">אין רשומות ב-WorkshopParticipants</li>';
+
+            const nearbyHtml = nearby.length
+                ? nearby.map((s) => `<li class="text-xs font-mono text-slate-700">${escapeHtml(s.startLabel || s.start || '—')} · id=${escapeHtml(s.id)} · session=${escapeHtml(s.sessionId)} · event=${escapeHtml(s.eventId)} · Δ=${s.diffMs != null ? Math.round(s.diffMs / 60000) + ' דק׳' : '—'}</li>`).join('')
+                : '<li class="text-xs text-slate-500">אין סשנים קרובים בטווח ±7 ימים</li>';
+
+            const cms = view.cms || {};
+            const match = view.match || {};
+            const local = view.local || {};
+
+            body.innerHTML = `
+                <div class="flex gap-2 mb-4">
+                    <input id="orderDebugLookupInputModal" type="text" value="${escapeHtml(orderId)}" placeholder="WorkshopOrders _id" class="flex-1 compact-input bg-gray-50 text-xs" />
+                    <button type="button" onclick="lookupOrderDebugFromModal()" class="px-3 py-1.5 rounded-md bg-slate-800 text-white text-xs font-bold">טען</button>
+                </div>
+                ${view.loading ? '<p class="text-sm text-amber-700 mb-3 flex items-center gap-2"><i class="ph ph-spinner wd-spin"></i> טוען נתונים חיים מה-CMS...</p>' : ''}
+                ${view.error ? `<p class="text-sm text-red-600 mb-3">${escapeHtml(view.error)}</p>` : ''}
+                <div class="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-4">
+                    <p class="text-xs font-bold text-amber-800 mb-1">אבחון</p>
+                    <ul class="list-disc pr-4 space-y-1">${diagnosisHtml}</ul>
+                </div>
+                <div class="grid md:grid-cols-2 gap-4">
+                    <div>
+                        <p class="text-xs font-bold text-slate-700 mb-2">CMS / התאמה</p>
+                        ${debugFieldRow('orderId', cms.id || orderId)}
+                        ${debugFieldRow('status', cms.status || local.orderStatus)}
+                        ${debugFieldRow('sessionId (CMS)', cms.sessionId || match.storedSessionId)}
+                        ${debugFieldRow('resolvedSessionId', match.resolvedSessionId || local.workshopId)}
+                        ${debugFieldRow('method', match.method)}
+                        ${debugFieldRow('failReason', match.failReason)}
+                        ${debugFieldRow('serviceId', cms.serviceId)}
+                        ${debugFieldRow('workshopStart', cms.workshopStartLabel || cms.workshopStart)}
+                        ${debugFieldRow('בטווח ברירת מחדל', match.inDefaultDashboardRange === false ? 'לא' : match.inDefaultDashboardRange ? 'כן' : '—')}
+                        ${debugFieldRow('selectionMode', cms.selectionMode || local.selectionMode)}
+                        ${debugFieldRow('adults / children / rugs', `${cms.adults ?? local.adults ?? 0} / ${cms.children ?? local.children ?? 0} / ${cms.rugCount ?? local.rugCount ?? 0}`)}
+                        ${debugFieldRow('cancelledAt', cms.cancelledAt)}
+                        ${debugFieldRow('ecomOrderId', cms.ecomOrderId || local.ecomOrderId)}
+                    </div>
+                    <div>
+                        <p class="text-xs font-bold text-slate-700 mb-2">קבוצות (${participants.length})</p>
+                        <ul class="space-y-1 mb-4">${participantsHtml}</ul>
+                        <p class="text-xs font-bold text-slate-700 mb-2">סשנים קרובים לאותו service</p>
+                        <ul class="space-y-1">${nearbyHtml}</ul>
+                    </div>
+                </div>
+            `;
+        }
+
+        function lookupOrderDebugFromModal() {
+            const input = document.getElementById('orderDebugLookupInputModal');
+            const orderId = (input?.value || '').trim();
+            if (!orderId) return;
+            openOrderDebug(orderId);
+        }
+
+        function openOrderDebug(orderId, event) {
+            if (event) event.stopPropagation();
+            const id = String(orderId || '').trim();
+            if (!id) return;
+            const local = mockOrders.find((o) => o.id === id)
+                || (ordersDebug.unmatched || []).find((o) => o.orderId === id);
+            const localAsOrder = local && local.orderId ? {
+                id: local.orderId,
+                organizerName: local.organizerName,
+                workshopId: null,
+                selectionMode: local.selectionMode,
+                participantGroups: [],
+            } : local;
+            renderOrderDebugModal({
+                loading: true,
+                orderId: id,
+                local: localAsOrder,
+                diagnosis: local?.diagnosis || [],
+                participants: localAsOrder?.participantGroups || [],
+            });
+            openModal('orderDebugModal');
+            dispatchDashboardAction('debugOrderMatch', { orderId: id });
+        }
+
+        function handleOrderDebugAttribute(newValue) {
+            if (!newValue) return;
+            try {
+                const report = JSON.parse(newValue);
+                renderOrderDebugModal(report);
+            } catch (err) {
+                console.error('[workshops-dashboard] Failed to parse order-debug attribute:', err);
+            }
         }
 
         // --- SUB-MODALS & ACTIONS ---
@@ -3907,6 +4124,9 @@ window.saveNote = saveNote;
 window.saveTemplate = saveTemplate;
 window.scrollCarousel = scrollCarousel;
 window.sendWhatsApp = sendWhatsApp;
+window.openOrderDebug = openOrderDebug;
+window.lookupOrderDebugFromInput = lookupOrderDebugFromInput;
+window.lookupOrderDebugFromModal = lookupOrderDebugFromModal;
 window.onShowAllOrdersChange = onShowAllOrdersChange;
 window.onShowPastWorkshopsChange = onShowPastWorkshopsChange;
 window.onDateRangeFilterChange = onDateRangeFilterChange;
@@ -3921,7 +4141,7 @@ window.updateWaPreview = updateWaPreview;
 // ============================================================
 class WorkshopsDashboardElement extends HTMLElement {
     static get observedAttributes() {
-        return ['dashboard-data', 'sketch-download', 'action-error', 'staff-admin-data', 'staff-admin-action-result'];
+        return ['dashboard-data', 'sketch-download', 'action-error', 'staff-admin-data', 'staff-admin-action-result', 'order-debug'];
     }
 
     connectedCallback() {
@@ -3976,6 +4196,12 @@ class WorkshopsDashboardElement extends HTMLElement {
     }
 
     attributeChangedCallback(name, oldValue, newValue) {
+        if (name === 'order-debug') {
+            if (!newValue || newValue === oldValue) return;
+            handleOrderDebugAttribute(newValue);
+            return;
+        }
+
         if (name === 'sketch-download') {
             if (!newValue || newValue === oldValue) return;
             handleSketchDownloadAttribute(newValue);

@@ -8,6 +8,7 @@ import {
     saveTemplate,
     deleteTemplate,
     getSketchDownloadUrl,
+    debugOrderMatch,
 } from 'backend/dashboardService.web.js';
 
 import {
@@ -381,6 +382,42 @@ async function handleDashboardAction(dashboardEl, detail) {
         await deleteTemplate(payload.id);
 
         break;
+
+    case 'debugOrderMatch':
+
+        try {
+
+            const report = await debugOrderMatch(payload?.orderId);
+
+            dashboardEl.setAttribute('order-debug', JSON.stringify({
+
+                ...report,
+
+                __ts: Date.now(),
+
+            }));
+
+        } catch (err) {
+
+            console.error('[order-managment-dashboard-velo] debugOrderMatch failed:', err?.message || err);
+
+            dashboardEl.setAttribute('order-debug', JSON.stringify({
+
+                ok: false,
+
+                orderId: payload?.orderId || null,
+
+                error: err?.message || String(err),
+
+                diagnosis: [{ code: 'error', text: err?.message || String(err) }],
+
+                __ts: Date.now(),
+
+            }));
+
+        }
+
+        return;
 
     case 'getSketchDownloadUrl':
 

@@ -539,7 +539,9 @@ export const getMyPortalData = webMethod(Permissions.Anyone, async () => {
 export const requestDayOff = webMethod(Permissions.Anyone, async (dates, notes) => {
     const { role } = await assertEmployeeAccess('submitAvailability');
     if (!Array.isArray(dates) || !dates.length) throw new Error('BAD_REQUEST: יש לבחור לפחות יום אחד.');
-    return requestEmployeeDaysOff(role, dates, notes);
+    const result = await requestEmployeeDaysOff(role, dates, notes);
+    await publishSchedulingUpdate('vacation-requested', { employeeId: role._id });
+    return result;
 });
 
 /**

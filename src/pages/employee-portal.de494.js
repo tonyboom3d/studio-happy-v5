@@ -354,6 +354,26 @@ async function handlePortalAction(portalEl, detail) {
             let availResult = null;
             if (dayOffDates.length) dayOffResult = await requestDayOff(dayOffDates);
             if (shifts.length) availResult = await submitAvailability(shifts);
+
+            // submitAvailability can resolve with { ok: false, errors } (e.g. validation/skill
+            // mismatch) instead of throwing — that must not be reported to the UI as a success.
+            if (shifts.length && availResult?.ok === false) {
+                const dayOffCount = dayOffResult?.created?.length || 0;
+                const reason = (availResult.errors || []).map(e => e.message).filter(Boolean)[0]
+                    || 'ההגשה נדחתה — בדקו את הכללים.';
+                pushActionResult(portalEl, {
+                    type,
+                    error: true,
+                    message: dayOffCount
+                        ? `${dayOffCount} בקשות חופש נשלחו, אך הגשת המשמרות נדחתה: ${reason}`
+                        : reason,
+                    dayOffCount,
+                });
+                refreshPortal = true;
+                refreshAdmin = !!__epLastAdminMonth;
+                break;
+            }
+
             pushActionResult(portalEl, {
                 type,
                 ok: true,
@@ -486,7 +506,7 @@ async function handlePortalAction(portalEl, detail) {
             const result = await saveEmployeeVacation(payload?.vacation);
             pushActionResult(portalEl, { type, ...result });
             refreshPortal = false;
-            refreshAdmin = false;
+            refreshAdmin = true; // pending-vacations badge count may have changed
             await loadAndPushVacations(portalEl);
             break;
         }
@@ -495,7 +515,7 @@ async function handlePortalAction(portalEl, detail) {
             const result = await deleteEmployeeVacation(payload?.vacationId);
             pushActionResult(portalEl, { type, ...result });
             refreshPortal = false;
-            refreshAdmin = false;
+            refreshAdmin = true;
             await loadAndPushVacations(portalEl);
             break;
         }
@@ -503,7 +523,7 @@ async function handlePortalAction(portalEl, detail) {
         case 'adminApproveVacation': {
             const result = await approveEmployeeVacation(payload?.vacationId, payload?.managerComment || '');
             pushActionResult(portalEl, { type, ...result });
-            refreshAdmin = false;
+            refreshAdmin = true;
             await loadAndPushVacations(portalEl);
             break;
         }
@@ -511,7 +531,7 @@ async function handlePortalAction(portalEl, detail) {
         case 'adminRejectVacation': {
             const result = await rejectEmployeeVacation(payload?.vacationId, payload?.managerComment || '');
             pushActionResult(portalEl, { type, ...result });
-            refreshAdmin = false;
+            refreshAdmin = true;
             await loadAndPushVacations(portalEl);
             break;
         }

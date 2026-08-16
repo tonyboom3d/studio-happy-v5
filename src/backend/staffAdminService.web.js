@@ -217,7 +217,8 @@ export const getStaffAdminData = webMethod(Permissions.SiteMember, async (monthK
     const paddedFromKey = shiftDateKey(fromKey, -6);
     const paddedToKey = shiftDateKey(toKey, 6);
 
-    const [board, settings, submissionsRaw, weeklySubsRaw, vacationsByEmployee, tuftingTypeIds] = await Promise.all([
+    const canManageEmployees = getRolePermissionValue(role, 'manageEmployees');
+    const [board, settings, submissionsRaw, weeklySubsRaw, vacationsByEmployee, tuftingTypeIds, pendingVacationsCount] = await Promise.all([
         buildBoard(fromKey, toKey, { includeOffers: true }),
         loadSettings(),
         // All statuses (incl. REJECTED) so the tracker page shows the full picture;
@@ -232,6 +233,9 @@ export const getStaffAdminData = webMethod(Permissions.SiteMember, async (monthK
             .limit(1000).find(SA).catch(() => ({ items: [] })),
         loadVacationsOverlappingRangeByEmployee(fromKey, toKey),
         loadTuftingTypeIdSet(),
+        canManageEmployees
+            ? wixData.query('EmployeeVacations').eq('status', 'PENDING').count(SA).catch(() => 0)
+            : Promise.resolve(0),
     ]);
 
     const weeklySubsByEmployee = {};
@@ -337,6 +341,7 @@ export const getStaffAdminData = webMethod(Permissions.SiteMember, async (monthK
             editTimeEntries: getRolePermissionValue(role, 'editTimeEntries'),
         },
         employees,
+        pendingVacationsCount: canManageEmployees ? (Number(pendingVacationsCount) || 0) : 0,
         workshopTypes: Object.values(board.typesById),
         workTypes: WORK_TYPES.map(value => ({ value, label: WORK_TYPE_LABELS[value] })),
         roleTypes: ROLE_TYPES.map(rt => ({ value: rt, label: ROLE_TYPE_LABELS[rt] })),

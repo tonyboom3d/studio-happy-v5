@@ -71,6 +71,11 @@ export const ADMIN_STYLE = `
 .epa-nav-btn { width: 100%; border: 0; background: transparent; color: #475569; border-radius: 10px; padding: 9px 10px; display: flex; align-items: center; gap: 10px; cursor: pointer; font-family: inherit; font-size: 12.5px; font-weight: 700; text-align: right; white-space: nowrap; transition: background .15s,color .15s,transform .15s,box-shadow .15s; }
 .epa-nav-btn:hover { background: #eff6ff; color: #1d4ed8; transform: translateX(-2px); }
 .epa-nav-btn.active { color: #fff; background: linear-gradient(135deg,#2563eb,#1d4ed8); box-shadow: 0 7px 18px rgba(37,99,235,.24); }
+.epa-nav-btn { position: relative; }
+.epa-nav-label { flex: 1; }
+.epa-nav-badge { display: inline-flex; align-items: center; justify-content: center; min-width: 19px; height: 19px; padding: 0 5px; border-radius: 999px; background: #dc2626; color: #fff; font-size: 10.5px; font-weight: 800; line-height: 1; flex-shrink: 0; box-shadow: 0 0 0 2px rgba(255,255,255,.6); }
+.epa-nav-btn.active .epa-nav-badge { background: #fff; color: #dc2626; box-shadow: none; }
+.epa-shell.collapsed .epa-nav-btn .epa-nav-badge { position: absolute; top: 2px; inset-inline-end: 4px; }
 .epa-icon { width: 18px; height: 18px; flex: 0 0 18px; display: inline-grid; place-items: center; }
 .epa-icon svg { width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
 .epa-shell.collapsed .epa-user-meta,.epa-shell.collapsed .epa-nav-label { display: none; }
@@ -450,7 +455,7 @@ function renderSidebar(ce, d) {
         { page: 'employees', label: 'עובדים', show: d.permissions.viewTeamSchedule !== false },
         { page: 'teamTime', label: 'שעות צוות', show: d.permissions.editTimeEntries },
         { page: 'messages', label: 'הודעות', show: d.permissions.manageEmployees },
-        { page: 'vacations', label: 'חופשות', show: d.permissions.manageEmployees },
+        { page: 'vacations', label: 'חופשות', show: d.permissions.manageEmployees, badge: d.pendingVacationsCount || 0 },
         { page: 'settings', label: 'הגדרות', show: d.permissions.manageRules },
         { page: 'templates', label: 'תבניות', show: d.permissions.manageTemplates },
     ].filter(x => x.show);
@@ -461,8 +466,8 @@ function renderSidebar(ce, d) {
         </div>
         <button class="epa-collapse" data-action="admin-toggle-sidebar" title="${ce._adminSidebarCollapsed ? 'הרחבת תפריט' : 'צמצום תפריט'}">${ce._adminSidebarCollapsed ? '‹' : 'צמצום התפריט ›'}</button>
         <nav class="epa-nav" aria-label="ניווט ניהול">
-            ${items.map(item => `<button class="epa-nav-btn ${ce._adminPage === item.page ? 'active' : ''}" data-action="admin-page" data-page="${item.page}" title="${item.label}">
-                ${icon(item.page)}<span class="epa-nav-label">${item.label}</span>
+            ${items.map(item => `<button class="epa-nav-btn ${ce._adminPage === item.page ? 'active' : ''}" data-action="admin-page" data-page="${item.page}" title="${item.label}${item.badge ? ` (${item.badge} ממתינות לאישור)` : ''}">
+                ${icon(item.page)}<span class="epa-nav-label">${item.label}</span>${item.badge ? `<span class="epa-nav-badge">${item.badge > 99 ? '99+' : item.badge}</span>` : ''}
             </button>`).join('')}
         </nav>
     </aside>`;

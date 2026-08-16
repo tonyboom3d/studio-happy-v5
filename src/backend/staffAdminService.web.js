@@ -184,6 +184,8 @@ function mapEmployeeForAdmin(role, canSeeRates, canManageRoles, bookingStaffIdSe
         priorityRank: role.priorityRank ?? null,
         minShiftsPerWeek: role.minShiftsPerWeek ?? null,
         minShiftHours: role.minShiftHours ?? null,
+        requiredFridaysPerMonth: role.requiredFridaysPerMonth ?? null,
+        requiredSaturdaysPerMonth: role.requiredSaturdaysPerMonth ?? null,
         skillIds: refIds(role.skills),
         staffId,
         connectedStaffId: staffId,
@@ -373,7 +375,7 @@ export const getStaffAdminData = webMethod(Permissions.SiteMember, async (monthK
 // Employee profile management
 // ---------------------------------------------------------------------------
 
-const PROFILE_FIELDS = ['displayName', 'phone', 'color', 'seniority', 'isTrainee', 'active', 'minShiftsPerWeek', 'minShiftHours', 'priorityRank', 'roleType'];
+const PROFILE_FIELDS = ['displayName', 'phone', 'color', 'seniority', 'isTrainee', 'active', 'minShiftsPerWeek', 'minShiftHours', 'requiredFridaysPerMonth', 'requiredSaturdaysPerMonth', 'priorityRank', 'roleType'];
 const RATE_FIELDS = ['rateStudio', 'rateInstruction', 'rateWool'];
 
 /** Normalize workshop multi-ref ids for a CMS write (strings only). */
@@ -451,6 +453,53 @@ export const saveEmployeeAdmin = webMethod(Permissions.SiteMember, async (roleId
         skills: Array.isArray(patch.skillIds) ? skillIdsForWrite(patch.skillIds).length : 'unchanged',
     });
     return { ok: true };
+});
+
+/** Lists an employee's future (not-yet-passed) shifts/availability rows, for the deactivation confirm dialog. */
+export const listEmployeeUpcomingShifts = webMethod(Permissions.SiteMember, async (roleId) => {
+    await assertEmployeeAccess('manageEmployees');
+    if (!roleId) throw new Error('BAD_REQUEST: חסר מזהה עובד/ת.');
+
+    const todayKey = toDateKey(new Date());
+    const result = await wixData.query('AvailabilitySubmissions')
+        .eq('employeeId', roleId)
+        .ne('status', SUBMISSION_STATUS.REJECTED)
+        .ascending('date')
+        .limit(1000)
+        .find(SA);
+
+    const shifts = (result.items || [])
+        .map(s => ({
+            id: s._id,
+            dateKey: toDateKey(s.date),
+            startTime: s.startTime || '',
+            endTime: s.endTime || '',
+            status: s.status,
+        }))
+        .filter(s => s.dateKey >= todayKey)
+        .sort((a, b) => a.dateKey.localeCompare(b.dateKey));
+
+    return { ok: true, shifts };
+});
+
+/** Bulk-removes all future shifts/availability rows for an employee (used when deactivating a profile). */
+export const removeEmployeeUpcomingShifts = webMethod(Permissions.SiteMember, async (roleId) => {
+    const { role } = await assertEmployeeAccess('manageEmployees');
+    if (!roleId) throw new Error('BAD_REQUEST: חסר מזהה עובד/ת.');
+
+    const todayKey = toDateKey(new Date());
+    const result = await wixData.query('AvailabilitySubmissions')
+        .eq('employeeId', roleId)
+        .ne('status', SUBMISSION_STATUS.REJECTED)
+        .limit(1000)
+        .find(SA);
+
+    const toRemove = (result.items || []).filter(s => toDateKey(s.date) >= todayKey);
+    await Promise.all(toRemove.map(s => wixData.remove('AvailabilitySubmissions', s._id, SA).catch(() => null)));
+
+    await publishSchedulingUpdate('employee-shifts-removed', { roleId, count: toRemove.length });
+    console.log(`[staffAdminService] removeEmployeeUpcomingShifts: ${roleId} removed=${toRemove.length} by ${role._id}`);
+    return { ok: true, removed: toRemove.length };
 });
 
 /** Persists manual employee list order via priorityRank (1 = first). */
@@ -648,6 +697,8 @@ export const linkEmployeeStaff = webMethod(Permissions.SiteMember, async (staffI
         priorityRank: patch?.priorityRank ?? baseRow.priorityRank ?? null,
         minShiftsPerWeek: patch?.minShiftsPerWeek ?? baseRow.minShiftsPerWeek ?? null,
         minShiftHours: patch?.minShiftHours ?? baseRow.minShiftHours ?? null,
+        requiredFridaysPerMonth: patch?.requiredFridaysPerMonth ?? baseRow.requiredFridaysPerMonth ?? null,
+        requiredSaturdaysPerMonth: patch?.requiredSaturdaysPerMonth ?? baseRow.requiredSaturdaysPerMonth ?? null,
         ...permissions,
     };
 

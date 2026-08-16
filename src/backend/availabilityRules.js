@@ -419,16 +419,20 @@ export function evaluateWeekendCompliance(profile, settings, monthKey, allSubmis
         }
     }
 
-    const requiredFridays = Math.max(0, (settings.requiredFridaysPerMonth ?? 0) - fridayExempt);
-    const requiredSaturdays = Math.max(0, (settings.requiredSaturdaysPerMonth ?? 0) - saturdayExempt);
+    const baseFridays = Number.isFinite(Number(profile?.requiredFridaysPerMonth)) && profile?.requiredFridaysPerMonth !== null && profile?.requiredFridaysPerMonth !== undefined
+        ? Number(profile.requiredFridaysPerMonth) : (settings.requiredFridaysPerMonth ?? 0);
+    const baseSaturdays = Number.isFinite(Number(profile?.requiredSaturdaysPerMonth)) && profile?.requiredSaturdaysPerMonth !== null && profile?.requiredSaturdaysPerMonth !== undefined
+        ? Number(profile.requiredSaturdaysPerMonth) : (settings.requiredSaturdaysPerMonth ?? 0);
+    const requiredFridays = Math.max(0, baseFridays - fridayExempt);
+    const requiredSaturdays = Math.max(0, baseSaturdays - saturdayExempt);
     const fridays = {
         submitted: fridaySubmitted, required: requiredFridays,
-        requiredBase: settings.requiredFridaysPerMonth ?? 0, vacationExempt: fridayExempt,
+        requiredBase: baseFridays, vacationExempt: fridayExempt,
         met: fridaySubmitted >= requiredFridays,
     };
     const saturdays = {
         submitted: saturdaySubmitted, required: requiredSaturdays,
-        requiredBase: settings.requiredSaturdaysPerMonth ?? 0, vacationExempt: saturdayExempt,
+        requiredBase: baseSaturdays, vacationExempt: saturdayExempt,
         met: saturdaySubmitted >= requiredSaturdays,
     };
     return { fridays, saturdays, met: fridays.met && saturdays.met };

@@ -68,6 +68,8 @@ import {
     deleteEmployeeVacation,
     approveEmployeeVacation,
     rejectEmployeeVacation,
+    listEmployeeUpcomingShifts,
+    removeEmployeeUpcomingShifts,
 } from 'backend/staffAdminService.web.js';
 import {
     runSchedulingNow,
@@ -539,9 +541,38 @@ async function handlePortalAction(portalEl, detail) {
             break;
         }
 
+        case 'adminDeactivateEmployee': {
+            await updateEmployeeProfile(payload?.roleId, { active: false });
+            let removed = 0;
+            if (payload?.removeShifts) {
+                const rm = await removeEmployeeUpcomingShifts(payload.roleId);
+                removed = rm?.removed || 0;
+            }
+            pushActionResult(portalEl, { type, ok: true, removed });
+            refreshPortal = false;
+            refreshAdmin = true;
+            break;
+        }
+
         case 'adminUpdateEmployeePermissions': {
             const result = await updateEmployeePermissions(payload?.roleId, payload?.permissions);
             pushActionResult(portalEl, { type, ...result });
+            refreshPortal = false;
+            refreshAdmin = true;
+            break;
+        }
+
+        case 'adminListEmployeeShifts': {
+            const result = await listEmployeeUpcomingShifts(payload?.roleId);
+            pushActionResult(portalEl, { type, ...result, roleId: payload?.roleId });
+            refreshPortal = false;
+            refreshAdmin = false;
+            return;
+        }
+
+        case 'adminRemoveEmployeeShifts': {
+            const result = await removeEmployeeUpcomingShifts(payload?.roleId);
+            pushActionResult(portalEl, { type, ...result, roleId: payload?.roleId });
             refreshPortal = false;
             refreshAdmin = true;
             break;

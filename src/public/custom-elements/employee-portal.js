@@ -953,7 +953,40 @@ class EmployeePortal extends HTMLElement {
             if (result.type === 'adminMessagesLoad') this._adminMessagesData = [];
             if (result.type === 'adminVacationsLoad') this._vacationsData = [];
             if (result.type === 'loadSwapCandidates') { this._shiftModal = null; this._swapCandidates = null; }
+            if (result.type === 'adminListEmployeeShifts') this._deactivateShifts = [];
+            if (result.type === 'adminDeactivateEmployee') this._deactivateShifts = null;
+            if (result.type === 'adminUpdateSettings') this._settingsSaving = false;
+            if (result.type === 'adminUpdateHolidays') this._holidaysSaving = false;
             this._toast(result.message || 'אירעה שגיאה. נסו שוב.', 'error');
+            this.render();
+            return;
+        }
+        if (result.type === 'adminUpdateSettings' && result.ok) {
+            this._settingsSaving = false;
+            this._settingsFieldErrors = null;
+            this._settingsSavedAt = Date.now();
+            this._toast('הגדרות הזמינות נשמרו בהצלחה.', 'success');
+            this.render();
+            return;
+        }
+        if (result.type === 'adminUpdateHolidays' && result.ok) {
+            this._holidaysSaving = false;
+            this._toast('המועדים נשמרו בהצלחה.', 'success');
+            this.render();
+            return;
+        }
+        if (result.type === 'adminListEmployeeShifts') {
+            if (this._adminModal?.type === 'confirmDeactivate' && this._adminModal.id === result.roleId) {
+                this._deactivateShifts = result.shifts || [];
+                this.render();
+            }
+            return;
+        }
+        if (result.type === 'adminDeactivateEmployee' && result.ok) {
+            this._deactivateShifts = null;
+            this._toast(result.removed
+                ? `העובד/ת הושבת/ה והוסרו ${result.removed} משמרות עתידיות.`
+                : 'העובד/ת הושבת/ה בהצלחה.', 'success');
             this.render();
             return;
         }
@@ -1973,9 +2006,9 @@ class EmployeePortal extends HTMLElement {
                 const tooShort = !dayOff && hrs !== null && hrs < rules.minShiftHours;
                 const hoursLabel = dayOff ? '—' : (hrs === null ? '—' : `${hrs} ש׳`);
                 const timeFields = dayOff ? '' : `
-                    <input type="time" min="${SHIFT_MIN_TIME}" max="${SHIFT_MAX_TIME}" data-role="start" data-date="${dateKey}" value="${escapeHtml(times.startTime)}">
+                    <input type="time" data-role="start" data-date="${dateKey}" value="${escapeHtml(times.startTime)}">
                     <span>-</span>
-                    <input type="time" min="${SHIFT_MIN_TIME}" max="${SHIFT_MAX_TIME}" data-role="end" data-date="${dateKey}" value="${escapeHtml(times.endTime)}">
+                    <input type="time" data-role="end" data-date="${dateKey}" value="${escapeHtml(times.endTime)}">
                     <span class="ep-sel-hours ${tooShort || hrs === null ? 'bad' : ''}">${hoursLabel}</span>`;
                 const statusChip = dayOff
                     ? `<span class="ep-status PENDING ep-tip-trigger" data-tip="בקשת יום חופש — תישלח לאישור מנהל/ת">יום חופש</span>`
@@ -2298,8 +2331,8 @@ class EmployeePortal extends HTMLElement {
         let title, body;
         const timeInputs = `
             <div class="epa-form">
-                <div><label>התחלה</label><input id="epShiftStart" type="time" min="${SHIFT_MIN_TIME}" max="${SHIFT_MAX_TIME}" value="${escapeHtml(s.startTime)}"></div>
-                <div><label>סיום</label><input id="epShiftEnd" type="time" min="${SHIFT_MIN_TIME}" max="${SHIFT_MAX_TIME}" value="${escapeHtml(s.endTime)}"></div>
+                <div><label>התחלה</label><input id="epShiftStart" type="time" value="${escapeHtml(s.startTime)}"></div>
+                <div><label>סיום</label><input id="epShiftEnd" type="time" value="${escapeHtml(s.endTime)}"></div>
             </div>`;
 
         if (modal.type === 'confirmDelete') {
@@ -2845,11 +2878,11 @@ class EmployeePortal extends HTMLElement {
 
     _onChange(e) {
         const input = e.target;
+        if (input?.dataset?.action?.startsWith('admin-') && handleAdminChange(this, input)) return;
         if (this._adminModal?.type === 'employee' && (input?.id?.startsWith('epaF_') || input?.classList?.contains('epa-skill') || input?.classList?.contains('epaPerm'))) {
             captureEmployeeFormDraft(this, this._adminData);
             return;
         }
-        if (input?.dataset?.action?.startsWith('admin-') && handleAdminChange(this, input)) return;
         if (input?.dataset?.action === 'urgent-toggle') {
             const id = input.dataset.id;
             if (input.checked) {
@@ -2899,14 +2932,17 @@ class EmployeePortal extends HTMLElement {
         const dateKey = input.dataset.date;
         const entry = this._selected.get(dateKey);
         if (!entry) return;
-        let value = input.value;
-        if (value && (value < SHIFT_MIN_TIME || value > SHIFT_MAX_TIME)) {
-            value = value < SHIFT_MIN_TIME ? SHIFT_MIN_TIME : SHIFT_MAX_TIME;
-            input.value = value;
-        }
+        // Let the user type any value freely — range/order validation happens
+        // at submit time (see `case 'submit'`), so we never fight their typing here.
+        const value = input.value;
         if (input.dataset.role === 'start') entry.startTime = value;
         if (input.dataset.role === 'end') entry.endTime = value;
+        const focusRestore = { dateKey, role: input.dataset.role };
         this.render();
+        // Re-render replaces the DOM node — restore focus so the browser's
+        // native time-input keyboard entry isn't interrupted mid-type.
+        const restored = this.querySelector(`input[type="time"][data-date="${focusRestore.dateKey}"][data-role="${focusRestore.role}"]`);
+        if (restored) restored.focus({ preventScroll: true });
     }
 
     _submitUrgentCalls() {

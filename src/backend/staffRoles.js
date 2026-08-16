@@ -240,19 +240,11 @@ export async function getCurrentRoleRecord(member) {
     return role;
 }
 
-/** Multi-ref skills are only reliable with include('skills') — needed for skill checks and calendar day states. */
+/** Attach the employee's real workshop certifications onto a role row. */
 export async function loadRoleWithSkills(role) {
     if (!role?._id) return role;
-    try {
-        const result = await wixData.query('Dashboard_Roles')
-            .eq('_id', role._id)
-            .include('skills')
-            .limit(1)
-            .find(SA);
-        return result.items?.[0] || role;
-    } catch (_) {
-        return role;
-    }
+    const skills = await loadSkillsForRoleId(role._id, role.skills);
+    return { ...role, skills };
 }
 
 /** True when the role row has a linked Bookings/Staff reference. */
@@ -296,8 +288,45 @@ export function refId(refValue) {
 /** Multi-reference field → array of item _ids. */
 export function refIds(refValue) {
     if (!refValue) return [];
-    const arr = Array.isArray(refValue) ? refValue : [refValue];
-    return arr.map((r) => (typeof r === 'string' ? r : r?._id)).filter(Boolean);
+    if (typeof refValue === 'string') {
+        const trimmed = refValue.trim();
+        if (!trimmed) return [];
+        return trimmed.includes(',') ? trimmed.split(',').map(s => s.trim()).filter(Boolean) : [trimmed];
+    }
+    if (Array.isArray(refValue)) {
+        return refValue.map((r) => (typeof r === 'string' ? r.trim() : (r?._id || r?.id))).filter(Boolean);
+    }
+    if (typeof refValue === 'object') {
+        if (Array.isArray(refValue.items)) return refIds(refValue.items);
+        return [refValue._id || refValue.id].filter(Boolean);
+    }
+    return [];
+}
+
+/**
+ * Canonical read for Dashboard_Roles.skills.
+ * Bulk `.include('skills')` is unreliable on this multi-ref; queryReferenced
+ * returns the actual workshop items the employee is certified for.
+ */
+export async function loadSkillsForRoleId(roleId, fallbackSkills) {
+    if (!roleId) return refIds(fallbackSkills);
+    try {
+        const result = await wixData.queryReferenced('Dashboard_Roles', roleId, 'skills', { suppressAuth: true, limit: 100 });
+        return refIds(result?.items);
+    } catch (_) { /* fall through */ }
+    try {
+        const result = await wixData.query('Dashboard_Roles').eq('_id', roleId).include('skills').limit(1).find(SA);
+        const ids = refIds(result.items?.[0]?.skills);
+        if (ids.length) return ids;
+    } catch (_) { /* fall through */ }
+    return refIds(fallbackSkills);
+}
+
+export async function attachSkillsToRoles(roles) {
+    await Promise.all((roles || []).map(async (r) => {
+        r.skills = await loadSkillsForRoleId(r._id, r.skills);
+    }));
+    return roles || [];
 }
 
 /**

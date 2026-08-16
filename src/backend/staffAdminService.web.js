@@ -19,6 +19,7 @@ import {
     PERMISSION_LABELS,
     refId,
     refIds,
+    attachSkillsToRoles,
     ROLE_TYPE_LABELS,
     ROLE_TYPES,
 } from 'backend/staffRoles.js';
@@ -606,7 +607,8 @@ export const listBookingStaff = webMethod(Permissions.SiteMember, async () => {
     }
 
     const staffIds = staffList.map(s => s._id).filter(Boolean);
-    const allEmployees = (allRolesResult.items || [])
+    const rolesWithSkills = await attachSkillsToRoles(allRolesResult.items || []);
+    const allEmployees = rolesWithSkills
         .map(r => mapEmployeeForAdmin(r, canSeeRates, canManageRoles, bookingStaffIdSet))
         .sort((a, b) => (a.priorityRank ?? 999) - (b.priorityRank ?? 999)
             || a.displayName.localeCompare(b.displayName, 'he'));

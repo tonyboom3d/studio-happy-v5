@@ -266,6 +266,8 @@ employee-portal * { box-sizing: border-box; }
 .ep-urgent-row:last-child { border-bottom: none; }
 .ep-urgent-row:hover { background: #f8fafc; }
 .ep-urgent-row input { flex-shrink: 0; width: 16px; height: 16px; cursor: pointer; }
+.ep-urgent-row.is-blocked { opacity: .45; cursor: not-allowed; background: #f8fafc; }
+.ep-urgent-row.is-blocked input { cursor: not-allowed; }
 .ep-urgent-row-date { font-weight: 700; color: #1f2937; white-space: nowrap; }
 .ep-urgent-row-time { font-weight: 700; color: #1f2937; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .ep-urgent-row-name { color: #1e40af; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -2223,20 +2225,53 @@ class EmployeePortal extends HTMLElement {
         }));
     }
 
+    _isParallelUrgentCall(call, calls = this._skillMatchedOpenCalls()) {
+        if (!call) return false;
+        const time = call.sessionTime || '';
+        return calls.filter(c => c.date === call.date && (c.sessionTime || '') === time).length > 1;
+    }
+
+    /** Other limiting/parallel workshops on the same day as an already-picked limiting shift. */
+    _urgentBlockedIds() {
+        const calls = this._skillMatchedOpenCalls();
+        const blocked = new Set();
+        for (const id of this._urgentSelected) {
+            const picked = calls.find(c => c.id === id);
+            if (!this._isParallelUrgentCall(picked, calls)) continue;
+            for (const c of calls) {
+                if (c.id === id || c.date !== picked.date) continue;
+                if (this._isParallelUrgentCall(c, calls)) blocked.add(c.id);
+            }
+        }
+        return blocked;
+    }
+
+    _syncUrgentPopupSelection() {
+        const blocked = this._urgentBlockedIds();
+        for (const el of this.querySelectorAll('input[data-action="urgent-toggle"]')) {
+            const id = el.dataset.id;
+            el.checked = this._urgentSelected.has(id);
+            el.disabled = blocked.has(id);
+            el.closest('.ep-urgent-row')?.classList.toggle('is-blocked', blocked.has(id));
+        }
+        const submitBtn = this.querySelector('.ep-urgent-submit');
+        if (submitBtn) submitBtn.disabled = this._urgentSelected.size === 0;
+    }
+
     /** Compact selection popup for all pending urgent open calls, grouped by date/time so parallel slots are visually distinct. */
     _renderUrgentPopup() {
         const dayGroups = this._groupOpenCallsForUrgentPopup();
+        const blocked = this._urgentBlockedIds();
         const renderCall = (c, showTime) => `
-            <label class="ep-urgent-row">
-                <input type="checkbox" data-action="urgent-toggle" data-id="${escapeHtml(c.id)}" ${this._urgentSelected.has(c.id) ? 'checked' : ''}>
+            <label class="ep-urgent-row ${blocked.has(c.id) ? 'is-blocked' : ''}">
+                <input type="checkbox" data-action="urgent-toggle" data-id="${escapeHtml(c.id)}" ${this._urgentSelected.has(c.id) ? 'checked' : ''} ${blocked.has(c.id) ? 'disabled' : ''}>
                 ${showTime && c.sessionTime ? `<span class="ep-urgent-row-time">${escapeHtml(formatTimeHe(c.sessionTime))}</span>` : ''}
                 <span class="ep-urgent-row-name">${escapeHtml(workshopLabel(c.workshopName))}</span>
             </label>`;
         const body = dayGroups.map(({ date, slots }) => {
             const slotsHtml = slots.map(({ sessionTime, items }) => {
                 if (items.length > 1) {
-                    // Parallel workshops at the same time — side-by-side columns; only one may be picked.
-                    return `<div class="ep-urgent-parallel-hint">⚡ ${sessionTime ? escapeHtml(formatTimeHe(sessionTime)) : ''} — סדנאות מקבילות, ניתן לבחור רק אחת</div>
+                    return `<div class="ep-urgent-parallel-hint">⚡ ${sessionTime ? escapeHtml(formatTimeHe(sessionTime)) : ''} — סדנאות מגבילות, ניתן לבחור רק אחת ביום זה</div>
                         <div class="ep-urgent-parallel-row">${items.map(c => `<div class="ep-urgent-parallel-col">${renderCall(c, false)}</div>`).join('')}</div>`;
                 }
                 return renderCall(items[0], true);
@@ -2919,29 +2954,24 @@ class EmployeePortal extends HTMLElement {
         }
         if (input?.dataset?.action === 'urgent-toggle') {
             const id = input.dataset.id;
-            // Update the checkboxes/button in place instead of a full re-render —
-            // a full innerHTML rebuild on every click was flickering the popup.
-            const urgentInputs = [...this.querySelectorAll('input[data-action="urgent-toggle"]')];
+            const calls = this._skillMatchedOpenCalls();
+            const picked = calls.find(c => c.id === id);
             if (input.checked) {
+                if (this._urgentBlockedIds().has(id)) {
+                    input.checked = false;
+                    return;
+                }
                 this._urgentSelected.add(id);
-                // Parallel-slot rule: picking one workshop at a given date+time
-                // auto-deselects any other workshop starting at that same instant.
-                const calls = this._skillMatchedOpenCalls();
-                const picked = calls.find(c => c.id === id);
-                if (picked?.sessionTime) {
+                if (this._isParallelUrgentCall(picked, calls)) {
                     for (const c of calls) {
-                        if (c.id !== id && c.date === picked.date && c.sessionTime === picked.sessionTime) {
-                            this._urgentSelected.delete(c.id);
-                            const other = urgentInputs.find(el => el.dataset.id === c.id);
-                            if (other) other.checked = false;
-                        }
+                        if (c.id === id || c.date !== picked.date) continue;
+                        if (this._isParallelUrgentCall(c, calls)) this._urgentSelected.delete(c.id);
                     }
                 }
             } else {
                 this._urgentSelected.delete(id);
             }
-            const submitBtn = this.querySelector('.ep-urgent-submit');
-            if (submitBtn) submitBtn.disabled = this._urgentSelected.size === 0;
+            this._syncUrgentPopupSelection();
             return;
         }
         if (input?.dataset?.action === 'toggle-day-off') {

@@ -246,7 +246,10 @@ async function loadAllServiceBookings(serviceIds, startDate, endDate) {
             const response = await elevatedQueryExtendedBookings({
                 filter: {
                     'bookedEntity.item.slot.serviceId': { $in: serviceIds },
-                    startDate: { $gte: startDate.toISOString(), $lte: endDate.toISOString() },
+                    $and: [
+                        { startDate: { $gte: startDate.toISOString() } },
+                        { startDate: { $lte: endDate.toISOString() } },
+                    ],
                 },
                 cursorPaging: { limit: 100, cursor },
             });

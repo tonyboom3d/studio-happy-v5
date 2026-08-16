@@ -19,6 +19,11 @@ import {
 } from 'backend/whatsappTemplates.js';
 
 const SA = { suppressAuth: true };
+const ORDER_DEBUG_USER_ID = 'e5af95ac-27b1-45e9-9de4-bd89adffc953';
+
+function isOrderDebugUser(member) {
+    return !!member?._id && member._id === ORDER_DEBUG_USER_ID;
+}
 const ISRAEL_TZ = 'Asia/Jerusalem';
 const elevatedGetEcomOrder = auth.elevate(ecomOrders.getOrder);
 const elevatedQueryExtendedBookings = auth.elevate(extendedBookings.queryExtendedBookings);
@@ -315,6 +320,20 @@ function buildOrderMatchDiagnosis({ order, participants, match, inDateRange, que
         });
     }
     const participantCount = (participants || []).filter((p) => !p.cancelledAt).length;
+    const adults = order.adults || 0;
+    const isOrganizerMode = !order.selectionMode || order.selectionMode === 'organizer';
+    if (isOrganizerMode) {
+        reasons.push({
+            code: 'organizer-one-row',
+            text: `זו הזמנת מארגן (selectionMode=organizer). בטבלה היא שורה אחת / קבוצה אחת — גם אם יש ${adults || participantCount || 1} מבוגרים. מספר המבוגרים הוא גודל הקבוצה, לא מספר הקבוצות.`,
+        });
+        if (participantCount > 1) {
+            reasons.push({
+                code: 'organizer-hides-participant-rows',
+                text: `יש ${participantCount} רשומות ב-WorkshopParticipants, אבל במצב מארגן הן לא נספרות כשורות נפרדות. רק selectionMode=participants מציג כל רשומה כקבוצה.`,
+            });
+        }
+    }
     if (order.selectionMode === 'participants' && participantCount === 0) {
         reasons.push({
             code: 'no-participants',
@@ -807,6 +826,8 @@ export const getInitialDashboardData = webMethod(Permissions.SiteMember, async (
     const canManageOrdersSystem = hasPermission(dashboardRole, 'manageOrdersSystem');
     const hasSketchSewingSkill = hasPermission(dashboardRole, 'sketchSewingSkill');
     const myStaffId = refId(dashboardRole.connectedStaff);
+    const loggedInMember = await getLoggedInMember();
+    const showOrderDebug = isOrderDebugUser(loggedInMember);
 
     const refreshOnly = !!filters?.refreshOnly;
     const now = new Date();
@@ -1131,19 +1152,21 @@ export const getInitialDashboardData = webMethod(Permissions.SiteMember, async (
         alertsSummary: { count: missingSketchesCount, workshopIds: alertWorkshopIds },
         ...(currentUser ? { currentUser } : {}),
         includeAllOrders: !!filters?.includeAllOrders,
-        ordersDebug: {
-            queryReturned: orders.length,
-            queryTotal: ordersQueryTotal,
-            queryLimitHit,
-            unmatched: unmatchedOrders,
-        },
+        ...(showOrderDebug ? {
+            ordersDebug: {
+                queryReturned: orders.length,
+                queryTotal: ordersQueryTotal,
+                queryLimitHit,
+                unmatched: unmatchedOrders,
+            },
+        } : {}),
     };
 });
 
 async function resolveCurrentDashboardUser() {
     try {
         const member = await getLoggedInMember();
-        if (!member) return { name: null, email: null, role: null, permissions: null };
+        if (!member) return { name: null, email: null, role: null, permissions: null, userId: null, showOrderDebug: false };
 
         const email = extractMemberEmail(member);
         const roleRecord = await getCurrentDashboardRoleRecord(member);
@@ -1156,10 +1179,17 @@ async function resolveCurrentDashboardUser() {
         }
         if (!name) name = email;
 
-        return { name: name || null, email: email || null, role, permissions };
+        return {
+            name: name || null,
+            email: email || null,
+            role,
+            permissions,
+            userId: member._id || null,
+            showOrderDebug: isOrderDebugUser(member),
+        };
     } catch (err) {
         console.error('[dashboardService] resolveCurrentDashboardUser error:', err?.message || err);
-        return { name: null, email: null, role: null, permissions: null };
+        return { name: null, email: null, role: null, permissions: null, userId: null, showOrderDebug: false };
     }
 }
 
@@ -1177,23 +1207,88 @@ function isWorkshopStartInRange(workshopStart, startDate, endDate) {
     return t >= startDate.getTime() && t <= endDate.getTime();
 }
 
-/** On-demand CMS + session-match report for a single WorkshopOrders row. */
+async function loadSiblingWorkshopOrders(order) {
+    const queries = [];
+    if (order.sessionId) {
+        queries.push(
+            wixData.query('WorkshopOrders').eq('sessionId', order.sessionId).limit(100).find(SA)
+                .catch(() => ({ items: [] }))
+        );
+    }
+    if (order.workshopStart && order.serviceId) {
+        const t = new Date(order.workshopStart).getTime();
+        queries.push(
+            wixData.query('WorkshopOrders')
+                .eq('serviceId', order.serviceId)
+                .ge('workshopStart', new Date(t - SESSION_MATCH_TOLERANCE_MS))
+                .le('workshopStart', new Date(t + SESSION_MATCH_TOLERANCE_MS))
+                .limit(100)
+                .find(SA)
+                .catch(() => ({ items: [] }))
+        );
+    }
+    const results = await Promise.all(queries);
+    const byId = new Map();
+    for (const result of results) {
+        for (const item of (result.items || [])) byId.set(item._id, item);
+    }
+    return [...byId.values()];
+}
+
+function mapDebugParticipant(p) {
+    return {
+        id: p._id,
+        name: p.name || '',
+        phone: p.phone || p.rawPhone || '',
+        childrenCount: p.childrenCount || 0,
+        cancelledAt: p.cancelledAt || null,
+        orderId: p.orderId || null,
+    };
+}
+
+function expectedUiGroupCount(order, participants) {
+    const active = (participants || []).filter((p) => !p.cancelledAt);
+    if (order.selectionMode === 'participants' && active.length > 0) return active.length;
+    return order.cancelledAt ? 0 : 1;
+}
+
+/** On-demand CMS + session-match report. Accepts WorkshopOrders or WorkshopParticipants _id. */
 export const debugOrderMatch = webMethod(Permissions.SiteMember, async (orderId) => {
     await assertDashboardAccess();
+    const member = await getLoggedInMember();
+    if (!isOrderDebugUser(member)) {
+        throw new Error('PERMISSION_DENIED:orderDebug');
+    }
     if (!orderId) throw new Error('MISSING_ORDER_ID');
 
-    const order = await getItemWithRetry('WorkshopOrders', orderId, { callerLabel: 'debugOrderMatch' });
+    let lookedUpFrom = 'order';
+    let lookupParticipant = null;
+    let order = await getItemWithRetry('WorkshopOrders', orderId, { callerLabel: 'debugOrderMatch' });
     if (!order) {
-        return { ok: false, orderId, error: 'ORDER_NOT_FOUND', diagnosis: [{ code: 'not-found', text: 'לא נמצאה רשומה ב-WorkshopOrders עם המזהה הזה.' }] };
+        lookupParticipant = await getItemWithRetry('WorkshopParticipants', orderId, { callerLabel: 'debugOrderMatch.participant' });
+        if (lookupParticipant?.orderId) {
+            lookedUpFrom = 'participant';
+            order = await getItemWithRetry('WorkshopOrders', lookupParticipant.orderId, { callerLabel: 'debugOrderMatch.parentOrder' });
+        }
+    }
+    if (!order) {
+        return {
+            ok: false,
+            orderId,
+            error: 'ORDER_NOT_FOUND',
+            diagnosis: [{ code: 'not-found', text: 'המזהה לא נמצא ב-WorkshopOrders ולא ב-WorkshopParticipants.' }],
+        };
     }
 
+    const siblingOrders = await loadSiblingWorkshopOrders(order);
+    const siblingIds = siblingOrders.map((o) => o._id);
     const [{ allServiceIds }, participantsByOrderId, sketchesByOrderId] = await Promise.all([
         loadWorkshopTypes(),
-        loadParticipantsForOrders([orderId]),
-        loadSketchesForOrders([orderId]),
+        loadParticipantsForOrders(siblingIds.length ? siblingIds : [order._id]),
+        loadSketchesForOrders([order._id]),
     ]);
-    const participants = participantsByOrderId[orderId] || [];
-    const sketches = sketchesByOrderId[orderId] || [];
+    const participants = participantsByOrderId[order._id] || [];
+    const sketches = sketchesByOrderId[order._id] || [];
 
     const now = new Date();
     const workshopStart = order.workshopStart ? new Date(order.workshopStart) : null;
@@ -1217,6 +1312,28 @@ export const debugOrderMatch = webMethod(Permissions.SiteMember, async (orderId)
         .sort((a, b) => (a.diffMs ?? Infinity) - (b.diffMs ?? Infinity))
         .slice(0, 8);
 
+    const siblingReports = siblingOrders.map((sibling) => {
+        const siblingMatch = inspectOrderSessionMatch(sibling, idLookup, sessions);
+        const siblingParticipants = participantsByOrderId[sibling._id] || [];
+        const uiGroups = expectedUiGroupCount(sibling, siblingParticipants);
+        return {
+            orderId: sibling._id,
+            isCurrent: sibling._id === order._id,
+            organizerName: sibling.organizerName || 'ללא שם',
+            status: sibling.status || null,
+            cancelledAt: sibling.cancelledAt || null,
+            selectionMode: sibling.selectionMode || null,
+            adults: sibling.adults || 0,
+            children: sibling.children || 0,
+            participantCount: siblingParticipants.filter((p) => !p.cancelledAt).length,
+            uiGroups,
+            appearsInUi: sibling.status === 'paid' && !sibling.cancelledAt && !!siblingMatch.resolvedId,
+            matchMethod: siblingMatch.method,
+            failReason: siblingMatch.failReason || null,
+            resolvedSessionId: siblingMatch.resolvedId,
+        };
+    });
+
     const diagnosis = buildOrderMatchDiagnosis({
         order,
         participants,
@@ -1224,13 +1341,37 @@ export const debugOrderMatch = webMethod(Permissions.SiteMember, async (orderId)
         inDateRange: inDefaultDashboardRange,
         queryLimitHit: false,
     });
-    if (!diagnosis.length && match.resolvedId) {
-        diagnosis.push({ code: 'matched', text: 'ההזמנה מותאמת לסשן. אם קבוצות חסרות — בדקו WorkshopParticipants / selectionMode.' });
+    if (lookedUpFrom === 'participant') {
+        diagnosis.unshift({
+            code: 'looked-up-participant',
+            text: `המזהה שהוזן הוא קבוצה ב-WorkshopParticipants ("${lookupParticipant.name || 'ללא שם'}"). ההזמנה האב: ${order._id}.`,
+        });
+    }
+
+    const hiddenSiblings = siblingReports.filter((s) => !s.isCurrent && !s.appearsInUi);
+    const visibleSiblings = siblingReports.filter((s) => !s.isCurrent && s.appearsInUi);
+    const uiGroupsHere = expectedUiGroupCount(order, participants);
+    diagnosis.push({
+        code: 'ui-count',
+        text: `בטבלה הזמנה זו אמורה להופיע כ-${uiGroupsHere} קבוצה. בסשן הזה יש ${siblingReports.length} הזמנות CMS: ${visibleSiblings.length + (match.resolvedId && order.status === 'paid' && !order.cancelledAt ? 1 : 0)} יופיעו, ${hiddenSiblings.length + (!(match.resolvedId && order.status === 'paid' && !order.cancelledAt) ? 1 : 0)} יוסתרו.`,
+    });
+    for (const hidden of hiddenSiblings) {
+        const why = hidden.status !== 'paid'
+            ? `סטטוס ${hidden.status}`
+            : hidden.cancelledAt
+                ? 'מבוטלת'
+                : hidden.failReason || 'לא הותאמה לסשן';
+        diagnosis.push({
+            code: 'hidden-sibling',
+            text: `הזמנת אחות חסרה ב-UI: ${hidden.organizerName} (${hidden.orderId}) — ${why}.`,
+        });
     }
 
     return {
         ok: true,
-        orderId,
+        orderId: order._id,
+        lookedUpFrom,
+        lookupId: orderId,
         cms: {
             id: order._id,
             status: order.status || null,
@@ -1260,14 +1401,10 @@ export const debugOrderMatch = webMethod(Permissions.SiteMember, async (orderId)
             closestSession: match.closestSession || null,
             inDefaultDashboardRange,
             sessionsLoaded: sessions.length,
+            uiGroups: uiGroupsHere,
         },
-        participants: participants.map((p) => ({
-            id: p._id,
-            name: p.name || '',
-            phone: p.phone || p.rawPhone || '',
-            childrenCount: p.childrenCount || 0,
-            cancelledAt: p.cancelledAt || null,
-        })),
+        participants: participants.map(mapDebugParticipant),
+        siblingOrders: siblingReports,
         sketchesCount: sketches.length,
         nearbySessions,
         diagnosis,

@@ -3064,8 +3064,11 @@ function __wdInjectGlobalAssets() {
             return o.selectionMode === 'participants' && groups.length === 0;
         }
 
+        const ORDER_DEBUG_USER_ID = 'e5af95ac-27b1-45e9-9de4-bd89adffc953';
+
         function canUseOrderDebug() {
-            return hasDashboardPermission('viewDashboard');
+            const user = currentDashboardUser;
+            return !!(user && (user.showOrderDebug === true || user.userId === ORDER_DEBUG_USER_ID));
         }
 
         function buildOrderDebugTriggerHtml(o) {
@@ -3098,11 +3101,6 @@ function __wdInjectGlobalAssets() {
             const unmatched = ordersDebug.unmatched || [];
             const missingOnVisible = getVisibleOrders().filter(orderLooksMissingGroups);
             const showLimit = !!ordersDebug.queryLimitHit;
-            if (!unmatched.length && !missingOnVisible.length && !showLimit) {
-                el.classList.add('hidden');
-                el.innerHTML = '';
-                return;
-            }
 
             const unmatchedRows = unmatched.map((u) => `
                 <button type="button" onclick="openOrderDebug('${u.orderId}', event)" class="w-full text-right px-3 py-2 rounded-lg border border-amber-200 bg-white hover:bg-amber-50 transition-colors">
@@ -3136,7 +3134,7 @@ function __wdInjectGlobalAssets() {
                         </div>
                     </div>
                     <div class="mt-3 flex gap-2">
-                        <input id="orderDebugLookupInput" type="text" placeholder="הדבק _id מ-WorkshopOrders" class="flex-1 compact-input bg-white text-xs" />
+                        <input id="orderDebugLookupInput" type="text" placeholder="הדבק _id של הזמנה או של קבוצה מ-CMS" class="flex-1 compact-input bg-white text-xs" />
                         <button type="button" onclick="lookupOrderDebugFromInput()" class="px-3 py-1.5 rounded-md bg-amber-600 text-white text-xs font-bold hover:bg-amber-700">בדוק</button>
                     </div>
                     ${unmatchedRows || missingRows ? `<div class="mt-3 grid gap-2 sm:grid-cols-2">${unmatchedRows}${missingRows}</div>` : ''}
@@ -3162,6 +3160,7 @@ function __wdInjectGlobalAssets() {
             const diagnosis = view.diagnosis || [];
             const participants = view.participants || view.local?.participantGroups || [];
             const nearby = view.nearbySessions || [];
+            const siblings = view.siblingOrders || [];
 
             const diagnosisHtml = diagnosis.length
                 ? diagnosis.map((d) => `<li class="text-sm text-slate-800">${escapeHtml(d.text)}</li>`).join('')
@@ -3169,10 +3168,25 @@ function __wdInjectGlobalAssets() {
 
             const participantsHtml = participants.length
                 ? participants.map((p) => `<li class="text-xs text-slate-700">${escapeHtml(p.name || 'ללא שם')} · ${escapeHtml(p.phone || '—')} · ילדים: ${p.childrenCount || 0}${p.cancelledAt ? ' · בוטל' : ''}</li>`).join('')
-                : '<li class="text-xs text-slate-500">אין רשומות ב-WorkshopParticipants</li>';
+                : '<li class="text-xs text-slate-500">אין רשומות ב-WorkshopParticipants להזמנה הזו</li>';
+
+            const siblingsHtml = siblings.length
+                ? siblings.map((s) => {
+                    const state = s.appearsInUi ? 'מופיעה בטבלה' : 'חסרה בטבלה';
+                    const stateCls = s.appearsInUi ? 'text-green-700' : 'text-red-700';
+                    return `<li class="text-xs text-slate-700 ${s.isCurrent ? 'font-bold' : ''}">
+                        <button type="button" onclick="openOrderDebug('${s.orderId}', event)" class="text-right hover:underline">
+                            ${escapeHtml(s.organizerName)} · ${s.adults || 0} מבוגרים · mode=${escapeHtml(s.selectionMode || '—')}
+                            · <span class="${stateCls}">${state}</span>
+                            ${s.failReason ? ` · ${escapeHtml(s.failReason)}` : ''}
+                            ${s.isCurrent ? ' · (ההזמנה שבדקת)' : ''}
+                        </button>
+                    </li>`;
+                }).join('')
+                : '<li class="text-xs text-slate-500">אין הזמנות נוספות לאותו סשן</li>';
 
             const nearbyHtml = nearby.length
-                ? nearby.map((s) => `<li class="text-xs font-mono text-slate-700">${escapeHtml(s.startLabel || s.start || '—')} · id=${escapeHtml(s.id)} · session=${escapeHtml(s.sessionId)} · event=${escapeHtml(s.eventId)} · Δ=${s.diffMs != null ? Math.round(s.diffMs / 60000) + ' דק׳' : '—'}</li>`).join('')
+                ? nearby.map((s) => `<li class="text-xs font-mono text-slate-700">${escapeHtml(s.startLabel || s.start || '—')} · Δ=${s.diffMs != null ? Math.round(s.diffMs / 60000) + ' דק׳' : '—'}</li>`).join('')
                 : '<li class="text-xs text-slate-500">אין סשנים קרובים בטווח ±7 ימים</li>';
 
             const cms = view.cms || {};
@@ -3181,36 +3195,33 @@ function __wdInjectGlobalAssets() {
 
             body.innerHTML = `
                 <div class="flex gap-2 mb-4">
-                    <input id="orderDebugLookupInputModal" type="text" value="${escapeHtml(orderId)}" placeholder="WorkshopOrders _id" class="flex-1 compact-input bg-gray-50 text-xs" />
+                    <input id="orderDebugLookupInputModal" type="text" value="${escapeHtml(view.lookupId || orderId)}" placeholder="_id של הזמנה או של קבוצה" class="flex-1 compact-input bg-gray-50 text-xs" />
                     <button type="button" onclick="lookupOrderDebugFromModal()" class="px-3 py-1.5 rounded-md bg-slate-800 text-white text-xs font-bold">טען</button>
                 </div>
                 ${view.loading ? '<p class="text-sm text-amber-700 mb-3 flex items-center gap-2"><i class="ph ph-spinner wd-spin"></i> טוען נתונים חיים מה-CMS...</p>' : ''}
                 ${view.error ? `<p class="text-sm text-red-600 mb-3">${escapeHtml(view.error)}</p>` : ''}
                 <div class="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-4">
-                    <p class="text-xs font-bold text-amber-800 mb-1">אבחון</p>
+                    <p class="text-xs font-bold text-amber-800 mb-1">מה זה אומר</p>
                     <ul class="list-disc pr-4 space-y-1">${diagnosisHtml}</ul>
                 </div>
                 <div class="grid md:grid-cols-2 gap-4">
                     <div>
-                        <p class="text-xs font-bold text-slate-700 mb-2">CMS / התאמה</p>
+                        <p class="text-xs font-bold text-slate-700 mb-2">ההזמנה שבדקת</p>
                         ${debugFieldRow('orderId', cms.id || orderId)}
-                        ${debugFieldRow('status', cms.status || local.orderStatus)}
-                        ${debugFieldRow('sessionId (CMS)', cms.sessionId || match.storedSessionId)}
-                        ${debugFieldRow('resolvedSessionId', match.resolvedSessionId || local.workshopId)}
-                        ${debugFieldRow('method', match.method)}
-                        ${debugFieldRow('failReason', match.failReason)}
-                        ${debugFieldRow('serviceId', cms.serviceId)}
+                        ${debugFieldRow('סטטוס', cms.status || local.orderStatus)}
+                        ${debugFieldRow('מצב בחירה', cms.selectionMode || local.selectionMode)}
+                        ${debugFieldRow('מבוגרים / ילדים / שטיחים', `${cms.adults ?? local.adults ?? 0} / ${cms.children ?? local.children ?? 0} / ${cms.rugCount ?? local.rugCount ?? 0}`)}
+                        ${debugFieldRow('קבוצות בטבלה להזמנה זו', match.uiGroups ?? '—')}
+                        ${debugFieldRow('מותאמת לסשן', match.resolvedSessionId ? 'כן' : 'לא')}
                         ${debugFieldRow('workshopStart', cms.workshopStartLabel || cms.workshopStart)}
-                        ${debugFieldRow('בטווח ברירת מחדל', match.inDefaultDashboardRange === false ? 'לא' : match.inDefaultDashboardRange ? 'כן' : '—')}
-                        ${debugFieldRow('selectionMode', cms.selectionMode || local.selectionMode)}
-                        ${debugFieldRow('adults / children / rugs', `${cms.adults ?? local.adults ?? 0} / ${cms.children ?? local.children ?? 0} / ${cms.rugCount ?? local.rugCount ?? 0}`)}
                         ${debugFieldRow('cancelledAt', cms.cancelledAt)}
-                        ${debugFieldRow('ecomOrderId', cms.ecomOrderId || local.ecomOrderId)}
                     </div>
                     <div>
-                        <p class="text-xs font-bold text-slate-700 mb-2">קבוצות (${participants.length})</p>
+                        <p class="text-xs font-bold text-slate-700 mb-2">קבוצות ב-WorkshopParticipants (${participants.length})</p>
                         <ul class="space-y-1 mb-4">${participantsHtml}</ul>
-                        <p class="text-xs font-bold text-slate-700 mb-2">סשנים קרובים לאותו service</p>
+                        <p class="text-xs font-bold text-slate-700 mb-2">כל ההזמנות לאותו סשן (${siblings.length})</p>
+                        <ul class="space-y-1 mb-4">${siblingsHtml}</ul>
+                        <p class="text-xs font-bold text-slate-500 mb-1">סשנים קרובים</p>
                         <ul class="space-y-1">${nearbyHtml}</ul>
                     </div>
                 </div>

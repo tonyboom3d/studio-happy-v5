@@ -500,9 +500,13 @@ class EmployeePortal extends HTMLElement {
         this._openOffersOpen = false;
         this._openOffersPage = 0;
         this._openOffersWsFilter = '';
-        this._boardSubsOpen = false;
+        this._boardSubsOpen = true;
         this._boardSubsPage = 0;
-        this._boardSubsEmpFilter = '';
+        this._boardListFilter = { employeeIds: [], statuses: [], workshopIds: [], from: '', to: '' };
+        this._boardMsOpen = null;
+        this._dayListFilter = { employeeIds: [], statuses: [], workshopIds: [] };
+        this._dayMsOpen = null;
+        this._dayListPage = 0;
         this._selectedShiftDate = null;         // dateKey — day workshops modal (from "המשמרות שלי")
         this._wsAccordionOpen = new Set();      // open workshop-accordion keys in day modal
         this._lightboxImage = null;             // full-size sketch image URL shown in the lightbox
@@ -2572,6 +2576,11 @@ class EmployeePortal extends HTMLElement {
             try { e.target.showPicker(); } catch (_) { /* unsupported/blocked — native click behavior still works */ }
         }
         const target = e.target.closest('[data-action]');
+        if ((this._boardMsOpen || this._dayMsOpen) && !e.target.closest('.epa-ms')) {
+            this._boardMsOpen = null;
+            this._dayMsOpen = null;
+            if (!target) { this.render(); return; }
+        }
         if (!target) return;
         const action = target.dataset.action;
         const months = (this._data?.months || []).map(m => m.monthKey);

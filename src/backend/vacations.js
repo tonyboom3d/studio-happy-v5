@@ -49,15 +49,20 @@ export async function loadVacationHistoryForEmployee(employeeId) {
     return (result.items || []).map(mapVacation);
 }
 
-/** Vacations overlapping ['fromKey','toKey'] across all employees, grouped by employeeId (approved only). */
-export async function loadVacationsOverlappingRangeByEmployee(fromKey, toKey) {
+/** Vacations overlapping ['fromKey','toKey'] across all employees (all statuses). */
+export async function loadVacationsOverlappingRange(fromKey, toKey) {
     const result = await wixData.query('EmployeeVacations')
         .le('startDate', toKey)
         .ge('endDate', fromKey)
         .limit(1000).find(SA).catch(() => ({ items: [] }));
+    return (result.items || []).map(mapVacation);
+}
+
+/** Vacations overlapping ['fromKey','toKey'] across all employees, grouped by employeeId (approved only). */
+export async function loadVacationsOverlappingRangeByEmployee(fromKey, toKey) {
+    const all = await loadVacationsOverlappingRange(fromKey, toKey);
     const byEmployee = {};
-    for (const item of (result.items || [])) {
-        const v = mapVacation(item);
+    for (const v of all) {
         if (v.status !== VACATION_STATUS.APPROVED) continue;
         if (!byEmployee[v.employeeId]) byEmployee[v.employeeId] = [];
         byEmployee[v.employeeId].push(v);

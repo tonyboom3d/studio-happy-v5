@@ -170,6 +170,30 @@ export const ADMIN_STYLE = `
 .epa-filter-row { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; align-items: flex-end; }
 .epa-filter-row label { display: block; font-size: 11px; color: #6b7280; margin-bottom: 3px; }
 .epa-filter-row select { font-size: 12px; padding: 5px 8px; border: 1px solid #d1d5db; border-radius: 7px; min-width: 140px; }
+.epa-badge.warn { background: #fef3c7; color: #92400e; }
+.epa-badge.mute { background: #e5e7eb; color: #374151; }
+.epa-ms { position: relative; min-width: 168px; }
+.epa-ms-btn { width: 100%; display: flex; align-items: center; gap: 8px; border: 1px solid #d1d5db; background: #fff; border-radius: 9px; padding: 7px 10px; cursor: pointer; font-family: inherit; text-align: right; }
+.epa-ms-btn:hover { border-color: #60a5fa; }
+.epa-ms.open .epa-ms-btn { border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,.12); }
+.epa-ms-label { font-size: 10.5px; color: #64748b; font-weight: 700; }
+.epa-ms-value { flex: 1; font-size: 12px; color: #0f172a; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.epa-ms-caret { font-size: 10px; color: #64748b; }
+.epa-ms-drop { position: absolute; z-index: 20; top: calc(100% + 4px); inset-inline-start: 0; inset-inline-end: 0; min-width: 210px; max-height: 240px; overflow: auto; background: #fff; border: 1px solid #dbeafe; border-radius: 10px; box-shadow: 0 12px 28px rgba(15,23,42,.14); padding: 6px; }
+.epa-ms-opt { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 7px; font-size: 12px; cursor: pointer; margin: 0; }
+.epa-ms-opt:hover { background: #eff6ff; }
+.epa-ms-opt input { accent-color: #2563eb; }
+.epa-date-range { display: flex; gap: 6px; align-items: center; }
+.epa-date-range input[type="date"] { border: 1px solid #d1d5db; border-radius: 9px; padding: 6px 8px; font: inherit; font-size: 12px; }
+.epa-board-stats { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+.epa-board-stat { font-size: 11.5px; font-weight: 700; padding: 4px 9px; border-radius: 999px; background: #f1f5f9; color: #334155; }
+.epa-day-people { margin-bottom: 12px; }
+.epa-day-banner { font-size: 12px; font-weight: 600; padding: 7px 10px; border-radius: 9px; margin-bottom: 8px; }
+.epa-day-banner.blocked { background: #e5e7eb; color: #374151; }
+.epa-day-banner.holiday { background: #fef3c7; color: #92400e; }
+.epa-day-banner.note { background: #eff6ff; color: #1e40af; }
+.epa-detail-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 10px; }
+.epa-detail-head h3 { margin: 0; font-size: 15px; }
 .epa-pager { display: flex; align-items: center; justify-content: center; gap: 12px; margin-top: 10px; font-size: 12px; }
 .epa-pager-info { color: #6b7280; }
 .epa-detail-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; }
@@ -502,6 +526,222 @@ function renderBoardPage(ce, d) {
 
 const BOARD_PAGE_SIZE = 10;
 
+const BOARD_STATUS = {
+    SUBMITTED: { label: 'הוגש', badge: 'kind' },
+    STANDBY: { label: 'בהמתנה', badge: 'warn' },
+    SCHEDULED: { label: 'משובץ', badge: 'ok' },
+    REJECTED: { label: 'נדחה', badge: 'miss' },
+    VACATION_APPROVED: { label: 'חופשה מאושרת', badge: 'ok' },
+    VACATION_PENDING: { label: 'חופשה ממתינה', badge: 'warn' },
+    VACATION_REJECTED: { label: 'חופשה נדחתה', badge: 'miss' },
+    BLOCKED: { label: 'יום חסום', badge: 'mute' },
+    HOLIDAY: { label: 'חג / מועד', badge: 'warn' },
+};
+
+function monthBounds(monthKey) {
+    const [y, m] = (monthKey || '').split('-').map(Number);
+    const last = new Date(y, m, 0).getDate();
+    return { from: `${monthKey}-01`, to: `${monthKey}-${pad2(last)}` };
+}
+
+function emptyBoardFilter() {
+    return { employeeIds: [], statuses: [], workshopIds: [], from: '', to: '' };
+}
+function boardFilter(ce) {
+    if (!ce._boardListFilter) ce._boardListFilter = emptyBoardFilter();
+    return ce._boardListFilter;
+}
+function emptyDayFilter() {
+    return { employeeIds: [], statuses: [], workshopIds: [] };
+}
+function dayFilter(ce) {
+    if (!ce._dayListFilter) ce._dayListFilter = emptyDayFilter();
+    return ce._dayListFilter;
+}
+
+function buildBoardMonthRows(d) {
+    const rows = [];
+    for (const s of (d.submissions || [])) {
+        rows.push({
+            key: `sub-${s.id}`,
+            kind: 'submission',
+            date: s.date,
+            dateEnd: s.date,
+            employeeId: s.employeeId,
+            employeeName: s.employeeName,
+            startTime: s.startTime || '',
+            endTime: s.endTime || '',
+            workshopTypeId: s.workshopTypeId || null,
+            workshopName: s.workshopName || '',
+            status: s.status,
+            extra: s.managerOverride ? 'ידני' : '',
+        });
+    }
+    for (const v of (d.monthVacations || [])) {
+        rows.push({
+            key: `vac-${v.id}`,
+            kind: 'vacation',
+            date: v.startDate,
+            dateEnd: v.endDate || v.startDate,
+            employeeId: v.employeeId,
+            employeeName: v.employeeName,
+            startTime: '',
+            endTime: '',
+            workshopTypeId: null,
+            workshopName: '',
+            status: `VACATION_${v.status}`,
+            extra: v.notes || '',
+        });
+    }
+    for (const date of (d.settings?.blockedDates || [])) {
+        if (!String(date).startsWith(d.monthKey)) continue;
+        rows.push({
+            key: `blk-${date}`,
+            kind: 'blocked',
+            date,
+            dateEnd: date,
+            employeeId: null,
+            employeeName: 'כל העובדים',
+            startTime: '',
+            endTime: '',
+            workshopTypeId: null,
+            workshopName: '',
+            status: 'BLOCKED',
+            extra: 'חסום להגשות',
+        });
+    }
+    for (const h of (d.settings?.holidays || [])) {
+        if (!h?.date || !String(h.date).startsWith(d.monthKey)) continue;
+        rows.push({
+            key: `hol-${h.date}`,
+            kind: 'holiday',
+            date: h.date,
+            dateEnd: h.date,
+            employeeId: null,
+            employeeName: 'כל העובדים',
+            startTime: '',
+            endTime: '',
+            workshopTypeId: null,
+            workshopName: '',
+            status: 'HOLIDAY',
+            extra: `${h.name || 'חג'}${holidayModeMarker(h)}`.trim(),
+        });
+    }
+    return rows.sort((a, b) => a.date.localeCompare(b.date)
+        || (a.dateEnd || '').localeCompare(b.dateEnd || '')
+        || (a.employeeName || '').localeCompare(b.employeeName || '', 'he')
+        || (a.status || '').localeCompare(b.status || ''));
+}
+
+function filterBoardRows(rows, f, bounds) {
+    const from = f.from || bounds.from;
+    const to = f.to || bounds.to;
+    const emps = f.employeeIds || [];
+    const statuses = f.statuses || [];
+    const workshops = f.workshopIds || [];
+    return rows.filter(r => {
+        if (!dateRangesOverlap(r.date, r.dateEnd, from, to)) return false;
+        if (emps.length && (!r.employeeId || !emps.includes(r.employeeId))) return false;
+        if (statuses.length && !statuses.includes(r.status)) return false;
+        if (workshops.length && (!r.workshopTypeId || !workshops.includes(r.workshopTypeId))) return false;
+        return true;
+    });
+}
+
+function filteredBoardRows(ce, d) {
+    return filterBoardRows(buildBoardMonthRows(d), boardFilter(ce), monthBounds(d.monthKey));
+}
+
+function filteredDayRows(ce, d, dateKey) {
+    const f = dayFilter(ce);
+    return filterBoardRows(buildBoardMonthRows(d), { ...f, from: dateKey, to: dateKey }, monthBounds(d.monthKey))
+        .filter(r => r.kind === 'submission' || r.kind === 'vacation');
+}
+
+function applyMsOpt(list, value, checked) {
+    const next = (list || []).filter(x => x !== value);
+    if (checked) next.push(value);
+    return next;
+}
+
+function hasBoardFilters(f, bounds) {
+    return !!(f.employeeIds?.length || f.statuses?.length || f.workshopIds?.length
+        || (f.from && f.from !== bounds.from) || (f.to && f.to !== bounds.to));
+}
+
+function renderMultiSelect(scope, key, label, options, selected, openKey) {
+    const selectedSet = new Set(selected || []);
+    const count = selectedSet.size;
+    const first = count === 1 ? (options.find(o => o.value === [...selectedSet][0])?.label || '') : '';
+    const summary = count === 0 ? `כל ה${label}` : (count === 1 && first ? first : `${count} נבחרו`);
+    const isOpen = openKey === key;
+    return `<div class="epa-ms ${isOpen ? 'open' : ''}">
+        <button type="button" class="epa-ms-btn" data-action="admin-${scope}-ms-toggle" data-ms="${key}">
+            <span class="epa-ms-label">${esc(label)}</span>
+            <span class="epa-ms-value">${esc(summary)}</span>
+            <span class="epa-ms-caret">${isOpen ? '▲' : '▼'}</span>
+        </button>
+        ${isOpen ? `<div class="epa-ms-drop">${options.map(o => `
+            <label class="epa-ms-opt">
+                <input type="checkbox" data-action="admin-${scope}-ms-opt" data-ms="${key}" value="${esc(o.value)}" ${selectedSet.has(o.value) ? 'checked' : ''}>
+                <span>${esc(o.label)}</span>
+            </label>`).join('') || '<div class="ep-empty">אין אפשרויות</div>'}</div>` : ''}
+    </div>`;
+}
+
+function boardStatusOptions() {
+    return Object.entries(BOARD_STATUS).map(([value, meta]) => ({ value, label: meta.label }));
+}
+
+function boardEmployeeOptions(d) {
+    return (d.employees || []).slice().sort((a, b) => a.displayName.localeCompare(b.displayName, 'he'))
+        .map(e => ({ value: e.id, label: e.displayName }));
+}
+
+function boardWorkshopOptions(d) {
+    return (d.workshopTypes || []).slice().sort((a, b) => (a.name || '').localeCompare(b.name || '', 'he'))
+        .map(w => ({ value: w.id, label: w.name }));
+}
+
+function formatBoardDate(row) {
+    if (row.dateEnd && row.dateEnd !== row.date) return `${fmtDate(row.date)} – ${fmtDate(row.dateEnd)}`;
+    return fmtDate(row.date);
+}
+
+function formatBoardHours(row) {
+    if (row.startTime && row.endTime) return `${esc(row.startTime)}–${esc(row.endTime)}`;
+    if (row.startTime) return esc(row.startTime);
+    return '—';
+}
+
+function formatBoardDetails(row) {
+    if (row.workshopName) return esc(row.workshopName);
+    if (row.extra) return esc(row.extra);
+    return '—';
+}
+
+function rowSelectDate(row, monthKey) {
+    const { from, to } = monthBounds(monthKey);
+    if (row.date >= from && row.date <= to) return row.date;
+    if (from >= row.date && from <= (row.dateEnd || row.date)) return from;
+    return row.date;
+}
+
+function renderBoardRow(row, selectedDay, employees, monthKey) {
+    const meta = BOARD_STATUS[row.status] || { label: row.status, badge: 'kind' };
+    const extra = row.kind === 'submission' && row.extra ? ` · ${esc(row.extra)}` : '';
+    const employee = (employees || []).find(e => e.id === row.employeeId);
+    const dot = row.employeeId ? `<span class="epa-dot-lg" style="background:${esc(employee?.color || '#2563eb')}"></span>` : '';
+    const selectDate = rowSelectDate(row, monthKey);
+    return `<tr class="epa-row-click ${selectedDay === selectDate ? 'active' : ''}" data-action="admin-select-day" data-date="${esc(selectDate)}">
+        <td>${formatBoardDate(row)}</td>
+        <td>${dot}${esc(row.employeeName || '—')}</td>
+        <td>${formatBoardHours(row)}</td>
+        <td>${formatBoardDetails(row)}</td>
+        <td><span class="epa-badge ${meta.badge}">${esc(meta.label)}${extra}</span></td>
+    </tr>`;
+}
+
 function paginateSlice(items, page, pageSize = BOARD_PAGE_SIZE) {
     const total = items.length;
     const totalPages = Math.max(1, Math.ceil(total / pageSize));
@@ -519,53 +759,44 @@ function renderPager(page, totalPages, total, prevAction, nextAction) {
     </div>`;
 }
 
-/** Every request and assignment for the month — collapsed by default, paginated. */
+/** Month-wide list: submissions, vacations, blocked days and holidays, with filters. */
 function renderBoardSubmissions(ce, d) {
-    const statusLabel = { SUBMITTED: 'הוגש', STANDBY: 'בהמתנה', SCHEDULED: 'משובץ' };
-    const statusBadge = { SUBMITTED: 'kind', STANDBY: 'kind', SCHEDULED: 'ok' };
-    const empFilter = ce._boardSubsEmpFilter || '';
-    const open = !!ce._boardSubsOpen;
-    let subs = (d.submissions || [])
-        .filter(s => s.status !== 'REJECTED')
-        .slice()
-        .sort((a, b) => a.date.localeCompare(b.date) || (a.employeeName || '').localeCompare(b.employeeName || ''));
-    if (empFilter) subs = subs.filter(s => s.employeeId === empFilter);
+    const bounds = monthBounds(d.monthKey);
+    const f = boardFilter(ce);
+    const filtered = filteredBoardRows(ce, d);
+    const { items, page, totalPages, total } = paginateSlice(filtered, ce._boardSubsPage || 0);
+    const scheduled = filtered.filter(r => r.status === 'SCHEDULED').length;
+    const vacations = filtered.filter(r => r.kind === 'vacation').length;
+    const blocked = filtered.filter(r => r.kind === 'blocked').length;
+    const fromVal = f.from || bounds.from;
+    const toVal = f.to || bounds.to;
+    const rows = items.map(r => renderBoardRow(r, ce._adminSelectedDay, d.employees, d.monthKey)).join('');
 
-    const assigned = subs.filter(s => s.status === 'SCHEDULED').length;
-    const waiting = subs.length - assigned;
-    const { items, page, totalPages, total } = paginateSlice(subs, ce._boardSubsPage || 0);
-
-    const employees = (d.employees || []).slice().sort((a, b) => a.displayName.localeCompare(b.displayName, 'he'));
-    const empOptions = `<option value="">כל העובדים</option>` + employees.map(e =>
-        `<option value="${esc(e.id)}" ${empFilter === e.id ? 'selected' : ''}>${esc(e.displayName)}</option>`).join('');
-
-    const rows = items.map(s => {
-        const employee = (d.employees || []).find(e => e.id === s.employeeId);
-        return `<tr class="epa-row-click" data-action="admin-select-day" data-date="${esc(s.date)}">
-            <td>${fmtDate(s.date)}</td>
-            <td><span class="epa-dot-lg" style="background:${esc(employee?.color || '#2563eb')}"></span>${esc(s.employeeName)}</td>
-            <td>${esc(s.startTime)}–${esc(s.endTime)}</td>
-            <td>${s.workshopName ? esc(s.workshopName) : '—'}</td>
-            <td><span class="epa-badge ${statusBadge[s.status] || 'kind'}">${statusLabel[s.status] || esc(s.status)}${s.managerOverride ? ' · ידני' : ''}</span></td>
-        </tr>`;
-    }).join('');
-
-    return `<div class="epa-board-acc">
-        <button type="button" class="epa-accordion-toggle" data-action="admin-toggle-board-subs">
-            <span>כל ההגשות והשיבוצים — ${monthTitle(d.monthKey)} (${(d.submissions || []).filter(s => s.status !== 'REJECTED').length})</span>
-            <span class="epa-accordion-arrow">${open ? '▲' : '▼'}</span>
-        </button>
-        ${open ? `<div class="epa-accordion-body">
-            <div style="font-size:12px;color:#6b7280;margin-bottom:8px">שובצו ${assigned} · ממתינים ${waiting} — לחיצה על שורה פותחת את פרטי היום בלוח</div>
-            <div class="epa-filter-row">
-                <div><label>עובד/ת</label><select data-action="admin-board-subs-emp-filter">${empOptions}</select></div>
+    return `<div class="epa-panel-title"><h3>כל ההגשות והשיבוצים — ${monthTitle(d.monthKey)}</h3></div>
+        <div class="epa-board-stats">
+            <span class="epa-board-stat">${total} ברשימה</span>
+            <span class="epa-board-stat">${scheduled} משובצים</span>
+            <span class="epa-board-stat">${vacations} חופשות</span>
+            <span class="epa-board-stat">${blocked} ימים חסומים</span>
+        </div>
+        <div class="epa-filter-row">
+            ${renderMultiSelect('board', 'employeeIds', 'עובדים', boardEmployeeOptions(d), f.employeeIds, ce._boardMsOpen)}
+            <div>
+                <label>תאריך</label>
+                <div class="epa-date-range">
+                    <input type="date" data-action="admin-board-date-from" min="${bounds.from}" max="${bounds.to}" value="${esc(fromVal)}">
+                    <span style="color:#94a3b8">–</span>
+                    <input type="date" data-action="admin-board-date-to" min="${bounds.from}" max="${bounds.to}" value="${esc(toVal)}">
+                </div>
             </div>
-            <div class="epa-table-wrap"><table class="epa-table"><thead><tr><th>תאריך</th><th>עובד/ת</th><th>שעות</th><th>סדנה</th><th>סטטוס</th></tr></thead>
-                <tbody>${rows || '<tr><td colspan="5" class="ep-empty">אין הגשות התואמות את הסינון</td></tr>'}</tbody>
-            </table></div>
-            ${renderPager(page, totalPages, total, 'admin-board-subs-prev', 'admin-board-subs-next')}
-        </div>` : ''}
-    </div>`;
+            ${renderMultiSelect('board', 'statuses', 'סטטוסים', boardStatusOptions(), f.statuses, ce._boardMsOpen)}
+            ${renderMultiSelect('board', 'workshopIds', 'סדנאות', boardWorkshopOptions(d), f.workshopIds, ce._boardMsOpen)}
+            ${hasBoardFilters(f, bounds) ? `<button type="button" class="epa-btn" data-action="admin-board-filter-clear">איפוס סינון</button>` : ''}
+        </div>
+        <div class="epa-table-wrap"><table class="epa-table"><thead><tr><th>תאריך</th><th>עובד/ת</th><th>שעות</th><th>סדנה / פרטים</th><th>סטטוס</th></tr></thead>
+            <tbody>${rows || '<tr><td colspan="5" class="ep-empty">אין רשומות התואמות את הסינון</td></tr>'}</tbody>
+        </table></div>
+        ${renderPager(page, totalPages, total, 'admin-board-subs-prev', 'admin-board-subs-next')}`;
 }
 
 function renderToolbar(ce, d) {
@@ -721,13 +952,46 @@ function renderListView(ce, d) {
     return rows.join('');
 }
 
+function renderDayPeopleList(ce, d, dateKey) {
+    const f = dayFilter(ce);
+    const dayRows = filteredDayRows(ce, d, dateKey);
+    const { items, page, totalPages, total } = paginateSlice(dayRows, ce._dayListPage || 0);
+    const empIds = [...new Set(dayRows.map(r => r.employeeId).filter(Boolean))];
+    const empOpts = boardEmployeeOptions(d).filter(o => empIds.includes(o.value));
+    const wsIds = [...new Set(dayRows.map(r => r.workshopTypeId).filter(Boolean))];
+    const wsOpts = boardWorkshopOptions(d).filter(o => wsIds.includes(o.value));
+    const statusOpts = boardStatusOptions().filter(o => dayRows.some(r => r.status === o.value));
+    const hasFilter = !!(f.employeeIds?.length || f.statuses?.length || f.workshopIds?.length);
+    const rows = items.map(r => renderBoardRow(r, dateKey, d.employees, d.monthKey)).join('');
+    return `<div class="epa-day-people">
+        <div class="epa-panel-title"><h3>עובדים ביום זה (${total})</h3></div>
+        <div class="epa-filter-row">
+            ${renderMultiSelect('day', 'employeeIds', 'עובדים', empOpts, f.employeeIds, ce._dayMsOpen)}
+            ${renderMultiSelect('day', 'statuses', 'סטטוסים', statusOpts, f.statuses, ce._dayMsOpen)}
+            ${renderMultiSelect('day', 'workshopIds', 'סדנאות', wsOpts, f.workshopIds, ce._dayMsOpen)}
+            ${hasFilter ? `<button type="button" class="epa-btn" data-action="admin-day-filter-clear">איפוס סינון</button>` : ''}
+        </div>
+        <div class="epa-table-wrap"><table class="epa-table"><thead><tr><th>תאריך</th><th>עובד/ת</th><th>שעות</th><th>סדנה / פרטים</th><th>סטטוס</th></tr></thead>
+            <tbody>${rows || '<tr><td colspan="5" class="ep-empty">אין עובדים התואמים את הסינון ביום זה</td></tr>'}</tbody>
+        </table></div>
+        ${renderPager(page, totalPages, total, 'admin-day-list-prev', 'admin-day-list-next')}
+    </div>`;
+}
+
 function renderDayDetail(ce, d) {
     const dateKey = ce._adminSelectedDay;
     const info = d.days?.[dateKey];
     const subs = submissionsByDate(d)[dateKey] || [];
     const blocked = (d.settings?.blockedDates || []).includes(dateKey);
     const promoted = (d.settings?.promotedDates || []).includes(dateKey);
+    const holidayEntry = getHolidayEntry(d, dateKey);
+    const note = getDayNote(d, dateKey);
     const activeEmployees = (d.employees || []).filter(e => e.active);
+    const banners = [
+        blocked ? `<div class="epa-day-banner blocked">🚫 היום חסום להגשות</div>` : '',
+        holidayEntry ? `<div class="epa-day-banner holiday">🕎 ${esc(holidayEntry.name || 'חג')}${holidayModeMarker(holidayEntry)}</div>` : '',
+        note?.message ? `<div class="epa-day-banner note">✉ ${esc(note.message)}</div>` : '',
+    ].join('');
 
     const typeBlocks = (info?.types || []).map(t => {
         const assignedChips = subs
@@ -759,7 +1023,12 @@ function renderDayDetail(ce, d) {
         </div>` : '';
 
     return `<div class="epa-detail">
-        <h3>${fmtDate(dateKey)} <button class="epa-btn" data-action="admin-close-day" style="float:left">סגירה</button></h3>
+        <div class="epa-detail-head">
+            <h3>${fmtDate(dateKey)}</h3>
+            <button class="epa-btn" data-action="admin-close-day">סגירה</button>
+        </div>
+        ${banners}
+        ${renderDayPeopleList(ce, d, dateKey)}
         ${typeBlocks}
         ${assignSection}
         ${globalSection}
@@ -1771,8 +2040,35 @@ export function handleAdminChange(ce, input) {
         ce.render();
         return true;
     }
-    if (input?.dataset?.action === 'admin-board-subs-emp-filter') {
-        ce._boardSubsEmpFilter = input.value;
+    if (input?.dataset?.action === 'admin-board-ms-opt') {
+        const f = boardFilter(ce);
+        const key = input.dataset.ms;
+        if (f[key]) f[key] = applyMsOpt(f[key], input.value, input.checked);
+        ce._boardSubsPage = 0;
+        ce.render();
+        return true;
+    }
+    if (input?.dataset?.action === 'admin-day-ms-opt') {
+        const f = dayFilter(ce);
+        const key = input.dataset.ms;
+        if (f[key]) f[key] = applyMsOpt(f[key], input.value, input.checked);
+        ce._dayListPage = 0;
+        ce.render();
+        return true;
+    }
+    if (input?.dataset?.action === 'admin-board-date-from' || input?.dataset?.action === 'admin-board-date-to') {
+        const bounds = monthBounds(ce._adminData?.monthKey || ce._adminMonth);
+        const f = boardFilter(ce);
+        let value = input.value || '';
+        if (value && value < bounds.from) value = bounds.from;
+        if (value && value > bounds.to) value = bounds.to;
+        if (input.dataset.action === 'admin-board-date-from') {
+            f.from = value;
+            if (f.to && f.from && f.from > f.to) f.to = f.from;
+        } else {
+            f.to = value;
+            if (f.from && f.to && f.to < f.from) f.from = f.to;
+        }
         ce._boardSubsPage = 0;
         ce.render();
         return true;
@@ -1826,6 +2122,10 @@ export function handleAdminChange(ce, input) {
 
 export function handleAdminClick(ce, action, target) {
     const d = ce._adminData;
+    if (!['admin-board-ms-toggle', 'admin-board-ms-opt', 'admin-day-ms-toggle', 'admin-day-ms-opt'].includes(action)) {
+        ce._boardMsOpen = null;
+        ce._dayMsOpen = null;
+    }
     switch (action) {
         case 'admin-toggle-sidebar':
             ce._adminSidebarCollapsed = !ce._adminSidebarCollapsed;
@@ -1856,6 +2156,8 @@ export function handleAdminClick(ce, action, target) {
             ce._adminSelectedDay = null;
             ce._openOffersPage = 0;
             ce._boardSubsPage = 0;
+            boardFilter(ce).from = '';
+            boardFilter(ce).to = '';
             ce._requestAdminData();
             return true;
         case 'admin-month-next':
@@ -1863,6 +2165,8 @@ export function handleAdminClick(ce, action, target) {
             ce._adminSelectedDay = null;
             ce._openOffersPage = 0;
             ce._boardSubsPage = 0;
+            boardFilter(ce).from = '';
+            boardFilter(ce).to = '';
             ce._requestAdminData();
             return true;
         case 'admin-tracker-status':
@@ -1873,14 +2177,23 @@ export function handleAdminClick(ce, action, target) {
             ce._adminView = 'heat'; ce.render(); return true;
         case 'admin-view-list':
             ce._adminView = 'list'; ce.render(); return true;
-        case 'admin-select-day':
-            ce._adminSelectedDay = target.dataset.date;
+        case 'admin-select-day': {
+            const dateKey = target.dataset.date;
+            if (ce._adminSelectedDay !== dateKey) {
+                ce._dayListFilter = emptyDayFilter();
+                ce._dayListPage = 0;
+            }
+            ce._adminSelectedDay = dateKey;
             ce._adminDayGlobalOpen = false;
+            ce._dayMsOpen = null;
             ce.render();
+            ce.querySelector('.epa-detail')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
             return true;
+        }
         case 'admin-close-day':
             ce._adminSelectedDay = null;
             ce._adminDayGlobalOpen = false;
+            ce._dayMsOpen = null;
             ce.render();
             return true;
         case 'admin-toggle-holidays':
@@ -1906,8 +2219,31 @@ export function handleAdminClick(ce, action, target) {
             ce.render();
             return true;
         }
-        case 'admin-toggle-board-subs':
-            ce._boardSubsOpen = !ce._boardSubsOpen;
+        case 'admin-board-ms-toggle':
+            ce._boardMsOpen = ce._boardMsOpen === target.dataset.ms ? null : target.dataset.ms;
+            ce._dayMsOpen = null;
+            ce.render();
+            return true;
+        case 'admin-board-ms-opt':
+        case 'admin-day-ms-opt':
+        case 'admin-board-date-from':
+        case 'admin-board-date-to':
+            return true;
+        case 'admin-board-filter-clear':
+            ce._boardListFilter = emptyBoardFilter();
+            ce._boardMsOpen = null;
+            ce._boardSubsPage = 0;
+            ce.render();
+            return true;
+        case 'admin-day-ms-toggle':
+            ce._dayMsOpen = ce._dayMsOpen === target.dataset.ms ? null : target.dataset.ms;
+            ce._boardMsOpen = null;
+            ce.render();
+            return true;
+        case 'admin-day-filter-clear':
+            ce._dayListFilter = emptyDayFilter();
+            ce._dayMsOpen = null;
+            ce._dayListPage = 0;
             ce.render();
             return true;
         case 'admin-board-subs-prev':
@@ -1915,10 +2251,18 @@ export function handleAdminClick(ce, action, target) {
             ce.render();
             return true;
         case 'admin-board-subs-next': {
-            let subs = (d.submissions || []).filter(s => s.status !== 'REJECTED');
-            if (ce._boardSubsEmpFilter) subs = subs.filter(s => s.employeeId === ce._boardSubsEmpFilter);
-            const totalPages = Math.max(1, Math.ceil(subs.length / 10));
+            const totalPages = Math.max(1, Math.ceil(filteredBoardRows(ce, d).length / BOARD_PAGE_SIZE));
             ce._boardSubsPage = Math.min(totalPages - 1, (ce._boardSubsPage || 0) + 1);
+            ce.render();
+            return true;
+        }
+        case 'admin-day-list-prev':
+            ce._dayListPage = Math.max(0, (ce._dayListPage || 0) - 1);
+            ce.render();
+            return true;
+        case 'admin-day-list-next': {
+            const totalPages = Math.max(1, Math.ceil(filteredDayRows(ce, d, ce._adminSelectedDay).length / BOARD_PAGE_SIZE));
+            ce._dayListPage = Math.min(totalPages - 1, (ce._dayListPage || 0) + 1);
             ce.render();
             return true;
         }

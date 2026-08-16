@@ -46,7 +46,7 @@ import {
     ASSIGNMENT_STATUS,
 } from 'backend/schedulingEngine.js';
 import {
-    loadVacationsOverlappingRangeByEmployee,
+    loadVacationsOverlappingRange,
     loadVacationsForEmployee,
     listAllVacations,
     saveVacation as saveVacationRow,
@@ -219,7 +219,7 @@ export const getStaffAdminData = webMethod(Permissions.SiteMember, async (monthK
     const paddedToKey = shiftDateKey(toKey, 6);
 
     const canManageEmployees = getRolePermissionValue(role, 'manageEmployees');
-    const [board, settings, submissionsRaw, weeklySubsRaw, vacationsByEmployee, tuftingTypeIds, pendingVacationsResult] = await Promise.all([
+    const [board, settings, submissionsRaw, weeklySubsRaw, monthVacationsRaw, tuftingTypeIds, pendingVacationsResult] = await Promise.all([
         buildBoard(fromKey, toKey, { includeOffers: true }),
         loadSettings(),
         // All statuses (incl. REJECTED) so the tracker page shows the full picture;
@@ -232,13 +232,20 @@ export const getStaffAdminData = webMethod(Permissions.SiteMember, async (monthK
             .le('date', new Date(`${paddedToKey}T23:59:59Z`))
             .ne('status', SUBMISSION_STATUS.REJECTED)
             .limit(1000).find(SA).catch(() => ({ items: [] })),
-        loadVacationsOverlappingRangeByEmployee(fromKey, toKey),
+        loadVacationsOverlappingRange(fromKey, toKey),
         loadTuftingTypeIdSet(),
         canManageEmployees
             ? wixData.query('EmployeeVacations').eq('status', VACATION_STATUS.PENDING).limit(1).find(SA).catch(() => null)
             : Promise.resolve(null),
     ]);
     const pendingVacationsTotal = pendingVacationsResult?.totalCount ?? 0;
+
+    const vacationsByEmployee = {};
+    for (const v of (monthVacationsRaw || [])) {
+        if (v.status !== VACATION_STATUS.APPROVED) continue;
+        if (!vacationsByEmployee[v.employeeId]) vacationsByEmployee[v.employeeId] = [];
+        vacationsByEmployee[v.employeeId].push(v);
+    }
 
     const weeklySubsByEmployee = {};
     for (const s of (weeklySubsRaw.items || [])) {
@@ -354,6 +361,10 @@ export const getStaffAdminData = webMethod(Permissions.SiteMember, async (monthK
         } : {}),
         days,
         submissions,
+        monthVacations: (monthVacationsRaw || []).map(v => ({
+            ...v,
+            employeeName: board.rolesById[v.employeeId]?.displayName || '—',
+        })),
         tracker,
         openOffers,
         rules,

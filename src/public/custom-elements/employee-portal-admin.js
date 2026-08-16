@@ -54,6 +54,10 @@ export const ADMIN_STYLE = `
 .epa-inline select, .epa-inline input { border: 1px solid #d1d5db; border-radius: 7px; padding: 5px 7px; font-size: 12px; font-family: inherit; }
 .epa-section { margin-top: 16px; }
 .epa-rule-inputs input { width: 60px; border: 1px solid #d1d5db; border-radius: 7px; padding: 4px 6px; font-size: 12px; font-family: inherit; }
+.epa-rule-card { border: 1px solid #e2e8f0; border-radius: 12px; padding: 12px; margin-bottom: 10px; background: #f8fafc; }
+.epa-rule-card-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.epa-rule-card-head b { font-size: 13px; }
+.epa-rule-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(150px,1fr)); gap: 8px; }
 .epa-list-day { border: 1px solid #e5e7eb; border-radius: 10px; padding: 9px 11px; margin-bottom: 8px; font-size: 12.5px; background: #fff; }
 .epa-list-day.no-ws { background: #f9fafb; color: #9ca3af; }
 .epa-list-head { display: flex; justify-content: space-between; font-weight: 700; }
@@ -1630,16 +1634,55 @@ function renderAutoAssignSummaryStep(ce) {
         </div>`;
 }
 
+// Numeric fields shown per ruleType — each workshop only sees the fields relevant
+// to its own capacity model (see schedulingEngine.js RULE_TYPES/RULE_DEFAULTS).
+const RULE_TYPE_LABELS = {
+    SIMPLE: 'נוסחה כללית',
+    TUFTING: 'טאפטינג',
+    CANDLES: 'נרות',
+    TOTAL_CAP: 'תקרת משתתפים',
+};
+const RULE_FIELD_META = {
+    SIMPLE: [
+        { key: 'participantsPerInstructor', label: 'משתתפים למדריך' },
+        { key: 'parentChildParticipantsPerInstructor', label: 'הורה-ילד למדריך' },
+    ],
+    TUFTING: [
+        { key: 'maxPeoplePerInstructor', label: 'משתתפים למדריך (קבוצה מעורבת)', title: 'כשיש לפחות שטיח יחיד אחד בקבוצה — יחס משתתפים כללי למדריך' },
+        { key: 'maxPairsMixed', label: 'זוגות הורה-וילד למדריך (קבוצה מעורבת)', title: 'מקסימום זוגות הורה-וילד למדריך, גם כשיש בקבוצה שטיחים יחידים' },
+        { key: 'maxPairsOnly', label: 'זוגות למדריך (זוגות בלבד)', title: 'כשכל הקבוצה היא זוגות הורה-וילד בלבד — מקסימום זוגות למדריך' },
+    ],
+    CANDLES: [
+        { key: 'maxStationsPerInstructor', label: 'עמדות למדריך', title: 'עמדה = מבוגר יחיד או זוג הורה-וילד; נר נוסף אינו נספר כעמדה' },
+        { key: 'maxPairStations', label: 'מקסימום עמדות-זוג למדריך', title: 'מקסימום עמדות של זוגות הורה-וילד למדריך אחד' },
+    ],
+    TOTAL_CAP: [
+        { key: 'maxAdults', label: 'מקסימום מבוגרים בסדנה' },
+        { key: 'maxChildren', label: 'מקסימום ילדים (הורה-וילד) בסדנה', title: 'שרשרת/תוספת נוספת של אותו זוג אינה נספרת' },
+    ],
+};
+
 function renderRules(d) {
-    const rows = (d.rules || []).map(r => `
-        <tr class="epa-rule-inputs" data-type="${r.workshopTypeId}">
-            <td>${esc(r.workshopName)}</td>
-            <td><input type="number" class="epaR_ppi" value="${r.participantsPerInstructor}"></td>
-            <td><input type="number" class="epaR_pcpi" value="${r.parentChildParticipantsPerInstructor}"></td>
-            <td><input type="number" class="epaR_min" value="${r.minInstructors}"></td>
-            <td><button class="epa-btn" data-action="admin-save-rule" data-type="${r.workshopTypeId}">שמירה</button></td>
-        </tr>`).join('');
-    return `<div class="epa-table-wrap"><table class="epa-table"><thead><tr><th>סדנה</th><th>משתתפים למדריך</th><th>הורה-ילד למדריך</th><th>מינימום מדריכים</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`;
+    const cards = (d.rules || []).map(r => {
+        const ruleType = r.ruleType || 'SIMPLE';
+        const fields = RULE_FIELD_META[ruleType] || RULE_FIELD_META.SIMPLE;
+        const inputs = [...fields, { key: 'minInstructors', label: 'מינימום מדריכים' }].map(f => `
+            <div class="epa-field" ${f.title ? `title="${esc(f.title)}"` : ''}>
+                <label>${esc(f.label)}</label>
+                <input type="number" min="0" data-field="${f.key}" value="${r[f.key] ?? ''}">
+            </div>`).join('');
+        return `<div class="epa-rule-card" data-type="${r.workshopTypeId}">
+            <div class="epa-rule-card-head">
+                <b>${esc(r.workshopName)}</b>
+                <span class="epa-badge kind">${esc(RULE_TYPE_LABELS[ruleType] || ruleType)}</span>
+            </div>
+            <div class="epa-rule-grid">${inputs}</div>
+            <div class="epa-inline">
+                <button class="epa-btn" data-action="admin-save-rule" data-type="${r.workshopTypeId}">שמירה</button>
+            </div>
+        </div>`;
+    }).join('');
+    return `<div class="epa-rule-cards">${cards || '<div class="ep-empty">אין סדנאות מוגדרות</div>'}</div>`;
 }
 
 const SETTINGS_FIELD_LABELS = {
@@ -2850,15 +2893,15 @@ export function handleAdminClick(ce, action, target) {
             ce._dispatch('adminRejectVacation', { vacationId: target.dataset.vacation });
             return true;
         case 'admin-save-rule': {
-            const row = target.closest('tr');
+            const card = target.closest('.epa-rule-card');
+            const patch = {};
+            card?.querySelectorAll('[data-field]').forEach((input) => {
+                patch[input.dataset.field] = Number(input.value);
+            });
             ce._startBusy('שומר כלל…');
             ce._dispatch('adminUpdateRule', {
                 workshopTypeId: target.dataset.type,
-                patch: {
-                    participantsPerInstructor: Number(row?.querySelector('.epaR_ppi')?.value),
-                    parentChildParticipantsPerInstructor: Number(row?.querySelector('.epaR_pcpi')?.value),
-                    minInstructors: Number(row?.querySelector('.epaR_min')?.value),
-                },
+                patch,
             });
             return true;
         }

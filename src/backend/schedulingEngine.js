@@ -106,26 +106,119 @@ export async function loadWorkshopTypeMap() {
     return { typesById, serviceIdToTypeId };
 }
 
-export async function loadRulesByTypeId() {
+/**
+ * Per-workshop-type instructor capacity models.
+ * - SIMPLE: legacy linear ratio (adults/ppi + children/pcpi), used as the
+ *   fallback for any workshop type without a dedicated model (e.g. ceramics).
+ * - TUFTING: pairs-only groups get a richer pair-per-instructor ratio; mixed
+ *   groups (any solo adult present) fall back to a people ratio, but the
+ *   pair count is still capped per instructor so a solo rug joining a full
+ *   pair group forces a second instructor.
+ * - CANDLES: instructor load is driven by "stations" (each solo adult,
+ *   parent+child pair, or standalone extra child = 1 station); a stricter
+ *   pair-only cap applies on top since a full 7 stations of pairs would
+ *   overload a single instructor even though the station math allows it.
+ * - TOTAL_CAP: flat headcount ceiling split between adults/children
+ *   (jewelry, charms) — ready for when those workshops get paid-order data.
+ */
+export const RULE_TYPES = { SIMPLE: 'SIMPLE', TUFTING: 'TUFTING', CANDLES: 'CANDLES', TOTAL_CAP: 'TOTAL_CAP' };
+
+/** Known workshop-type IDs → default ruleType, used until a manager overrides it. */
+export const DEFAULT_RULE_TYPE_BY_WORKSHOP_ID = {
+    'd20eb0d0-0485-4e91-8ed9-ca6812a0ed12': RULE_TYPES.TUFTING, // טאפטינג
+    '4572e26f-37ae-45c6-a767-5b49ee144bb4': RULE_TYPES.CANDLES, // נרות
+    'a5ac42ec-80d3-447a-801c-08fe8e74e0a3': RULE_TYPES.TOTAL_CAP, // תכשיטים
+    'bd7f339d-ea8a-4adf-a7c1-15ff042f1558': RULE_TYPES.TOTAL_CAP, // צ'ארמס
+    'ee5072ec-3389-496c-917d-bc39a498ba54': RULE_TYPES.SIMPLE, // צביעה בקרמיקה
+};
+
+/** Default field values per ruleType — used whenever a SchedulingRules row is missing a field (or missing entirely). */
+export const RULE_DEFAULTS = {
+    [RULE_TYPES.SIMPLE]: { participantsPerInstructor: 8, parentChildParticipantsPerInstructor: 6, minInstructors: 1 },
+    [RULE_TYPES.TUFTING]: { maxPeoplePerInstructor: 8, maxPairsMixed: 2, maxPairsOnly: 4, minInstructors: 1 },
+    [RULE_TYPES.CANDLES]: { maxStationsPerInstructor: 7, maxPairStations: 5, minInstructors: 1 },
+    [RULE_TYPES.TOTAL_CAP]: { maxAdults: 8, maxChildren: 6, minInstructors: 1 },
+};
+
+const posNum = (v, fallback) => (Number(v) > 0 ? Number(v) : fallback);
+
+/**
+ * Full capacity ruleset for every known workshop type (from `workshops` CMS),
+ * merging manager-editable SchedulingRules overrides on top of ruleType defaults.
+ * Every workshop type always gets an entry, even without a SchedulingRules row.
+ */
+export async function loadRulesByTypeId(typesById) {
     const result = await wixData.query('SchedulingRules').limit(500).find(SA).catch(() => ({ items: [] }));
-    const map = {};
+    const rowsByTypeId = {};
     for (const r of (result.items || [])) {
         if (r.active === false || !r.workshopTypeId) continue;
-        map[r.workshopTypeId] = {
-            id: r._id,
-            workshopTypeId: r.workshopTypeId,
-            participantsPerInstructor: Number(r.participantsPerInstructor) > 0 ? Number(r.participantsPerInstructor) : 8,
-            parentChildParticipantsPerInstructor: Number(r.parentChildParticipantsPerInstructor) > 0 ? Number(r.parentChildParticipantsPerInstructor) : 6,
-            minInstructors: Number(r.minInstructors) > 0 ? Number(r.minInstructors) : 1,
-        };
+        rowsByTypeId[r.workshopTypeId] = r;
+    }
+
+    const allTypeIds = new Set([
+        ...Object.keys(typesById || {}),
+        ...Object.keys(rowsByTypeId),
+        ...Object.keys(DEFAULT_RULE_TYPE_BY_WORKSHOP_ID),
+    ]);
+
+    const map = {};
+    for (const workshopTypeId of allTypeIds) {
+        const row = rowsByTypeId[workshopTypeId] || null;
+        const ruleType = row?.ruleType || DEFAULT_RULE_TYPE_BY_WORKSHOP_ID[workshopTypeId] || RULE_TYPES.SIMPLE;
+        const defaults = RULE_DEFAULTS[ruleType] || RULE_DEFAULTS[RULE_TYPES.SIMPLE];
+
+        const rule = { id: row?._id || null, workshopTypeId, ruleType };
+        for (const [key, fallback] of Object.entries(defaults)) {
+            rule[key] = posNum(row?.[key], fallback);
+        }
+        map[workshopTypeId] = rule;
     }
     return map;
 }
 
-export function requiredInstructorsFor(rule, adults, children) {
-    const r = rule || { participantsPerInstructor: 8, parentChildParticipantsPerInstructor: 6, minInstructors: 1 };
-    const load = (adults || 0) / r.participantsPerInstructor + (children || 0) / r.parentChildParticipantsPerInstructor;
-    return Math.max(r.minInstructors, Math.ceil(load));
+/**
+ * @param {object} rule - a ruleset from loadRulesByTypeId (has .ruleType + its own fields).
+ * @param {{adults?:number, children?:number, pairs?:number, soloAdults?:number, extraChildren?:number, people?:number}} comp
+ *   Per-day/type composition, aggregated per-order (pairs/soloAdults/extraChildren must be
+ *   summed per-order — min(adults,children) at the aggregate level would be wrong across
+ *   multiple orders).
+ */
+export function requiredInstructorsFor(rule, comp) {
+    const c = comp || {};
+    const adults = c.adults || 0;
+    const children = c.children || 0;
+    const pairs = c.pairs || 0;
+    const soloAdults = c.soloAdults != null ? c.soloAdults : Math.max(0, adults - pairs);
+    const extraChildren = c.extraChildren != null ? c.extraChildren : Math.max(0, children - pairs);
+    const people = c.people != null ? c.people : adults + children;
+    const minInstructors = rule?.minInstructors > 0 ? rule.minInstructors : 1;
+
+    let required;
+    switch (rule?.ruleType) {
+        case RULE_TYPES.TUFTING: {
+            const r = { ...RULE_DEFAULTS[RULE_TYPES.TUFTING], ...rule };
+            required = soloAdults === 0 && pairs > 0
+                ? Math.ceil(pairs / r.maxPairsOnly)
+                : Math.max(Math.ceil(people / r.maxPeoplePerInstructor), Math.ceil(pairs / r.maxPairsMixed));
+            break;
+        }
+        case RULE_TYPES.CANDLES: {
+            const r = { ...RULE_DEFAULTS[RULE_TYPES.CANDLES], ...rule };
+            const stations = soloAdults + pairs + extraChildren;
+            required = Math.max(Math.ceil(stations / r.maxStationsPerInstructor), Math.ceil(pairs / r.maxPairStations));
+            break;
+        }
+        case RULE_TYPES.TOTAL_CAP: {
+            const r = { ...RULE_DEFAULTS[RULE_TYPES.TOTAL_CAP], ...rule };
+            required = Math.max(Math.ceil(adults / r.maxAdults), Math.ceil(children / r.maxChildren));
+            break;
+        }
+        default: {
+            const r = { ...RULE_DEFAULTS[RULE_TYPES.SIMPLE], ...rule };
+            required = Math.ceil(adults / r.participantsPerInstructor + children / r.parentChildParticipantsPerInstructor);
+        }
+    }
+    return Math.max(minInstructors, required || 0);
 }
 
 /** Active Dashboard_Roles rows; skills expanded when the field is a multi-ref. */
@@ -239,6 +332,7 @@ async function loadOffers(fromKey, toKey) {
  * @returns {Promise<{
  *   days: Object<string, { hasWorkshops: boolean, types: Object<string, {
  *     typeId: string, name: string, adults: number, children: number,
+ *     pairs: number, soloAdults: number, extraChildren: number, people: number,
  *     required: number, activeCount: number,
  *     standbyQueue: Array<{submissionId: string, employeeId: string, createdAt: Date}>,
  *     assignedCount: number, assignedEmployeeIds: string[]
@@ -253,7 +347,7 @@ async function loadOffers(fromKey, toKey) {
 export async function buildBoard(fromKey, toKey, { consistent = false, includeOffers = false } = {}) {
     const { typesById, serviceIdToTypeId } = await loadWorkshopTypeMap();
     const [rules, roles, orders, submissions, assignments, offers, sessionRows] = await Promise.all([
-        loadRulesByTypeId(),
+        loadRulesByTypeId(typesById),
         loadActiveRoles(),
         loadPaidOrders(fromKey, toKey),
         loadSubmissions(fromKey, toKey, consistent),
@@ -277,6 +371,10 @@ export async function buildBoard(fromKey, toKey, { consistent = false, includeOf
                 typeId,
                 name: typesById[typeId]?.name || 'סדנה',
                 adults: 0, children: 0, required: 0,
+                // Composition accumulated per-order (see requiredInstructorsFor):
+                // pairs = Σ min(order.adults, order.children); soloAdults/extraChildren
+                // are the remainder on each side; people = adults+children.
+                pairs: 0, soloAdults: 0, extraChildren: 0, people: 0,
                 activeCount: 0, standbyQueue: [],
                 assignedCount: 0, assignedEmployeeIds: [],
                 sessions: [], // distinct workshopStart ISO timestamps that day (calendar display)
@@ -291,8 +389,15 @@ export async function buildBoard(fromKey, toKey, { consistent = false, includeOf
         const typeId = serviceIdToTypeId[order.serviceId];
         if (!dateKey || !typeId || dateKey < fromKey || dateKey > toKey) continue;
         const t = dayType(dateKey, typeId);
-        t.adults += order.adults || 0;
-        t.children += order.children || 0;
+        const orderAdults = order.adults || 0;
+        const orderChildren = order.children || 0;
+        const orderPairs = Math.min(orderAdults, orderChildren);
+        t.adults += orderAdults;
+        t.children += orderChildren;
+        t.pairs += orderPairs;
+        t.soloAdults += orderAdults - orderPairs;
+        t.extraChildren += orderChildren - orderPairs;
+        t.people += orderAdults + orderChildren;
         const startIso = order.workshopStart instanceof Date ? order.workshopStart.toISOString() : new Date(order.workshopStart).toISOString();
         if (!t.sessions.includes(startIso)) t.sessions.push(startIso);
         days[dateKey].hasWorkshops = true;
@@ -307,7 +412,7 @@ export async function buildBoard(fromKey, toKey, { consistent = false, includeOf
 
     for (const dateKey of Object.keys(days)) {
         for (const t of Object.values(days[dateKey].types)) {
-            t.required = requiredInstructorsFor(rules[t.typeId], t.adults, t.children);
+            t.required = requiredInstructorsFor(rules[t.typeId], t);
         }
     }
 

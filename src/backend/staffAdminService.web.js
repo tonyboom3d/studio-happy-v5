@@ -41,6 +41,9 @@ import {
     loadSettings,
     loadRulesByTypeId,
     loadWorkshopTypeMap,
+    RULE_TYPES,
+    RULE_DEFAULTS,
+    DEFAULT_RULE_TYPE_BY_WORKSHOP_ID,
     runScheduling,
     publishSchedulingUpdate,
     OFFER_STATUS,
@@ -332,9 +335,21 @@ export const getStaffAdminData = webMethod(Permissions.SiteMember, async (monthK
     const rules = Object.values(board.rules || {}).map(r => ({
         workshopTypeId: r.workshopTypeId,
         workshopName: board.typesById[r.workshopTypeId]?.name || 'סדנה',
+        ruleType: r.ruleType,
+        minInstructors: r.minInstructors,
+        // SIMPLE (legacy / ceramics)
         participantsPerInstructor: r.participantsPerInstructor,
         parentChildParticipantsPerInstructor: r.parentChildParticipantsPerInstructor,
-        minInstructors: r.minInstructors,
+        // TUFTING
+        maxPeoplePerInstructor: r.maxPeoplePerInstructor,
+        maxPairsMixed: r.maxPairsMixed,
+        maxPairsOnly: r.maxPairsOnly,
+        // CANDLES
+        maxStationsPerInstructor: r.maxStationsPerInstructor,
+        maxPairStations: r.maxPairStations,
+        // TOTAL_CAP (jewelry, charms)
+        maxAdults: r.maxAdults,
+        maxChildren: r.maxChildren,
     }));
 
     return {
@@ -740,10 +755,19 @@ export const updateSchedulingRule = webMethod(Permissions.SiteMember, async (wor
     if (!workshopTypeId) throw new Error('BAD_REQUEST: חסר workshopTypeId.');
 
     const num = (v) => (Number(v) > 0 ? Number(v) : undefined);
+    // Only the numeric fields relevant to the workshop's ruleType are ever sent by the
+    // UI for a given save, so this stays generic across SIMPLE/TUFTING/CANDLES/TOTAL_CAP.
     const fields = {
+        minInstructors: num(patch?.minInstructors),
         participantsPerInstructor: num(patch?.participantsPerInstructor),
         parentChildParticipantsPerInstructor: num(patch?.parentChildParticipantsPerInstructor),
-        minInstructors: num(patch?.minInstructors),
+        maxPeoplePerInstructor: num(patch?.maxPeoplePerInstructor),
+        maxPairsMixed: num(patch?.maxPairsMixed),
+        maxPairsOnly: num(patch?.maxPairsOnly),
+        maxStationsPerInstructor: num(patch?.maxStationsPerInstructor),
+        maxPairStations: num(patch?.maxPairStations),
+        maxAdults: num(patch?.maxAdults),
+        maxChildren: num(patch?.maxChildren),
     };
 
     const existing = await wixData.query('SchedulingRules')
@@ -755,14 +779,11 @@ export const updateSchedulingRule = webMethod(Permissions.SiteMember, async (wor
         await wixData.update('SchedulingRules', row, SA);
     } else {
         const { typesById } = await loadWorkshopTypeMap();
-        await wixData.insert('SchedulingRules', {
-            workshopTypeId,
-            workshopName: typesById[workshopTypeId]?.name || 'סדנה',
-            participantsPerInstructor: fields.participantsPerInstructor || 8,
-            parentChildParticipantsPerInstructor: fields.parentChildParticipantsPerInstructor || 6,
-            minInstructors: fields.minInstructors || 1,
-            active: true,
-        }, SA);
+        const ruleType = DEFAULT_RULE_TYPE_BY_WORKSHOP_ID[workshopTypeId] || RULE_TYPES.SIMPLE;
+        const defaults = RULE_DEFAULTS[ruleType] || RULE_DEFAULTS[RULE_TYPES.SIMPLE];
+        const row = { workshopTypeId, workshopName: typesById[workshopTypeId]?.name || 'סדנה', ruleType, active: true };
+        for (const [k, fallback] of Object.entries(defaults)) row[k] = fields[k] || fallback;
+        await wixData.insert('SchedulingRules', row, SA);
     }
     await publishSchedulingUpdate('rules-updated', { workshopTypeId });
     console.log(`[staffAdminService] updateSchedulingRule: ${workshopTypeId} by ${role._id}`);

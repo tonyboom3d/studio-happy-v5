@@ -182,18 +182,26 @@ async function loadSessions(serviceIds, startDate, endDate) {
         }
     }));
 
-    const uniqueByCanonical = new Map();
+    // Dedupe by serviceId + start time, NOT by raw id: the same physical slot
+    // can come back with different id variants (old sessionId vs new eventId),
+    // which used to create duplicate workshop rows with orders split between
+    // them. All id variants of the same slot map to one canonical id.
+    const uniqueBySlotKey = new Map();
     const idLookup = {};
 
     for (const entries of allResults) {
         for (const entry of entries) {
             const slot = entry.slot || {};
-            const canonicalId = slot.eventId || slot.sessionId;
-            if (!canonicalId) continue;
+            const anyId = slot.eventId || slot.sessionId;
+            if (!anyId) continue;
 
-            if (!uniqueByCanonical.has(canonicalId)) {
-                uniqueByCanonical.set(canonicalId, {
-                    id: canonicalId,
+            const startTs = slot.startDate ? new Date(slot.startDate).getTime() : null;
+            const slotKey = startTs !== null ? `${slot.serviceId}_${startTs}` : anyId;
+
+            let session = uniqueBySlotKey.get(slotKey);
+            if (!session) {
+                session = {
+                    id: anyId,
                     sessionId: slot.sessionId || null,
                     eventId: slot.eventId || null,
                     serviceId: slot.serviceId,
@@ -202,16 +210,23 @@ async function loadSessions(serviceIds, startDate, endDate) {
                     totalSpots: entry.totalSpots || 0,
                     openSpots: entry.openSpots || 0,
                     staffId: slot.resource?._id || null,
-                });
+                };
+                uniqueBySlotKey.set(slotKey, session);
+            } else {
+                // Merge id variants from the duplicate entry into the canonical session.
+                if (!session.sessionId && slot.sessionId) session.sessionId = slot.sessionId;
+                if (!session.eventId && slot.eventId) session.eventId = slot.eventId;
+                if (!session.staffId && slot.resource?._id) session.staffId = slot.resource._id;
             }
 
-            if (slot.sessionId) idLookup[slot.sessionId] = canonicalId;
-            if (slot.eventId) idLookup[slot.eventId] = canonicalId;
-            idLookup[canonicalId] = canonicalId;
+            if (slot.sessionId) idLookup[slot.sessionId] = session.id;
+            if (slot.eventId) idLookup[slot.eventId] = session.id;
+            idLookup[anyId] = session.id;
+            idLookup[session.id] = session.id;
         }
     }
 
-    return { sessions: [...uniqueByCanonical.values()], idLookup };
+    return { sessions: [...uniqueBySlotKey.values()], idLookup };
 }
 
 const SESSION_MATCH_TOLERANCE_MS = 5 * 60 * 1000;

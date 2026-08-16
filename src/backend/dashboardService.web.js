@@ -891,25 +891,44 @@ export const getInitialDashboardData = webMethod(Permissions.SiteMember, async (
     ];
     const productWixImageById = await loadProductWixImagesById(allProductIds);
 
-    // Group orders by resolved session id (handles sessionId/eventId mismatch + datetime fallback).
+    // Group orders by session. The CMS sessionId is the primary grouping key:
+    // all WorkshopOrders sharing a sessionId MUST land on the same workshop row,
+    // even when the calendar returns a different id variant for the slot.
+    //
+    // Pass 1 — resolve each order individually (idLookup / datetime fallback)
+    // and learn which stored sessionId maps to which canonical session.
+    const matchByOrderId = {};
+    const resolvedByStoredSessionId = {};
+    for (const order of orders) {
+        const match = inspectOrderSessionMatch(order, idLookup, sessions);
+        matchByOrderId[order._id] = match;
+        if (match.resolvedId && order.sessionId && !resolvedByStoredSessionId[order.sessionId]) {
+            resolvedByStoredSessionId[order.sessionId] = match.resolvedId;
+        }
+    }
+
+    // Pass 2 — assign every order to a session: own match → shared stored
+    // sessionId → synthetic session built from the order itself (so paid CMS
+    // orders are never dropped from the UI).
     const ordersBySessionId = {};
     const orderMatchLog = [];
     const unmatchedOrders = [];
+    const syntheticSessionsByKey = new Map();
     for (const order of orders) {
-        const match = inspectOrderSessionMatch(order, idLookup, sessions);
-        const resolvedId = match.resolvedId;
+        const match = matchByOrderId[order._id];
+        let resolvedId = match.resolvedId;
+        let method = match.method;
+
+        if (!resolvedId && order.sessionId && resolvedByStoredSessionId[order.sessionId]) {
+            resolvedId = resolvedByStoredSessionId[order.sessionId];
+            method = 'shared-cms-sessionId';
+            idLookup[order.sessionId] = resolvedId;
+        }
+
         const participants = participantsByOrderId[order._id] || [];
-        orderMatchLog.push({
-            orderId: order._id,
-            storedSessionId: order.sessionId,
-            resolvedSessionId: resolvedId,
-            matchMethod: match.method,
-            failReason: match.failReason || null,
-            serviceId: order.serviceId,
-            workshopStart: order.workshopStart,
-            organizerName: order.organizerName,
-        });
         if (!resolvedId) {
+            // Surface in the debug panel, then keep the order visible via a
+            // synthetic workshop row keyed by the CMS sessionId (or service+time).
             unmatchedOrders.push({
                 orderId: order._id,
                 organizerName: order.organizerName || 'ללא שם',
@@ -933,14 +952,56 @@ export const getInitialDashboardData = webMethod(Permissions.SiteMember, async (
                     queryLimitHit: false,
                 }),
             });
-            continue;
+
+            const orderStart = order.workshopStart ? new Date(order.workshopStart) : null;
+            const syntheticKey = order.sessionId
+                || (orderStart && order.serviceId ? `${order.serviceId}_${orderStart.getTime()}` : null);
+            if (syntheticKey) {
+                let synthetic = syntheticSessionsByKey.get(syntheticKey);
+                if (!synthetic) {
+                    synthetic = {
+                        id: order.sessionId || `cms_${syntheticKey}`,
+                        sessionId: order.sessionId || null,
+                        eventId: null,
+                        serviceId: order.serviceId || null,
+                        start: orderStart,
+                        end: null,
+                        totalSpots: 0,
+                        openSpots: 0,
+                        staffId: null,
+                        isSynthetic: true,
+                    };
+                    syntheticSessionsByKey.set(syntheticKey, synthetic);
+                    idLookup[synthetic.id] = synthetic.id;
+                    if (order.sessionId) idLookup[order.sessionId] = synthetic.id;
+                }
+                resolvedId = synthetic.id;
+                method = 'synthetic-cms-row';
+            }
         }
+
+        orderMatchLog.push({
+            orderId: order._id,
+            storedSessionId: order.sessionId,
+            resolvedSessionId: resolvedId,
+            matchMethod: method,
+            failReason: match.failReason || null,
+            serviceId: order.serviceId,
+            workshopStart: order.workshopStart,
+            organizerName: order.organizerName,
+        });
+        if (!resolvedId) continue;
         if (!ordersBySessionId[resolvedId]) ordersBySessionId[resolvedId] = [];
         ordersBySessionId[resolvedId].push(order);
     }
+    const syntheticSessions = [...syntheticSessionsByKey.values()];
+    if (syntheticSessions.length) {
+        sessions.push(...syntheticSessions);
+        console.warn(`🧩 [dashboardService] Created ${syntheticSessions.length} synthetic workshop row(s) from CMS orders with no calendar session.`);
+    }
     console.warn('🔗 [dashboardService] Order → session matching:', orderMatchLog);
     if (unmatchedOrders.length) {
-        console.warn(`⚠️ [dashboardService] ${unmatchedOrders.length} paid WorkshopOrders did not match a Bookings session:`, unmatchedOrders);
+        console.warn(`⚠️ [dashboardService] ${unmatchedOrders.length} paid WorkshopOrders did not match a Bookings session (now shown via synthetic rows):`, unmatchedOrders);
     }
 
     const ecomBuyerByOrderId = refreshOnly ? {} : await loadEcomBuyerByOrderId(orders);
@@ -1051,11 +1112,11 @@ export const getInitialDashboardData = webMethod(Permissions.SiteMember, async (
             time: formatTimeIL(session.start),
             endTime: formatTimeIL(session.end),
             startTimestamp: session.start ? session.start.getTime() : null,
-            maxCapacity: session.totalSpots,
+            maxCapacity: session.isSynthetic ? cmsCapacity : session.totalSpots,
             // currentCapacity is the REAL headcount from Wix Bookings (includes legacy,
             // non-CMS bookings). cmsCapacity counts only participants from WorkshopOrders
             // CMS records — used as the default display until "show all orders" is on.
-            currentCapacity: session.totalSpots - session.openSpots,
+            currentCapacity: session.isSynthetic ? cmsCapacity : (session.totalSpots - session.openSpots),
             cmsCapacity,
             groupsCount,
             allGroupsCount: groupsCount,

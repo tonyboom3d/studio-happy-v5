@@ -15,6 +15,18 @@ function isCandlesOrder(order) {
     return !!order?.serviceId && CANDLES_SERVICE_ID_SET.has(order.serviceId);
 }
 
+// Ceramics Workshop ("סדנת קרמיקה") Service IDs — keep in sync with bookingService.web.js.
+const CERAMICS_SERVICE_ID_SET = new Set([
+    'ad89914a-1845-48c6-804d-544cd17f179b',
+    '06508cd0-92ec-49d9-bd27-a3d4999afc89',
+]);
+
+/** True if the order belongs to the ceramics ("סדנת קרמיקה") workshop. */
+function isCeramicsOrder(order) {
+    if (order?.workshopType) return order.workshopType === 'ceramics';
+    return !!order?.serviceId && CERAMICS_SERVICE_ID_SET.has(order.serviceId);
+}
+
 // --- Green API credentials ---
 
 async function getGreenApiCredentials() {
@@ -108,6 +120,11 @@ export async function sendOrderConfirmationWhatsApp(order) {
         return;
     }
 
+    if (isCeramicsOrder(order)) {
+        await sendCeramicsOrderConfirmationWhatsApp(order);
+        return;
+    }
+
     const adminLink = `https://www.studiohappy.art/user-selections?admin=${order._id}`;
     const dateStr = formatWorkshopDate(order.workshopStart);
 
@@ -165,6 +182,37 @@ async function sendCandlesOrderConfirmationWhatsApp(order) {
 
     await sendGreenApiWhatsApp(order.organizerPhone, msg);
     console.log('[sendCandlesOrderConfirmationWhatsApp] Sent to', order.organizerPhone);
+}
+
+/** Ceramics ("סדנת קרמיקה") order confirmation — summary only, no sketch/admin link. */
+async function sendCeramicsOrderConfirmationWhatsApp(order) {
+    const dateStr = formatWorkshopDate(order.workshopStart);
+    const total = order.paidTotal || order.basePrice || 0;
+    const participants = order.adults || 0;
+    const extraItems = order.extraCandleCount || 0;
+    const itemsCount = order.rugCount || 0;
+
+    const msg = [
+        `🏺 *ההזמנה לסדנת קרמיקה בוצעה בהצלחה!*`,
+        ``,
+        `👤 *שם המזמין:* ${order.organizerName || ''}`,
+        `📞 *טלפון:* ${order.organizerPhone || ''}`,
+        `📧 *מייל:* ${order.organizerEmail || ''}`,
+        ``,
+        `📅 *מועד הסדנה:* ${dateStr}`,
+        `📍 *מיקום:* סטודיו האפי, הדובדבן 7, קריית אונו (קומה 5)`,
+        ``,
+        `👥 *משתתפים:* ${participants}`,
+        `🏺 *כלים:* ${itemsCount}`,
+        extraItems > 0 ? `✨ *כלים נוספים:* ${extraItems}` : null,
+        `💰 *סה"כ שולם:* ₪${total}`,
+        ``,
+        `יש שאלות? שלחו לנו הודעה 💬`,
+        `בהצלחה וכיף! 🏺`
+    ].filter(Boolean).join('\n');
+
+    await sendGreenApiWhatsApp(order.organizerPhone, msg);
+    console.log('[sendCeramicsOrderConfirmationWhatsApp] Sent to', order.organizerPhone);
 }
 
 // --- Selection notification (when participant completes a sketch pick) ---

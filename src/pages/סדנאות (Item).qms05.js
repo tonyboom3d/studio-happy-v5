@@ -34,9 +34,9 @@ $w.onReady(async function () {
             $w('#button2').onClick(() => { redirect("/booking-flow-tufting") })
             break;
         case "ee5072ec-3389-496c-917d-bc39a498ba54": // קרמיקה
-            $w('#wixCalendar').expand();
-            $w('#section10').expand();
-            $w('#button2').onClick(() => { $w('#wixCalendar').scrollTo() })
+            $w('#new-flow-section').expand();
+            $w('#button7').onClick(() => { redirect("/booking-flow-ceramics") })
+            $w('#button2').onClick(() => { redirect("/booking-flow-ceramics") })
             break;
         case "a5ac42ec-80d3-447a-801c-08fe8e74e0a3": // תכשיטים
             $w('#wixCalendar').expand();

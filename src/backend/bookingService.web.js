@@ -46,9 +46,30 @@ function isCandlesServiceId(serviceId) {
     return !!serviceId && CANDLES_ID_SET.has(serviceId);
 }
 
+// Ceramics Workshop ("סדנת קרמיקה") Service IDs — see src/pages/Ceramic order flow.cwdtj.js
+const CERAMICS_SERVICE_IDS = {
+    weekday: 'ad89914a-1845-48c6-804d-544cd17f179b',
+    weekend: '06508cd0-92ec-49d9-bd27-a3d4999afc89',
+};
+const CERAMICS_ID_SET = new Set(Object.values(CERAMICS_SERVICE_IDS));
+
+/** True if serviceId belongs to the ceramics ("סדנת קרמיקה") workshop. */
+function isCeramicsServiceId(serviceId) {
+    return !!serviceId && CERAMICS_ID_SET.has(serviceId);
+}
+
+// Ceramics pricing is fixed (not fetched from Wix Bookings Variants) — one
+// "משתתף" ticket type per person, plus an optional "כלי קרמיקה נוסף" surcharge
+// (max 1 per participant), modeled purely as a checkout custom line item.
+const CERAMICS_PRICING_BY_SERVICE = {
+    'ad89914a-1845-48c6-804d-544cd17f179b': { base: 170, extraItem: 80 }, // אמצע שבוע
+    '06508cd0-92ec-49d9-bd27-a3d4999afc89': { base: 195, extraItem: 90 }, // סופ"ש
+};
+
 /** Resolve the full sibling-service-id group (used for multi-service availability/pricing) for a given serviceId. */
 function getServiceIdsGroupFor(serviceId) {
     if (isCandlesServiceId(serviceId)) return Object.values(CANDLES_SERVICE_IDS);
+    if (isCeramicsServiceId(serviceId)) return Object.values(CERAMICS_SERVICE_IDS);
     return Object.values(TUFTING_SERVICE_IDS);
 }
 
@@ -383,6 +404,10 @@ function mapCatalogProduct(product, options = {}) {
 // --- פונקציה: שליפת קטלוג מוצרים עם המרת תמונות ---
 export const getProductsCatalog = webMethod(Permissions.Anyone, async (serviceId) => {
     try {
+        // Ceramics has no product catalog step — never fall through to an
+        // unfiltered bookingProducts query for it.
+        if (isCeramicsServiceId(serviceId)) return [];
+
         let query = wixData.query('bookingProducts');
         const isCandles = isCandlesServiceId(serviceId);
         if (isTuftingServiceId(serviceId)) {
@@ -543,9 +568,9 @@ async function hashAccessToken(token) {
 export const createAndCheckout = webMethod(Permissions.Anyone, async (orderData) => {
     console.log('[createAndCheckout] orderData received:', JSON.stringify(orderData, null, 2));
 
-    const { adults, children, extraCandles: rawExtraCandles, slots: rawSlots, userDetails: rawUser, products: rawProducts } = orderData;
+    const { adults, children, extraCandles: rawExtraCandles, participants: rawParticipants, extraItems: rawExtraItems, slots: rawSlots, userDetails: rawUser, products: rawProducts } = orderData;
     const userDetails = rawUser || orderData.customerInfo || {};
-    const numAdults = Number(adults) || 1;
+    let numAdults = Number(adults) || 1;
     const numChildren = Number(children) || 0;
     const slotsList = Array.isArray(rawSlots) ? rawSlots : [];
 
@@ -553,12 +578,21 @@ export const createAndCheckout = webMethod(Permissions.Anyone, async (orderData)
         throw new Error('No slots provided for booking');
     }
 
-    // --- חישוב מחיר מ-Wix Variants API (טאפטינג / נרות) ---
+    // --- חישוב מחיר (טאפטינג/נרות: Wix Variants API; קרמיקה: מחיר קבוע) ---
     const serviceId = slotsList[0].serviceId;
     const isCandles = isCandlesServiceId(serviceId);
+    const isCeramics = isCeramicsServiceId(serviceId);
+    // קרמיקה: אין הפרדה מבוגר/ילד — "משתתף" יחיד; הכמות מגיעה כ-participants.
+    if (isCeramics) {
+        numAdults = Number(rawParticipants) || numAdults;
+    }
     const allPricing = await getServicePricingCached(getServiceIdsGroupFor(serviceId));
     const servicePricing = allPricing[serviceId];
-    if (!servicePricing || !servicePricing.solo) {
+    if (isCeramics) {
+        if (!servicePricing || typeof servicePricing.base !== 'number') {
+            throw new Error(`No ceramics pricing configured for service: ${serviceId}`);
+        }
+    } else if (!servicePricing || !servicePricing.solo) {
         throw new Error(`No pricing found for service: ${serviceId}. Make sure Wix Bookings variants are configured.`);
     }
 
@@ -574,7 +608,17 @@ export const createAndCheckout = webMethod(Permissions.Anyone, async (orderData)
     // · "נר נוסף" (add-on נפרד, בלי מושב) — עד נר נוסף אחד לכל נר בסיס.
     // טאפטינג: הורה+ילד = זוג אחד (לוגיקה קיימת ללא שינוי).
     let parentChildPairs, extraChildren, soloAdults, rugCount, baseCandles = 0, extraCandles = 0, extraCandlePrice = 0, extraCandleAddOnId = null, extraCandleGroupId = null;
-    if (isCandles) {
+    let basePrice;
+    if (isCeramics) {
+        // קרמיקה: משתתף אחד = כרטיס בסיס אחד; "כלי קרמיקה נוסף" — עד יחידה
+        // אחת נוספת לכל משתתף, ללא מושב נפרד (surcharge בלבד, custom line item).
+        soloAdults = numAdults;
+        parentChildPairs = 0;
+        extraChildren = 0;
+        extraCandles = Math.max(0, Math.min(Number(rawExtraItems) || 0, numAdults));
+        rugCount = numAdults + extraCandles; // סה"כ יחידות קרמיקה (בסיס + נוספות)
+        basePrice = (numAdults * (servicePricing.base || 0)) + (extraCandles * (servicePricing.extraItem || 0));
+    } else if (isCandles) {
         const parentChildPairsCalc = Math.min(numAdults, numChildren);
         const remainingChildren = numChildren - parentChildPairsCalc;
         const maxExtraPerPairedAdult = CANDLES_MAX_CHILDREN_PER_ADULT - 1;
@@ -590,18 +634,23 @@ export const createAndCheckout = webMethod(Permissions.Anyone, async (orderData)
         extraCandles = Math.max(0, Math.min(Number(rawExtraCandles) || 0, baseCandles));
 
         rugCount = baseCandles + extraCandles; // מספר נרות כולל (למכסת כוסות/דשבורד)
+
+        const pricePerAdult = servicePricing.solo;
+        // מחיר כרטיס "ילד" (זוג הורה+ילד) — נופל חזרה למחיר יחיד אם לא הוגדר.
+        const childTicketPrice = servicePricing.parentChild || pricePerAdult;
+        // מחיר "תוספת ילד" — כרטיס בפני עצמו, מתומחר כמו יחיד (לא כמו חבילת הורה+ילד).
+        const extraChildTicketPrice = servicePricing.extraChild || pricePerAdult;
+        basePrice = (soloAdults * pricePerAdult) + (parentChildPairs * childTicketPrice) + (extraChildren * extraChildTicketPrice) + (extraCandles * extraCandlePrice);
     } else {
         parentChildPairs = Math.min(numAdults, numChildren);
         extraChildren = 0;
         soloAdults = numAdults - parentChildPairs;
         rugCount = numAdults;
+
+        const pricePerAdult = servicePricing.solo;
+        const childTicketPrice = servicePricing.parentChild || pricePerAdult;
+        basePrice = (soloAdults * pricePerAdult) + (parentChildPairs * childTicketPrice);
     }
-    const pricePerAdult = servicePricing.solo;
-    // מחיר כרטיס "ילד" (זוג הורה+ילד) — נופל חזרה למחיר יחיד אם לא הוגדר.
-    const childTicketPrice = servicePricing.parentChild || pricePerAdult;
-    // מחיר "תוספת ילד" — כרטיס בפני עצמו, מתומחר כמו יחיד (לא כמו חבילת הורה+ילד).
-    const extraChildTicketPrice = servicePricing.extraChild || pricePerAdult;
-    const basePrice = (soloAdults * pricePerAdult) + (parentChildPairs * childTicketPrice) + (extraChildren * extraChildTicketPrice) + (extraCandles * extraCandlePrice);
 
     // --- נרמול פרטי משתמש ---
     const fullName = (userDetails?.name || userDetails?.full_name || '').trim();
@@ -616,11 +665,12 @@ export const createAndCheckout = webMethod(Permissions.Anyone, async (orderData)
     const effectivePrice = rawPhone === '0523813929' ? 1 : basePrice;
 
     // --- הודעת תיאור לבעל האתר ---
-    const unitWordPlural = isCandles ? 'נרות' : 'שטיחים';
-    const unitWordSingular = isCandles ? 'נר' : 'שטיח';
+    const unitWordPlural = isCeramics ? 'כלים' : isCandles ? 'נרות' : 'שטיחים';
+    const unitWordSingular = isCeramics ? 'כלי' : isCandles ? 'נר' : 'שטיח';
     const unitWord = rugCount === 1 ? unitWordSingular : unitWordPlural;
-    const workshopLabel = isCandles ? 'סדנת נרות' : 'סדנת טאפטינג';
-    const notificationMessage = `${workshopLabel}: ${numAdults} מבוגרים${numChildren > 0 ? `, ${numChildren} ילדים` : ''}, ${rugCount} ${unitWordPlural}`;
+    const workshopLabel = isCeramics ? 'סדנת קרמיקה' : isCandles ? 'סדנת נרות' : 'סדנת טאפטינג';
+    const participantWord = isCeramics ? (numAdults === 1 ? 'משתתף' : 'משתתפים') : (numAdults === 1 ? 'מבוגר' : 'מבוגרים');
+    const notificationMessage = `${workshopLabel}: ${numAdults} ${participantWord}${(!isCeramics && numChildren > 0) ? `, ${numChildren} ילדים` : ''}, ${rugCount} ${unitWordPlural}`;
 
     // --- שלב 1: createBooking (הזמנה אחת בלבד) ---
     const slot = slotsList[0];
@@ -631,7 +681,7 @@ export const createAndCheckout = webMethod(Permissions.Anyone, async (orderData)
 
     // מושבי Wix בפועל — לפי אנשים, לא לפי נרות (הורה+ילד = 2 מושבים, נר אחד).
     const seatsUsed = isCandles ? (numAdults + numChildren) : numAdults;
-    if (isCandles && typeof slot.openSpots === 'number' && seatsUsed > slot.openSpots) {
+    if ((isCandles || isCeramics) && typeof slot.openSpots === 'number' && seatsUsed > slot.openSpots) {
         throw new Error('CAPACITY_EXCEEDED');
     }
 
@@ -687,8 +737,8 @@ export const createAndCheckout = webMethod(Permissions.Anyone, async (orderData)
         }
         participantField = { participantsChoices: { serviceChoices } };
     } else {
-        // rugCount = number of candles (candles: base + extra); seatsUsed = actual Wix seats.
-        participantField = { totalParticipants: isCandles ? seatsUsed : rugCount };
+        // rugCount = number of candles/ceramics units (base + extra); seatsUsed = actual Wix seats.
+        participantField = { totalParticipants: (isCandles || isCeramics) ? seatsUsed : rugCount };
     }
 
     const bookingPayload = {
@@ -828,7 +878,7 @@ export const createAndCheckout = webMethod(Permissions.Anyone, async (orderData)
         adults: numAdults,
         children: numChildren,
         rugCount,
-        extraCandleCount: isCandles ? extraCandles : 0,
+        extraCandleCount: (isCandles || isCeramics) ? extraCandles : 0,
         basePrice: effectivePrice,
         organizerName: fullName,
         organizerEmail: email,
@@ -838,7 +888,7 @@ export const createAndCheckout = webMethod(Permissions.Anyone, async (orderData)
         showPriceToParticipants: false,
         notifyOnSelection: false,
         selectionMode: null,
-        workshopType: isCandles ? 'candles' : 'tufting',
+        workshopType: isCeramics ? 'ceramics' : isCandles ? 'candles' : 'tufting',
         // Always written (even as []) so "no cups selected" is explicit in the
         // CMS row rather than looking identical to "cups field never written".
         selectedProducts: selectedCupsForOrder,
@@ -851,8 +901,8 @@ export const createAndCheckout = webMethod(Permissions.Anyone, async (orderData)
     const pricePerItem = (effectivePrice / bookingIds.length).toFixed(2);
 
     const participantDescription = [
-        `${numAdults} ${numAdults === 1 ? 'מבוגר' : 'מבוגרים'}`,
-        numChildren > 0 ? `${numChildren} ${numChildren === 1 ? 'ילד' : 'ילדים'}` : null,
+        `${numAdults} ${participantWord}`,
+        (!isCeramics && numChildren > 0) ? `${numChildren} ${numChildren === 1 ? 'ילד' : 'ילדים'}` : null,
         `${rugCount} ${unitWord}`,
     ].filter(Boolean).join(', ');
 
@@ -869,7 +919,18 @@ export const createAndCheckout = webMethod(Permissions.Anyone, async (orderData)
     }));
 
     // Strip internal bookkeeping fields before sending to the eCom API.
-    const customLineItems = cupCustomLineItems.map(({ _productId, _price, _product, ...item }) => item);
+    // "כלי קרמיקה נוסף" — surcharge-only custom line item (no Wix Bookings
+    // Add-On/seat involved), mirroring how candles' cups are represented.
+    const ceramicsExtraItemLineItems = (isCeramics && extraCandles > 0) ? [{
+        quantity: extraCandles,
+        price: (servicePricing.extraItem || 0).toFixed(2),
+        productName: { original: 'כלי קרמיקה נוסף' },
+        itemType: { preset: 'PHYSICAL' },
+    }] : [];
+    const customLineItems = [
+        ...cupCustomLineItems.map(({ _productId, _price, _product, ...item }) => item),
+        ...ceramicsExtraItemLineItems,
+    ];
 
     const checkoutOptions = {
         lineItems,
@@ -2090,6 +2151,17 @@ async function getServicePricingCached(serviceIds) {
     const targetServiceIds = Array.isArray(serviceIds) && serviceIds.length > 0 ?
         serviceIds :
         Object.values(TUFTING_SERVICE_IDS);
+
+    // Ceramics pricing is fixed/hardcoded — never call the Wix Bookings
+    // Variants API for it.
+    if (targetServiceIds.every(isCeramicsServiceId)) {
+        return targetServiceIds.reduce((acc, svcId) => {
+            const pricing = CERAMICS_PRICING_BY_SERVICE[svcId];
+            if (pricing) acc[svcId] = { ...pricing };
+            return acc;
+        }, {});
+    }
+
     const cacheKey = [...targetServiceIds].sort().join(',');
 
     const now = Date.now();
@@ -3392,6 +3464,7 @@ export const getOrderContext = webMethod(Permissions.Anyone, async (orderId) => 
     if (!order) return null;
 
     const isCandles = isCandlesServiceId(order.serviceId);
+    const isCeramics = isCeramicsServiceId(order.serviceId);
 
     const [participants, selections, products, session90Used, selectedProducts] = await Promise.all([
         wixData.query('WorkshopParticipants')
@@ -3409,6 +3482,7 @@ export const getOrderContext = webMethod(Permissions.Anyone, async (orderId) => 
     return {
         order: enrichOrderEditingFields(order),
         isCandles,
+        isCeramics,
         selectedProducts,
         participants: participants.items,
         selections: selections.items.map(normalizeUpgradeSelection),

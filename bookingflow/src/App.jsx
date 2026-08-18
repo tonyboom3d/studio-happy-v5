@@ -4,6 +4,7 @@ import { queryClientInstance } from '@/lib/query-client'
 import { HashRouter as Router, Route, Routes, useLocation } from 'react-router-dom';
 import WorkshopBooking from './pages/WorkshopBooking';
 import CandelsBooking from './pages/candels/CandelsBooking';
+import CeramicsBooking from './pages/ceramics/CeramicsBooking';
 import BookingSummary from './pages/BookingSummary';
 import OrderPage from './pages/OrderPage';
 import { useEffect } from 'react';
@@ -28,6 +29,7 @@ function AppContent() {
         <Route path="/order" element={<OrderPage />} />
         <Route path="/select/:token" element={<OrderPage />} />
         <Route path="/candels" element={<CandelsBooking />} />
+        <Route path="/ceramics" element={<CeramicsBooking />} />
         <Route path="*" element={<WorkshopBooking />} />
       </Routes>
       {!isSummaryPage && <Toaster />}

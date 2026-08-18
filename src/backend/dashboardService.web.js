@@ -47,6 +47,17 @@ function isCandlesOrder(order) {
     return !!order?.serviceId && CANDLES_SERVICE_ID_SET.has(order.serviceId);
 }
 
+// Keep in sync with CERAMICS_SERVICE_IDS in bookingService.web.js
+const CERAMICS_SERVICE_ID_SET = new Set([
+    'ad89914a-1845-48c6-804d-544cd17f179b',
+    '06508cd0-92ec-49d9-bd27-a3d4999afc89',
+]);
+
+function isCeramicsOrder(order) {
+    if (order?.workshopType) return order.workshopType === 'ceramics';
+    return !!order?.serviceId && CERAMICS_SERVICE_ID_SET.has(order.serviceId);
+}
+
 /** Convert Wix media URLs to browser-displayable HTTPS URLs. */
 function convertWixImageUrl(wixUrl, width = 400, height = 400, quality = 80) {
     if (!wixUrl) return null;
@@ -1034,6 +1045,7 @@ export const getInitialDashboardData = webMethod(Permissions.SiteMember, async (
         for (const order of sessionOrders) {
             const isCancelled = !!order.cancelledAt;
             const isCandles = isCandlesOrder(order);
+            const isCeramics = isCeramicsOrder(order);
             const orderParticipants = participantsByOrderId[order._id] || [];
             const organizer = enrichOrganizerFields(order, orderParticipants, ecomBuyerByOrderId[order._id]);
             const adults = order.adults || 0;
@@ -1063,7 +1075,7 @@ export const getInitialDashboardData = webMethod(Permissions.SiteMember, async (
             dashboardOrders.push({
                 id: order._id,
                 workshopId: sessionId,
-                workshopType: order.workshopType || (isCandles ? 'candles' : 'tufting'),
+                workshopType: order.workshopType || (isCandles ? 'candles' : isCeramics ? 'ceramics' : 'tufting'),
                 selectionMode: order.selectionMode || null,
                 organizerName: organizer.organizerName,
                 organizerEmail: organizer.organizerEmail,

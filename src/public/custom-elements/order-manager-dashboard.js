@@ -2654,13 +2654,15 @@ function __wdInjectGlobalAssets() {
                     ? `<span class="bg-gray-200 text-gray-600 px-1.5 py-0.5 rounded text-[10px] font-bold border border-gray-300 whitespace-nowrap" title="הזמנה שנעשתה מחוץ למערכת החדשה - ללא מעקב סקיצות/הערות">הזמנה ישנה</span>`
                     : '';
                 const isCandles = isCandlesOrder(o);
-                const unitWord = isCandles ? 'נרות' : 'שטיחים';
+                const isCeramics = o?.workshopType === 'ceramics';
+                const unitWord = isCandles ? 'נרות' : isCeramics ? 'כלים' : 'שטיחים';
+                const adultsWord = isCeramics ? 'משתתפים' : 'מבוגרים';
                 // Clear breakdown: adults / children (if any) / total rugs needed —
                 // replaces the ambiguous "x{quantity} משתתפים" single number.
                 const groupBreakdownHtml = `
                     <div class="flex items-center gap-1.5 flex-wrap">
-                        <span class="bg-indigo-50 text-indigo-700 border border-indigo-200 px-1.5 py-0.5 rounded text-[10px] font-bold flex items-center gap-1" title="מבוגרים">
-                            <i class="ph-fill ph-user"></i>${o.adults || 0} מבוגרים
+                        <span class="bg-indigo-50 text-indigo-700 border border-indigo-200 px-1.5 py-0.5 rounded text-[10px] font-bold flex items-center gap-1" title="${adultsWord}">
+                            <i class="ph-fill ph-user"></i>${o.adults || 0} ${adultsWord}
                         </span>
                         ${(o.children || 0) > 0 ? `
                         <span class="bg-purple-50 text-purple-700 border border-purple-200 px-1.5 py-0.5 rounded text-[10px] font-bold flex items-center gap-1" title="ילדים">

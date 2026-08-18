@@ -7,6 +7,7 @@ import { readCatalogCache, writeCatalogCache } from '@/lib/utils';
 import { findLockedInGroup, groupDeletableCacheKey } from '@/lib/sketchStatus';
 import OrganizerOrderHub from './OrganizerOrderHub';
 import CandelsThankYou from '../../candels/CandelsThankYou';
+import CeramicsThankYou from '../../ceramics/CeramicsThankYou';
 import SketchSelectionView from './SketchSelectionView';
 import InvalidLinkMessage from './InvalidLinkMessage';
 import OrderLoadError from './OrderLoadError';
@@ -46,9 +47,11 @@ export default function PostPaymentHub({
   const [session90, setSession90] = useState(
     orderContext?.session90 || participantContext?.session90 || null
   );
-  // Candles ("סדנת נרות") orders render a summary-only Thank You view instead
-  // of the full Tufting organizer hub (no sketch/group features).
+  // Candles ("סדנת נרות") / Ceramics ("סדנת קרמיקה") orders render a
+  // summary-only Thank You view instead of the full Tufting organizer hub
+  // (no sketch/group features).
   const [isCandles, setIsCandles] = useState(!!orderContext?.isCandles);
+  const [isCeramics, setIsCeramics] = useState(!!orderContext?.isCeramics);
   const [selectedProducts, setSelectedProducts] = useState(orderContext?.selectedProducts || []);
 
   // Share links are derived directly from each group's stable plaintext token so
@@ -107,6 +110,7 @@ export default function PostPaymentHub({
     if (orderContext?.sketchLocks?.length) mergeSketchLocks(orderContext.sketchLocks);
     if (orderContext?.session90) setSession90(orderContext.session90);
     if (orderContext?.isCandles !== undefined) setIsCandles(!!orderContext.isCandles);
+    if (orderContext?.isCeramics !== undefined) setIsCeramics(!!orderContext.isCeramics);
     if (orderContext?.selectedProducts) setSelectedProducts(orderContext.selectedProducts);
   }, [orderContext, applyCatalog, mergeSketchLocks]);
 
@@ -836,6 +840,22 @@ export default function PostPaymentHub({
           ecomSummary={ecomSummary}
           orderHistory={orderHistory}
           selectedProducts={selectedProducts}
+          onSwitchOrder={handleSwitchOrder}
+          isSwitchingOrder={switchingOrder}
+        />
+      </div>
+    );
+  }
+
+  // Organizer view — ceramics orders get a summary-only Thank You view (no catalog/sketch/group features)
+  if (role === 'organizer' && isCeramics) {
+    return (
+      <div className="max-w-2xl mx-auto p-4 md:p-6">
+        {paymentOverlay}
+        <CeramicsThankYou
+          order={localOrder}
+          ecomSummary={ecomSummary}
+          orderHistory={orderHistory}
           onSwitchOrder={handleSwitchOrder}
           isSwitchingOrder={switchingOrder}
         />

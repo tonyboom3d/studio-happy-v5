@@ -581,26 +581,15 @@ export const submitAvailability = webMethod(Permissions.Anyone, async (shifts) =
 
     // Placement decided at click time against a consistent capacity snapshot:
     // OPEN/FREE day → SUBMITTED, skill-matched-but-full → STANDBY (waiting
-    // list), no skill match for that day's workshops → rejected.
+    // list). Lacking a matching skill no longer blocks submission — it's
+    // simply submitted as pending, same as any other day.
     const batchDates = cleanShifts.map(s => s.date).sort();
     const board = await buildBoard(batchDates[0], batchDates[batchDates.length - 1], { consistent: true });
     const mySkills = getRoleSkillWorkshopIds(roleRow);
 
     const placements = {};
-    const skillErrors = [];
     for (const shift of cleanShifts) {
-        const status = resolvePlacement(board.days[shift.date], mySkills);
-        if (!status) {
-            skillErrors.push({
-                date: shift.date, code: 'NO_SKILL',
-                message: `בתאריך ${shift.date} מתקיימות סדנאות שאינן תואמות את ההכשרות שלך.`,
-            });
-        } else {
-            placements[shift.date] = status;
-        }
-    }
-    if (skillErrors.length) {
-        return { ok: false, errors: skillErrors, inserted: 0 };
+        placements[shift.date] = resolvePlacement(board.days[shift.date], mySkills) || SUBMISSION_STATUS.SUBMITTED;
     }
 
     const staffId = refId(roleRow.connectedStaff);

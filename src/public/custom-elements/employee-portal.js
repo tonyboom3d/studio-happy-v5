@@ -127,12 +127,20 @@ employee-portal * { box-sizing: border-box; }
 .ep-sel-head h2 { margin: 0; }
 .ep-submit-btn.small { width: auto; margin-top: 0; padding: 8px 16px; font-size: 12.5px; border-radius: 9px; }
 .ep-sel-list { display: flex; flex-direction: column; gap: 8px; max-height: 340px; overflow-y: auto; }
-.ep-sel-row { display: flex; align-items: center; gap: 6px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 10px; padding: 7px 9px; font-size: 12.5px; flex-wrap: nowrap; }
+.ep-sel-row { display: flex; align-items: center; gap: 6px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 10px; padding: 7px 9px; font-size: 12.5px; flex-wrap: wrap; }
 .ep-sel-date { font-weight: 700; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .ep-sel-row input[type="time"] { border: 1px solid #d1d5db; border-radius: 7px; padding: 3px 5px; font-size: 12px; font-family: inherit; width: 78px; }
 .ep-sel-remove { border: none; background: none; color: #ef4444; cursor: pointer; font-size: 15px; padding: 2px 4px; }
 .ep-sel-hours { font-size: 11px; color: #6b7280; min-width: 54px; text-align: center; }
 .ep-sel-hours.bad { color: #dc2626; font-weight: 700; }
+.ep-time-field { display: inline-flex; align-items: center; gap: 3px; }
+.ep-time-label { font-size: 11px; color: #6b7280; font-weight: 600; }
+.ep-slot-row { display: flex; gap: 5px; flex-wrap: wrap; width: 100%; }
+.ep-slot-btn { border: 1px solid #d1d5db; background: #fff; border-radius: 8px; padding: 4px 8px; font-size: 11.5px; font-weight: 600; color: #374151; cursor: pointer; font-family: inherit; line-height: 1.4; text-align: center; }
+.ep-slot-btn small { display: block; font-size: 10px; font-weight: 500; color: #9ca3af; }
+.ep-slot-btn.active { border-color: #2563eb; background: #eff6ff; color: #1d4ed8; }
+.ep-slot-btn.active small { color: #3b82f6; }
+.ep-slot-custom { display: flex; align-items: center; gap: 6px; width: 100%; }
 .ep-dayoff-check { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 600; color: #9d174d; white-space: nowrap; cursor: pointer; }
 .ep-dayoff-check input { width: 15px; height: 15px; cursor: pointer; }
 .ep-vac-row { border: 1px solid #e5e7eb; border-radius: 10px; padding: 9px 11px; margin-bottom: 8px; font-size: 12.5px; display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
@@ -350,6 +358,13 @@ const HEBREW_DOW = ['א׳', 'ב׳', 'ג׳', 'ד׳', 'ה׳', 'ו׳', 'ש׳'];
 // Business hours for shift start/end pickers (mirrors backend/availabilityRules.js).
 const SHIFT_MIN_TIME = '08:00';
 const SHIFT_MAX_TIME = '23:59';
+// Fixed shift slots offered to employees when submitting availability for a
+// regular (non-short) day. "custom" lets them type their own start/end.
+const FIXED_SHIFT_SLOTS = [
+    { id: 'morning', label: 'בוקר', startTime: '08:30', endTime: '14:30' },
+    { id: 'afternoon', label: 'צהריים', startTime: '14:30', endTime: '20:30' },
+    { id: 'evening', label: 'ערב', startTime: '19:30', endTime: '23:30' },
+];
 const STATUS_LABELS = {
     SUBMITTED: 'הוגש',
     STANDBY: 'בהמתנה',
@@ -1600,6 +1615,12 @@ class EmployeePortal extends HTMLElement {
         return map;
     }
 
+    /** True when the date is a holiday marked as a shortened (reduced-hours) day. */
+    _isShortDay(dateKey) {
+        const holiday = (this._data.holidays || []).find(h => h.date === dateKey);
+        return !!(holiday?.mode === 'SHORT' && holiday.shortStart && holiday.shortEnd);
+    }
+
     _vacationByDate() {
         const map = {};
         for (const v of (this._data.myVacations || [])) {
@@ -1742,10 +1763,6 @@ class EmployeePortal extends HTMLElement {
                 addDot('#ef4444', 'חסום להגשה');
             } else if (!monthOpen) {
                 cls += ' disabled';
-            } else if (skillState === 'NO_SKILL') {
-                cls += ' noskill';
-                badge = `<span class="ep-day-badge ep-badge-noskill">לא בהכשרה</span>`;
-                addDot('#d1d5db', 'אין הכשרה מתאימה ליום זה');
             } else if (fullLocked) {
                 cls += ' full locked';
                 badge = `<span class="ep-day-badge ep-badge-full">מאויש</span>`;
@@ -1758,6 +1775,8 @@ class EmployeePortal extends HTMLElement {
                 if (selected) cls += ' selected';
             } else {
                 clickable = true;
+                // No-skill days are no longer blocked from submission — shown only as a heads-up hint.
+                if (skillState === 'NO_SKILL') { cls += ' noskill'; badge = `<span class="ep-day-badge ep-badge-noskill">לא בהכשרה</span>`; addDot('#d1d5db', 'אין הכשרה מתאימה ליום זה — ניתן להגיש בכל זאת'); }
                 if (full) { cls += ' full'; badge = `<span class="ep-day-badge ep-badge-full">מאויש</span>`; addDot('#9ca3af', 'מאויש — ניתן להגיש רק לאחר השלמת המכסה'); }
                 if (promoted) { cls += ' promoted'; badge = `<span class="ep-day-badge ep-badge-promoted">דרושים ⭐</span>`; addDot('#f59e0b', 'דרושים עובדים ⭐'); }
                 if (holidayShort) {
@@ -1964,7 +1983,7 @@ class EmployeePortal extends HTMLElement {
             { dot: 'background:#fffbeb;border:1px solid #f59e0b', title: 'דרושים עובדים', desc: 'יום עם דרישה מוגברת לכוח אדם' },
             { dot: 'background:#fffbeb;border:1px solid #fbbf24', title: 'רשימת המתנה', desc: 'ניתן להגיש — המשמרת מלאה, תיכנסו לרשימת המתנה' },
             { dot: 'background:#f3f4f6;border:1px solid #e5e7eb', title: 'מאויש', desc: 'אין מקומות פנויים ליום זה' },
-            { dot: 'background:#f9fafb;border:1px solid #e5e7eb', title: 'לא בהכשרה', desc: 'אין לכם הכשרה מתאימה לסדנה ביום זה' },
+            { dot: 'background:#f9fafb;border:1px solid #e5e7eb', title: 'לא בהכשרה', desc: 'אין לכם הכשרה מתאימה לסדנה ביום זה — ניתן להגיש בכל זאת' },
             { dot: 'background:#fef2f2;border:1px solid #fecaca', title: 'חסום', desc: 'היום חסום להגשה (חג, מועד אחרון וכד׳)' },
             { dot: 'background:#fef2f2;border:1px solid #fecaca', title: 'עסק סגור', desc: 'חג בו העסק סגור — לא ניתן להגיש זמינות' },
             { dot: 'background:#fffbeb;border:1px solid #fbbf24', title: 'יום מקוצר', desc: 'חג עם שעות פעילות מקוצרות — ניתן להגיש רק בטווח השעות המצוין' },
@@ -2030,18 +2049,34 @@ class EmployeePortal extends HTMLElement {
         const entries = [...this._selected.entries()].sort((a, b) => a[0].localeCompare(b[0]));
         let rows;
         if (!entries.length) {
-            rows = `<div class="ep-empty">בחרו ימים בלוח השנה להגשת זמינות</div>`;
+            rows = `<div class="ep-empty">בחרו ימים בלוח השנה להגשות ממתינות</div>`;
         } else {
             rows = `<div class="ep-sel-list">` + entries.map(([dateKey, times]) => {
                 const dayOff = !!times.dayOff;
+                const isShortDay = this._isShortDay(dateKey);
                 const hrs = dayOff ? null : hoursBetween(times.startTime, times.endTime);
                 const tooShort = !dayOff && hrs !== null && hrs < rules.minShiftHours;
                 const hoursLabel = dayOff ? '—' : (hrs === null ? '—' : `${hrs} ש׳`);
-                const timeFields = dayOff ? '' : `
-                    <input type="time" data-role="start" data-date="${dateKey}" value="${escapeHtml(times.startTime)}">
-                    <span>-</span>
-                    <input type="time" data-role="end" data-date="${dateKey}" value="${escapeHtml(times.endTime)}">
-                    <span class="ep-sel-hours ${tooShort || hrs === null ? 'bad' : ''}">${hoursLabel}</span>`;
+                const customTimeFields = `
+                    <span class="ep-time-field"><span class="ep-time-label">מ-</span><input type="time" data-role="start" data-date="${dateKey}" value="${escapeHtml(times.startTime)}"></span>
+                    <span class="ep-time-field"><span class="ep-time-label">עד-</span><input type="time" data-role="end" data-date="${dateKey}" value="${escapeHtml(times.endTime)}"></span>`;
+                let timeFields = '';
+                if (!dayOff) {
+                    if (isShortDay) {
+                        // Short (holiday) days don't fit the fixed slots — let the employee type the exact hours.
+                        timeFields = `${customTimeFields}<span class="ep-sel-hours ${tooShort || hrs === null ? 'bad' : ''}">${hoursLabel}</span>`;
+                    } else {
+                        const slotButtons = FIXED_SHIFT_SLOTS.map(slot => `
+                            <button type="button" class="ep-slot-btn ${times.slot === slot.id ? 'active' : ''}" data-action="pick-slot" data-date="${dateKey}" data-slot="${slot.id}">${slot.label}<small>${slot.startTime}–${slot.endTime}</small></button>`).join('');
+                        const customActive = times.slot === 'custom';
+                        timeFields = `<div class="ep-slot-row">
+                                ${slotButtons}
+                                <button type="button" class="ep-slot-btn ${customActive ? 'active' : ''}" data-action="pick-slot" data-date="${dateKey}" data-slot="custom">שעות משלי</button>
+                            </div>
+                            ${customActive ? `<div class="ep-slot-custom">${customTimeFields}</div>` : ''}
+                            <span class="ep-sel-hours ${tooShort || hrs === null ? 'bad' : ''}">${hoursLabel}</span>`;
+                    }
+                }
                 const statusChip = dayOff
                     ? `<span class="ep-status PENDING ep-tip-trigger" data-tip="בקשת יום חופש — תישלח לאישור מנהל/ת">יום חופש</span>`
                     : `<span class="ep-status PENDING ep-tip-trigger" data-tip="${escapeHtml(STATUS_HINTS.PENDING)}">${STATUS_LABELS.PENDING}</span>`;
@@ -2068,7 +2103,7 @@ class EmployeePortal extends HTMLElement {
                 : 'הגשת זמינות';
         return `
             <div class="ep-sel-head">
-                <h2>הגשת זמינות (${entries.length})${this._sectionHelp('בחרו ימים בלוח השנה. סמנו "יום חופש" לבקשת חופש לאישור מנהל/ת, או הגדירו שעות להגשת זמינות.')}</h2>
+                <h2>הגשות ממתינות (${entries.length})${this._sectionHelp('בחרו ימים בלוח השנה. סמנו "יום חופש" לבקשת חופש לאישור מנהל/ת, או בחרו משמרת קבועה (או שעות משלכם) להגשת זמינות.')}</h2>
                 <button class="ep-submit-btn small" data-action="submit" ${(!entries.length || invalid || this._submitting) ? 'disabled' : ''}>
                     ${this._submitting ? 'שולח…' : submitLabel}
                 </button>
@@ -2571,7 +2606,7 @@ class EmployeePortal extends HTMLElement {
             ['הכשרות', certs],
             ['תאריך הצטרפות', escapeHtml(joined)],
             ['מכסת משמרות שבועית', escapeHtml(quotaVal)],
-            ['אורך משמרת מינימלי', escapeHtml(minHoursVal)],
+            ['אורך משמרת מינימלי (בשעות)', escapeHtml(minHoursVal)],
             ['תפקיד', escapeHtml(u.roleLabel || '—')],
         ];
         return `
@@ -2895,8 +2930,11 @@ class EmployeePortal extends HTMLElement {
                     const holiday = (this._data.holidays || []).find(h => h.date === dateKey);
                     const useShort = holiday?.mode === 'SHORT' && holiday.shortStart && holiday.shortEnd;
                     this._selected.set(dateKey, {
-                        startTime: useShort ? holiday.shortStart : (rules.defaultShiftStart || '10:00'),
-                        endTime: useShort ? holiday.shortEnd : (rules.defaultShiftEnd || '16:00'),
+                        startTime: useShort ? holiday.shortStart : '',
+                        endTime: useShort ? holiday.shortEnd : '',
+                        // Regular days start with no slot chosen — the employee must
+                        // pick one of the fixed shifts or "שעות משלי" (custom hours).
+                        slot: null,
                         dayOff: false,
                     });
                 }
@@ -2907,6 +2945,26 @@ class EmployeePortal extends HTMLElement {
                 this._selected.delete(target.dataset.date);
                 this.render();
                 break;
+            case 'pick-slot': {
+                const dateKey = target.dataset.date;
+                const slotId = target.dataset.slot;
+                const entry = this._selected.get(dateKey);
+                if (!entry) break;
+                if (slotId === 'custom') {
+                    entry.slot = 'custom';
+                    if (!entry.startTime) entry.startTime = rules.defaultShiftStart || '10:00';
+                    if (!entry.endTime) entry.endTime = rules.defaultShiftEnd || '16:00';
+                } else {
+                    const slot = FIXED_SHIFT_SLOTS.find(s => s.id === slotId);
+                    if (slot) {
+                        entry.slot = slot.id;
+                        entry.startTime = slot.startTime;
+                        entry.endTime = slot.endTime;
+                    }
+                }
+                this.render();
+                break;
+            }
             case 'submit': {
                 if (this._submitting || !this._selected.size) return;
                 const dayOffDates = [];

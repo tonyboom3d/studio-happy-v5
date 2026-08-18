@@ -1720,7 +1720,7 @@ const SETTINGS_FIELD_LABELS = {
     epaS_deadline: 'ימים לפני סוף החודש לסגירת הגשות',
     epaS_monthsAhead: 'מספר חודשים קדימה',
     epaS_minShifts: 'מכסת משמרות שבועית',
-    epaS_minHours: 'אורך משמרת מינימלי',
+    epaS_minHours: 'אורך משמרת מינימלי (בשעות)',
     epaS_start: 'שעת התחלה ברירת מחדל',
     epaS_end: 'שעת סיום ברירת מחדל',
     epaS_reqFri: 'ימי שישי נדרשים בחודש',

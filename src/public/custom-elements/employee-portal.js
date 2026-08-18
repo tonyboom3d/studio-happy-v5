@@ -25,10 +25,10 @@ import { ADMIN_STYLE, renderAdminTab, handleAdminClick, handleAdminChange, handl
 const EMPLOYEE_SAVE_HOLD_MS = 2000;
 
 const EP_STYLE = `
-employee-portal { display: block; direction: rtl; font-family: 'Heebo', 'Segoe UI', Arial, sans-serif; background: linear-gradient(145deg,#f8fafc,#eff6ff); color: #1f2937; min-height: 100%; max-width: 100%; overflow-x: hidden; }
+employee-portal { display: block; direction: rtl; font-family: 'Heebo', 'Segoe UI', Arial, sans-serif; background: linear-gradient(145deg,#f8fafc,#eff6ff); color: #1f2937; min-height: 100%; width: 100%; max-width: 100%; min-width: 0; overflow-x: clip; }
 employee-portal * { box-sizing: border-box; }
-.ep-wrap { width: 100%; max-width: 100%; margin: 0; padding: 18px 24px; overflow-x: hidden; }
-.ep-header { background: rgba(255,255,255,.96); border: 1px solid #dbeafe; border-radius: 18px; padding: 14px 18px; display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; box-shadow: 0 8px 28px rgba(30,64,175,.07); }
+.ep-wrap { width: 100%; max-width: 100%; min-width: 0; margin: 0; padding: 18px 24px; overflow-x: clip; }
+.ep-header { background: rgba(255,255,255,.96); border: 1px solid #dbeafe; border-radius: 18px; padding: 14px 18px; display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; box-shadow: 0 8px 28px rgba(30,64,175,.07); width: 100%; max-width: 100%; min-width: 0; }
 .ep-user { display: flex; align-items: center; gap: 10px; }
 .ep-avatar { width: 42px; height: 42px; border-radius: 13px; color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 700; background: linear-gradient(135deg,#2563eb,#60a5fa); flex-shrink: 0; box-shadow: 0 5px 16px rgba(37,99,235,.22); }
 .ep-user-name { font-weight: 700; font-size: 15px; }
@@ -43,8 +43,9 @@ employee-portal * { box-sizing: border-box; }
 .ep-banner.info { background: #eff6ff; border: 1px solid #bfdbfe; color: #1e40af; }
 .ep-banner.warn { background: #fffbeb; border: 1px solid #fde68a; color: #92400e; }
 .ep-banner.closed { background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; }
-.ep-grid { display: grid; grid-template-columns: 1fr; gap: 16px; margin-top: 16px; align-items: start; }
-.ep-card { background: rgba(255,255,255,.98); border: 1px solid #e2e8f0; border-radius: 17px; padding: 16px; box-shadow: 0 6px 22px rgba(15,23,42,.045); transition: box-shadow .18s ease,border-color .18s ease; max-width: 100%; overflow: hidden; }
+.ep-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; margin-top: 16px; align-items: start; width: 100%; max-width: 100%; min-width: 0; }
+.ep-grid > div { width: 100%; max-width: 100%; min-width: 0; }
+.ep-card { background: rgba(255,255,255,.98); border: 1px solid #e2e8f0; border-radius: 17px; padding: 16px; box-shadow: 0 6px 22px rgba(15,23,42,.045); transition: box-shadow .18s ease,border-color .18s ease; width: 100%; max-width: 100%; min-width: 0; overflow: hidden; }
 .ep-card:hover { border-color: #dbeafe; box-shadow: 0 9px 26px rgba(30,64,175,.065); }
 .ep-card h2 { margin: 0 0 10px; font-size: 15px; font-weight: 700; display: inline-flex; align-items: center; gap: 4px; }
 .ep-section-help { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 50%; background: #e5e7eb; color: #4b5563; font-size: 11px; font-weight: 700; cursor: pointer; flex-shrink: 0; transition: background .12s,color .12s; }
@@ -91,9 +92,9 @@ employee-portal * { box-sizing: border-box; }
 .ep-cal-nav button { border: 1px solid #dbeafe; background: #fff; color: #1d4ed8; border-radius: 9px; width: 30px; height: 30px; cursor: pointer; font-size: 14px; line-height: 1; transition: transform .14s,background .14s; }
 .ep-cal-nav button:hover:not(:disabled) { transform: translateY(-1px); background: #eff6ff; }
 .ep-cal-nav button:disabled { opacity: .35; cursor: default; }
-.ep-cal-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 5px; width: 100%; min-width: 0; }
-.ep-dow { text-align: center; font-size: 13px; color: #9ca3af; font-weight: 600; padding: 4px 0; }
-.ep-day { position: relative; border: 1px solid #e5e7eb; border-radius: 10px; min-height: 96px; padding: 5px; font-size: 14px; cursor: pointer; background: #fff; text-align: right; transition: border-color .15s,background .15s,transform .15s,box-shadow .15s; }
+.ep-cal-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 5px; width: 100%; max-width: 100%; min-width: 0; }
+.ep-dow { text-align: center; font-size: 13px; color: #9ca3af; font-weight: 600; padding: 4px 0; min-width: 0; overflow: hidden; }
+.ep-day { position: relative; border: 1px solid #e5e7eb; border-radius: 10px; min-height: 96px; min-width: 0; max-width: 100%; padding: 5px; font-size: 14px; cursor: pointer; background: #fff; text-align: right; transition: border-color .15s,background .15s,transform .15s,box-shadow .15s; overflow: hidden; }
 .ep-day:hover:not(.disabled):not(.submitted) { border-color: #60a5fa; transform: translateY(-1px); box-shadow: 0 4px 10px rgba(37,99,235,.09); }
 .ep-day.other { visibility: hidden; }
 .ep-day.disabled { background: #f9fafb; color: #c4c7cc; cursor: default; }
@@ -129,7 +130,7 @@ employee-portal * { box-sizing: border-box; }
 .ep-sel-list { display: flex; flex-direction: column; gap: 8px; max-height: 340px; overflow-y: auto; }
 .ep-sel-list.menu-open { overflow: visible; }
 .ep-card.ep-card-sel-open { overflow: visible; position: relative; z-index: 10001; }
-.ep-sel-row { display: flex; align-items: center; gap: 6px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 10px; padding: 7px 9px; font-size: 12.5px; flex-wrap: wrap; }
+.ep-sel-row { display: flex; align-items: center; gap: 6px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 10px; padding: 7px 9px; font-size: 12.5px; flex-wrap: wrap; max-width: 100%; min-width: 0; }
 .ep-sel-row:has(.ep-slot-ms.open) { position: relative; z-index: 50; }
 .ep-sel-main { display: flex; align-items: center; gap: 6px; flex: 1; min-width: 0; flex-wrap: wrap; }
 .ep-sel-date { font-weight: 700; flex-shrink: 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -261,7 +262,7 @@ employee-portal * { box-sizing: border-box; }
 .ep-denied-login:hover { background: #1d4ed8; }
 .ep-spinner { width: 34px; height: 34px; border: 3px solid #dbeafe; border-top-color: #2563eb; border-radius: 50%; margin: 0 auto 14px; animation: ep-spin .8s linear infinite; }
 @keyframes ep-spin { to { transform: rotate(360deg); } }
-.ep-tabs { display: inline-flex; gap: 5px; margin-top: 14px; padding: 4px; border: 1px solid #dbeafe; border-radius: 13px; background: rgba(255,255,255,.85); }
+.ep-tabs { display: flex; gap: 5px; margin-top: 14px; padding: 4px; border: 1px solid #dbeafe; border-radius: 13px; background: rgba(255,255,255,.85); width: 100%; max-width: 100%; min-width: 0; box-sizing: border-box; }
 .ep-tabbtn { border: 0; background: transparent; border-radius: 9px; padding: 8px 18px; font-size: 13px; font-weight: 700; cursor: pointer; font-family: inherit; color: #64748b; transition: color .15s,background .15s,transform .15s,box-shadow .15s; }
 .ep-tabbtn:hover { color: #1d4ed8; background: #eff6ff; }
 .ep-tabbtn.active { background: linear-gradient(135deg,#2563eb,#1d4ed8); color: #fff; box-shadow: 0 5px 14px rgba(37,99,235,.2); }
@@ -339,7 +340,7 @@ employee-portal * { box-sizing: border-box; }
 .ep-row-menu-pop button { width: 100%; text-align: right; white-space: nowrap; }
 .ep-lbl-short { display: none; }
 @media (max-width:700px) {
-  .ep-wrap { padding: 10px 10px 88px; }
+  .ep-wrap { padding: 10px 8px 88px; }
   .ep-tabs { display:flex; overflow-x:auto; width:100%; max-width:100%; }
   .ep-tabbtn { flex:1; white-space:nowrap; padding-inline:11px; min-width: 0; }
   .ep-subtabs { width: 100%; overflow-x: visible; }
@@ -352,23 +353,30 @@ employee-portal * { box-sizing: border-box; }
   .ep-quota { width: 100%; }
   .ep-quota-chip { flex: 1; min-width: 0; padding: 6px 6px; font-size: 11px; }
   .ep-quota-chip b { font-size: 13px; }
-  .ep-card { padding: 12px 10px; border-radius: 14px; }
+  .ep-card { padding: 12px 8px; border-radius: 14px; }
   .ep-cal-head { flex-wrap: wrap; gap: 8px; }
   .ep-cal-title { font-size: 15px; }
   .ep-cal-grid { gap: 2px; }
+  .ep-cal-acc-body { grid-template-columns: 1fr; }
   .ep-dow { font-size: 10px; padding: 2px 0; }
-  .ep-day { min-height: 48px; padding: 3px 1px; border-radius: 8px; text-align: center; font-size: 12.5px; overflow: hidden; }
+  .ep-day { min-height: 44px; padding: 2px 0; border-radius: 7px; text-align: center; font-size: 12px; }
+  .ep-day:hover:not(.disabled):not(.submitted) { transform: none; box-shadow: none; }
   .ep-day-ws, .ep-day-hol, .ep-day-sketch, .ep-day-badge, .ep-day-note { display: none; }
-  .ep-day-num { display: block; }
-  .ep-day-dots { display: flex; justify-content: center; align-items: center; gap: 3px; margin-top: 3px; flex-wrap: nowrap; min-height: 5px; max-width: 100%; padding: 0 1px; }
+  .ep-day-num { display: block; font-size: 11px; line-height: 1.2; }
+  .ep-day-dots { display: flex; justify-content: center; align-items: center; gap: 2px; margin-top: 2px; flex-wrap: nowrap; min-height: 4px; max-width: 100%; padding: 0; }
   .ep-day.selected { border-width: 2px; box-shadow: inset 0 0 0 1px #2563eb; background: #bfdbfe; }
-  .ep-day-dot:nth-child(n+4) { display: none; }
-  .ep-day-dot { width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0; }
-  .ep-day-plus { position: static; display: inline-flex; align-items: center; justify-content: center; width: 15px; height: 15px; margin-top: 3px; font-size: 11px; line-height: 1; }
+  .ep-day-dot:nth-child(n+3) { display: none; }
+  .ep-day-dot { width: 4px; height: 4px; border-radius: 50%; flex-shrink: 0; }
+  .ep-day-plus { position: static; display: inline-flex; align-items: center; justify-content: center; width: 12px; height: 12px; margin-top: 2px; font-size: 9px; line-height: 1; }
   .ep-sel-row { flex-wrap: wrap; }
-  .ep-sel-main { flex-wrap: wrap; width: 100%; }
-  .ep-sel-actions { width: 100%; justify-content: space-between; }
-  .ep-time-input { width: 68px; }
+  .ep-sel-main { flex-wrap: wrap; width: 100%; min-width: 0; }
+  .ep-sel-actions { width: 100%; justify-content: space-between; flex-wrap: wrap; gap: 6px; }
+  .ep-slot-ms { width: 100%; max-width: 100%; min-width: 0; }
+  .ep-slot-ms-btn { min-width: 0; width: 100%; max-width: 100%; }
+  .ep-slot-custom { width: 100%; max-width: 100%; flex-wrap: wrap; min-width: 0; }
+  .ep-time-field { min-width: 0; flex: 1 1 72px; }
+  .ep-time-input { width: 100%; max-width: 72px; min-width: 58px; }
+  .ep-dayoff-check { font-size: 11px; white-space: normal; }
   .ep-board-item { flex-wrap: nowrap; align-items: center; gap: 6px; padding: 8px 9px; }
   .ep-board-item .ep-b-text { display: flex; align-items: center; gap: 4px; flex-wrap: nowrap; overflow: hidden; }
   .ep-board-item .ep-b-date { font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-shrink: 1; min-width: 0; }

@@ -19,6 +19,7 @@ import {
     getMinShiftHours,
     SHIFT_MIN_TIME,
     SHIFT_MAX_TIME,
+    validateShiftWithinShortDay,
 } from 'backend/availabilityRules.js';
 import { publishSchedulingUpdate, loadSettings } from 'backend/schedulingEngine.js';
 import { enqueueManagerNotification, flushOutbox, PRIORITY } from 'backend/notificationOutbox.js';
@@ -117,6 +118,8 @@ export async function createShiftChangeRequest(role, submissionId, payload) {
         if (hrs === null || hrs < minHrs) {
             throw new Error(`BAD_REQUEST: אורך המשמרת המבוקשת קצר מהמינימום (${minHrs} שעות) או שהשעות שגויות.`);
         }
+        const shortDayErr = validateShiftWithinShortDay(dateKey, requestedStartTime, requestedEndTime, settings);
+        if (shortDayErr) throw new Error(`BAD_REQUEST: ${shortDayErr}`);
     }
 
     const notes = typeof payload?.notes === 'string' ? payload.notes.trim().slice(0, 500) : '';

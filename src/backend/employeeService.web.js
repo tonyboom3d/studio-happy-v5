@@ -40,6 +40,7 @@ import {
     WORK_TYPE_LABELS,
     SHIFT_MIN_TIME,
     SHIFT_MAX_TIME,
+    validateShiftWithinShortDay,
 } from 'backend/availabilityRules.js';
 import {
     buildBoard,
@@ -717,6 +718,9 @@ export const updateSubmission = webMethod(Permissions.Anyone, async (submissionI
     if (hrs === null || hrs < minHrs) {
         throw new Error(`BAD_REQUEST: אורך המשמרת קצר מהמינימום (${minHrs} שעות) או שהשעות שגויות.`);
     }
+    const dateKey = toDateKey(item.date);
+    const shortDayErr = validateShiftWithinShortDay(dateKey, startTime, endTime, settings);
+    if (shortDayErr) throw new Error(`BAD_REQUEST: ${shortDayErr}`);
 
     await wixData.update('AvailabilitySubmissions', {
         ...item,

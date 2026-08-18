@@ -268,6 +268,29 @@ export function getMinShiftHours(profile, settings) {
     return Number.isFinite(v) && v > 0 ? v : settings.defaultMinShiftHours;
 }
 
+/** Manager-defined shortened-day window for `dateKey`, or null when not a SHORT holiday. */
+export function getShortDayBounds(settings, dateKey) {
+    const holidayEntry = (settings?.holidays || []).find(h => h?.date === dateKey);
+    if (holidayEntry?.mode === 'SHORT' && holidayEntry.shortStart && holidayEntry.shortEnd) {
+        return {
+            shortStart: holidayEntry.shortStart,
+            shortEnd: holidayEntry.shortEnd,
+            name: holidayEntry.name || '',
+        };
+    }
+    return null;
+}
+
+/** Error message when shift times fall outside a shortened day window; null when valid. */
+export function validateShiftWithinShortDay(dateKey, startTime, endTime, settings) {
+    const bounds = getShortDayBounds(settings, dateKey);
+    if (!bounds) return null;
+    if (startTime < bounds.shortStart || endTime > bounds.shortEnd) {
+        return `בתאריך ${dateKey} (${bounds.name || 'יום מקוצר'}) ניתן להגיש רק בין ${bounds.shortStart} ל-${bounds.shortEnd}.`;
+    }
+    return null;
+}
+
 /** Required shifts for a single Sun–Sat week (per-employee override or site default). */
 export function getRequiredShiftsPerWeek(profile, settings) {
     const v = Number(profile?.minShiftsPerWeek);
@@ -548,14 +571,10 @@ export function validateSubmission(shifts, profile, settings, existing, opts = {
             errors.push({ date: dateKey, code: 'HOLIDAY_CLOSED', message: `בתאריך ${dateKey} העסק סגור (${holidayEntry.name || 'חג'}).` });
             continue;
         }
-        if (holidayEntry?.mode === 'SHORT' && holidayEntry.shortStart && holidayEntry.shortEnd) {
-            if (shift.startTime < holidayEntry.shortStart || shift.endTime > holidayEntry.shortEnd) {
-                errors.push({
-                    date: dateKey, code: 'OUT_OF_HOLIDAY_HOURS',
-                    message: `בתאריך ${dateKey} (${holidayEntry.name || 'יום מקוצר'}) ניתן להגיש רק בין ${holidayEntry.shortStart} ל-${holidayEntry.shortEnd}.`,
-                });
-                continue;
-            }
+        const shortDayErr = validateShiftWithinShortDay(dateKey, shift.startTime, shift.endTime, settings);
+        if (shortDayErr) {
+            errors.push({ date: dateKey, code: 'OUT_OF_HOLIDAY_HOURS', message: shortDayErr });
+            continue;
         }
 
         // Biweekly submission window: a date belongs to a 2-week window whose

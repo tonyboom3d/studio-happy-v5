@@ -156,7 +156,8 @@ employee-portal * { box-sizing: border-box; }
 .ep-slot-ms-opt:hover { background: #f8fafc; }
 .ep-slot-ms-opt input { width: 15px; height: 15px; cursor: pointer; flex-shrink: 0; }
 .ep-slot-ms-opt small { color: #9ca3af; font-size: 10.5px; margin-inline-start: auto; white-space: nowrap; }
-.ep-slot-custom { display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.ep-slot-custom { display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0; flex-wrap: wrap; }
+.ep-short-hint { font-size: 10.5px; color: #b45309; font-weight: 600; white-space: nowrap; }
 .ep-dayoff-check { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 600; color: #9d174d; white-space: nowrap; cursor: pointer; }
 .ep-dayoff-check input { width: 15px; height: 15px; cursor: pointer; }
 .ep-vac-row { border: 1px solid #e5e7eb; border-radius: 10px; padding: 9px 11px; margin-bottom: 8px; font-size: 12.5px; display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
@@ -333,14 +334,18 @@ employee-portal * { box-sizing: border-box; }
 .ep-user-dropdown { position: absolute; top: calc(100% + 10px); inset-inline-start: 0; z-index: 10002; background: #fff; border: 1px solid #e2e8f0; border-radius: 14px; box-shadow: 0 14px 34px rgba(15,23,42,.14); padding: 14px 16px; width: 300px; max-width: calc(100vw - 24px); }
 .ep-menu-backdrop { position: fixed; inset: 0; z-index: 10000; background: transparent; }
 .ep-day-dots { display: none; }
-.ep-row-menu { position: relative; display: inline-flex; }
+.ep-row-menu { position: relative; display: inline-flex; z-index: 1; }
+.ep-row-menu.open { z-index: 10003; }
 .ep-row-menu-btn { border: 1px solid #e2e8f0; background: #fff; color: #374151; border-radius: 8px; width: 26px; height: 26px; cursor: pointer; font-size: 15px; line-height: 1; padding: 0; transition: background .12s; }
 .ep-row-menu-btn:hover { background: #f1f5f9; }
-.ep-row-menu-pop { position: absolute; top: calc(100% + 4px); inset-inline-end: 0; z-index: 10002; background: #fff; border: 1px solid #e2e8f0; border-radius: 11px; box-shadow: 0 10px 26px rgba(15,23,42,.14); padding: 6px; display: flex; flex-direction: column; gap: 5px; min-width: 132px; }
+.ep-row-menu-pop { position: absolute; top: calc(100% + 4px); inset-inline-end: 0; z-index: 10004; background: #fff; border: 1px solid #e2e8f0; border-radius: 11px; box-shadow: 0 10px 26px rgba(15,23,42,.14); padding: 6px; display: flex; flex-direction: column; gap: 5px; min-width: 132px; }
 .ep-row-menu-pop button { width: 100%; text-align: right; white-space: nowrap; }
+.ep-card.ep-card-row-menu-open { overflow: visible; position: relative; z-index: 10001; }
+.ep-board-list.menu-open { padding-bottom: 110px; }
+.ep-wrap.ep-row-menu-active { padding-bottom: 180px; }
 .ep-lbl-short { display: none; }
 @media (max-width:700px) {
-  .ep-wrap { padding: 10px 8px 88px; }
+  .ep-wrap { padding: 10px 8px 120px; }
   .ep-tabs { display:flex; overflow-x:auto; width:100%; max-width:100%; }
   .ep-tabbtn { flex:1; white-space:nowrap; padding-inline:11px; min-width: 0; }
   .ep-subtabs { width: 100%; overflow-x: visible; }
@@ -388,6 +393,8 @@ employee-portal * { box-sizing: border-box; }
   .ep-board-item .ep-b-chips .ep-lock-badge,
   .ep-board-item .ep-b-chips .ep-swap-pending { font-size: 10px; padding: 2px 6px; }
   .ep-row-menu-pop { top: auto; bottom: calc(100% + 4px); }
+  .ep-wrap.ep-row-menu-active { padding-bottom: 200px; }
+  .ep-board-list.menu-open { padding-bottom: 130px; }
   .ep-offer-btns { width: 100%; margin-inline-start: 0 !important; }
   .ep-progress-head { font-size: 11.5px; }
   .ep-progress-breakdown { gap: 8px; font-size: 10px; }
@@ -490,6 +497,30 @@ function normalizeTimeStr(t) {
     const m = /^(\d{1,2}):(\d{2})$/.exec(String(t || '').trim());
     if (!m) return '';
     return `${pad2(Number(m[1]))}:${pad2(Number(m[2]))}`;
+}
+function getShortDayBounds(holidays, dateKey) {
+    const h = (holidays || []).find(x => x.date === dateKey);
+    if (h?.mode === 'SHORT' && h.shortStart && h.shortEnd) {
+        return { shortStart: h.shortStart, shortEnd: h.shortEnd, name: h.name || '' };
+    }
+    return null;
+}
+function isShiftWithinShortDayBounds(start, end, bounds) {
+    if (!bounds) return true;
+    const s = normalizeTimeStr(start);
+    const e = normalizeTimeStr(end);
+    if (!s || !e || s >= e) return false;
+    return s >= bounds.shortStart && e <= bounds.shortEnd;
+}
+function clampToShortDayTime(value, role, bounds, otherTime) {
+    if (!bounds || !isValidTimeStr(value)) return normalizeTimeStr(value);
+    let v = normalizeTimeStr(value);
+    if (v < bounds.shortStart) v = bounds.shortStart;
+    if (v > bounds.shortEnd) v = bounds.shortEnd;
+    const other = otherTime ? normalizeTimeStr(otherTime) : '';
+    if (role === 'start' && other && v >= other) v = bounds.shortStart;
+    if (role === 'end' && other && v <= other) v = bounds.shortEnd;
+    return v;
 }
 /** Expand a pending selection entry into one or more { startTime, endTime } ranges. */
 function expandEntryShifts(entry, isShortDay) {
@@ -1287,7 +1318,7 @@ class EmployeePortal extends HTMLElement {
                 <div>
                     <div class="ep-card">${this._renderCalendar()}</div>
                     ${this._selected.size ? `<div class="ep-card ep-card-sel${this._slotMenuOpen ? ' ep-card-sel-open' : ''}" style="margin-top:16px">${this._renderSelectionPanel()}</div>` : ''}
-                    <div class="ep-card" style="margin-top:16px">${this._renderShiftsCard()}</div>
+                    <div class="ep-card ep-card-shifts${this._rowMenuOpen ? ' ep-card-row-menu-open' : ''}" style="margin-top:16px">${this._renderShiftsCard()}</div>
                 </div>
             </div>`;
 
@@ -1303,7 +1334,7 @@ class EmployeePortal extends HTMLElement {
         }
 
         this.innerHTML = `
-            <div class="ep-wrap">
+            <div class="ep-wrap${this._rowMenuOpen ? ' ep-row-menu-active' : ''}">
                 ${this._renderHeader()}
                 ${tabs}
                 ${tabContent}
@@ -1700,8 +1731,11 @@ class EmployeePortal extends HTMLElement {
 
     /** True when the date is a holiday marked as a shortened (reduced-hours) day. */
     _isShortDay(dateKey) {
-        const holiday = (this._data.holidays || []).find(h => h.date === dateKey);
-        return !!(holiday?.mode === 'SHORT' && holiday.shortStart && holiday.shortEnd);
+        return !!this._getShortDayBounds(dateKey);
+    }
+
+    _getShortDayBounds(dateKey) {
+        return getShortDayBounds(this._data?.holidays, dateKey);
     }
 
     _defaultShiftTimes() {
@@ -1712,14 +1746,17 @@ class EmployeePortal extends HTMLElement {
         };
     }
 
-    _renderTimeField(dateKey, role, value) {
+    _renderTimeField(dateKey, role, value, bounds) {
         const val = escapeHtml(normalizeTimeStr(value) || value || '');
         const label = role === 'start' ? 'מ-' : 'עד-';
+        const minAttr = bounds ? ` min="${bounds.shortStart}"` : '';
+        const maxAttr = bounds ? ` max="${bounds.shortEnd}"` : '';
+        const title = bounds ? ` title="טווח מותר: ${bounds.shortStart}–${bounds.shortEnd}"` : '';
         return `<span class="ep-time-field">
             <span class="ep-time-label">${label}</span>
             <span class="ep-time-wrap">
-                <input type="text" inputmode="numeric" maxlength="5" class="ep-time-input" data-role="${role}" data-date="${dateKey}" value="${val}" placeholder="HH:MM">
-                <input type="time" class="ep-time-native" data-role="${role}" data-date="${dateKey}" value="${val}" tabindex="-1" aria-hidden="true">
+                <input type="text" inputmode="numeric" maxlength="5" class="ep-time-input" data-role="${role}" data-date="${dateKey}" value="${val}" placeholder="HH:MM"${title}>
+                <input type="time" class="ep-time-native" data-role="${role}" data-date="${dateKey}" value="${val}" tabindex="-1" aria-hidden="true"${minAttr}${maxAttr}>
                 <button type="button" class="ep-time-clock" data-action="open-time-picker" data-role="${role}" data-date="${dateKey}" title="בחירת שעה">🕐</button>
             </span>
         </span>`;
@@ -1755,7 +1792,9 @@ class EmployeePortal extends HTMLElement {
         </div>`;
     }
 
-    _entryHoursSummary(entry, isShortDay, minHours) {
+    _entryHoursSummary(entry, dateKey, minHours) {
+        const isShortDay = this._isShortDay(dateKey);
+        const bounds = this._getShortDayBounds(dateKey);
         const ranges = expandEntryShifts(entry, isShortDay);
         if (!ranges.length) return { label: '—', bad: true };
         let total = 0;
@@ -1764,19 +1803,23 @@ class EmployeePortal extends HTMLElement {
             const hrs = hoursBetween(r.startTime, r.endTime);
             if (hrs === null) { bad = true; continue; }
             if (hrs < minHours) bad = true;
+            if (!isShiftWithinShortDayBounds(r.startTime, r.endTime, bounds)) bad = true;
             total += hrs;
         }
         const label = ranges.length > 1 ? `${total} ש׳ (${ranges.length})` : (total ? `${total} ש׳` : '—');
         return { label, bad: bad || !total };
     }
 
-    _isEntryInvalid(entry, isShortDay, minHours) {
+    _isEntryInvalid(dateKey, entry, minHours) {
         if (entry.dayOff) return false;
+        const isShortDay = this._isShortDay(dateKey);
+        const bounds = this._getShortDayBounds(dateKey);
         const ranges = expandEntryShifts(entry, isShortDay);
         if (!ranges.length) return true;
         return ranges.some(r => {
             const hrs = hoursBetween(r.startTime, r.endTime);
-            return hrs === null || hrs < minHours;
+            if (hrs === null || hrs < minHours) return true;
+            return !isShiftWithinShortDayBounds(r.startTime, r.endTime, bounds);
         });
     }
 
@@ -2214,10 +2257,14 @@ class EmployeePortal extends HTMLElement {
             rows = `<div class="ep-sel-list${this._slotMenuOpen ? ' menu-open' : ''}">` + entries.map(([dateKey, times]) => {
                 const dayOff = !!times.dayOff;
                 const isShortDay = this._isShortDay(dateKey);
+                const bounds = this._getShortDayBounds(dateKey);
                 const defaults = this._defaultShiftTimes();
                 const customActive = isShortDay || (times.slots || []).includes('custom');
-                const summary = this._entryHoursSummary(times, isShortDay, rules.minShiftHours);
-                const customTimeFields = `<span class="ep-slot-custom">${this._renderTimeField(dateKey, 'start', times.startTime || defaults.start)}${this._renderTimeField(dateKey, 'end', times.endTime || defaults.end)}</span>`;
+                const summary = this._entryHoursSummary(times, dateKey, rules.minShiftHours);
+                const shortHint = bounds
+                    ? `<span class="ep-short-hint">טווח: ${escapeHtml(bounds.shortStart)}–${escapeHtml(bounds.shortEnd)}</span>`
+                    : '';
+                const customTimeFields = `<span class="ep-slot-custom">${shortHint}${this._renderTimeField(dateKey, 'start', times.startTime || defaults.start, bounds)}${this._renderTimeField(dateKey, 'end', times.endTime || defaults.end, bounds)}</span>`;
                 let timeFields = '';
                 if (!dayOff) {
                     if (isShortDay) {
@@ -2242,7 +2289,7 @@ class EmployeePortal extends HTMLElement {
                 </div>`;
             }).join('') + `</div>`;
         }
-        const invalid = entries.some(([dateKey, t]) => this._isEntryInvalid(t, this._isShortDay(dateKey), rules.minShiftHours));
+        const invalid = entries.some(([dateKey, t]) => this._isEntryInvalid(dateKey, t, rules.minShiftHours));
         const hasDayOff = entries.some(([, t]) => t.dayOff);
         const hasAvail = entries.some(([, t]) => !t.dayOff);
         const submitLabel = hasDayOff && hasAvail
@@ -2258,7 +2305,7 @@ class EmployeePortal extends HTMLElement {
                 </button>
             </div>
             ${rows}
-            ${invalid ? `<div class="ep-banner warn" style="margin-top:8px">יש משמרות קצרות מהמינימום (${rules.minShiftHours} שעות) או עם שעות שגויות.</div>` : ''}`;
+            ${invalid ? `<div class="ep-banner warn" style="margin-top:8px">יש משמרות קצרות מהמינימום (${rules.minShiftHours} שעות), שעות שגויות, או שעות מחוץ לטווח יום מקוצר.</div>` : ''}`;
     }
 
     /** "המשמרות שלי" / "ההגשות שלי" / "החופשות שלי" (when vacations exist in viewed month). */
@@ -2323,7 +2370,7 @@ class EmployeePortal extends HTMLElement {
             </div>
             ${subTab === 'myVacations' ? '' : this._renderEditWindowBanner()}
             ${subTab === 'myVacations' ? '' : this._renderStatusGuide()}
-            <div style="margin-top:12px">
+            <div class="ep-board-list${this._rowMenuOpen ? ' menu-open' : ''}" style="margin-top:12px">
                 ${subTab === 'myVacations' ? '' : decidedBanners}
                 ${rows}
             </div>`;
@@ -2545,7 +2592,7 @@ class EmployeePortal extends HTMLElement {
             ? `class="ep-board-item clickable ${autoApprovedClass}" data-action="view-day-workshops" data-date="${escapeHtml(s.date)}" title="לחצו לצפייה בסדנאות ביום זה"`
             : `class="ep-board-item ${autoApprovedClass}"`;
         const actionsMenu = actions
-            ? `<span class="ep-row-menu">
+            ? `<span class="ep-row-menu${this._rowMenuOpen === s.id ? ' open' : ''}">
                     <button type="button" class="ep-row-menu-btn" data-action="toggle-row-menu" data-id="${escapeHtml(s.id)}" aria-label="אפשרויות" aria-expanded="${this._rowMenuOpen === s.id}">⋮</button>
                     ${this._rowMenuOpen === s.id ? `<span class="ep-row-menu-pop">${actions}</span>` : ''}
                 </span>`
@@ -2578,10 +2625,17 @@ class EmployeePortal extends HTMLElement {
         if (!s) return '';
 
         let title, body;
+        const bounds = this._getShortDayBounds(s.date);
+        const minAttr = bounds ? ` min="${bounds.shortStart}"` : '';
+        const maxAttr = bounds ? ` max="${bounds.shortEnd}"` : '';
+        const shortNote = bounds
+            ? `<div class="ep-short-hint" style="margin-bottom:8px">יום מקוצר — ניתן לבחור רק בין ${escapeHtml(bounds.shortStart)} ל-${escapeHtml(bounds.shortEnd)}</div>`
+            : '';
         const timeInputs = `
+            ${shortNote}
             <div class="epa-form">
-                <div><label>התחלה</label><input id="epShiftStart" type="time" value="${escapeHtml(s.startTime)}"></div>
-                <div><label>סיום</label><input id="epShiftEnd" type="time" value="${escapeHtml(s.endTime)}"></div>
+                <div><label>התחלה</label><input id="epShiftStart" type="time" value="${escapeHtml(s.startTime)}"${minAttr}${maxAttr}></div>
+                <div><label>סיום</label><input id="epShiftEnd" type="time" value="${escapeHtml(s.endTime)}"${minAttr}${maxAttr}></div>
             </div>`;
 
         if (modal.type === 'confirmDelete') {
@@ -2942,16 +2996,28 @@ class EmployeePortal extends HTMLElement {
                 this.render();
                 return;
             case 'shift-modal-save-edit': {
-                const startTime = this.querySelector('#epShiftStart')?.value;
-                const endTime = this.querySelector('#epShiftEnd')?.value;
+                const sub = (this._data.submissions || []).find(x => x.id === target.dataset.id);
+                const startTime = normalizeTimeStr(this.querySelector('#epShiftStart')?.value);
+                const endTime = normalizeTimeStr(this.querySelector('#epShiftEnd')?.value);
+                const bounds = sub ? this._getShortDayBounds(sub.date) : null;
+                if (!isShiftWithinShortDayBounds(startTime, endTime, bounds)) {
+                    this._toast(`ביום מקוצר ניתן לבחור רק בין ${bounds.shortStart} ל-${bounds.shortEnd}.`, 'error');
+                    return;
+                }
                 this._shiftModal = null;
                 this._startBusy('שומר שינויים…');
                 this._dispatch('updateSubmission', { id: target.dataset.id, patch: { startTime, endTime } });
                 return;
             }
             case 'shift-modal-save-request-edit': {
-                const requestedStartTime = this.querySelector('#epShiftStart')?.value;
-                const requestedEndTime = this.querySelector('#epShiftEnd')?.value;
+                const sub = (this._data.submissions || []).find(x => x.id === target.dataset.id);
+                const requestedStartTime = normalizeTimeStr(this.querySelector('#epShiftStart')?.value);
+                const requestedEndTime = normalizeTimeStr(this.querySelector('#epShiftEnd')?.value);
+                const bounds = sub ? this._getShortDayBounds(sub.date) : null;
+                if (!isShiftWithinShortDayBounds(requestedStartTime, requestedEndTime, bounds)) {
+                    this._toast(`ביום מקוצר ניתן לבחור רק בין ${bounds.shortStart} ל-${bounds.shortEnd}.`, 'error');
+                    return;
+                }
                 const notes = this.querySelector('#epShiftNotes')?.value || '';
                 this._shiftModal = null;
                 this._startBusy('שולח בקשה למנהל/ת…');
@@ -3139,6 +3205,11 @@ class EmployeePortal extends HTMLElement {
                             this._toast(`שעת ההתחלה חייבת להיות לפני שעת הסיום (${formatDateHe(date)}).`, 'error');
                             return;
                         }
+                        const bounds = getShortDayBounds(this._data.holidays, date);
+                        if (!isShiftWithinShortDayBounds(startTime, endTime, bounds)) {
+                            this._toast(`ביום מקוצר (${formatDateHe(date)}) ניתן להגיש רק בין ${bounds.shortStart} ל-${bounds.shortEnd}.`, 'error');
+                            return;
+                        }
                         shifts.push({ date, startTime, endTime });
                     }
                 }
@@ -3217,12 +3288,13 @@ class EmployeePortal extends HTMLElement {
             const entry = this._selected.get(dateKey);
             if (!entry) return;
             const defaults = this._defaultShiftTimes();
+            const bounds = this._getShortDayBounds(dateKey);
             if (!Array.isArray(entry.slots)) entry.slots = [];
             if (slotId === 'custom') {
                 if (input.checked) {
                     entry.slots = ['custom'];
-                    entry.startTime = defaults.start;
-                    entry.endTime = defaults.end;
+                    entry.startTime = bounds ? bounds.shortStart : defaults.start;
+                    entry.endTime = bounds ? bounds.shortEnd : defaults.end;
                 } else {
                     entry.slots = entry.slots.filter(s => s !== 'custom');
                 }
@@ -3239,9 +3311,12 @@ class EmployeePortal extends HTMLElement {
             const dateKey = input.dataset.date;
             const entry = this._selected.get(dateKey);
             if (!entry) return;
-            const value = normalizeTimeStr(input.value);
-            if (input.dataset.role === 'start') entry.startTime = value;
-            if (input.dataset.role === 'end') entry.endTime = value;
+            const bounds = this._getShortDayBounds(dateKey);
+            const role = input.dataset.role;
+            let value = clampToShortDayTime(input.value, role, bounds, role === 'start' ? entry.endTime : entry.startTime);
+            value = normalizeTimeStr(value);
+            if (role === 'start') entry.startTime = value;
+            if (role === 'end') entry.endTime = value;
             this.render();
             return;
         }
@@ -3249,11 +3324,16 @@ class EmployeePortal extends HTMLElement {
             const dateKey = input.dataset.date;
             const entry = this._selected.get(dateKey);
             if (!entry) return;
-            const value = normalizeTimeStr(input.value);
+            const bounds = this._getShortDayBounds(dateKey);
+            const role = input.dataset.role;
+            let value = normalizeTimeStr(input.value);
+            if (isValidTimeStr(value)) {
+                value = clampToShortDayTime(value, role, bounds, role === 'start' ? entry.endTime : entry.startTime);
+            }
             input.value = value;
-            if (input.dataset.role === 'start') entry.startTime = value;
-            if (input.dataset.role === 'end') entry.endTime = value;
-            const native = this.querySelector(`input.ep-time-native[data-date="${dateKey}"][data-role="${input.dataset.role}"]`);
+            if (role === 'start') entry.startTime = value;
+            if (role === 'end') entry.endTime = value;
+            const native = this.querySelector(`input.ep-time-native[data-date="${dateKey}"][data-role="${role}"]`);
             if (native && value) native.value = value;
             this.render();
             return;

@@ -101,7 +101,7 @@ employee-portal * { box-sizing: border-box; }
 .ep-day.full { background: #f3f4f6; color: #6b7280; }
 .ep-day.full.locked { cursor: default; }
 .ep-day.promoted { border-color: #f59e0b; background: #fffbeb; }
-.ep-day.selected { border: 2px solid #2563eb; background: #dbeafe; box-shadow: 0 0 0 2px rgba(37,99,235,.35); }
+.ep-day.selected { border: 2px solid #2563eb; background: #dbeafe; box-shadow: inset 0 0 0 1px #2563eb; }
 .ep-day.submitted { border-color: #d1d5db; background: #eef2ff; cursor: default; }
 .ep-day.scheduled { border-color: #6ee7b7; background: #ecfdf5; cursor: default; }
 .ep-day.holiday-closed { background: #fef2f2; border-color: #fecaca; }
@@ -140,10 +140,10 @@ employee-portal * { box-sizing: border-box; }
 .ep-time-field { display: inline-flex; align-items: center; gap: 3px; flex-shrink: 0; }
 .ep-time-label { font-size: 11px; color: #6b7280; font-weight: 600; }
 .ep-time-wrap { position: relative; display: inline-flex; align-items: center; }
-.ep-time-input { border: 1px solid #d1d5db; border-radius: 7px; padding: 3px 28px 3px 5px; font-size: 12px; font-family: inherit; width: 72px; text-align: center; letter-spacing: .3px; background: #fff; }
+.ep-time-input { border: 1px solid #d1d5db; border-radius: 7px; padding: 3px 5px; padding-inline-start: 26px; font-size: 12px; font-family: inherit; width: 72px; text-align: center; letter-spacing: .3px; background: #fff; }
 .ep-time-input:focus { outline: 0; border-color: #2563eb; box-shadow: 0 0 0 2px rgba(37,99,235,.12); }
 .ep-time-native { position: absolute; inset: 0; opacity: 0; pointer-events: none; width: 100%; height: 100%; }
-.ep-time-clock { position: absolute; inset-inline-end: 2px; top: 50%; transform: translateY(-50%); border: none; background: none; color: #6b7280; cursor: pointer; font-size: 13px; line-height: 1; padding: 2px 4px; }
+.ep-time-clock { position: absolute; inset-inline-start: 2px; top: 50%; transform: translateY(-50%); border: none; background: none; color: #6b7280; cursor: pointer; font-size: 13px; line-height: 1; padding: 2px 4px; }
 .ep-time-clock:hover { color: #2563eb; }
 .ep-slot-ms { position: relative; flex-shrink: 0; z-index: 1; }
 .ep-slot-ms.open { z-index: 60; }
@@ -360,10 +360,10 @@ employee-portal * { box-sizing: border-box; }
   .ep-day { min-height: 48px; padding: 3px 1px; border-radius: 8px; text-align: center; font-size: 12.5px; overflow: hidden; }
   .ep-day-ws, .ep-day-hol, .ep-day-sketch, .ep-day-badge, .ep-day-note { display: none; }
   .ep-day-num { display: block; }
-  .ep-day-dots { display: flex; justify-content: center; align-items: center; gap: 5px; margin-top: 4px; flex-wrap: nowrap; min-height: 6px; max-width: 100%; }
-  .ep-day.selected { border-width: 2px; box-shadow: 0 0 0 2px #2563eb; background: #bfdbfe; }
+  .ep-day-dots { display: flex; justify-content: center; align-items: center; gap: 3px; margin-top: 3px; flex-wrap: nowrap; min-height: 5px; max-width: 100%; padding: 0 1px; }
+  .ep-day.selected { border-width: 2px; box-shadow: inset 0 0 0 1px #2563eb; background: #bfdbfe; }
   .ep-day-dot:nth-child(n+4) { display: none; }
-  .ep-day-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+  .ep-day-dot { width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0; }
   .ep-day-plus { position: static; display: inline-flex; align-items: center; justify-content: center; width: 15px; height: 15px; margin-top: 3px; font-size: 11px; line-height: 1; }
   .ep-sel-row { flex-wrap: wrap; }
   .ep-sel-main { flex-wrap: wrap; width: 100%; }

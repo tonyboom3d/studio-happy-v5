@@ -101,7 +101,7 @@ employee-portal * { box-sizing: border-box; }
 .ep-day.full { background: #f3f4f6; color: #6b7280; }
 .ep-day.full.locked { cursor: default; }
 .ep-day.promoted { border-color: #f59e0b; background: #fffbeb; }
-.ep-day.selected { border-color: #2563eb; background: #eff6ff; box-shadow: inset 0 0 0 1px #2563eb; }
+.ep-day.selected { border: 2px solid #2563eb; background: #dbeafe; box-shadow: 0 0 0 2px rgba(37,99,235,.35); }
 .ep-day.submitted { border-color: #d1d5db; background: #eef2ff; cursor: default; }
 .ep-day.scheduled { border-color: #6ee7b7; background: #ecfdf5; cursor: default; }
 .ep-day.holiday-closed { background: #fef2f2; border-color: #fecaca; }
@@ -128,7 +128,7 @@ employee-portal * { box-sizing: border-box; }
 .ep-submit-btn.small { width: auto; margin-top: 0; padding: 8px 16px; font-size: 12.5px; border-radius: 9px; }
 .ep-sel-list { display: flex; flex-direction: column; gap: 8px; max-height: 340px; overflow-y: auto; }
 .ep-sel-list.menu-open { overflow: visible; }
-.ep-card.ep-card-sel-open { overflow: visible; position: relative; z-index: 40; }
+.ep-card.ep-card-sel-open { overflow: visible; position: relative; z-index: 10001; }
 .ep-sel-row { display: flex; align-items: center; gap: 6px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 10px; padding: 7px 9px; font-size: 12.5px; flex-wrap: wrap; }
 .ep-sel-row:has(.ep-slot-ms.open) { position: relative; z-index: 50; }
 .ep-sel-main { display: flex; align-items: center; gap: 6px; flex: 1; min-width: 0; flex-wrap: wrap; }
@@ -168,8 +168,11 @@ employee-portal * { box-sizing: border-box; }
 .ep-submit-btn:disabled { background: #93c5fd; box-shadow: none; cursor: default; }
 .ep-empty { color: #9ca3af; font-size: 12.5px; text-align: center; padding: 14px 0; }
 .ep-board-item { border: 1px solid #e5e7eb; border-radius: 10px; padding: 9px 11px; margin-bottom: 8px; font-size: 12.5px; display: flex; justify-content: space-between; align-items: center; gap: 8px; max-width: 100%; min-width: 0; }
+.ep-board-item .ep-b-text { flex: 1; min-width: 0; }
 .ep-board-item .ep-b-date { font-weight: 700; }
 .ep-board-item .ep-b-time { color: #6b7280; }
+.ep-board-item .ep-b-sep { display: none; color: #9ca3af; }
+.ep-board-item .ep-b-chips { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: flex-end; flex-shrink: 0; }
 .ep-b-meta { display: none; flex-direction: column; gap: 1px; margin-top: 3px; font-size: 10.5px; color: #9ca3af; font-weight: 500; }
 .ep-b-info { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 50%; border: 1px solid #cbd5e1; background: #f8fafc; color: #64748b; font-size: 11px; font-weight: 700; font-style: italic; font-family: Georgia,serif; cursor: pointer; flex-shrink: 0; padding: 0; line-height: 1; transition: background .12s,border-color .12s,color .12s; }
 .ep-b-info:hover,.ep-b-info:focus-visible { background: #eff6ff; border-color: #93c5fd; color: #1d4ed8; outline: none; }
@@ -336,7 +339,7 @@ employee-portal * { box-sizing: border-box; }
 .ep-row-menu-pop button { width: 100%; text-align: right; white-space: nowrap; }
 .ep-lbl-short { display: none; }
 @media (max-width:700px) {
-  .ep-wrap { padding: 10px; }
+  .ep-wrap { padding: 10px 10px 88px; }
   .ep-tabs { display:flex; overflow-x:auto; width:100%; max-width:100%; }
   .ep-tabbtn { flex:1; white-space:nowrap; padding-inline:11px; min-width: 0; }
   .ep-subtabs { width: 100%; overflow-x: visible; }
@@ -357,7 +360,8 @@ employee-portal * { box-sizing: border-box; }
   .ep-day { min-height: 48px; padding: 3px 1px; border-radius: 8px; text-align: center; font-size: 12.5px; overflow: hidden; }
   .ep-day-ws, .ep-day-hol, .ep-day-sketch, .ep-day-badge, .ep-day-note { display: none; }
   .ep-day-num { display: block; }
-  .ep-day-dots { display: flex; justify-content: center; align-items: center; gap: 2px; margin-top: 3px; flex-wrap: nowrap; min-height: 6px; max-width: 100%; }
+  .ep-day-dots { display: flex; justify-content: center; align-items: center; gap: 5px; margin-top: 4px; flex-wrap: nowrap; min-height: 6px; max-width: 100%; }
+  .ep-day.selected { border-width: 2px; box-shadow: 0 0 0 2px #2563eb; background: #bfdbfe; }
   .ep-day-dot:nth-child(n+4) { display: none; }
   .ep-day-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
   .ep-day-plus { position: static; display: inline-flex; align-items: center; justify-content: center; width: 15px; height: 15px; margin-top: 3px; font-size: 11px; line-height: 1; }
@@ -365,7 +369,17 @@ employee-portal * { box-sizing: border-box; }
   .ep-sel-main { flex-wrap: wrap; width: 100%; }
   .ep-sel-actions { width: 100%; justify-content: space-between; }
   .ep-time-input { width: 68px; }
-  .ep-board-item { flex-wrap: wrap; }
+  .ep-board-item { flex-wrap: nowrap; align-items: center; gap: 6px; padding: 8px 9px; }
+  .ep-board-item .ep-b-text { display: flex; align-items: center; gap: 4px; flex-wrap: nowrap; overflow: hidden; }
+  .ep-board-item .ep-b-date { font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-shrink: 1; min-width: 0; }
+  .ep-board-item .ep-b-sep { display: inline; flex-shrink: 0; font-size: 11px; }
+  .ep-board-item .ep-b-time { font-size: 11px; white-space: nowrap; flex-shrink: 0; }
+  .ep-board-item .ep-b-chips { flex-wrap: nowrap; gap: 4px; }
+  .ep-board-item .ep-b-chips .ep-status,
+  .ep-board-item .ep-b-chips .ep-worktype,
+  .ep-board-item .ep-b-chips .ep-lock-badge,
+  .ep-board-item .ep-b-chips .ep-swap-pending { font-size: 10px; padding: 2px 6px; }
+  .ep-row-menu-pop { top: auto; bottom: calc(100% + 4px); }
   .ep-offer-btns { width: 100%; margin-inline-start: 0 !important; }
   .ep-progress-head { font-size: 11.5px; }
   .ep-progress-breakdown { gap: 8px; font-size: 10px; }
@@ -1295,7 +1309,7 @@ class EmployeePortal extends HTMLElement {
             ${this._sketchGalleryOrderId ? this._renderSketchGalleryModal() : ''}
             ${this._lightboxImage ? this._renderLightbox() : ''}
             ${this._msgPopup ? this._renderMessagesPopup() : ''}
-            ${(this._userMenuOpen || this._rowMenuOpen || this._slotMenuOpen) ? `<div class="ep-menu-backdrop" data-action="close-menus"></div>` : ''}
+            ${(this._userMenuOpen || this._rowMenuOpen) ? `<div class="ep-menu-backdrop" data-action="close-menus"></div>` : ''}
             <div class="ep-toast" id="epToast"></div>
         `;
         this._restoreToast();
@@ -1705,7 +1719,7 @@ class EmployeePortal extends HTMLElement {
 
     _slotSelectionLabel(slots) {
         const list = slots || [];
-        if (!list.length) return 'בחר משמרת';
+        if (!list.length) return 'בחר\\י משמרת';
         if (list.includes('custom')) return 'שעות משלי';
         return list.map(id => FIXED_SHIFT_SLOTS.find(s => s.id === id)?.label || id).join(', ');
     }
@@ -2493,21 +2507,19 @@ class EmployeePortal extends HTMLElement {
             pendingChip = `<span class="ep-status PENDING">🕐 בקשת ${pendingReq.type === 'DELETE' ? 'מחיקה' : 'שינוי'} בטיפול</span>`;
         } else if (pendingSwap) {
             pendingChip = `<span class="ep-swap-pending">🔄 החלפה עם ${escapeHtml(pendingSwap.targetEmployeeName || 'עובד/ת')} בטיפול</span>`;
-        } else if (s.date > tKey) {
-            if (s.status === 'SUBMITTED' && withinEditWindow) {
-                actions = `
+        } else if (s.status === 'SUBMITTED' && withinEditWindow && s.date > tKey) {
+            actions = `
                     <button class="ep-withdraw" data-action="shift-edit" data-id="${escapeHtml(s.id)}">ערוך</button>
                     <button class="ep-withdraw" data-action="shift-delete" data-id="${escapeHtml(s.id)}">מחיקה</button>`;
-            } else if (s.status === 'SUBMITTED' && !withinEditWindow) {
-                actions = `
+        } else if (s.status === 'SUBMITTED') {
+            actions = `
                     <button class="ep-withdraw" data-action="shift-request-edit" data-id="${escapeHtml(s.id)}">בקשת שינוי</button>
                     <button class="ep-withdraw" data-action="shift-request-delete" data-id="${escapeHtml(s.id)}">בקשת מחיקה</button>`;
-            } else if (s.status === 'SCHEDULED' || s.status === 'STANDBY') {
-                actions = `
+        } else if ((s.status === 'SCHEDULED' || s.status === 'STANDBY') && s.date > tKey) {
+            actions = `
                     <button class="ep-withdraw" data-action="shift-request-edit" data-id="${escapeHtml(s.id)}">בקשת שינוי</button>
                     <button class="ep-withdraw" data-action="shift-request-delete" data-id="${escapeHtml(s.id)}">בקשת מחיקה</button>
                     <button class="ep-swap-btn" data-action="shift-swap-open" data-id="${escapeHtml(s.id)}">בקשת החלפה</button>`;
-            }
         }
         const workTypeLabel = (s.status === 'SCHEDULED' || s.status === 'STANDBY')
             ? (s.workTypeLabel || 'סדנה')
@@ -2533,12 +2545,13 @@ class EmployeePortal extends HTMLElement {
         return `
             <div ${clickAttrs}>
                 ${clickable ? '<span class="ep-shift-chevron" aria-hidden="true">◂</span>' : ''}
-                <div style="flex:1;min-width:0">
-                    <div class="ep-b-date">${formatDateHe(s.date)}</div>
-                    <div class="ep-b-time">${escapeHtml(s.startTime)}–${escapeHtml(s.endTime)}${s.hours ? ` · ${s.hours} ש׳` : ''}</div>
+                <div class="ep-b-text">
+                    <span class="ep-b-date">${formatDateHe(s.date)}</span>
+                    <span class="ep-b-sep">·</span>
+                    <span class="ep-b-time">${escapeHtml(s.startTime)}–${escapeHtml(s.endTime)}${s.hours ? ` · ${s.hours} ש׳` : ''}</span>
                     ${metaDesktop}
                 </div>
-                <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;justify-content:flex-end">
+                <div class="ep-b-chips">
                     ${metaIcon}
                     ${workTypeChip}
                     ${lockBadge}
@@ -2774,6 +2787,10 @@ class EmployeePortal extends HTMLElement {
         if ((this._boardMsOpen || this._dayMsOpen) && !e.target.closest('.epa-ms')) {
             this._boardMsOpen = null;
             this._dayMsOpen = null;
+            if (!target) { this.render(); return; }
+        }
+        if (this._slotMenuOpen && !e.target.closest('.ep-slot-ms')) {
+            this._slotMenuOpen = null;
             if (!target) { this.render(); return; }
         }
         if (!target) return;

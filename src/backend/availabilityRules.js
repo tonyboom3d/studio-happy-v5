@@ -490,12 +490,15 @@ export function validateSubmission(shifts, profile, settings, existing, opts = {
             continue;
         }
         const monthKey = dateKey.slice(0, 7);
+        const startTime = String(shift.startTime || '').trim();
+        const endTime = String(shift.endTime || '').trim();
+        const batchKey = `${dateKey}|${startTime}|${endTime}`;
 
-        if (seenInBatch.has(dateKey)) {
-            errors.push({ date: dateKey, code: 'DUPLICATE', message: `תאריך ${dateKey} נבחר פעמיים.` });
+        if (seenInBatch.has(batchKey)) {
+            errors.push({ date: dateKey, code: 'DUPLICATE', message: `משמרת כפולה בתאריך ${dateKey} (${startTime}–${endTime}).` });
             continue;
         }
-        seenInBatch.add(dateKey);
+        seenInBatch.add(batchKey);
 
         if (existingDates.has(dateKey)) {
             errors.push({ date: dateKey, code: 'ALREADY_SUBMITTED', message: `כבר הוגשה זמינות לתאריך ${dateKey}.` });

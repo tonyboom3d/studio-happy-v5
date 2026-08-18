@@ -128,19 +128,30 @@ employee-portal * { box-sizing: border-box; }
 .ep-submit-btn.small { width: auto; margin-top: 0; padding: 8px 16px; font-size: 12.5px; border-radius: 9px; }
 .ep-sel-list { display: flex; flex-direction: column; gap: 8px; max-height: 340px; overflow-y: auto; }
 .ep-sel-row { display: flex; align-items: center; gap: 6px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 10px; padding: 7px 9px; font-size: 12.5px; flex-wrap: wrap; }
-.ep-sel-date { font-weight: 700; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-.ep-sel-row input[type="time"] { border: 1px solid #d1d5db; border-radius: 7px; padding: 3px 5px; font-size: 12px; font-family: inherit; width: 78px; }
+.ep-sel-main { display: flex; align-items: center; gap: 6px; flex: 1; min-width: 0; flex-wrap: wrap; }
+.ep-sel-date { font-weight: 700; flex-shrink: 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ep-sel-actions { display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0; }
 .ep-sel-remove { border: none; background: none; color: #ef4444; cursor: pointer; font-size: 15px; padding: 2px 4px; }
-.ep-sel-hours { font-size: 11px; color: #6b7280; min-width: 54px; text-align: center; }
+.ep-sel-hours { font-size: 11px; color: #6b7280; min-width: 54px; text-align: center; flex-shrink: 0; }
 .ep-sel-hours.bad { color: #dc2626; font-weight: 700; }
-.ep-time-field { display: inline-flex; align-items: center; gap: 3px; }
+.ep-time-field { display: inline-flex; align-items: center; gap: 3px; flex-shrink: 0; }
 .ep-time-label { font-size: 11px; color: #6b7280; font-weight: 600; }
-.ep-slot-row { display: flex; gap: 5px; flex-wrap: wrap; width: 100%; }
-.ep-slot-btn { border: 1px solid #d1d5db; background: #fff; border-radius: 8px; padding: 4px 8px; font-size: 11.5px; font-weight: 600; color: #374151; cursor: pointer; font-family: inherit; line-height: 1.4; text-align: center; }
-.ep-slot-btn small { display: block; font-size: 10px; font-weight: 500; color: #9ca3af; }
-.ep-slot-btn.active { border-color: #2563eb; background: #eff6ff; color: #1d4ed8; }
-.ep-slot-btn.active small { color: #3b82f6; }
-.ep-slot-custom { display: flex; align-items: center; gap: 6px; width: 100%; }
+.ep-time-wrap { position: relative; display: inline-flex; align-items: center; }
+.ep-time-input { border: 1px solid #d1d5db; border-radius: 7px; padding: 3px 28px 3px 5px; font-size: 12px; font-family: inherit; width: 72px; text-align: center; letter-spacing: .3px; background: #fff; }
+.ep-time-input:focus { outline: 0; border-color: #2563eb; box-shadow: 0 0 0 2px rgba(37,99,235,.12); }
+.ep-time-native { position: absolute; inset: 0; opacity: 0; pointer-events: none; width: 100%; height: 100%; }
+.ep-time-clock { position: absolute; inset-inline-end: 2px; top: 50%; transform: translateY(-50%); border: none; background: none; color: #6b7280; cursor: pointer; font-size: 13px; line-height: 1; padding: 2px 4px; }
+.ep-time-clock:hover { color: #2563eb; }
+.ep-slot-ms { position: relative; flex-shrink: 0; }
+.ep-slot-ms-btn { border: 1px solid #d1d5db; background: #fff; border-radius: 8px; padding: 4px 8px; font-size: 11.5px; font-weight: 600; color: #374151; cursor: pointer; font-family: inherit; min-width: 130px; max-width: 200px; text-align: right; display: inline-flex; align-items: center; justify-content: space-between; gap: 6px; }
+.ep-slot-ms-btn span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ep-slot-ms-menu { display: none; position: absolute; top: calc(100% + 4px); inset-inline-end: 0; z-index: 30; min-width: 210px; background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; box-shadow: 0 8px 24px rgba(15,23,42,.12); padding: 6px 0; }
+.ep-slot-ms.open .ep-slot-ms-menu { display: block; }
+.ep-slot-ms-opt { display: flex; align-items: center; gap: 8px; padding: 7px 12px; font-size: 12px; cursor: pointer; }
+.ep-slot-ms-opt:hover { background: #f8fafc; }
+.ep-slot-ms-opt input { width: 15px; height: 15px; cursor: pointer; flex-shrink: 0; }
+.ep-slot-ms-opt small { color: #9ca3af; font-size: 10.5px; margin-inline-start: auto; white-space: nowrap; }
+.ep-slot-custom { display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0; }
 .ep-dayoff-check { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 600; color: #9d174d; white-space: nowrap; cursor: pointer; }
 .ep-dayoff-check input { width: 15px; height: 15px; cursor: pointer; }
 .ep-vac-row { border: 1px solid #e5e7eb; border-radius: 10px; padding: 9px 11px; margin-bottom: 8px; font-size: 12.5px; display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
@@ -161,6 +172,9 @@ employee-portal * { box-sizing: border-box; }
 @media (min-width: 768px) {
   .ep-b-meta { display: flex; }
   .ep-b-info { display: none !important; }
+  .ep-sel-row { flex-wrap: nowrap; }
+  .ep-sel-main { flex-wrap: nowrap; }
+  .ep-sel-date { min-width: 108px; }
 }
 .ep-status { font-size: 11px; font-weight: 700; padding: 2px 9px; border-radius: 999px; white-space: nowrap; }
 .ep-status.SUBMITTED { background: #e0e7ff; color: #3730a3; }
@@ -343,7 +357,9 @@ employee-portal * { box-sizing: border-box; }
   .ep-day-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
   .ep-day-plus { position: static; display: inline-flex; align-items: center; justify-content: center; width: 15px; height: 15px; margin-top: 3px; font-size: 11px; line-height: 1; }
   .ep-sel-row { flex-wrap: wrap; }
-  .ep-sel-row input[type="time"] { width: 72px; }
+  .ep-sel-main { flex-wrap: wrap; width: 100%; }
+  .ep-sel-actions { width: 100%; justify-content: space-between; }
+  .ep-time-input { width: 68px; }
   .ep-board-item { flex-wrap: wrap; }
   .ep-offer-btns { width: 100%; margin-inline-start: 0 !important; }
   .ep-progress-head { font-size: 11.5px; }
@@ -436,6 +452,26 @@ function hoursBetween(start, end) {
     const s = p(start), e = p(end);
     if (s === null || e === null || e <= s) return null;
     return Math.round(((e - s) / 60) * 100) / 100;
+}
+function isValidTimeStr(t) {
+    const m = /^(\d{1,2}):(\d{2})$/.exec(String(t || '').trim());
+    if (!m) return false;
+    const h = Number(m[1]), min = Number(m[2]);
+    return h >= 0 && h <= 23 && min >= 0 && min <= 59;
+}
+function normalizeTimeStr(t) {
+    const m = /^(\d{1,2}):(\d{2})$/.exec(String(t || '').trim());
+    if (!m) return '';
+    return `${pad2(Number(m[1]))}:${pad2(Number(m[2]))}`;
+}
+/** Expand a pending selection entry into one or more { startTime, endTime } ranges. */
+function expandEntryShifts(entry, isShortDay) {
+    if (!entry || entry.dayOff) return [];
+    if (isShortDay || (entry.slots || []).includes('custom')) {
+        return [{ startTime: entry.startTime, endTime: entry.endTime }];
+    }
+    return (entry.slots || []).map(id => FIXED_SHIFT_SLOTS.find(s => s.id === id)).filter(Boolean)
+        .map(s => ({ startTime: s.startTime, endTime: s.endTime }));
 }
 function escapeHtml(str) {
     return String(str ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -541,6 +577,7 @@ class EmployeePortal extends HTMLElement {
         this._msgPopup = null;                  // 'personal' | 'system' — messages popup open in top bar
         this._userMenuOpen = false;             // user details dropdown in header
         this._rowMenuOpen = null;               // submission id whose record-options dropdown is open
+        this._slotMenuOpen = null;              // dateKey whose shift-slot dropdown is open
         this._tipTimer = null;
         this._tipEl = null;
         this._tipPinned = null;
@@ -564,8 +601,15 @@ class EmployeePortal extends HTMLElement {
         this.addEventListener('change', (e) => this._onChange(e));
         this.addEventListener('input', (e) => {
             const input = e.target;
-            if (input?.classList?.contains('epa-time-input')) {
+            if (input?.classList?.contains('epa-time-input') || input?.classList?.contains('ep-time-input')) {
                 maskTimeInput(input);
+                if (input.classList.contains('ep-time-input')) {
+                    const entry = this._selected.get(input.dataset.date);
+                    if (entry) {
+                        if (input.dataset.role === 'start') entry.startTime = input.value;
+                        if (input.dataset.role === 'end') entry.endTime = input.value;
+                    }
+                }
                 return;
             }
             if (this._adminModal?.type === 'employee' && input?.id?.startsWith('epaF_')) {
@@ -1234,7 +1278,7 @@ class EmployeePortal extends HTMLElement {
             ${this._sketchGalleryOrderId ? this._renderSketchGalleryModal() : ''}
             ${this._lightboxImage ? this._renderLightbox() : ''}
             ${this._msgPopup ? this._renderMessagesPopup() : ''}
-            ${(this._userMenuOpen || this._rowMenuOpen) ? `<div class="ep-menu-backdrop" data-action="close-menus"></div>` : ''}
+            ${(this._userMenuOpen || this._rowMenuOpen || this._slotMenuOpen) ? `<div class="ep-menu-backdrop" data-action="close-menus"></div>` : ''}
             <div class="ep-toast" id="epToast"></div>
         `;
         this._restoreToast();
@@ -1619,6 +1663,82 @@ class EmployeePortal extends HTMLElement {
     _isShortDay(dateKey) {
         const holiday = (this._data.holidays || []).find(h => h.date === dateKey);
         return !!(holiday?.mode === 'SHORT' && holiday.shortStart && holiday.shortEnd);
+    }
+
+    _defaultShiftTimes() {
+        const rules = this._data?.rules || {};
+        return {
+            start: rules.defaultShiftStart || '10:00',
+            end: rules.defaultShiftEnd || '16:00',
+        };
+    }
+
+    _renderTimeField(dateKey, role, value) {
+        const val = escapeHtml(normalizeTimeStr(value) || value || '');
+        const label = role === 'start' ? 'מ-' : 'עד-';
+        return `<span class="ep-time-field">
+            <span class="ep-time-label">${label}</span>
+            <span class="ep-time-wrap">
+                <input type="text" inputmode="numeric" maxlength="5" class="ep-time-input" data-role="${role}" data-date="${dateKey}" value="${val}" placeholder="HH:MM">
+                <input type="time" class="ep-time-native" data-role="${role}" data-date="${dateKey}" value="${val}" tabindex="-1" aria-hidden="true">
+                <button type="button" class="ep-time-clock" data-action="open-time-picker" data-role="${role}" data-date="${dateKey}" title="בחירת שעה">🕐</button>
+            </span>
+        </span>`;
+    }
+
+    _slotSelectionLabel(slots) {
+        const list = slots || [];
+        if (!list.length) return 'בחר משמרת';
+        if (list.includes('custom')) return 'שעות משלי';
+        return list.map(id => FIXED_SHIFT_SLOTS.find(s => s.id === id)?.label || id).join(', ');
+    }
+
+    _renderSlotDropdown(dateKey, times) {
+        const slots = times.slots || [];
+        const open = this._slotMenuOpen === dateKey;
+        const options = FIXED_SHIFT_SLOTS.map(slot => `
+            <label class="ep-slot-ms-opt">
+                <input type="checkbox" data-action="toggle-slot-option" data-date="${dateKey}" data-slot="${slot.id}" ${slots.includes(slot.id) ? 'checked' : ''} ${slots.includes('custom') ? 'disabled' : ''}>
+                <span>${slot.label}</span>
+                <small>${slot.startTime}–${slot.endTime}</small>
+            </label>`).join('');
+        return `<div class="ep-slot-ms ${open ? 'open' : ''}">
+            <button type="button" class="ep-slot-ms-btn" data-action="toggle-slot-menu" data-date="${dateKey}">
+                <span>${escapeHtml(this._slotSelectionLabel(slots))}</span><span aria-hidden="true">▼</span>
+            </button>
+            <div class="ep-slot-ms-menu">
+                ${options}
+                <label class="ep-slot-ms-opt">
+                    <input type="checkbox" data-action="toggle-slot-option" data-date="${dateKey}" data-slot="custom" ${slots.includes('custom') ? 'checked' : ''}>
+                    <span>שעות משלי</span>
+                </label>
+            </div>
+        </div>`;
+    }
+
+    _entryHoursSummary(entry, isShortDay, minHours) {
+        const ranges = expandEntryShifts(entry, isShortDay);
+        if (!ranges.length) return { label: '—', bad: true };
+        let total = 0;
+        let bad = false;
+        for (const r of ranges) {
+            const hrs = hoursBetween(r.startTime, r.endTime);
+            if (hrs === null) { bad = true; continue; }
+            if (hrs < minHours) bad = true;
+            total += hrs;
+        }
+        const label = ranges.length > 1 ? `${total} ש׳ (${ranges.length})` : (total ? `${total} ש׳` : '—');
+        return { label, bad: bad || !total };
+    }
+
+    _isEntryInvalid(entry, isShortDay, minHours) {
+        if (entry.dayOff) return false;
+        const ranges = expandEntryShifts(entry, isShortDay);
+        if (!ranges.length) return true;
+        return ranges.some(r => {
+            const hrs = hoursBetween(r.startTime, r.endTime);
+            return hrs === null || hrs < minHours;
+        });
     }
 
     _vacationByDate() {
@@ -2054,46 +2174,35 @@ class EmployeePortal extends HTMLElement {
             rows = `<div class="ep-sel-list">` + entries.map(([dateKey, times]) => {
                 const dayOff = !!times.dayOff;
                 const isShortDay = this._isShortDay(dateKey);
-                const hrs = dayOff ? null : hoursBetween(times.startTime, times.endTime);
-                const tooShort = !dayOff && hrs !== null && hrs < rules.minShiftHours;
-                const hoursLabel = dayOff ? '—' : (hrs === null ? '—' : `${hrs} ש׳`);
-                const customTimeFields = `
-                    <span class="ep-time-field"><span class="ep-time-label">מ-</span><input type="time" data-role="start" data-date="${dateKey}" value="${escapeHtml(times.startTime)}"></span>
-                    <span class="ep-time-field"><span class="ep-time-label">עד-</span><input type="time" data-role="end" data-date="${dateKey}" value="${escapeHtml(times.endTime)}"></span>`;
+                const defaults = this._defaultShiftTimes();
+                const customActive = isShortDay || (times.slots || []).includes('custom');
+                const summary = this._entryHoursSummary(times, isShortDay, rules.minShiftHours);
+                const customTimeFields = `<span class="ep-slot-custom">${this._renderTimeField(dateKey, 'start', times.startTime || defaults.start)}${this._renderTimeField(dateKey, 'end', times.endTime || defaults.end)}</span>`;
                 let timeFields = '';
                 if (!dayOff) {
                     if (isShortDay) {
-                        // Short (holiday) days don't fit the fixed slots — let the employee type the exact hours.
-                        timeFields = `${customTimeFields}<span class="ep-sel-hours ${tooShort || hrs === null ? 'bad' : ''}">${hoursLabel}</span>`;
+                        timeFields = `${customTimeFields}<span class="ep-sel-hours ${summary.bad ? 'bad' : ''}">${summary.label}</span>`;
                     } else {
-                        const slotButtons = FIXED_SHIFT_SLOTS.map(slot => `
-                            <button type="button" class="ep-slot-btn ${times.slot === slot.id ? 'active' : ''}" data-action="pick-slot" data-date="${dateKey}" data-slot="${slot.id}">${slot.label}<small>${slot.startTime}–${slot.endTime}</small></button>`).join('');
-                        const customActive = times.slot === 'custom';
-                        timeFields = `<div class="ep-slot-row">
-                                ${slotButtons}
-                                <button type="button" class="ep-slot-btn ${customActive ? 'active' : ''}" data-action="pick-slot" data-date="${dateKey}" data-slot="custom">שעות משלי</button>
-                            </div>
-                            ${customActive ? `<div class="ep-slot-custom">${customTimeFields}</div>` : ''}
-                            <span class="ep-sel-hours ${tooShort || hrs === null ? 'bad' : ''}">${hoursLabel}</span>`;
+                        timeFields = `${this._renderSlotDropdown(dateKey, times)}${customActive ? customTimeFields : ''}<span class="ep-sel-hours ${summary.bad ? 'bad' : ''}">${summary.label}</span>`;
                     }
                 }
                 const statusChip = dayOff
                     ? `<span class="ep-status PENDING ep-tip-trigger" data-tip="בקשת יום חופש — תישלח לאישור מנהל/ת">יום חופש</span>`
                     : `<span class="ep-status PENDING ep-tip-trigger" data-tip="${escapeHtml(STATUS_HINTS.PENDING)}">${STATUS_LABELS.PENDING}</span>`;
                 return `<div class="ep-sel-row">
-                    <span class="ep-sel-date">${formatDateHe(dateKey)}</span>
-                    ${timeFields}
-                    <label class="ep-dayoff-check"><input type="checkbox" data-action="toggle-day-off" data-date="${dateKey}" ${dayOff ? 'checked' : ''}>יום חופש</label>
-                    ${statusChip}
-                    <button class="ep-sel-remove" data-action="remove-day" data-date="${dateKey}" title="הסרה">✕</button>
+                    <div class="ep-sel-main">
+                        <span class="ep-sel-date">${formatDateHe(dateKey)}</span>
+                        ${timeFields}
+                    </div>
+                    <div class="ep-sel-actions">
+                        <label class="ep-dayoff-check"><input type="checkbox" data-action="toggle-day-off" data-date="${dateKey}" ${dayOff ? 'checked' : ''}>יום חופש</label>
+                        ${statusChip}
+                        <button class="ep-sel-remove" data-action="remove-day" data-date="${dateKey}" title="הסרה">✕</button>
+                    </div>
                 </div>`;
             }).join('') + `</div>`;
         }
-        const invalid = entries.some(([, t]) => {
-            if (t.dayOff) return false;
-            const hrs = hoursBetween(t.startTime, t.endTime);
-            return hrs === null || hrs < rules.minShiftHours;
-        });
+        const invalid = entries.some(([dateKey, t]) => this._isEntryInvalid(t, this._isShortDay(dateKey), rules.minShiftHours));
         const hasDayOff = entries.some(([, t]) => t.dayOff);
         const hasAvail = entries.some(([, t]) => !t.dayOff);
         const submitLabel = hasDayOff && hasAvail
@@ -2103,7 +2212,7 @@ class EmployeePortal extends HTMLElement {
                 : 'הגשת זמינות';
         return `
             <div class="ep-sel-head">
-                <h2>הגשות ממתינות (${entries.length})${this._sectionHelp('בחרו ימים בלוח השנה. סמנו "יום חופש" לבקשת חופש לאישור מנהל/ת, או בחרו משמרת קבועה (או שעות משלכם) להגשת זמינות.')}</h2>
+                <h2>הגשות ממתינות (${entries.length})${this._sectionHelp('בחרו ימים בלוח השנה. סמנו "יום חופש" לבקשת חופש, או בחרו משמרת/ות מהרשימה. "שעות משלי" מאפשר הזנה ידנית לפי שעות ברירת המחדל.')}</h2>
                 <button class="ep-submit-btn small" data-action="submit" ${(!entries.length || invalid || this._submitting) ? 'disabled' : ''}>
                     ${this._submitting ? 'שולח…' : submitLabel}
                 </button>
@@ -2642,10 +2751,6 @@ class EmployeePortal extends HTMLElement {
     // -----------------------------------------------------------------
 
     _onClick(e) {
-        // Clicking anywhere on a time field (not just its native icon) opens the picker.
-        if (e.target instanceof HTMLInputElement && e.target.type === 'time' && typeof e.target.showPicker === 'function') {
-            try { e.target.showPicker(); } catch (_) { /* unsupported/blocked — native click behavior still works */ }
-        }
         const target = e.target.closest('[data-action]');
         if ((this._boardMsOpen || this._dayMsOpen) && !e.target.closest('.epa-ms')) {
             this._boardMsOpen = null;
@@ -2897,6 +3002,7 @@ class EmployeePortal extends HTMLElement {
             case 'close-menus':
                 this._userMenuOpen = false;
                 this._rowMenuOpen = null;
+                this._slotMenuOpen = null;
                 this.render();
                 return;
         }
@@ -2924,17 +3030,13 @@ class EmployeePortal extends HTMLElement {
                 if (this._vacationByDate()[dateKey]) return;
                 if (this._selected.has(dateKey)) this._selected.delete(dateKey);
                 else {
-                    // Short holiday days default their shift to the defined
-                    // hours instead of the site default, so the pre-filled
-                    // times don't fall outside what the backend will accept.
                     const holiday = (this._data.holidays || []).find(h => h.date === dateKey);
                     const useShort = holiday?.mode === 'SHORT' && holiday.shortStart && holiday.shortEnd;
+                    const defaults = this._defaultShiftTimes();
                     this._selected.set(dateKey, {
-                        startTime: useShort ? holiday.shortStart : '',
-                        endTime: useShort ? holiday.shortEnd : '',
-                        // Regular days start with no slot chosen — the employee must
-                        // pick one of the fixed shifts or "שעות משלי" (custom hours).
-                        slot: null,
+                        startTime: useShort ? holiday.shortStart : defaults.start,
+                        endTime: useShort ? holiday.shortEnd : defaults.end,
+                        slots: useShort ? ['custom'] : [],
                         dayOff: false,
                     });
                 }
@@ -2945,24 +3047,19 @@ class EmployeePortal extends HTMLElement {
                 this._selected.delete(target.dataset.date);
                 this.render();
                 break;
-            case 'pick-slot': {
+            case 'toggle-slot-menu': {
                 const dateKey = target.dataset.date;
-                const slotId = target.dataset.slot;
-                const entry = this._selected.get(dateKey);
-                if (!entry) break;
-                if (slotId === 'custom') {
-                    entry.slot = 'custom';
-                    if (!entry.startTime) entry.startTime = rules.defaultShiftStart || '10:00';
-                    if (!entry.endTime) entry.endTime = rules.defaultShiftEnd || '16:00';
-                } else {
-                    const slot = FIXED_SHIFT_SLOTS.find(s => s.id === slotId);
-                    if (slot) {
-                        entry.slot = slot.id;
-                        entry.startTime = slot.startTime;
-                        entry.endTime = slot.endTime;
-                    }
-                }
+                this._slotMenuOpen = this._slotMenuOpen === dateKey ? null : dateKey;
                 this.render();
+                break;
+            }
+            case 'open-time-picker': {
+                const dateKey = target.dataset.date;
+                const role = target.dataset.role;
+                const native = this.querySelector(`input.ep-time-native[data-date="${dateKey}"][data-role="${role}"]`);
+                if (native && typeof native.showPicker === 'function') {
+                    try { native.showPicker(); } catch (_) { /* blocked */ }
+                }
                 break;
             }
             case 'submit': {
@@ -2974,19 +3071,32 @@ class EmployeePortal extends HTMLElement {
                         dayOffDates.push(date);
                         continue;
                     }
-                    if (!t.startTime || !t.endTime) {
-                        this._toast(`יש להזין שעת התחלה וסיום עבור ${formatDateHe(date)}.`, 'error');
+                    const ranges = expandEntryShifts(t, this._isShortDay(date));
+                    if (!ranges.length) {
+                        this._toast(`יש לבחור משמרת עבור ${formatDateHe(date)}.`, 'error');
                         return;
                     }
-                    if (t.startTime < SHIFT_MIN_TIME || t.endTime > SHIFT_MAX_TIME) {
-                        this._toast(`שעות המשמרת חייבות להיות בטווח שעות הפעילות (${SHIFT_MIN_TIME}–${SHIFT_MAX_TIME}).`, 'error');
-                        return;
+                    for (const range of ranges) {
+                        if (!range.startTime || !range.endTime) {
+                            this._toast(`יש להזין שעת התחלה וסיום עבור ${formatDateHe(date)}.`, 'error');
+                            return;
+                        }
+                        const startTime = normalizeTimeStr(range.startTime);
+                        const endTime = normalizeTimeStr(range.endTime);
+                        if (!isValidTimeStr(startTime) || !isValidTimeStr(endTime)) {
+                            this._toast(`שעות לא תקינות עבור ${formatDateHe(date)}.`, 'error');
+                            return;
+                        }
+                        if (startTime < SHIFT_MIN_TIME || endTime > SHIFT_MAX_TIME) {
+                            this._toast(`שעות המשמרת חייבות להיות בטווח שעות הפעילות (${SHIFT_MIN_TIME}–${SHIFT_MAX_TIME}).`, 'error');
+                            return;
+                        }
+                        if (startTime >= endTime) {
+                            this._toast(`שעת ההתחלה חייבת להיות לפני שעת הסיום (${formatDateHe(date)}).`, 'error');
+                            return;
+                        }
+                        shifts.push({ date, startTime, endTime });
                     }
-                    if (t.startTime >= t.endTime) {
-                        this._toast(`שעת ההתחלה חייבת להיות לפני שעת הסיום (${formatDateHe(date)}).`, 'error');
-                        return;
-                    }
-                    shifts.push({ date, startTime: t.startTime, endTime: t.endTime });
                 }
                 this._submitting = true;
                 this._busy = dayOffDates.length && shifts.length
@@ -3057,21 +3167,53 @@ class EmployeePortal extends HTMLElement {
             if (wrap) wrap.style.display = input.value === 'EMPLOYEE' ? '' : 'none';
             return;
         }
-        if (input.tagName !== 'INPUT' || input.type !== 'time') return;
-        const dateKey = input.dataset.date;
-        const entry = this._selected.get(dateKey);
-        if (!entry) return;
-        // Let the user type any value freely — range/order validation happens
-        // at submit time (see `case 'submit'`), so we never fight their typing here.
-        const value = input.value;
-        if (input.dataset.role === 'start') entry.startTime = value;
-        if (input.dataset.role === 'end') entry.endTime = value;
-        const focusRestore = { dateKey, role: input.dataset.role };
-        this.render();
-        // Re-render replaces the DOM node — restore focus so the browser's
-        // native time-input keyboard entry isn't interrupted mid-type.
-        const restored = this.querySelector(`input[type="time"][data-date="${focusRestore.dateKey}"][data-role="${focusRestore.role}"]`);
-        if (restored) restored.focus({ preventScroll: true });
+        if (input?.dataset?.action === 'toggle-slot-option') {
+            const dateKey = input.dataset.date;
+            const slotId = input.dataset.slot;
+            const entry = this._selected.get(dateKey);
+            if (!entry) return;
+            const defaults = this._defaultShiftTimes();
+            if (!Array.isArray(entry.slots)) entry.slots = [];
+            if (slotId === 'custom') {
+                if (input.checked) {
+                    entry.slots = ['custom'];
+                    entry.startTime = defaults.start;
+                    entry.endTime = defaults.end;
+                } else {
+                    entry.slots = entry.slots.filter(s => s !== 'custom');
+                }
+            } else if (input.checked) {
+                entry.slots = entry.slots.filter(s => s !== 'custom');
+                if (!entry.slots.includes(slotId)) entry.slots.push(slotId);
+            } else {
+                entry.slots = entry.slots.filter(s => s !== slotId);
+            }
+            this.render();
+            return;
+        }
+        if (input.classList?.contains('ep-time-native')) {
+            const dateKey = input.dataset.date;
+            const entry = this._selected.get(dateKey);
+            if (!entry) return;
+            const value = normalizeTimeStr(input.value);
+            if (input.dataset.role === 'start') entry.startTime = value;
+            if (input.dataset.role === 'end') entry.endTime = value;
+            this.render();
+            return;
+        }
+        if (input.classList?.contains('ep-time-input')) {
+            const dateKey = input.dataset.date;
+            const entry = this._selected.get(dateKey);
+            if (!entry) return;
+            const value = normalizeTimeStr(input.value);
+            input.value = value;
+            if (input.dataset.role === 'start') entry.startTime = value;
+            if (input.dataset.role === 'end') entry.endTime = value;
+            const native = this.querySelector(`input.ep-time-native[data-date="${dateKey}"][data-role="${input.dataset.role}"]`);
+            if (native && value) native.value = value;
+            this.render();
+            return;
+        }
     }
 
     _submitUrgentCalls() {

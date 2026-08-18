@@ -127,7 +127,10 @@ employee-portal * { box-sizing: border-box; }
 .ep-sel-head h2 { margin: 0; }
 .ep-submit-btn.small { width: auto; margin-top: 0; padding: 8px 16px; font-size: 12.5px; border-radius: 9px; }
 .ep-sel-list { display: flex; flex-direction: column; gap: 8px; max-height: 340px; overflow-y: auto; }
+.ep-sel-list.menu-open { overflow: visible; }
+.ep-card.ep-card-sel-open { overflow: visible; position: relative; z-index: 40; }
 .ep-sel-row { display: flex; align-items: center; gap: 6px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 10px; padding: 7px 9px; font-size: 12.5px; flex-wrap: wrap; }
+.ep-sel-row:has(.ep-slot-ms.open) { position: relative; z-index: 50; }
 .ep-sel-main { display: flex; align-items: center; gap: 6px; flex: 1; min-width: 0; flex-wrap: wrap; }
 .ep-sel-date { font-weight: 700; flex-shrink: 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ep-sel-actions { display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0; }
@@ -142,10 +145,11 @@ employee-portal * { box-sizing: border-box; }
 .ep-time-native { position: absolute; inset: 0; opacity: 0; pointer-events: none; width: 100%; height: 100%; }
 .ep-time-clock { position: absolute; inset-inline-end: 2px; top: 50%; transform: translateY(-50%); border: none; background: none; color: #6b7280; cursor: pointer; font-size: 13px; line-height: 1; padding: 2px 4px; }
 .ep-time-clock:hover { color: #2563eb; }
-.ep-slot-ms { position: relative; flex-shrink: 0; }
+.ep-slot-ms { position: relative; flex-shrink: 0; z-index: 1; }
+.ep-slot-ms.open { z-index: 60; }
 .ep-slot-ms-btn { border: 1px solid #d1d5db; background: #fff; border-radius: 8px; padding: 4px 8px; font-size: 11.5px; font-weight: 600; color: #374151; cursor: pointer; font-family: inherit; min-width: 130px; max-width: 200px; text-align: right; display: inline-flex; align-items: center; justify-content: space-between; gap: 6px; }
 .ep-slot-ms-btn span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ep-slot-ms-menu { display: none; position: absolute; top: calc(100% + 4px); inset-inline-end: 0; z-index: 30; min-width: 210px; background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; box-shadow: 0 8px 24px rgba(15,23,42,.12); padding: 6px 0; }
+.ep-slot-ms-menu { display: none; position: absolute; top: calc(100% + 4px); inset-inline-end: 0; z-index: 10003; min-width: 210px; background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; box-shadow: 0 10px 28px rgba(15,23,42,.16); padding: 6px 0; }
 .ep-slot-ms.open .ep-slot-ms-menu { display: block; }
 .ep-slot-ms-opt { display: flex; align-items: center; gap: 8px; padding: 7px 12px; font-size: 12px; cursor: pointer; }
 .ep-slot-ms-opt:hover { background: #f8fafc; }
@@ -353,7 +357,8 @@ employee-portal * { box-sizing: border-box; }
   .ep-day { min-height: 48px; padding: 3px 1px; border-radius: 8px; text-align: center; font-size: 12.5px; overflow: hidden; }
   .ep-day-ws, .ep-day-hol, .ep-day-sketch, .ep-day-badge, .ep-day-note { display: none; }
   .ep-day-num { display: block; }
-  .ep-day-dots { display: flex; justify-content: center; align-items: center; gap: 3px; margin-top: 3px; flex-wrap: wrap; min-height: 6px; }
+  .ep-day-dots { display: flex; justify-content: center; align-items: center; gap: 2px; margin-top: 3px; flex-wrap: nowrap; min-height: 6px; max-width: 100%; }
+  .ep-day-dot:nth-child(n+4) { display: none; }
   .ep-day-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
   .ep-day-plus { position: static; display: inline-flex; align-items: center; justify-content: center; width: 15px; height: 15px; margin-top: 3px; font-size: 11px; line-height: 1; }
   .ep-sel-row { flex-wrap: wrap; }
@@ -472,6 +477,18 @@ function expandEntryShifts(entry, isShortDay) {
     }
     return (entry.slots || []).map(id => FIXED_SHIFT_SLOTS.find(s => s.id === id)).filter(Boolean)
         .map(s => ({ startTime: s.startTime, endTime: s.endTime }));
+}
+/** One dot per distinct color — mobile calendar stays readable when many workshops share a color. */
+function uniqueDayDots(dots, max = 4) {
+    const out = [];
+    const seen = new Set();
+    for (const color of dots) {
+        if (seen.has(color)) continue;
+        seen.add(color);
+        out.push(color);
+        if (out.length >= max) break;
+    }
+    return out;
 }
 function escapeHtml(str) {
     return String(str ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -1247,7 +1264,7 @@ class EmployeePortal extends HTMLElement {
             <div class="ep-grid">
                 <div>
                     <div class="ep-card">${this._renderCalendar()}</div>
-                    ${this._selected.size ? `<div class="ep-card" style="margin-top:16px">${this._renderSelectionPanel()}</div>` : ''}
+                    ${this._selected.size ? `<div class="ep-card ep-card-sel${this._slotMenuOpen ? ' ep-card-sel-open' : ''}" style="margin-top:16px">${this._renderSelectionPanel()}</div>` : ''}
                     <div class="ep-card" style="margin-top:16px">${this._renderShiftsCard()}</div>
                 </div>
             </div>`;
@@ -1924,7 +1941,8 @@ class EmployeePortal extends HTMLElement {
                     : (w.times || []).map(start => ({ start, end: null }));
                 return ranges.map(r => `${w.name} — ${formatTimeRangeHe(r.start, r.end)}`);
             });
-            wsLines.forEach(line => { dots.push('#2563eb'); detailItems.push({ color: '#2563eb', text: line }); });
+            wsLines.forEach(line => detailItems.push({ color: '#2563eb', text: line }));
+            if (wsLines.length) dots.push('#2563eb');
 
             const note = dayNoteByDate[dateKey];
             const noteIcon = note
@@ -1940,7 +1958,7 @@ class EmployeePortal extends HTMLElement {
             if (sketchDuty) addDot('#7c3aed', `🧵 תפירת סקיצות ${sketchDuty.startTime || ''}–${sketchDuty.endTime || ''}`);
 
             const dotsHtml = dots.length
-                ? `<span class="ep-day-dots">${dots.slice(0, 5).map(c => `<span class="ep-day-dot" style="background:${c}"></span>`).join('')}</span>`
+                ? `<span class="ep-day-dots">${uniqueDayDots(dots).map(c => `<span class="ep-day-dot" style="background:${c}"></span>`).join('')}</span>`
                 : '';
             const dayPlus = detailItems.length ? this._renderDayPlus(detailItems) : '';
 
@@ -2171,7 +2189,7 @@ class EmployeePortal extends HTMLElement {
         if (!entries.length) {
             rows = `<div class="ep-empty">בחרו ימים בלוח השנה להגשות ממתינות</div>`;
         } else {
-            rows = `<div class="ep-sel-list">` + entries.map(([dateKey, times]) => {
+            rows = `<div class="ep-sel-list${this._slotMenuOpen ? ' menu-open' : ''}">` + entries.map(([dateKey, times]) => {
                 const dayOff = !!times.dayOff;
                 const isShortDay = this._isShortDay(dateKey);
                 const defaults = this._defaultShiftTimes();

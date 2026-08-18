@@ -2497,14 +2497,15 @@ class EmployeePortal extends HTMLElement {
         const workTypeChip = workTypeLabel
             ? `<span class="ep-worktype ep-tip-trigger" data-tip="סוג העבודה שהוגדר לך">${escapeHtml(workTypeLabel)}</span>`
             : '';
-        const lockBadge = s.autoApproved
+        const lockBadge = s.autoApproved && (s.status === 'SCHEDULED' || s.status === 'STANDBY')
             ? `<span class="ep-lock-badge ep-tip-trigger" data-tip="אושר אוטומטית מול הזמנת לקוח — נעול לשינוי ישיר">🔒 אושר אוטומטית</span>`
             : '';
+        const autoApprovedClass = s.autoApproved && (s.status === 'SCHEDULED' || s.status === 'STANDBY') ? 'auto-approved' : '';
         const metaDesktop = this._submissionMetaDesktop(s);
         const metaIcon = this._submissionMetaIcon(s);
         const clickAttrs = clickable
-            ? `class="ep-board-item clickable ${s.autoApproved ? 'auto-approved' : ''}" data-action="view-day-workshops" data-date="${escapeHtml(s.date)}" title="לחצו לצפייה בסדנאות ביום זה"`
-            : `class="ep-board-item ${s.autoApproved ? 'auto-approved' : ''}"`;
+            ? `class="ep-board-item clickable ${autoApprovedClass}" data-action="view-day-workshops" data-date="${escapeHtml(s.date)}" title="לחצו לצפייה בסדנאות ביום זה"`
+            : `class="ep-board-item ${autoApprovedClass}"`;
         const actionsMenu = actions
             ? `<span class="ep-row-menu">
                     <button type="button" class="ep-row-menu-btn" data-action="toggle-row-menu" data-id="${escapeHtml(s.id)}" aria-label="אפשרויות" aria-expanded="${this._rowMenuOpen === s.id}">⋮</button>

@@ -1253,8 +1253,9 @@ export const manualAssign = webMethod(Permissions.SiteMember, async (dateKey, wo
     return { ok: true, assigned: toAssign.length, skipped: alreadyAssigned.length };
 });
 
-export const cancelAssignment = webMethod(Permissions.SiteMember, async (dateKey, workshopTypeId, employeeId) => {
+export const cancelAssignment = webMethod(Permissions.SiteMember, async (dateKey, workshopTypeId, employeeId, disposition = 'restore') => {
     const { role } = await assertEmployeeAccess('manageScheduling');
+    const mode = disposition === 'delete' ? 'delete' : 'restore';
     const result = await wixData.query('ShiftAssignments')
         .eq('dateKey', dateKey)
         .eq('workshopTypeId', workshopTypeId)
@@ -1263,13 +1264,31 @@ export const cancelAssignment = webMethod(Permissions.SiteMember, async (dateKey
         .limit(10).find(SA).catch(() => ({ items: [] }));
     if (!result.items?.length) throw new Error('NOT_FOUND: השיבוץ לא נמצא.');
 
+    const submissionIds = new Set();
     for (const a of result.items) {
         await wixData.update('ShiftAssignments', { ...a, status: ASSIGNMENT_STATUS.CANCELLED }, SA);
-        if (a.submissionId) {
-            const sub = await wixData.get('AvailabilitySubmissions', a.submissionId, SA).catch(() => null);
-            if (sub && sub.status === SUBMISSION_STATUS.SCHEDULED) {
-                await wixData.update('AvailabilitySubmissions', { ...sub, status: SUBMISSION_STATUS.SUBMITTED }, SA);
-            }
+        if (a.submissionId) submissionIds.add(a.submissionId);
+    }
+
+    for (const subId of submissionIds) {
+        const sub = await wixData.get('AvailabilitySubmissions', subId, SA).catch(() => null);
+        if (!sub) continue;
+        const stillAssigned = await wixData.query('ShiftAssignments')
+            .eq('submissionId', subId)
+            .ne('status', ASSIGNMENT_STATUS.CANCELLED)
+            .limit(1)
+            .find(SA)
+            .catch(() => ({ items: [] }));
+        if (stillAssigned.items?.length) continue;
+
+        if (mode === 'delete') {
+            await wixData.remove('AvailabilitySubmissions', subId, SA);
+        } else if (sub.status === SUBMISSION_STATUS.SCHEDULED || sub.status === SUBMISSION_STATUS.STANDBY || sub.autoApproved) {
+            await wixData.update('AvailabilitySubmissions', {
+                ...sub,
+                status: SUBMISSION_STATUS.SUBMITTED,
+                autoApproved: false,
+            }, SA);
         }
     }
 
@@ -1293,8 +1312,9 @@ export const cancelAssignment = webMethod(Permissions.SiteMember, async (dateKey
     // its own flushOutbox handles both this cancellation and any resulting refill notice.
     await runScheduling(dateKey, dateKey);
     await flushOutbox({ force: true }).catch(err => console.error('[staffAdminService] flushOutbox failed:', err?.message || err));
-    console.log(`[staffAdminService] cancelAssignment: ${employeeId} @ ${dateKey}/${workshopTypeId} by ${role._id}`);
-    return { ok: true };
+    await publishSchedulingUpdate('cancel-assignment', { dateKey, employeeId, disposition: mode });
+    console.log(`[staffAdminService] cancelAssignment: ${employeeId} @ ${dateKey}/${workshopTypeId} disposition=${mode} by ${role._id}`);
+    return { ok: true, disposition: mode };
 });
 
 async function notifyShiftChange(target, actionKey, vars, dateKey) {

@@ -793,7 +793,12 @@ async function handlePortalAction(portalEl, detail) {
         }
 
         case 'adminCancelAssignment': {
-            const result = await cancelAssignment(payload?.dateKey, payload?.workshopTypeId, payload?.employeeId);
+            const result = await cancelAssignment(
+                payload?.dateKey,
+                payload?.workshopTypeId,
+                payload?.employeeId,
+                payload?.disposition || 'restore',
+            );
             pushActionResult(portalEl, { type, ...result });
             refreshAdmin = true;
             break;

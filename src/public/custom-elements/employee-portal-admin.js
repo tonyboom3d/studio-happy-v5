@@ -2049,6 +2049,15 @@ function renderModal(ce, d) {
         const employee = findEmployee(ce, d, modal.id);
         title = `השבתת עובד/ת — ${esc(employee?.displayName || '')}`;
         body = renderConfirmDeactivateForm(ce, modal.id);
+    } else if (modal.type === 'confirmCancelAssign') {
+        const employee = findEmployee(ce, d, modal.employeeId);
+        title = 'ביטול שיבוץ';
+        body = `<p style="margin:0 0 12px">מה לעשות עם ההגשה של <strong>${esc(employee?.displayName || 'העובד/ת')}</strong> ליום ${fmtDate(modal.dateKey)}?</p>
+            <div class="epa-inline" style="flex-wrap:wrap;gap:8px">
+                <button class="epa-btn primary" data-action="admin-confirm-cancel-assign" data-disposition="restore" data-date="${esc(modal.dateKey)}" data-type="${esc(modal.workshopTypeId)}" data-emp="${esc(modal.employeeId)}">החזרה להגשות פעילות (הוגש)</button>
+                <button class="epa-btn danger" data-action="admin-confirm-cancel-assign" data-disposition="delete" data-date="${esc(modal.dateKey)}" data-type="${esc(modal.workshopTypeId)}" data-emp="${esc(modal.employeeId)}">הסרה לגמרי</button>
+                <button class="epa-btn" data-action="admin-close-modal">ביטול</button>
+            </div>`;
     }
     return `<div class="epa-modal-backdrop">
         <div class="epa-modal" role="dialog" aria-modal="true" aria-label="${esc(title)}">
@@ -2488,12 +2497,22 @@ export function handleAdminClick(ce, action, target) {
             return true;
         }
         case 'admin-cancel-assign':
+            ce._adminModal = {
+                type: 'confirmCancelAssign',
+                dateKey: target.dataset.date,
+                workshopTypeId: target.dataset.type,
+                employeeId: target.dataset.emp,
+            };
+            ce.render();
+            return true;
+        case 'admin-confirm-cancel-assign':
             ce._adminModal = null;
-            ce._startBusy('מבטל שיבוץ…');
+            ce._startBusy(target.dataset.disposition === 'delete' ? 'מסיר הגשה…' : 'מחזיר להגשות פעילות…');
             ce._dispatch('adminCancelAssignment', {
                 dateKey: target.dataset.date,
                 workshopTypeId: target.dataset.type,
                 employeeId: target.dataset.emp,
+                disposition: target.dataset.disposition === 'delete' ? 'delete' : 'restore',
             });
             return true;
         case 'admin-approve-submission': {

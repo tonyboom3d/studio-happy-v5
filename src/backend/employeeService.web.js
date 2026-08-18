@@ -617,10 +617,10 @@ export const submitAvailability = webMethod(Permissions.Anyone, async (shifts) =
         if (placements[shift.date] === SUBMISSION_STATUS.STANDBY) standby++;
     }
 
-    // Auto-approve mode: run the engine immediately so days with active
-    // customer bookings assign the employee on the spot (skill-matched);
-    // days without bookings simply stay pending. Manual mode: no-op
-    // (runScheduling is gated internally on the same setting).
+    // Auto-approve mode: run the engine immediately — but only workshop types
+    // that already have active customers (paid WorkshopOrders and/or Wix
+    // Bookings) and a skill match get scheduled; empty calendar slots stay
+    // SUBMITTED until a booking arrives or a manager assigns manually.
     let autoApproved = [];
     if (settings.autoApproveShifts !== false) {
         await runScheduling(batchDates[0], batchDates[batchDates.length - 1]).catch(err =>

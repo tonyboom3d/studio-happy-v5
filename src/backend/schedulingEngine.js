@@ -14,6 +14,8 @@
  * Collections: ShiftAssignments, ShiftOffers (specs in plan).
  */
 import wixData from 'wix-data';
+import { auth } from '@wix/essentials';
+import { extendedBookings } from '@wix/bookings';
 import { availabilityCalendar } from 'wix-bookings.v2';
 import { publish } from 'wix-realtime-backend';
 import { SUBMISSION_STATUS, toDateKey, normalizeSettings, DEFAULT_WORK_TYPE } from 'backend/availabilityRules.js';
@@ -26,6 +28,7 @@ import { maybeSuppressManagerNotification } from 'backend/managerPendingQuery.js
 const SA = { suppressAuth: true };
 const SAC = { suppressAuth: true, consistentRead: true };
 const PORTAL_URL = 'https://www.studiohappy.art/employee-portal';
+const elevatedQueryExtendedBookings = auth.elevate(extendedBookings.queryExtendedBookings);
 
 export const ASSIGNMENT_STATUS = { STANDBY: 'STANDBY', APPROVED: 'APPROVED', CANCELLED: 'CANCELLED' };
 export const OFFER_KIND = { WAITLIST_OFFER: 'WAITLIST_OFFER', OPEN_CALL: 'OPEN_CALL' };
@@ -255,6 +258,56 @@ async function loadPaidOrders(fromKey, toKey) {
     return items;
 }
 
+/** Active Wix Bookings (non-cancelled) — supplements paid WorkshopOrders for demand detection. */
+async function loadActiveWixBookings(fromKey, toKey, serviceIdToTypeId) {
+    const serviceIds = Object.keys(serviceIdToTypeId || {});
+    if (!serviceIds.length) return [];
+
+    const startDate = new Date(`${fromKey}T00:00:00Z`);
+    const endDate = new Date(`${toKey}T23:59:59Z`);
+    const rows = [];
+    let cursor = null;
+
+    try {
+        do {
+            const response = await elevatedQueryExtendedBookings({
+                filter: {
+                    'bookedEntity.item.slot.serviceId': { $in: serviceIds },
+                    $and: [
+                        { startDate: { $gte: startDate.toISOString() } },
+                        { startDate: { $lte: endDate.toISOString() } },
+                    ],
+                },
+                cursorPaging: { limit: 100, cursor },
+            });
+            for (const ext of (response.extendedBookings || [])) {
+                const booking = ext.booking;
+                if (!booking?._id || booking.status === 'CANCELED') continue;
+                const slot = booking.bookedEntity?.slot || booking.bookedEntity?.item?.slot || {};
+                const serviceId = slot.serviceId;
+                const typeId = serviceIdToTypeId[serviceId];
+                const startRaw = booking.startDate || slot.startDate;
+                if (!serviceId || !typeId || !startRaw) continue;
+                const dateKey = toDateKey(startRaw);
+                if (dateKey < fromKey || dateKey > toKey) continue;
+                const qty = Math.max(1, Number(booking.totalParticipants) || 1);
+                rows.push({
+                    bookingId: booking._id,
+                    dateKey,
+                    typeId,
+                    adults: qty,
+                    children: 0,
+                    startIso: new Date(startRaw).toISOString(),
+                });
+            }
+            cursor = response.pagingMetadata?.cursors?.next || null;
+        } while (cursor);
+    } catch (err) {
+        console.warn('[schedulingEngine] Wix Bookings load failed:', err?.message || err);
+    }
+    return rows;
+}
+
 /** Scheduled Bookings slots — used so the calendar shows workshops even before paid orders exist. */
 async function loadBookingsSessions(fromKey, toKey, serviceIdToTypeId) {
     const serviceIds = Object.keys(serviceIdToTypeId || {});
@@ -346,7 +399,7 @@ async function loadOffers(fromKey, toKey) {
  */
 export async function buildBoard(fromKey, toKey, { consistent = false, includeOffers = false } = {}) {
     const { typesById, serviceIdToTypeId } = await loadWorkshopTypeMap();
-    const [rules, roles, orders, submissions, assignments, offers, sessionRows] = await Promise.all([
+    const [rules, roles, orders, submissions, assignments, offers, sessionRows, wixBookings] = await Promise.all([
         loadRulesByTypeId(typesById),
         loadActiveRoles(),
         loadPaidOrders(fromKey, toKey),
@@ -354,6 +407,7 @@ export async function buildBoard(fromKey, toKey, { consistent = false, includeOf
         loadAssignments(fromKey, toKey, consistent),
         includeOffers ? loadOffers(fromKey, toKey) : Promise.resolve([]),
         loadBookingsSessions(fromKey, toKey, serviceIdToTypeId),
+        loadActiveWixBookings(fromKey, toKey, serviceIdToTypeId),
     ]);
 
     const rolesById = {};
@@ -379,12 +433,16 @@ export async function buildBoard(fromKey, toKey, { consistent = false, includeOf
                 assignedCount: 0, assignedEmployeeIds: [],
                 sessions: [], // distinct workshopStart ISO timestamps that day (calendar display)
                 sessionEnds: {}, // startIso -> endIso, resolved from Bookings availability where known
+                hasActiveCustomers: false, // true when paid WorkshopOrders or live Wix Bookings exist
             };
         }
         return days[dateKey].types[typeId];
     };
 
+    const coveredBookingIds = new Set();
     for (const order of orders) {
+        for (const id of (order.bookingIds || [])) if (id) coveredBookingIds.add(id);
+        if (order.bookingId) coveredBookingIds.add(order.bookingId);
         const dateKey = toDateKey(order.workshopStart);
         const typeId = serviceIdToTypeId[order.serviceId];
         if (!dateKey || !typeId || dateKey < fromKey || dateKey > toKey) continue;
@@ -403,6 +461,20 @@ export async function buildBoard(fromKey, toKey, { consistent = false, includeOf
         days[dateKey].hasWorkshops = true;
     }
 
+    for (const b of wixBookings) {
+        if (coveredBookingIds.has(b.bookingId)) continue;
+        const t = dayType(b.dateKey, b.typeId);
+        const orderPairs = Math.min(b.adults, b.children);
+        t.adults += b.adults;
+        t.children += b.children;
+        t.pairs += orderPairs;
+        t.soloAdults += b.adults - orderPairs;
+        t.extraChildren += b.children - orderPairs;
+        t.people += b.adults + b.children;
+        if (!t.sessions.includes(b.startIso)) t.sessions.push(b.startIso);
+        days[b.dateKey].hasWorkshops = true;
+    }
+
     for (const { dateKey, typeId, startIso, endIso } of sessionRows) {
         const t = dayType(dateKey, typeId);
         if (!t.sessions.includes(startIso)) t.sessions.push(startIso);
@@ -412,6 +484,7 @@ export async function buildBoard(fromKey, toKey, { consistent = false, includeOf
 
     for (const dateKey of Object.keys(days)) {
         for (const t of Object.values(days[dateKey].types)) {
+            t.hasActiveCustomers = (t.people || 0) > 0;
             t.required = requiredInstructorsFor(rules[t.typeId], t);
         }
     }
@@ -444,6 +517,11 @@ export async function buildBoard(fromKey, toKey, { consistent = false, includeOf
     }
 
     return { days, skillsByRoleId, rolesById, typesById, rules, offers };
+}
+
+/** True when at least one paying/active customer exists for this workshop type on this day. */
+export function typeHasActiveCustomers(t) {
+    return !!t?.hasActiveCustomers;
 }
 
 /** Coverage per type: filled = assigned + not-yet-assigned active submissions. */
@@ -582,8 +660,13 @@ async function ensureShortageHandled(dateKey, t, board, { batchNotify = false } 
 // ---------------------------------------------------------------------------
 
 /**
- * Auto-assigns SUBMITTED availability to short workshops (priorityRank, then
- * FIFO), then routes remaining shortages to waiting-list offers / open calls.
+ * Auto-assigns SUBMITTED availability to workshops that already have active
+ * customers (paid WorkshopOrders and/or live Wix Bookings), skill-matched,
+ * then routes remaining shortages to waiting-list offers / open calls.
+ *
+ * Workshops scheduled on the calendar with zero customers are skipped — empty
+ * slots stay pending until a booking arrives (processBookingPaid) or a manager
+ * assigns manually.
  *
  * Fully disabled when the "אישור אוטומטי של משמרות" setting is OFF — in that
  * mode all submissions stay pending until a manager assigns them manually.
@@ -606,6 +689,9 @@ export async function runScheduling(fromKey, toKey, { batchNotify = false } = {}
         if (dateKey <= todayKey) continue;
         const day = board.days[dateKey];
         for (const t of Object.values(day.types)) {
+            // No paying/active customers → never auto-approve for this workshop.
+            if (!typeHasActiveCustomers(t)) continue;
+
             let shortage = t.required - t.assignedCount;
             if (shortage <= 0) continue;
 

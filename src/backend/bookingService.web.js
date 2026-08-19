@@ -47,9 +47,8 @@ function isCandlesServiceId(serviceId) {
 }
 
 // Ceramics Workshop ("סדנת קרמיקה") — a single consolidated Wix Bookings
-// service. Pricing per day-of-week ("יחיד" / "כלי נוסף") comes from its
-// ticket variants (see _fetchCeramicsPricingInternal below), not from a
-// hardcoded table. See src/pages/Ceramic order flow.cwdtj.js.
+// service. Ticket pricing ("יחיד" / "הורה וילד") comes from variants per
+// day-of-week; "כלי קרמיקה נוסף" is a Wix add-on (see CERAMICS_EXTRA_ITEM_*).
 // The second (legacy) ID is kept only so historical orders still classify
 // as ceramics; it is no longer used for new bookings/pricing.
 const CERAMICS_SERVICE_ID = 'ad89914a-1845-48c6-804d-544cd17f179b';
@@ -80,6 +79,33 @@ const EXTRA_CANDLE_ADDON_BY_SERVICE = {
     'eb8fec0e-5d04-48a3-a795-e3e8051d07da': { addOnId: '08b64e92-6b95-46b0-9e83-9d3762a98584', groupId: 'c917292b-8fb9-4e0e-b181-fe14f3bf5f68', price: 250 }, // נרות שבת — כרטיס יחיד ₪250
     'f0f6e447-02d8-4808-80ba-3c380ce9eae8': { addOnId: '84fd7faa-aeee-4ea2-8b14-e966bf3f1848', groupId: '637c0d34-fdc1-475e-8340-f75e3cc5266d', price: 210 }, // נרות א'-ו' — כרטיס יחיד ₪210
 };
+
+// "כלי קרמיקה נוסף" — ceramics-only Wix Bookings add-on (no extra seat).
+// Max 1 per ticket (יחיד or הורה וילד). Run getCeramicsAddOnsTest from
+// backend/TEST.web.js to refresh addOnId/groupId if Wix changes.
+const CERAMICS_EXTRA_ITEM_ADDON_WEEKDAY = {
+    addOnId: 'f58a1553-2065-4201-a57d-6b41413fa34c',
+    price: 80,
+};
+const CERAMICS_EXTRA_ITEM_ADDON_SATURDAY = {
+    addOnId: '378587fb-2cc0-4d66-bc52-c1ca36147964',
+    price: 90,
+};
+
+/** Ceramics extra-item add-on config for a slot day (SATURDAY vs אמצע שבוע). */
+function getCeramicsExtraItemAddOnForDay(dayEnum) {
+    return dayEnum === 'SATURDAY' ? CERAMICS_EXTRA_ITEM_ADDON_SATURDAY : CERAMICS_EXTRA_ITEM_ADDON_WEEKDAY;
+}
+
+/** Fill byDay.extraItem prices from ceramics add-on constants (not ticket variants). */
+function applyCeramicsExtraItemAddonPricing(byDay) {
+    const ALL_DAYS = ['SUNDAY', 'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY'];
+    for (const day of ALL_DAYS) {
+        if (!byDay[day]) continue;
+        const cfg = getCeramicsExtraItemAddOnForDay(day);
+        byDay[day].extraItem = cfg.price;
+    }
+}
 
 const FIRST_ORDER_MIN_TICKETS = 2;
 
@@ -602,9 +628,10 @@ export const createAndCheckout = webMethod(Permissions.Anyone, async (orderData)
     // קרמיקה: המחיר תלוי ביום בשבוע של הסלוט (ולא בסרוויס — יש סרוויס אחד
     // מאוחד עם ticket variants לפי יום). נפתור את יום השבוע כאן, לפני חישוב basePrice.
     let ceramicsDayPricing = null;
+    let ceramicsDayEnum = null;
     if (isCeramics) {
         const ceramicsSlotStartIso = slotsList[0].date || slotsList[0].startDate || slotsList[0].start?.timestamp || slotsList[0].start;
-        const ceramicsDayEnum = getIsraelWeekdayEnum(ceramicsSlotStartIso);
+        ceramicsDayEnum = getIsraelWeekdayEnum(ceramicsSlotStartIso);
         ceramicsDayPricing = servicePricing?.byDay?.[ceramicsDayEnum];
         if (!ceramicsDayEnum || !ceramicsDayPricing || typeof ceramicsDayPricing.solo !== 'number') {
             throw new Error(`No ceramics pricing configured for day: ${ceramicsDayEnum || 'unknown'}`);
@@ -639,10 +666,14 @@ export const createAndCheckout = webMethod(Permissions.Anyone, async (orderData)
         }
         extraCandles = Math.max(0, Math.min(Number(rawExtraItems) || 0, totalCeramicsTickets));
         rugCount = totalCeramicsTickets + extraCandles; // סה"כ יחידות קרמיקה (בסיס + נוספות)
+        const ceramicsExtraAddOn = getCeramicsExtraItemAddOnForDay(ceramicsDayEnum);
+        extraCandlePrice = ceramicsExtraAddOn.price || 0;
+        extraCandleAddOnId = ceramicsExtraAddOn.addOnId || null;
+        extraCandleGroupId = null;
         const ceramicsParentChildPrice = ceramicsDayPricing.parentChild || ceramicsDayPricing.solo || 0;
         basePrice = (soloAdults * (ceramicsDayPricing.solo || 0))
             + (parentChildPairs * ceramicsParentChildPrice)
-            + (extraCandles * (ceramicsDayPricing.extraItem || 0));
+            + (extraCandles * extraCandlePrice);
         // עדכון numAdults/numChildren לצורך הודעות/CMS — סה"כ מבוגרים (סולו + מבוגר
         // בכל זוג) וסה"כ ילדים (ילד אחד בכל זוג "הורה וילד").
         numAdults = soloAdults + parentChildPairs;
@@ -795,8 +826,8 @@ export const createAndCheckout = webMethod(Permissions.Anyone, async (orderData)
         }
     };
 
-    // "נר נוסף" — add-on בלבד, בלי מושב נוסף.
-    if (isCandles && extraCandles > 0 && extraCandleAddOnId) {
+    // "נר נוסף" / "כלי קרמיקה נוסף" — add-on בלבד, בלי מושב נוסף.
+    if ((isCandles || isCeramics) && extraCandles > 0 && extraCandleAddOnId) {
         bookingPayload.bookedAddOns = [{
             _id: extraCandleAddOnId,
             ...(extraCandleGroupId ? { groupId: extraCandleGroupId } : {}),
@@ -955,19 +986,7 @@ export const createAndCheckout = webMethod(Permissions.Anyone, async (orderData)
         }
     }));
 
-    // Strip internal bookkeeping fields before sending to the eCom API.
-    // "כלי קרמיקה נוסף" — surcharge-only custom line item (no Wix Bookings
-    // Add-On/seat involved), mirroring how candles' cups are represented.
-    const ceramicsExtraItemLineItems = (isCeramics && extraCandles > 0) ? [{
-        quantity: extraCandles,
-        price: (ceramicsDayPricing?.extraItem || 0).toFixed(2),
-        productName: { original: 'כלי קרמיקה נוסף' },
-        itemType: { preset: 'PHYSICAL' },
-    }] : [];
-    const customLineItems = [
-        ...cupCustomLineItems.map(({ _productId, _price, _product, ...item }) => item),
-        ...ceramicsExtraItemLineItems,
-    ];
+    const customLineItems = cupCustomLineItems.map(({ _productId, _price, _product, ...item }) => item);
 
     const checkoutOptions = {
         lineItems,
@@ -2209,8 +2228,8 @@ async function _fetchCeramicsPricingInternal(serviceId) {
         if (isNaN(price) || days.length === 0 || !name) continue;
 
         let key = null;
-        if (name.includes('כלי נוסף')) key = 'extraItem';
-        else if (name.includes('הורה וילד')) key = 'parentChild';
+        if (name.includes('כלי נוסף')) continue; // priced via Wix add-on, not ticket variant
+        if (name.includes('הורה וילד')) key = 'parentChild';
         else if (name.includes('יחיד')) key = 'solo';
         if (!key) continue;
 
@@ -2219,6 +2238,7 @@ async function _fetchCeramicsPricingInternal(serviceId) {
         }
     }
 
+    applyCeramicsExtraItemAddonPricing(byDay);
     console.log('[CeramicsPricing] Fetched by-day variant pricing:', JSON.stringify(byDay));
     return { byDay, currency: item?.minPrice?.currency || 'ILS' };
 }

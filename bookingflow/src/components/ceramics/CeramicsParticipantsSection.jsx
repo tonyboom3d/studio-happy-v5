@@ -83,6 +83,10 @@ export default function CeramicsParticipantsSection({
     setValidationError(null);
   };
 
+  // מבוגרים = יחיד + מבוגר בכל זוג הורה+ילד; ילדים = ילד אחד בכל כרטיס הורה+ילד.
+  const adultsCount = soloTickets + parentChildTickets;
+  const childrenCount = parentChildTickets;
+
   const handleContinue = () => {
     if (totalTickets <= 0) {
       setValidationError('יש לבחור לפחות כרטיס אחד');
@@ -103,7 +107,11 @@ export default function CeramicsParticipantsSection({
 
   return (
     <div className="flex flex-col items-center py-4">
-      <p className="text-[16px] text-[#464646]/70 mb-4">כמה משתתפים יהיו בסדנה?</p>
+      <p className="text-[16px] text-[#464646]/70 mb-1">כמה משתתפים יהיו בסדנה?</p>
+      <p className="text-[13px] text-[#464646]/50 mb-1">גיל מינימלי להשתתפות בסדנה: 3 (חובה בליווי הורה)</p>
+      <p className="text-[17px] text-[#5E2F88] mb-4 font-semibold">
+        כל מבוגר יכול ללוות <span className="underline underline-offset-2">עד 5 ילדים</span> בהזמנה
+      </p>
 
       {/* יחיד + הורה וילד */}
       <div className="w-full max-w-md grid grid-cols-2 gap-3 mb-2">
@@ -205,7 +213,7 @@ export default function CeramicsParticipantsSection({
               <div>
                 <p className="text-[16px] font-medium text-[#581E83]">כלי קרמיקה נוסף</p>
                 <p className="text-[12px] text-[#464646]/60">
-                  לכל מי שרוצה להכין {maxExtraItems === 1 ? 'כלי שני' : 'כלים נוספים'} (עד {maxExtraItems})
+                  עד כלי נוסף אחד לכל כרטיס (עד {maxExtraItems})
                   {extraItemUnitPrice > 0 && ` · ₪${extraItemUnitPrice} לכלי`}
                 </p>
               </div>
@@ -290,6 +298,22 @@ export default function CeramicsParticipantsSection({
                   <span className="font-medium tabular-nums">₪{extraItemsTotal}</span>
                 </div>
               )}
+            </div>
+          )}
+
+          {seatsUsed > 0 && (
+            <div className="mt-3 pt-3 border-t border-[#e8e8e8] space-y-1">
+              <div className="flex items-center gap-1.5 font-medium text-[#581E83] text-[14px]">
+                <Users className="w-3.5 h-3.5 shrink-0" />
+                <span>
+                  סה״כ {seatsUsed} {seatsUsed === 1 ? 'משתתף' : 'משתתפים'} מגיעים לסדנה
+                  ({adultsCount} {adultsCount === 1 ? 'מבוגר' : 'מבוגרים'}
+                  {childrenCount > 0 && ` + ${childrenCount} ${childrenCount === 1 ? 'ילד' : 'ילדים'}`})
+                </span>
+              </div>
+              <p className="text-[12px] text-[#464646]/75 leading-relaxed pr-0.5">
+                מקומות הישיבה מוגבלים — לא ניתן להביא מלווים מעבר למשתתפים שנרשמו; מלווה נוסף יוכל להישאר רק אם יישאר מקום פנוי.
+              </p>
             </div>
           )}
 

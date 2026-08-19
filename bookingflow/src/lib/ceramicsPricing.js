@@ -6,8 +6,8 @@
 // · "יחיד" (9+) — one seat, one ceramic piece.
 // · "הורה וילד" (3-8) — one ticket covers a parent+child pair (2 seats),
 //   one shared ceramic piece.
-// Each ticket (either type) may add up to one "כלי קרמיקה נוסף" (extra
-// item), a surcharge-only add-on with no Wix Bookings seat of its own.
+// Each ticket (יחיד or הורה וילד) may add up to one "כלי קרמיקה נוסף" — a
+// Wix Bookings add-on (no extra seat). Prices: ₪80 אמצע שבוע, ₪90 שבת.
 //
 // Pricing is defined in Wix per day-of-week (single consolidated service
 // with ticket variants), not per serviceId — resolveCeramicsDayPricing picks

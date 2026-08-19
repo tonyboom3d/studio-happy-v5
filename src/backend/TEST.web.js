@@ -306,10 +306,19 @@ export const getCeramicsServiceTest = webMethod(Permissions.Admin, async (servic
             const variants = item.variants?.values || [];
             for (const variant of variants) {
                 const choice = variant.choices?.[0] || {};
+                // This service's option is DATE_TIME (day/hour rule), not CUSTOM —
+                // the ticket name and weekday/weekend rule live under
+                // choice.dateTime, not choice.custom (which candles/tufting use).
+                const dateTime = choice.dateTime || null;
+                const choiceLabel = choice.custom || dateTime?.name || '';
                 variantsSummary.push({
                     serviceId: item.serviceId,
-                    choiceLabel: choice.custom || '',
+                    choiceLabel,
                     optionId: choice.optionId || null,
+                    days: dateTime?.hoursAndDaysRule?.days || null,
+                    startTime: dateTime?.hoursAndDaysRule?.startTime || null,
+                    endTime: dateTime?.hoursAndDaysRule?.endTime || null,
+                    ruleType: dateTime?.ruleType || null,
                     price: variant.price?.value != null ? parseFloat(variant.price.value) : null,
                     currency: variant.price?.currency || item.minPrice?.currency || 'ILS',
                     variantId: variant._id || variant.id || null,

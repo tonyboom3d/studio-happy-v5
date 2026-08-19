@@ -11,7 +11,7 @@
  */
 import wixData from 'wix-data';
 import { Permissions, webMethod } from 'wix-web-module';
-import { staffMembers, addOns, services } from '@wix/bookings';
+import { staffMembers, addOns, services, serviceOptionsAndVariants } from '@wix/bookings';
 import { auth } from '@wix/essentials';
 import { listBookingStaff } from 'backend/staffAdminService.web.js';
 import { EMPLOYEE_ACTION_KEYS } from 'backend/employeeTemplates.js';
@@ -228,6 +228,9 @@ const CANDLES_SERVICE_IDS_FOR_TEST = {
  *
  *   import { listCandlesAddOns } from 'backend/TEST.web.js';
  *   listCandlesAddOns().then(console.log);
+ *
+ *   import { getCeramicsServiceTest } from 'backend/TEST.web.js';
+ *   getCeramicsServiceTest().then(console.log);
  */
 export const listCandlesAddOns = webMethod(Permissions.Admin, async () => {
     const elevatedQueryAddOns = auth.elevate(addOns.queryAddOns);
@@ -263,4 +266,100 @@ export const listCandlesAddOns = webMethod(Permissions.Admin, async () => {
     console.log('[TEST] listCandlesAddOns — byService:', JSON.stringify(byService));
 
     return { ok: true, allAddOns, byService };
+});
+
+// Ceramics workshop ("סדנת קרמיקה") — consolidated service with ticket variants.
+const CERAMICS_SERVICE_ID_FOR_TEST = 'ad89914a-1845-48c6-804d-544cd17f179b';
+
+/**
+ * Fetches the ceramics Bookings service + ticket variants (serviceOptionsAndVariants)
+ * so you can inspect pricing/choice labels before wiring createAndCheckout.
+ *
+ *   import { getCeramicsServiceTest } from 'backend/TEST.web.js';
+ *   getCeramicsServiceTest().then(console.log);
+ *
+ * @param {string} [serviceId] — defaults to CERAMICS_SERVICE_ID_FOR_TEST
+ */
+export const getCeramicsServiceTest = webMethod(Permissions.Admin, async (serviceId = CERAMICS_SERVICE_ID_FOR_TEST) => {
+    const id = String(serviceId || CERAMICS_SERVICE_ID_FOR_TEST).trim();
+    const elevatedGetService = auth.elevate(services.getService);
+    const elevatedListGroups = auth.elevate(services.listAddOnGroupsByServiceId);
+
+    let service = null;
+    let serviceError = null;
+    try {
+        service = await elevatedGetService(id);
+    } catch (err) {
+        serviceError = err?.message || String(err);
+    }
+
+    let optionsAndVariantsRaw = null;
+    let optionsAndVariantsError = null;
+    let variantsSummary = [];
+    try {
+        const response = await serviceOptionsAndVariants.queryServiceOptionsAndVariants({
+            filter: { serviceId: { $in: [id] } },
+        });
+        optionsAndVariantsRaw = response;
+        const list = response?.serviceOptionsAndVariantsList || [];
+        for (const item of list) {
+            const variants = item.variants?.values || [];
+            for (const variant of variants) {
+                const choice = variant.choices?.[0] || {};
+                variantsSummary.push({
+                    serviceId: item.serviceId,
+                    choiceLabel: choice.custom || '',
+                    optionId: choice.optionId || null,
+                    price: variant.price?.value != null ? parseFloat(variant.price.value) : null,
+                    currency: variant.price?.currency || item.minPrice?.currency || 'ILS',
+                    variantId: variant._id || variant.id || null,
+                });
+            }
+        }
+    } catch (err) {
+        optionsAndVariantsError = err?.message || String(err);
+    }
+
+    let addOnGroups = null;
+    let addOnGroupsError = null;
+    try {
+        const groupsResult = await elevatedListGroups(id);
+        addOnGroups = (groupsResult?.addOnGroups || []).map((g) => ({
+            _id: g._id,
+            name: g.name,
+            addOns: (g.addOns || []).map((a) => ({
+                _id: a._id,
+                name: a.name,
+                price: a.price,
+                maxQuantity: a.maxQuantity,
+            })),
+        }));
+    } catch (err) {
+        addOnGroupsError = err?.message || String(err);
+    }
+
+    const result = {
+        ok: !serviceError,
+        serviceId: id,
+        service,
+        serviceError,
+        optionsAndVariantsRaw,
+        optionsAndVariantsError,
+        variantsSummary,
+        addOnGroups,
+        addOnGroupsError,
+    };
+
+    console.log('[TEST] getCeramicsServiceTest:', JSON.stringify({
+        serviceId: id,
+        serviceName: service?.name || service?.service?.name || null,
+        variantsCount: variantsSummary.length,
+        variantsSummary,
+        addOnGroupsCount: addOnGroups?.length ?? 0,
+        serviceError,
+        optionsAndVariantsError,
+        addOnGroupsError,
+    }));
+
+    return result;
 });

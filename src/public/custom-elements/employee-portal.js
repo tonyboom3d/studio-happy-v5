@@ -129,7 +129,11 @@ employee-portal * { box-sizing: border-box; }
 .ep-sel-head h2 { margin: 0; }
 .ep-submit-btn.small { width: auto; margin-top: 0; padding: 8px 16px; font-size: 12.5px; border-radius: 9px; }
 .ep-sel-list { display: flex; flex-direction: column; gap: 8px; max-height: 340px; overflow-y: auto; }
-.ep-sel-list.menu-open { overflow: visible; }
+/* While a per-row dropdown (time slot / row menu) is open, drop the height
+   cap entirely — max-height still constrains the box even with
+   overflow:visible, so content beyond 340px was rendering outside the box
+   and overlapping whatever came after it on the page. */
+.ep-sel-list.menu-open { overflow: visible; max-height: none; }
 .ep-card.ep-card-sel-open { overflow: visible; position: relative; z-index: 10001; }
 .ep-sel-row { display: flex; align-items: center; gap: 6px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 10px; padding: 7px 9px; font-size: 12.5px; flex-wrap: wrap; max-width: 100%; min-width: 0; }
 .ep-sel-row:has(.ep-slot-ms.open) { position: relative; z-index: 50; }

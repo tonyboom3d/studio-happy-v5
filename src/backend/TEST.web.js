@@ -372,3 +372,53 @@ export const getCeramicsServiceTest = webMethod(Permissions.Admin, async (servic
 
     return result;
 });
+
+/**
+ * Lists every add-on in the site (up to 100) plus the add-on groups/add-ons
+ * already attached to the ceramics ("סדנת קרמיקה") service — used to find
+ * the real add-on _id/groupId/price for "כלי קרמיקה נוסף" before switching
+ * it from a custom checkout line item to a real Wix Bookings add-on:
+ *
+ *   import { getCeramicsAddOnsTest } from 'backend/TEST.web.js';
+ *   getCeramicsAddOnsTest().then(console.log);
+ *
+ * @param {string} [serviceId] — defaults to CERAMICS_SERVICE_ID_FOR_TEST
+ */
+export const getCeramicsAddOnsTest = webMethod(Permissions.Admin, async (serviceId = CERAMICS_SERVICE_ID_FOR_TEST) => {
+    const id = String(serviceId || CERAMICS_SERVICE_ID_FOR_TEST).trim();
+    const elevatedQueryAddOns = auth.elevate(addOns.queryAddOns);
+    const elevatedListGroups = auth.elevate(services.listAddOnGroupsByServiceId);
+
+    const allAddOnsResult = await elevatedQueryAddOns({ cursorPaging: { limit: 100 } });
+    const allAddOns = (allAddOnsResult?.addOns || []).map((a) => ({
+        _id: a._id,
+        name: a.name,
+        price: a.price,
+        maxQuantity: a.maxQuantity,
+        durationInMinutes: a.durationInMinutes,
+    }));
+
+    let addOnGroups = null;
+    let addOnGroupsError = null;
+    try {
+        const groupsResult = await elevatedListGroups(id);
+        addOnGroups = (groupsResult?.addOnGroups || []).map((g) => ({
+            _id: g._id,
+            name: g.name,
+            addOns: (g.addOns || []).map((a) => ({
+                _id: a._id,
+                name: a.name,
+                price: a.price,
+                maxQuantity: a.maxQuantity,
+            })),
+        }));
+    } catch (err) {
+        addOnGroupsError = err?.message || String(err);
+    }
+
+    const result = { ok: true, serviceId: id, allAddOns, addOnGroups, addOnGroupsError };
+
+    console.log('[TEST] getCeramicsAddOnsTest:', JSON.stringify(result));
+
+    return result;
+});

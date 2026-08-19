@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { Calendar, Clock, Users, Sparkles, ArrowLeft } from 'lucide-react';
+import { Calendar, Clock, Users, Baby, Sparkles, ArrowLeft } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { format } from 'date-fns';
 import { he } from 'date-fns/locale';
@@ -10,7 +10,8 @@ import { computeCeramicsPrice, resolveCeramicsDayPricing } from '@/lib/ceramicsP
 // "כלי קרמיקה נוסף" surcharge line (if any) and the total, followed by the
 // pay button that hands off to Wix eCommerce checkout.
 export default function CeramicsOrderSummarySection({
-  participants,
+  soloTickets = 0,
+  parentChildTickets = 0,
   extraItems = 0,
   selectedSlot,
   servicePricing,
@@ -30,10 +31,12 @@ export default function CeramicsOrderSummarySection({
   }, [selectedSlot]);
 
   const pricing = resolveCeramicsDayPricing(servicePricing?.[selectedSlot?.serviceId], selectedSlot);
-  const { basePriceTotal, extraItemsTotal } = useMemo(
-    () => computeCeramicsPrice({ participants, extraItems }, pricing),
-    [pricing, participants, extraItems]
+  const { soloTotal, parentChildTotal, extraItemsTotal } = useMemo(
+    () => computeCeramicsPrice({ soloTickets, parentChildTickets, extraItems }, pricing),
+    [pricing, soloTickets, parentChildTickets, extraItems]
   );
+
+  const totalParticipants = soloTickets + parentChildTickets * 2;
 
   return (
     <div className="flex flex-col py-3 px-1 space-y-3" dir="rtl">
@@ -53,19 +56,28 @@ export default function CeramicsOrderSummarySection({
         )}
         <span className="flex items-center gap-1.5">
           <Users className="w-4 h-4 text-[#5E2F88]" />
-          סה״כ {participants} {participants === 1 ? 'משתתף' : 'משתתפים'}
+          סה״כ {totalParticipants} {totalParticipants === 1 ? 'משתתף' : 'משתתפים'}
         </span>
       </div>
 
       {/* פירוט מחיר */}
       <div className="border-t border-[#e8e8e8] pt-3 space-y-2 text-base text-[#464646]">
-        {participants > 0 && (
+        {soloTickets > 0 && (
           <div className="flex justify-between gap-3">
             <span className="flex items-center gap-1.5">
               <Users className="w-4 h-4" />
-              {participants} × {participants === 1 ? 'כרטיס משתתף' : 'כרטיסי משתתפים'}
+              {soloTickets} × כרטיס יחיד
             </span>
-            <span className="font-medium tabular-nums">₪{basePriceTotal}</span>
+            <span className="font-medium tabular-nums">₪{soloTotal}</span>
+          </div>
+        )}
+        {parentChildTickets > 0 && (
+          <div className="flex justify-between gap-3">
+            <span className="flex items-center gap-1.5">
+              <Baby className="w-4 h-4" />
+              {parentChildTickets} × הורה + ילד
+            </span>
+            <span className="font-medium tabular-nums">₪{parentChildTotal}</span>
           </div>
         )}
         {extraItems > 0 && (
@@ -124,6 +136,15 @@ export default function CeramicsOrderSummarySection({
             </>
           )}
         </motion.button>
+      </div>
+
+      {/* הסבר על בחירת הכלים בסטודיו */}
+      <div className="rounded-xl border border-[#e8e8e8] bg-[#f9f6fd] p-3">
+        <p className="text-[13px] text-[#464646]/80 leading-relaxed text-center">
+          בסדנה תוכלו לבחור מתוך מגוון כלים שימושיים, כגון צלחות, קערות, ספלים ועוד – הכלולים במחיר הסדנה.
+          <br />
+          בנוסף, בסטודיו מחכה לכם מבחר של כלים מיוחדים ובגדלים שונים, אותם ניתן לבחור במקום בתוספת תשלום
+        </p>
       </div>
     </div>
   );

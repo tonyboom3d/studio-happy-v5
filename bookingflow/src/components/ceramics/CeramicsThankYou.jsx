@@ -57,7 +57,8 @@ export default function CeramicsThankYou({
   const hasCoupon = !!ecomSummary?.coupon;
   const hasDiscount = ecomSummary?.discount > 0;
 
-  const participants = order?.adults || 0;
+  // order.adults = "יחיד" תיקטים + מבוגר בכל זוג "הורה וילד"; order.children = ילדים בזוגות.
+  const participants = (order?.adults || 0) + (order?.children || 0);
   const itemsCount = order?.rugCount || 0;
 
   if (!order) return null;

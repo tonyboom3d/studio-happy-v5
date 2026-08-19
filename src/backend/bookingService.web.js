@@ -575,10 +575,14 @@ async function hashAccessToken(token) {
 export const createAndCheckout = webMethod(Permissions.Anyone, async (orderData) => {
     console.log('[createAndCheckout] orderData received:', JSON.stringify(orderData, null, 2));
 
-    const { adults, children, extraCandles: rawExtraCandles, participants: rawParticipants, extraItems: rawExtraItems, slots: rawSlots, userDetails: rawUser, products: rawProducts } = orderData;
+    const {
+        adults, children, extraCandles: rawExtraCandles,
+        participants: rawParticipants, parentChildTickets: rawParentChildTickets, extraItems: rawExtraItems,
+        slots: rawSlots, userDetails: rawUser, products: rawProducts,
+    } = orderData;
     const userDetails = rawUser || orderData.customerInfo || {};
     let numAdults = Number(adults) || 1;
-    const numChildren = Number(children) || 0;
+    let numChildren = Number(children) || 0;
     const slotsList = Array.isArray(rawSlots) ? rawSlots : [];
 
     if (slotsList.length === 0) {
@@ -589,10 +593,10 @@ export const createAndCheckout = webMethod(Permissions.Anyone, async (orderData)
     const serviceId = slotsList[0].serviceId;
     const isCandles = isCandlesServiceId(serviceId);
     const isCeramics = isCeramicsServiceId(serviceId);
-    // קרמיקה: אין הפרדה מבוגר/ילד — "משתתף" יחיד; הכמות מגיעה כ-participants.
-    if (isCeramics) {
-        numAdults = Number(rawParticipants) || numAdults;
-    }
+    // קרמיקה: שני סוגי כרטיסים — "יחיד" (9+, participants) ו"הורה וילד"
+    // (3-8, parentChildTickets — כרטיס אחד = זוג הורה+ילד, 2 מושבים).
+    const ceramicsSoloTickets = isCeramics ? Math.max(0, Number(rawParticipants) || 0) : 0;
+    const ceramicsParentChildTickets = isCeramics ? Math.max(0, Number(rawParentChildTickets) || 0) : 0;
     const allPricing = await getServicePricingCached(getServiceIdsGroupFor(serviceId));
     const servicePricing = allPricing[serviceId];
     // קרמיקה: המחיר תלוי ביום בשבוע של הסלוט (ולא בסרוויס — יש סרוויס אחד
@@ -623,14 +627,26 @@ export const createAndCheckout = webMethod(Permissions.Anyone, async (orderData)
     let parentChildPairs, extraChildren, soloAdults, rugCount, baseCandles = 0, extraCandles = 0, extraCandlePrice = 0, extraCandleAddOnId = null, extraCandleGroupId = null;
     let basePrice;
     if (isCeramics) {
-        // קרמיקה: משתתף אחד = כרטיס בסיס אחד; "כלי קרמיקה נוסף" — עד יחידה
-        // אחת נוספת לכל משתתף, ללא מושב נפרד (surcharge בלבד, custom line item).
-        soloAdults = numAdults;
-        parentChildPairs = 0;
+        // קרמיקה: "יחיד" (9+) = כרטיס בסיס אחד, מושב אחד. "הורה וילד" (3-8)
+        // = כרטיס אחד לזוג, 2 מושבים. "כלי קרמיקה נוסף" — עד יחידה אחת
+        // נוספת לכל כרטיס (סולו או זוג), ללא מושב נפרד (surcharge בלבד).
+        soloAdults = ceramicsSoloTickets;
+        parentChildPairs = ceramicsParentChildTickets;
         extraChildren = 0;
-        extraCandles = Math.max(0, Math.min(Number(rawExtraItems) || 0, numAdults));
-        rugCount = numAdults + extraCandles; // סה"כ יחידות קרמיקה (בסיס + נוספות)
-        basePrice = (numAdults * (ceramicsDayPricing.solo || 0)) + (extraCandles * (ceramicsDayPricing.extraItem || 0));
+        const totalCeramicsTickets = soloAdults + parentChildPairs;
+        if (totalCeramicsTickets <= 0) {
+            throw new Error('At least one ceramics ticket (יחיד or הורה וילד) is required');
+        }
+        extraCandles = Math.max(0, Math.min(Number(rawExtraItems) || 0, totalCeramicsTickets));
+        rugCount = totalCeramicsTickets + extraCandles; // סה"כ יחידות קרמיקה (בסיס + נוספות)
+        const ceramicsParentChildPrice = ceramicsDayPricing.parentChild || ceramicsDayPricing.solo || 0;
+        basePrice = (soloAdults * (ceramicsDayPricing.solo || 0))
+            + (parentChildPairs * ceramicsParentChildPrice)
+            + (extraCandles * (ceramicsDayPricing.extraItem || 0));
+        // עדכון numAdults/numChildren לצורך הודעות/CMS — סה"כ מבוגרים (סולו + מבוגר
+        // בכל זוג) וסה"כ ילדים (ילד אחד בכל זוג "הורה וילד").
+        numAdults = soloAdults + parentChildPairs;
+        numChildren = parentChildPairs;
     } else if (isCandles) {
         const parentChildPairsCalc = Math.min(numAdults, numChildren);
         const remainingChildren = numChildren - parentChildPairsCalc;
@@ -682,8 +698,10 @@ export const createAndCheckout = webMethod(Permissions.Anyone, async (orderData)
     const unitWordSingular = isCeramics ? 'כלי' : isCandles ? 'נר' : 'שטיח';
     const unitWord = rugCount === 1 ? unitWordSingular : unitWordPlural;
     const workshopLabel = isCeramics ? 'סדנת קרמיקה' : isCandles ? 'סדנת נרות' : 'סדנת טאפטינג';
-    const participantWord = isCeramics ? (numAdults === 1 ? 'משתתף' : 'משתתפים') : (numAdults === 1 ? 'מבוגר' : 'מבוגרים');
-    const notificationMessage = `${workshopLabel}: ${numAdults} ${participantWord}${(!isCeramics && numChildren > 0) ? `, ${numChildren} ילדים` : ''}, ${rugCount} ${unitWordPlural}`;
+    const participantWord = isCeramics ? (soloAdults === 1 ? 'יחיד' : 'יחידים') : (numAdults === 1 ? 'מבוגר' : 'מבוגרים');
+    const notificationMessage = isCeramics ?
+        `${workshopLabel}: ${soloAdults} ${participantWord}${parentChildPairs > 0 ? `, ${parentChildPairs} הורה וילד` : ''}, ${rugCount} ${unitWordPlural}` :
+        `${workshopLabel}: ${numAdults} ${participantWord}${numChildren > 0 ? `, ${numChildren} ילדים` : ''}, ${rugCount} ${unitWordPlural}`;
 
     // --- שלב 1: createBooking (הזמנה אחת בלבד) ---
     const slot = slotsList[0];
@@ -692,8 +710,8 @@ export const createAndCheckout = webMethod(Permissions.Anyone, async (orderData)
         throw new Error('Slot is missing sessionId');
     }
 
-    // מושבי Wix בפועל — לפי אנשים, לא לפי נרות (הורה+ילד = 2 מושבים, נר אחד).
-    const seatsUsed = isCandles ? (numAdults + numChildren) : numAdults;
+    // מושבי Wix בפועל — לפי אנשים, לא לפי נרות/כלים (הורה+ילד = 2 מושבים, פריט אחד).
+    const seatsUsed = (isCandles || isCeramics) ? (numAdults + numChildren) : numAdults;
     if ((isCandles || isCeramics) && typeof slot.openSpots === 'number' && seatsUsed > slot.openSpots) {
         throw new Error('CAPACITY_EXCEEDED');
     }
@@ -913,11 +931,17 @@ export const createAndCheckout = webMethod(Permissions.Anyone, async (orderData)
     const WIX_BOOKINGS_APP_ID = '13d21c63-b5ec-5912-8397-c3a5ddb27a97';
     const pricePerItem = (effectivePrice / bookingIds.length).toFixed(2);
 
-    const participantDescription = [
-        `${numAdults} ${participantWord}`,
-        (!isCeramics && numChildren > 0) ? `${numChildren} ${numChildren === 1 ? 'ילד' : 'ילדים'}` : null,
-        `${rugCount} ${unitWord}`,
-    ].filter(Boolean).join(', ');
+    const participantDescription = isCeramics ?
+        [
+            soloAdults > 0 ? `${soloAdults} ${soloAdults === 1 ? 'יחיד' : 'יחידים'}` : null,
+            parentChildPairs > 0 ? `${parentChildPairs} הורה וילד` : null,
+            `${rugCount} ${unitWord}`,
+        ].filter(Boolean).join(', ') :
+        [
+            `${numAdults} ${participantWord}`,
+            numChildren > 0 ? `${numChildren} ${numChildren === 1 ? 'ילד' : 'ילדים'}` : null,
+            `${rugCount} ${unitWord}`,
+        ].filter(Boolean).join(', ');
 
     const lineItems = bookingIds.map(id => ({
         quantity: 1,
@@ -2160,15 +2184,14 @@ async function _fetchServicePricingInternal(serviceIds) {
 }
 
 /**
- * שליפת מחירי הקרמיקה ("יחיד" / "כלי נוסף") מ-Wix Bookings Variants API,
- * לפי יום בשבוע (הסרוויס המאוחד מגדיר תמחור שונה לכל יום via DATE_TIME
- * option/ticket variants). "הורה וילד" קיים כטיקט בוויקס אך לא נצרך כאן —
- * תהליך ההזמנה של קרמיקה לא תומך בהפרדת מבוגר/ילד.
- * מחזיר: { byDay: { SUNDAY: {solo, extraItem}, ..., SATURDAY: {...} }, currency }
+ * שליפת מחירי הקרמיקה ("יחיד" / "הורה וילד" / "כלי נוסף") מ-Wix Bookings
+ * Variants API, לפי יום בשבוע (הסרוויס המאוחד מגדיר תמחור שונה לכל יום
+ * via DATE_TIME option/ticket variants).
+ * מחזיר: { byDay: { SUNDAY: {solo, parentChild, extraItem}, ..., SATURDAY: {...} }, currency }
  */
 async function _fetchCeramicsPricingInternal(serviceId) {
     const ALL_DAYS = ['SUNDAY', 'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY'];
-    const byDay = ALL_DAYS.reduce((acc, day) => { acc[day] = { solo: null, extraItem: null }; return acc; }, {});
+    const byDay = ALL_DAYS.reduce((acc, day) => { acc[day] = { solo: null, parentChild: null, extraItem: null }; return acc; }, {});
 
     const response = await serviceOptionsAndVariants.queryServiceOptionsAndVariants({
         filter: { serviceId: { $in: [serviceId] } },
@@ -2187,8 +2210,9 @@ async function _fetchCeramicsPricingInternal(serviceId) {
 
         let key = null;
         if (name.includes('כלי נוסף')) key = 'extraItem';
+        else if (name.includes('הורה וילד')) key = 'parentChild';
         else if (name.includes('יחיד')) key = 'solo';
-        if (!key) continue; // e.g. "הורה וילד" — not used by this flow
+        if (!key) continue;
 
         for (const day of days) {
             if (byDay[day]) byDay[day][key] = price;

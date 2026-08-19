@@ -1,17 +1,20 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { Minus, Plus, Users, MessageCircle, AlertTriangle, Sparkles } from 'lucide-react';
+import { Minus, Plus, Users, Baby, MessageCircle, AlertTriangle, Sparkles } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { validateFirstOrderMinimum, FIRST_ORDER_MIN_TICKETS_MESSAGE } from '@/lib/firstOrderMinimum';
 import { computeCeramicsPrice, getMaxExtraItems, resolveCeramicsDayPricing } from '@/lib/ceramicsPricing';
 
-// Ceramics workshop ("סדנת קרמיקה") participants step. One "משתתף" ticket
-// per person (no adult/child split). Each participant may add up to one
-// "כלי קרמיקה נוסף" — a surcharge-only extra item, no additional Wix
-// Bookings seat.
+// Ceramics workshop ("סדנת קרמיקה") participants step. Two ticket types:
+// "יחיד" (9+) — one seat, one ceramic piece; "הורה וילד" (3-8) — one ticket
+// covers a parent+child pair (2 seats, one shared piece). Each ticket
+// (either type) may add up to one "כלי קרמיקה נוסף" — a surcharge-only
+// extra item, no additional Wix Bookings seat.
 export default function CeramicsParticipantsSection({
-  participants,
-  setParticipants,
+  soloTickets,
+  setSoloTickets,
+  parentChildTickets,
+  setParentChildTickets,
   extraItems,
   setExtraItems,
   maxParticipants = 10,
@@ -21,23 +24,29 @@ export default function CeramicsParticipantsSection({
 }) {
   const [validationError, setValidationError] = useState(null);
 
-  const isGroupTooLarge = participants > 9;
-  const spotsExceeded = participants > maxParticipants;
+  // מקומות תפוסים ב-Wix Bookings: "יחיד" = מושב אחד, "הורה וילד" = 2 מושבים.
+  const seatsUsed = soloTickets + parentChildTickets * 2;
+  const totalTickets = soloTickets + parentChildTickets;
+  const isGroupTooLarge = seatsUsed > 9;
+  const spotsExceeded = seatsUsed > maxParticipants;
 
   const slotPricing = useMemo(
     () => resolveCeramicsDayPricing(servicePricing?.[selectedSlot?.serviceId], selectedSlot),
     [selectedSlot, servicePricing]
   );
 
-  const { extraItemUnitPrice, basePriceTotal, extraItemsTotal, totalPrice } = useMemo(
-    () => computeCeramicsPrice({ participants, extraItems }, slotPricing),
-    [slotPricing, participants, extraItems]
+  const {
+    soloUnitPrice, parentChildUnitPrice, extraItemUnitPrice,
+    soloTotal, parentChildTotal, extraItemsTotal, totalPrice,
+  } = useMemo(
+    () => computeCeramicsPrice({ soloTickets, parentChildTickets, extraItems }, slotPricing),
+    [slotPricing, soloTickets, parentChildTickets, extraItems]
   );
 
-  // "כלי קרמיקה נוסף" — עד יחידה אחת נוספת לכל משתתף.
-  const maxExtraItems = getMaxExtraItems(participants);
+  // "כלי קרמיקה נוסף" — עד יחידה אחת נוספת לכל כרטיס (יחיד או הורה+ילד).
+  const maxExtraItems = getMaxExtraItems(soloTickets, parentChildTickets);
 
-  // כשמספר המשתתפים יורד, חותכים את הכלים הנוספים בהתאם.
+  // כשמספר הכרטיסים יורד, חותכים את הכלים הנוספים בהתאם.
   useEffect(() => {
     if (extraItems > maxExtraItems) {
       setExtraItems(maxExtraItems);
@@ -51,24 +60,39 @@ export default function CeramicsParticipantsSection({
     if (extraItems < maxExtraItems) setExtraItems(extraItems + 1);
   };
 
-  const handleParticipantsDecrease = () => {
-    if (participants > 1) {
-      setParticipants(participants - 1);
+  const handleSoloDecrease = () => {
+    if (soloTickets > 0) {
+      setSoloTickets(soloTickets - 1);
       setValidationError(null);
     }
   };
-  const handleParticipantsIncrease = () => {
-    if (participants >= maxParticipants) return;
-    setParticipants(participants + 1);
+  const handleSoloIncrease = () => {
+    if (seatsUsed >= maxParticipants) return;
+    setSoloTickets(soloTickets + 1);
+    setValidationError(null);
+  };
+  const handleParentChildDecrease = () => {
+    if (parentChildTickets > 0) {
+      setParentChildTickets(parentChildTickets - 1);
+      setValidationError(null);
+    }
+  };
+  const handleParentChildIncrease = () => {
+    if (seatsUsed + 2 > maxParticipants) return;
+    setParentChildTickets(parentChildTickets + 1);
     setValidationError(null);
   };
 
   const handleContinue = () => {
+    if (totalTickets <= 0) {
+      setValidationError('יש לבחור לפחות כרטיס אחד');
+      return;
+    }
     if (spotsExceeded) {
       setValidationError(`נותרו ${maxParticipants} מקומות בלבד בתאריך שנבחר`);
       return;
     }
-    const firstOrderError = validateFirstOrderMinimum(participants + extraItems, selectedSlot);
+    const firstOrderError = validateFirstOrderMinimum(totalTickets + extraItems, selectedSlot);
     if (firstOrderError) {
       setValidationError(FIRST_ORDER_MIN_TICKETS_MESSAGE);
       return;
@@ -79,59 +103,91 @@ export default function CeramicsParticipantsSection({
 
   return (
     <div className="flex flex-col items-center py-4">
-      <p className="text-[16px] text-[#464646]/70 mb-1">כמה משתתפים יהיו בסדנה?</p>
-      <p className="text-[17px] text-[#5E2F88] mb-4 font-semibold">
-        כל משתתף יכול להוסיף <span className="underline underline-offset-2">כלי קרמיקה נוסף אחד</span> להזמנה
-      </p>
+      <p className="text-[16px] text-[#464646]/70 mb-4">כמה משתתפים יהיו בסדנה?</p>
 
-      <div className="w-full max-w-md rounded-xl border border-[#e8e8e8] bg-[#f9f6fd] p-3 mb-4">
-        <p className="text-[13px] text-[#464646]/80 leading-relaxed text-center">
-          בסדנה תוכלו לבחור מתוך מגוון כלים שימושיים, כגון צלחות, קערות, ספלים ועוד – הכלולים במחיר הסדנה.
-          <br />
-          בנוסף, בסטודיו מחכה לכם מבחר של כלים מיוחדים ובגדלים שונים, אותם ניתן לבחור במקום בתוספת תשלום
-        </p>
-      </div>
-
-      {/* משתתפים */}
-      <div className="w-full max-w-md rounded-xl border border-[#e8e8e8] bg-white p-3 mb-2">
-        <div className="flex items-center justify-center gap-1.5 mb-2">
-          <Users className="w-5 h-5 text-[#581E83]" />
-          <span className="text-[20px] font-medium text-[#581E83]">משתתפים</span>
+      {/* יחיד + הורה וילד */}
+      <div className="w-full max-w-md grid grid-cols-2 gap-3 mb-2">
+        {/* יחיד */}
+        <div className="rounded-xl border border-[#e8e8e8] bg-white p-3">
+          <div className="flex items-center justify-center gap-1.5 mb-2">
+            <Users className="w-5 h-5 text-[#581E83]" />
+            <span className="text-[20px] font-medium text-[#581E83]">יחיד</span>
+            <span className="text-[16px] text-[#464646]/50">(9+)</span>
+          </div>
+          <div className="flex items-center justify-center gap-2">
+            <button
+              type="button"
+              onClick={handleSoloDecrease}
+              disabled={soloTickets <= 0}
+              className="w-8 h-8 rounded-full border-2 border-[#5E2F88] flex items-center justify-center
+                         text-[#5E2F88] hover:bg-[#5E2F88] hover:text-white transition-colors
+                         disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-[#5E2F88]"
+            >
+              <Minus className="w-3 h-3" />
+            </button>
+            <motion.div
+              key={soloTickets}
+              initial={{ scale: 0.8, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              className="text-3xl font-bold text-[#581E83] w-9 text-center"
+            >
+              {soloTickets}
+            </motion.div>
+            <button
+              type="button"
+              onClick={handleSoloIncrease}
+              disabled={seatsUsed >= maxParticipants}
+              className="w-8 h-8 rounded-full border-2 border-[#5E2F88] flex items-center justify-center
+                         text-[#5E2F88] hover:bg-[#5E2F88] hover:text-white transition-colors
+                         disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-[#5E2F88]"
+            >
+              <Plus className="w-3 h-3" />
+            </button>
+          </div>
         </div>
-        <div className="flex items-center justify-center gap-2">
-          <button
-            type="button"
-            onClick={handleParticipantsDecrease}
-            disabled={participants <= 1}
-            className="w-8 h-8 rounded-full border-2 border-[#5E2F88] flex items-center justify-center
-                       text-[#5E2F88] hover:bg-[#5E2F88] hover:text-white transition-colors
-                       disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-[#5E2F88]"
-          >
-            <Minus className="w-3 h-3" />
-          </button>
-          <motion.div
-            key={participants}
-            initial={{ scale: 0.8, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            className="text-3xl font-bold text-[#581E83] w-9 text-center"
-          >
-            {participants}
-          </motion.div>
-          <button
-            type="button"
-            onClick={handleParticipantsIncrease}
-            disabled={participants >= maxParticipants}
-            className="w-8 h-8 rounded-full border-2 border-[#5E2F88] flex items-center justify-center
-                       text-[#5E2F88] hover:bg-[#5E2F88] hover:text-white transition-colors
-                       disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-[#5E2F88]"
-          >
-            <Plus className="w-3 h-3" />
-          </button>
+
+        {/* הורה וילד */}
+        <div className="rounded-xl border border-[#e8e8e8] bg-white p-3">
+          <div className="flex items-center justify-center gap-1.5 mb-2">
+            <Baby className="w-5 h-5 text-[#581E83]" />
+            <span className="text-[20px] font-medium text-[#581E83]">הורה וילד</span>
+            <span className="text-[16px] text-[#464646]/50">(3-8)</span>
+          </div>
+          <div className="flex items-center justify-center gap-2">
+            <button
+              type="button"
+              onClick={handleParentChildDecrease}
+              disabled={parentChildTickets <= 0}
+              className="w-8 h-8 rounded-full border-2 border-[#5E2F88] flex items-center justify-center
+                         text-[#5E2F88] hover:bg-[#5E2F88] hover:text-white transition-colors
+                         disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-[#5E2F88]"
+            >
+              <Minus className="w-3 h-3" />
+            </button>
+            <motion.div
+              key={parentChildTickets}
+              initial={{ scale: 0.8, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              className="text-3xl font-bold text-[#581E83] w-9 text-center"
+            >
+              {parentChildTickets}
+            </motion.div>
+            <button
+              type="button"
+              onClick={handleParentChildIncrease}
+              disabled={seatsUsed + 2 > maxParticipants}
+              className="w-8 h-8 rounded-full border-2 border-[#5E2F88] flex items-center justify-center
+                         text-[#5E2F88] hover:bg-[#5E2F88] hover:text-white transition-colors
+                         disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-[#5E2F88]"
+            >
+              <Plus className="w-3 h-3" />
+            </button>
+          </div>
         </div>
       </div>
 
       {/* אין עוד מקומות פנויים */}
-      {!isGroupTooLarge && !spotsExceeded && participants >= maxParticipants && (
+      {!isGroupTooLarge && !spotsExceeded && seatsUsed >= maxParticipants && (
         <div className="w-full max-w-md mb-3 rounded-lg border border-amber-300 bg-amber-50 p-2.5">
           <div className="flex items-start gap-2">
             <AlertTriangle className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
@@ -189,31 +245,42 @@ export default function CeramicsParticipantsSection({
       )}
 
       {/* סיכום ויזואלי */}
-      {!isGroupTooLarge && (
+      {!isGroupTooLarge && totalTickets > 0 && (
         <div className="w-full max-w-md rounded-xl border border-[#e8e8e8] bg-[#fafafa] p-3 mb-3">
           <div className="flex items-start justify-around text-center">
             <div className="flex flex-col items-center gap-1">
               <Users className="w-5 h-5 text-[#581E83]" />
-              <span className="text-[20px] font-bold text-[#581E83]">{participants}</span>
-              <span className="text-[16px] text-[#464646]/60">{participants === 1 ? 'משתתף' : 'משתתפים'}</span>
+              <span className="text-[20px] font-bold text-[#581E83]">{seatsUsed}</span>
+              <span className="text-[16px] text-[#464646]/60">{seatsUsed === 1 ? 'משתתף' : 'משתתפים'}</span>
             </div>
 
             <div className="flex flex-col items-center gap-1">
               <Sparkles className="w-5 h-5 text-[#581E83]" />
-              <span className="text-[20px] font-bold text-[#581E83]">{participants + extraItems}</span>
-              <span className="text-[16px] text-[#464646]/60">{(participants + extraItems) === 1 ? 'כלי' : 'כלים'}</span>
+              <span className="text-[20px] font-bold text-[#581E83]">{totalTickets + extraItems}</span>
+              <span className="text-[16px] text-[#464646]/60">{(totalTickets + extraItems) === 1 ? 'כלי' : 'כלים'}</span>
             </div>
           </div>
 
           {totalPrice > 0 && (
             <div className="mt-3 pt-3 border-t border-[#e8e8e8] space-y-1.5 text-[14px] text-[#464646]">
-              <div className="flex justify-between gap-3">
-                <span className="flex items-center gap-1.5">
-                  <Users className="w-3.5 h-3.5" />
-                  {participants} × {participants === 1 ? 'כרטיס משתתף' : 'כרטיסי משתתפים'}
-                </span>
-                <span className="font-medium tabular-nums">₪{basePriceTotal}</span>
-              </div>
+              {soloTickets > 0 && (
+                <div className="flex justify-between gap-3">
+                  <span className="flex items-center gap-1.5">
+                    <Users className="w-3.5 h-3.5" />
+                    {soloTickets} × כרטיס יחיד
+                  </span>
+                  <span className="font-medium tabular-nums">₪{soloTotal}</span>
+                </div>
+              )}
+              {parentChildTickets > 0 && (
+                <div className="flex justify-between gap-3">
+                  <span className="flex items-center gap-1.5">
+                    <Baby className="w-3.5 h-3.5" />
+                    {parentChildTickets} × הורה + ילד
+                  </span>
+                  <span className="font-medium tabular-nums">₪{parentChildTotal}</span>
+                </div>
+              )}
               {extraItems > 0 && (
                 <div className="flex justify-between gap-3">
                   <span className="flex items-center gap-1.5">
@@ -295,7 +362,7 @@ export default function CeramicsParticipantsSection({
       )}
 
       {/* לינק לקבוצות גדולות — מתחת לכפתור */}
-      {!isGroupTooLarge && participants >= 5 && (
+      {!isGroupTooLarge && seatsUsed >= 5 && (
         <div className="mt-3">
           <a
             href="https://wa.link/jbfarf"

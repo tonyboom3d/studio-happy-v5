@@ -188,7 +188,7 @@ async function sendCandlesOrderConfirmationWhatsApp(order) {
 async function sendCeramicsOrderConfirmationWhatsApp(order) {
     const dateStr = formatWorkshopDate(order.workshopStart);
     const total = order.paidTotal || order.basePrice || 0;
-    const participants = order.adults || 0;
+    const participants = (order.adults || 0) + (order.children || 0);
     const extraItems = order.extraCandleCount || 0;
     const itemsCount = order.rugCount || 0;
 

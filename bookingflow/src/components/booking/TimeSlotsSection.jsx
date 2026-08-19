@@ -6,6 +6,7 @@ import {
   getSlotDateStrIsrael,
   getSlotLocalDate,
   getSlotTimeRange,
+  getSlotWeekdayEnum,
   sortSlotsByStartTime,
 } from '@/lib/slotTime';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -141,9 +142,22 @@ function getMinPriceForDate(slots, servicePricing) {
 
   slots.forEach(slot => {
     const pricing = servicePricing[slot.serviceId];
-    if (pricing?.minPrice && pricing.minPrice < minPrice) {
+    if (!pricing) return;
+
+    // Ceramics: pricing is per day-of-week (single consolidated service),
+    // not a flat {solo} per serviceId.
+    if (pricing.byDay) {
+      const dayEnum = getSlotWeekdayEnum(slot);
+      const dayEntry = dayEnum ? pricing.byDay[dayEnum] : null;
+      if (typeof dayEntry?.solo === 'number' && dayEntry.solo < minPrice) {
+        minPrice = dayEntry.solo;
+      }
+      return;
+    }
+
+    if (pricing.minPrice && pricing.minPrice < minPrice) {
       minPrice = pricing.minPrice;
-    } else if (pricing?.solo && pricing.solo < minPrice) {
+    } else if (pricing.solo && pricing.solo < minPrice) {
       minPrice = pricing.solo;
     }
   });

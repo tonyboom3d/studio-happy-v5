@@ -11,9 +11,9 @@ import { addLog } from '@/components/VersionLogger';
 import { computeCeramicsPrice, getMaxExtraItems, resolveCeramicsDayPricing } from '@/lib/ceramicsPricing';
 
 // Ceramics workshop ("סדנת קרמיקה") booking flow — same accordion shape as
-// Candels/WorkshopBooking, but simpler: no adult/child split (single
-// "participants" ticket) and no catalog/cup-selection step. Kept in its own
-// file/route so the Tufting and Candles flows are never touched.
+// Candels/WorkshopBooking. Two ticket types: "יחיד" (9+) and "הורה וילד"
+// (3-8, a parent+child pair per ticket). No catalog/cup-selection step.
+// Kept in its own file/route so the Tufting and Candles flows are never touched.
 const SESSION_TIMEOUT_MS = 10 * 60 * 1000; // 10 דקות
 
 export default function CeramicsBooking() {
@@ -25,9 +25,10 @@ export default function CeramicsBooking() {
   const [summaryExpanded, setSummaryExpanded] = useState(false);
   const [prevActiveSection, setPrevActiveSection] = useState(1);
 
-  // נתוני ההזמנה
+  // נתוני ההזמנה — שני סוגי כרטיסים: "יחיד" (9+) ו"הורה וילד" (3-8, זוג לכרטיס)
   const [selectedSlot, setSelectedSlot] = useState(null);
-  const [participants, setParticipants] = useState(1);
+  const [soloTickets, setSoloTickets] = useState(1);
+  const [parentChildTickets, setParentChildTickets] = useState(0);
   const [extraItems, setExtraItems] = useState(0);
 
   // אישור איפוס בחירות כשמשנים תאריך/שעה אחרי שכבר התקדמנו הלאה
@@ -118,8 +119,8 @@ export default function CeramicsBooking() {
   // עדכון Wix על התקדמות
   useEffect(() => {
     addLog(`[Ceramics] Active section changed to: ${activeSection}`, 'info');
-    notifyProgress(activeSection, { participants, extraItems, hasSelectedSlot: !!selectedSlot });
-  }, [activeSection, participants, extraItems, selectedSlot]);
+    notifyProgress(activeSection, { soloTickets, parentChildTickets, extraItems, hasSelectedSlot: !!selectedSlot });
+  }, [activeSection, soloTickets, parentChildTickets, extraItems, selectedSlot]);
 
   // פתיחה/סגירה אוטומטית של סיכום הזמנה
   useEffect(() => {
@@ -132,8 +133,8 @@ export default function CeramicsBooking() {
     setPrevActiveSection(activeSection);
   }, [activeSection, prevActiveSection]);
 
-  // מחיר: משתתף אחד = כרטיס בסיס אחד; "כלי קרמיקה נוסף" — עד יחידה אחת נוספת לכל משתתף.
-  const maxExtraItems = getMaxExtraItems(participants);
+  // מחיר: "כלי קרמיקה נוסף" — עד יחידה אחת נוספת לכל כרטיס (יחיד או הורה+ילד).
+  const maxExtraItems = getMaxExtraItems(soloTickets, parentChildTickets);
   useEffect(() => {
     if (extraItems > maxExtraItems) {
       setExtraItems(maxExtraItems);
@@ -145,8 +146,8 @@ export default function CeramicsBooking() {
     [selectedSlot, servicePricing]
   );
   const { totalPrice: orderTotalPreview } = useMemo(
-    () => computeCeramicsPrice({ participants, extraItems }, slotPricing),
-    [slotPricing, participants, extraItems]
+    () => computeCeramicsPrice({ soloTickets, parentChildTickets, extraItems }, slotPricing),
+    [slotPricing, soloTickets, parentChildTickets, extraItems]
   );
 
   // מעבר לסקשן הבא
@@ -173,7 +174,8 @@ export default function CeramicsBooking() {
 
   const confirmSlotChange = () => {
     setSelectedSlot(pendingSlot);
-    setParticipants(1);
+    setSoloTickets(1);
+    setParentChildTickets(0);
     setExtraItems(0);
     setCompletedSections([]);
     setActiveSection(1);
@@ -210,7 +212,8 @@ export default function CeramicsBooking() {
     setIsProcessing(true);
 
     const bookingData = {
-      participants,
+      participants: soloTickets,
+      parentChildTickets,
       extraItems,
       selectedSlot: selectedSlot ? {
         slot_id: selectedSlot._id || selectedSlot.sessionId,
@@ -410,8 +413,10 @@ export default function CeramicsBooking() {
                 )}
                 {section.id === 2 && (
                   <CeramicsParticipantsSection
-                    participants={participants}
-                    setParticipants={setParticipants}
+                    soloTickets={soloTickets}
+                    setSoloTickets={setSoloTickets}
+                    parentChildTickets={parentChildTickets}
+                    setParentChildTickets={setParentChildTickets}
                     extraItems={extraItems}
                     setExtraItems={setExtraItems}
                     maxParticipants={selectedSlot?.openSpots || 10}
@@ -422,7 +427,8 @@ export default function CeramicsBooking() {
                 )}
                 {section.id === 3 && (
                   <CeramicsOrderSummarySection
-                    participants={participants}
+                    soloTickets={soloTickets}
+                    parentChildTickets={parentChildTickets}
                     extraItems={extraItems}
                     selectedSlot={selectedSlot}
                     servicePricing={servicePricing}

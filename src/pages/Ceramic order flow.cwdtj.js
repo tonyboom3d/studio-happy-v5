@@ -87,7 +87,8 @@ async function handleBookingSubmit(bookingData, iframe) {
             : bookingData.selected_slots || [];
 
         const orderData = {
-            participants: bookingData.participants || 1,
+            participants: bookingData.participants || 0,
+            parentChildTickets: bookingData.parentChildTickets || 0,
             extraItems: bookingData.extraItems || 0,
             slots: slots,
             totalSessions: 1,

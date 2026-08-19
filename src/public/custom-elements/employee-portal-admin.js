@@ -1720,6 +1720,7 @@ const SETTINGS_FIELD_LABELS = {
     epaS_deadline: 'ימים לפני סוף החודש לסגירת הגשות',
     epaS_monthsAhead: 'מספר חודשים קדימה',
     epaS_minShifts: 'מכסת משמרות שבועית',
+    epaS_reqAE: 'מהן חובה צהריים/ערב בשבוע',
     epaS_minHours: 'אורך משמרת מינימלי (בשעות)',
     epaS_start: 'שעת התחלה ברירת מחדל',
     epaS_end: 'שעת סיום ברירת מחדל',
@@ -1753,6 +1754,7 @@ function renderSettingsPage(ce, d) {
                 ${settingsField(ce, 'epaS_deadline', SETTINGS_FIELD_LABELS.epaS_deadline, `<input id="epaS_deadline" type="number" min="1" value="${s.deadlineDaysBeforeMonthEnd ?? 4}">`)}
                 ${settingsField(ce, 'epaS_monthsAhead', SETTINGS_FIELD_LABELS.epaS_monthsAhead, `<input id="epaS_monthsAhead" type="number" min="1" value="${s.monthsAheadAllowed ?? 1}">`)}
                 ${settingsField(ce, 'epaS_minShifts', SETTINGS_FIELD_LABELS.epaS_minShifts, `<input id="epaS_minShifts" type="number" min="1" value="${s.defaultMinShiftsPerWeek ?? 1}">`)}
+                ${settingsField(ce, 'epaS_reqAE', SETTINGS_FIELD_LABELS.epaS_reqAE, `<input id="epaS_reqAE" type="number" min="0" value="${s.defaultRequiredAfternoonEveningPerWeek ?? 2}">`, 'מתוך המשמרות הנדרשות בשבוע — כמה חייבות להיות צהריים/ערב (השאר יכולות להיות בוקר)')}
                 ${settingsField(ce, 'epaS_minHours', SETTINGS_FIELD_LABELS.epaS_minHours, `<input id="epaS_minHours" type="number" min="0.5" step="0.5" value="${s.defaultMinShiftHours ?? 4}">`)}
                 ${settingsField(ce, 'epaS_start', SETTINGS_FIELD_LABELS.epaS_start, `<input id="epaS_start" class="epa-time-input" type="text" inputmode="numeric" maxlength="5" placeholder="HH:MM" value="${esc(s.defaultShiftStart || '10:00')}">`)}
                 ${settingsField(ce, 'epaS_end', SETTINGS_FIELD_LABELS.epaS_end, `<input id="epaS_end" class="epa-time-input" type="text" inputmode="numeric" maxlength="5" placeholder="HH:MM" value="${esc(s.defaultShiftEnd || '16:00')}">`)}
@@ -2752,6 +2754,7 @@ export function handleAdminClick(ce, action, target) {
             const deadlineDaysBeforeMonthEnd = positiveNumber('epaS_deadline');
             const monthsAheadAllowed = positiveNumber('epaS_monthsAhead');
             const defaultMinShiftsPerWeek = positiveNumber('epaS_minShifts');
+            const defaultRequiredAfternoonEveningPerWeek = positiveNumber('epaS_reqAE', { allowZero: true });
             const defaultMinShiftHours = positiveNumber('epaS_minHours');
             const defaultShiftStart = timeValue('epaS_start');
             const defaultShiftEnd = timeValue('epaS_end');
@@ -2786,6 +2789,7 @@ export function handleAdminClick(ce, action, target) {
                     deadlineDaysBeforeMonthEnd,
                     monthsAheadAllowed,
                     defaultMinShiftsPerWeek,
+                    defaultRequiredAfternoonEveningPerWeek,
                     defaultMinShiftHours,
                     defaultShiftStart,
                     defaultShiftEnd,

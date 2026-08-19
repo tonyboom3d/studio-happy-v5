@@ -43,6 +43,9 @@ export const DEFAULT_SETTINGS = {
     // quota itself is now weekly (see defaultMinShiftsPerWeek below).
     defaultMinShiftsPerMonth: 3,
     defaultMinShiftsPerWeek: 1,
+    // Of each week's required shifts, how many must be afternoon/evening
+    // (the rest may be morning). Capped to that week's required count.
+    defaultRequiredAfternoonEveningPerWeek: 2,
     requiredFridaysPerMonth: 2,
     requiredSaturdaysPerMonth: 2,
     defaultMinShiftHours: 4,
@@ -70,6 +73,7 @@ export function normalizeSettings(raw) {
     s.monthsAheadAllowed = Math.max(1, num(raw.monthsAheadAllowed, s.monthsAheadAllowed));
     s.defaultMinShiftsPerMonth = num(raw.defaultMinShiftsPerMonth, s.defaultMinShiftsPerMonth);
     s.defaultMinShiftsPerWeek = num(raw.defaultMinShiftsPerWeek, s.defaultMinShiftsPerWeek);
+    s.defaultRequiredAfternoonEveningPerWeek = num(raw.defaultRequiredAfternoonEveningPerWeek, s.defaultRequiredAfternoonEveningPerWeek);
     s.requiredFridaysPerMonth = num(raw.requiredFridaysPerMonth, s.requiredFridaysPerMonth);
     s.requiredSaturdaysPerMonth = num(raw.requiredSaturdaysPerMonth, s.requiredSaturdaysPerMonth);
     s.defaultMinShiftHours = num(raw.defaultMinShiftHours, s.defaultMinShiftHours);
@@ -297,6 +301,30 @@ export function getRequiredShiftsPerWeek(profile, settings) {
     return Number.isFinite(v) && v > 0 ? v : settings.defaultMinShiftsPerWeek;
 }
 
+/** Of a week's required shifts, how many must be afternoon/evening (per-employee override or site default). */
+export function getRequiredAfternoonEveningPerWeek(profile, settings) {
+    const v = Number(profile?.minAfternoonEveningPerWeek);
+    return Number.isFinite(v) && v >= 0 ? v : settings.defaultRequiredAfternoonEveningPerWeek;
+}
+
+/**
+ * Classifies a shift's start time into 'morning' | 'afternoon' | 'evening',
+ * mirroring the fixed slot windows offered on the employee portal (morning
+ * 08:30–15:30, afternoon 12:30–19:30, evening 16:30–23:30). Fridays only
+ * offer morning/afternoon slots, so any Friday shift starting at/after 12:30
+ * is classified as afternoon (never evening).
+ */
+export function classifyShiftSlot(dateKey, startTime) {
+    const start = String(startTime || '').trim();
+    if (!/^\d{2}:\d{2}$/.test(start)) return null;
+    const [y, m, d] = String(dateKey || '').split('-').map(Number);
+    const dow = (y && m && d) ? new Date(Date.UTC(y, m - 1, d)).getUTCDay() : null;
+    if (dow === 5) return start < '12:30' ? 'morning' : 'afternoon';
+    if (start < '12:30') return 'morning';
+    if (start < '16:30') return 'afternoon';
+    return 'evening';
+}
+
 /** Total required shifts across every week overlapping `monthKey` (for single-number displays). */
 export function getRequiredShiftsForMonth(profile, settings, monthKey) {
     return getRequiredShiftsPerWeek(profile, settings) * getWeeksInMonth(monthKey).length;
@@ -343,13 +371,19 @@ function countBlockedDaysInWeek(weekStart, isBlocked) {
  */
 export function evaluateQuota(profile, settings, monthKey, allSubmissions, vacations) {
     const requiredPerWeek = getRequiredShiftsPerWeek(profile, settings);
+    const requiredAePerWeek = getRequiredAfternoonEveningPerWeek(profile, settings);
     const countByWeek = {};
+    const aeCountByWeek = {};
     for (const s of (allSubmissions || [])) {
         if (s.status === SUBMISSION_STATUS.REJECTED) continue;
         const dateKey = s.dateKey || toDateKey(s.date);
         if (!dateKey) continue;
         const weekStart = getWeekStart(dateKey);
         countByWeek[weekStart] = (countByWeek[weekStart] || 0) + 1;
+        const slot = classifyShiftSlot(dateKey, s.startTime);
+        if (slot === 'afternoon' || slot === 'evening') {
+            aeCountByWeek[weekStart] = (aeCountByWeek[weekStart] || 0) + 1;
+        }
     }
     const isBlocked = buildBlockedDayChecker(vacations, getClosedHolidayDates(settings));
     const weeks = getWeeksInMonth(monthKey).map(weekStart => {
@@ -358,18 +392,25 @@ export function evaluateQuota(profile, settings, monthKey, allSubmissions, vacat
         const availableDays = Math.max(0, 7 - blockedDays);
         const required = Math.min(requiredPerWeek, availableDays);
         const submitted = countByWeek[weekStart] || 0;
+        const aeRequired = Math.min(requiredAePerWeek, required);
+        const aeSubmitted = aeCountByWeek[weekStart] || 0;
+        const aeMet = aeSubmitted >= aeRequired;
         return {
             weekStart, weekEnd, submitted, required, requiredBase: requiredPerWeek,
-            vacationExempt: requiredPerWeek - required, met: submitted >= required,
+            vacationExempt: requiredPerWeek - required, met: submitted >= required && aeMet,
+            aeRequired, aeSubmitted, aeMet,
         };
     });
     const submitted = weeks.reduce((sum, w) => sum + w.submitted, 0);
     const required = weeks.reduce((sum, w) => sum + w.required, 0);
     const requiredBase = requiredPerWeek * weeks.length;
     const vacationExempt = weeks.reduce((sum, w) => sum + w.vacationExempt, 0);
+    const aeRequiredTotal = weeks.reduce((sum, w) => sum + w.aeRequired, 0);
+    const aeSubmittedTotal = weeks.reduce((sum, w) => sum + w.aeSubmitted, 0);
     const met = weeks.every(w => w.met);
     return {
         requiredPerWeek, required, requiredBase, submitted, vacationExempt, met,
+        requiredAePerWeek, aeRequiredTotal, aeSubmittedTotal,
         bonusUnlocked: settings.bonusUnlockEnabled && met, weeks,
     };
 }
@@ -381,13 +422,19 @@ export function evaluateQuota(profile, settings, monthKey, allSubmissions, vacat
  */
 export function evaluatePeriodQuota(profile, settings, period, allSubmissions, vacations) {
     const requiredPerWeek = getRequiredShiftsPerWeek(profile, settings);
+    const requiredAePerWeek = getRequiredAfternoonEveningPerWeek(profile, settings);
     const countByWeek = {};
+    const aeCountByWeek = {};
     for (const s of (allSubmissions || [])) {
         if (s.status === SUBMISSION_STATUS.REJECTED) continue;
         const dateKey = s.dateKey || toDateKey(s.date);
         if (!dateKey) continue;
         const weekStart = getWeekStart(dateKey);
         countByWeek[weekStart] = (countByWeek[weekStart] || 0) + 1;
+        const slot = classifyShiftSlot(dateKey, s.startTime);
+        if (slot === 'afternoon' || slot === 'evening') {
+            aeCountByWeek[weekStart] = (aeCountByWeek[weekStart] || 0) + 1;
+        }
     }
     const isBlocked = buildBlockedDayChecker(vacations, getClosedHolidayDates(settings));
 
@@ -404,12 +451,22 @@ export function evaluatePeriodQuota(profile, settings, period, allSubmissions, v
         const availableDays = Math.max(0, 7 - blockedDays);
         const required = Math.min(requiredPerWeek, availableDays);
         const submitted = countByWeek[weekStart] || 0;
-        return { weekStart, weekEnd, submitted, required, requiredBase: requiredPerWeek, met: submitted >= required };
+        const aeRequired = Math.min(requiredAePerWeek, required);
+        const aeSubmitted = aeCountByWeek[weekStart] || 0;
+        const aeMet = aeSubmitted >= aeRequired;
+        return {
+            weekStart, weekEnd, submitted, required, requiredBase: requiredPerWeek,
+            met: submitted >= required && aeMet, aeRequired, aeSubmitted, aeMet,
+        };
     });
     const submitted = weeks.reduce((sum, w) => sum + w.submitted, 0);
     const required = weeks.reduce((sum, w) => sum + w.required, 0);
+    const aeMissing = weeks.reduce((sum, w) => sum + Math.max(0, w.aeRequired - w.aeSubmitted), 0);
     const met = weeks.every(w => w.met);
-    return { requiredPerWeek, required, submitted, missing: Math.max(0, required - submitted), met, weeks };
+    return {
+        requiredPerWeek, required, submitted, missing: Math.max(0, required - submitted), met, weeks,
+        requiredAePerWeek, aeMissing,
+    };
 }
 
 /**
@@ -423,22 +480,32 @@ export function evaluateWeekendCompliance(profile, settings, monthKey, allSubmis
     const [y, m] = monthKey.split('-').map(Number);
     const daysInMonth = new Date(Date.UTC(y, m, 0)).getUTCDate();
     const isBlocked = buildBlockedDayChecker(vacations, getClosedHolidayDates(settings));
-    const submittedDates = new Set((allSubmissions || [])
-        .filter(s => s.status !== SUBMISSION_STATUS.REJECTED)
-        .map(s => s.dateKey || toDateKey(s.date)));
+    const submittedByDate = {};
+    for (const s of (allSubmissions || [])) {
+        if (s.status === SUBMISSION_STATUS.REJECTED) continue;
+        const dk = s.dateKey || toDateKey(s.date);
+        if (dk) submittedByDate[dk] = s;
+    }
 
     let fridaySubmitted = 0, saturdaySubmitted = 0, fridayExempt = 0, saturdayExempt = 0;
+    let fridayMorningSubmitted = 0, fridayAfternoonSubmitted = 0;
     for (let day = 1; day <= daysInMonth; day++) {
         const dateKey = `${monthKey}-${String(day).padStart(2, '0')}`;
         const dow = new Date(Date.UTC(y, m - 1, day)).getUTCDay(); // 5=Friday, 6=Saturday
         if (dow !== 5 && dow !== 6) continue;
         const exempt = isBlocked(dateKey);
+        const sub = submittedByDate[dateKey];
         if (dow === 5) {
             if (exempt) fridayExempt++;
-            else if (submittedDates.has(dateKey)) fridaySubmitted++;
+            else if (sub) {
+                fridaySubmitted++;
+                const slot = classifyShiftSlot(dateKey, sub.startTime);
+                if (slot === 'morning') fridayMorningSubmitted++;
+                else fridayAfternoonSubmitted++;
+            }
         } else {
             if (exempt) saturdayExempt++;
-            else if (submittedDates.has(dateKey)) saturdaySubmitted++;
+            else if (sub) saturdaySubmitted++;
         }
     }
 
@@ -448,10 +515,19 @@ export function evaluateWeekendCompliance(profile, settings, monthKey, allSubmis
         ? Number(profile.requiredSaturdaysPerMonth) : (settings.requiredSaturdaysPerMonth ?? 0);
     const requiredFridays = Math.max(0, baseFridays - fridayExempt);
     const requiredSaturdays = Math.max(0, baseSaturdays - saturdayExempt);
+    // Of the required Fridays, at least one must be morning and (once 2+ are
+    // required) at least one must be afternoon.
+    const fridayMorningRequired = requiredFridays >= 1 ? 1 : 0;
+    const fridayAfternoonRequired = requiredFridays >= 2 ? 1 : 0;
+    const fridayMorningMet = fridayMorningSubmitted >= fridayMorningRequired;
+    const fridayAfternoonMet = fridayAfternoonSubmitted >= fridayAfternoonRequired;
     const fridays = {
         submitted: fridaySubmitted, required: requiredFridays,
         requiredBase: baseFridays, vacationExempt: fridayExempt,
-        met: fridaySubmitted >= requiredFridays,
+        morningSubmitted: fridayMorningSubmitted, afternoonSubmitted: fridayAfternoonSubmitted,
+        morningRequired: fridayMorningRequired, afternoonRequired: fridayAfternoonRequired,
+        morningMet: fridayMorningMet, afternoonMet: fridayAfternoonMet,
+        met: fridaySubmitted >= requiredFridays && fridayMorningMet && fridayAfternoonMet,
     };
     const saturdays = {
         submitted: saturdaySubmitted, required: requiredSaturdays,

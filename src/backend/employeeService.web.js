@@ -338,8 +338,8 @@ async function loadScheduledWorkshopDetails(scheduledSubmissions) {
 
 function buildMonthsSummary(role, settings, submissions, now, vacations) {
     const openMonths = getOpenMonthKeys(settings, now);
-    // evaluateQuota/evaluateWeekendCompliance expect { status, date|dateKey }.
-    const subsForRules = submissions.map(s => ({ status: s.status, dateKey: s.date }));
+    // evaluateQuota/evaluateWeekendCompliance expect { status, date|dateKey, startTime }.
+    const subsForRules = submissions.map(s => ({ status: s.status, dateKey: s.date, startTime: s.startTime }));
     return openMonths.map(monthKey => {
         const quota = evaluateQuota(role, settings, monthKey, subsForRules, vacations);
         const weekend = evaluateWeekendCompliance(role, settings, monthKey, subsForRules, vacations);
@@ -353,8 +353,16 @@ function buildMonthsSummary(role, settings, submissions, now, vacations) {
             weekend,
             // Consolidated progress-bar payload: three components summing to 100%.
             progress: {
-                shifts: { submitted: quota.submitted, required: quota.required, requiredBase: quota.requiredBase, exempt: quota.vacationExempt },
-                fridays: { submitted: weekend.fridays.submitted, required: weekend.fridays.required, requiredBase: weekend.fridays.requiredBase, exempt: weekend.fridays.vacationExempt },
+                shifts: {
+                    submitted: quota.submitted, required: quota.required, requiredBase: quota.requiredBase, exempt: quota.vacationExempt,
+                    aeSubmitted: quota.aeSubmittedTotal, aeRequired: quota.aeRequiredTotal,
+                },
+                fridays: {
+                    submitted: weekend.fridays.submitted, required: weekend.fridays.required, requiredBase: weekend.fridays.requiredBase, exempt: weekend.fridays.vacationExempt,
+                    morningSubmitted: weekend.fridays.morningSubmitted, afternoonSubmitted: weekend.fridays.afternoonSubmitted,
+                    morningRequired: weekend.fridays.morningRequired, afternoonRequired: weekend.fridays.afternoonRequired,
+                    morningMet: weekend.fridays.morningMet, afternoonMet: weekend.fridays.afternoonMet,
+                },
                 saturdays: { submitted: weekend.saturdays.submitted, required: weekend.saturdays.required, requiredBase: weekend.saturdays.requiredBase, exempt: weekend.saturdays.vacationExempt },
             },
         };
@@ -363,7 +371,7 @@ function buildMonthsSummary(role, settings, submissions, now, vacations) {
 
 /** Upcoming 2-week submission windows + how many shifts are still missing for each. */
 function buildUpcomingWindows(role, settings, submissions, now, vacations) {
-    const subsForRules = submissions.map(s => ({ status: s.status, dateKey: s.date }));
+    const subsForRules = submissions.map(s => ({ status: s.status, dateKey: s.date, startTime: s.startTime }));
     return getUpcomingPeriods(now, 2).map(period => {
         const quota = evaluatePeriodQuota(role, settings, period, subsForRules, vacations);
         return {
@@ -373,6 +381,7 @@ function buildUpcomingWindows(role, settings, submissions, now, vacations) {
             required: quota.required,
             submitted: quota.submitted,
             missing: quota.missing,
+            aeMissing: quota.aeMissing,
             met: quota.met,
         };
     });

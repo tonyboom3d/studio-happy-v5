@@ -130,7 +130,7 @@ export async function processDeadlineReminders(now = new Date()) {
     const subsByEmployee = {};
     for (const s of (subsResult.items || [])) {
         if (!subsByEmployee[s.employeeId]) subsByEmployee[s.employeeId] = [];
-        subsByEmployee[s.employeeId].push({ status: s.status, dateKey: toDateKey(s.date) });
+        subsByEmployee[s.employeeId].push({ status: s.status, dateKey: toDateKey(s.date), startTime: s.startTime });
     }
     const vacationsByEmployee = await loadVacationsOverlappingRangeByEmployee(period.start, period.end);
 

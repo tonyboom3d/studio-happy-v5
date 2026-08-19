@@ -254,7 +254,7 @@ export const getStaffAdminData = webMethod(Permissions.SiteMember, async (monthK
     const weeklySubsByEmployee = {};
     for (const s of (weeklySubsRaw.items || [])) {
         if (!weeklySubsByEmployee[s.employeeId]) weeklySubsByEmployee[s.employeeId] = [];
-        weeklySubsByEmployee[s.employeeId].push({ status: s.status, dateKey: toDateKey(s.date) });
+        weeklySubsByEmployee[s.employeeId].push({ status: s.status, dateKey: toDateKey(s.date), startTime: s.startTime });
     }
 
     const employees = Object.values(board.rolesById)
@@ -388,6 +388,7 @@ export const getStaffAdminData = webMethod(Permissions.SiteMember, async (monthK
             deadlineDaysBeforeMonthEnd: settings.deadlineDaysBeforeMonthEnd,
             monthsAheadAllowed: settings.monthsAheadAllowed,
             defaultMinShiftsPerWeek: settings.defaultMinShiftsPerWeek,
+            defaultRequiredAfternoonEveningPerWeek: settings.defaultRequiredAfternoonEveningPerWeek,
             requiredFridaysPerMonth: settings.requiredFridaysPerMonth,
             requiredSaturdaysPerMonth: settings.requiredSaturdaysPerMonth,
             defaultMinShiftHours: settings.defaultMinShiftHours,
@@ -996,7 +997,7 @@ export const updateAvailabilitySettings = webMethod(Permissions.SiteMember, asyn
         if (!Number.isFinite(value) || value <= 0) throw new Error('BAD_REQUEST: ערך מספרי לא תקין.');
         updated[field] = value;
     }
-    const nonNegativeNumberFields = ['requiredFridaysPerMonth', 'requiredSaturdaysPerMonth'];
+    const nonNegativeNumberFields = ['requiredFridaysPerMonth', 'requiredSaturdaysPerMonth', 'defaultRequiredAfternoonEveningPerWeek'];
     for (const field of nonNegativeNumberFields) {
         if (patch[field] === undefined) continue;
         const value = Number(patch[field]);

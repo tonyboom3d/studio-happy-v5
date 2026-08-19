@@ -86,6 +86,7 @@ employee-portal * { box-sizing: border-box; }
 .ep-progress-breakdown { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 7px; font-size: 11px; color: #6b7280; }
 .ep-progress-breakdown b { color: #374151; font-weight: 700; }
 .ep-progress-breakdown .vac-note { color: #0284c7; font-weight: 600; }
+.ep-progress-breakdown .split-warn { color: #b45309; font-weight: 700; }
 .ep-cal-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
 .ep-cal-title { font-weight: 700; font-size: 17px; }
 .ep-cal-nav { display: flex; gap: 6px; }
@@ -410,11 +411,19 @@ const SHIFT_MIN_TIME = '08:00';
 const SHIFT_MAX_TIME = '23:59';
 // Fixed shift slots offered to employees when submitting availability for a
 // regular (non-short) day. "custom" lets them type their own start/end.
+// Fridays only offer morning/afternoon (no evening slot) — see slotsForDate().
 const FIXED_SHIFT_SLOTS = [
-    { id: 'morning', label: 'בוקר', startTime: '08:30', endTime: '14:30' },
-    { id: 'afternoon', label: 'צהריים', startTime: '14:30', endTime: '20:30' },
-    { id: 'evening', label: 'ערב', startTime: '19:30', endTime: '23:30' },
+    { id: 'morning', label: 'בוקר', startTime: '08:30', endTime: '15:30' },
+    { id: 'afternoon', label: 'צהריים', startTime: '12:30', endTime: '19:30' },
+    { id: 'evening', label: 'ערב', startTime: '16:30', endTime: '23:30' },
 ];
+/** Shift slot options available for a given date — Fridays exclude the evening slot. */
+function slotsForDate(dateKey) {
+    const [y, m, d] = String(dateKey || '').split('-').map(Number);
+    if (!y || !m || !d) return FIXED_SHIFT_SLOTS;
+    const dow = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+    return dow === 5 ? FIXED_SHIFT_SLOTS.filter(s => s.id !== 'evening') : FIXED_SHIFT_SLOTS;
+}
 const STATUS_LABELS = {
     SUBMITTED: 'הוגש',
     STANDBY: 'בהמתנה',
@@ -1772,7 +1781,7 @@ class EmployeePortal extends HTMLElement {
     _renderSlotDropdown(dateKey, times) {
         const slots = times.slots || [];
         const open = this._slotMenuOpen === dateKey;
-        const options = FIXED_SHIFT_SLOTS.map(slot => `
+        const options = slotsForDate(dateKey).map(slot => `
             <label class="ep-slot-ms-opt">
                 <input type="checkbox" data-action="toggle-slot-option" data-date="${dateKey}" data-slot="${slot.id}" ${slots.includes(slot.id) ? 'checked' : ''} ${slots.includes('custom') ? 'disabled' : ''}>
                 <span>${slot.label}</span>
@@ -2155,6 +2164,14 @@ class EmployeePortal extends HTMLElement {
             const exemptNote = comp.exempt ? ` (מתוכם ${comp.exempt} חופשה)` : '';
             return `<span>${label} <b>${comp.submitted}/${comp.required}</b>${exemptNote}</span>`;
         };
+        const aeNote = shifts.aeRequired
+            ? `<span class="${shifts.aeSubmitted >= shifts.aeRequired ? '' : 'split-warn'}">מתוכן צהריים/ערב <b>${shifts.aeSubmitted}/${shifts.aeRequired}</b></span>`
+            : '';
+        const fridaySplitOk = (fridays.morningRequired ? fridays.morningSubmitted >= fridays.morningRequired : true)
+            && (fridays.afternoonRequired ? fridays.afternoonSubmitted >= fridays.afternoonRequired : true);
+        const fridaySplitNote = (fridays.morningRequired || fridays.afternoonRequired)
+            ? `<span class="${fridaySplitOk ? '' : 'split-warn'}">שישי: בוקר <b>${fridays.morningSubmitted}/${fridays.morningRequired}</b> · צהריים <b>${fridays.afternoonSubmitted}/${fridays.afternoonRequired}</b></span>`
+            : '';
 
         return `
             <div class="ep-progress ${complete ? 'complete' : ''}">
@@ -2169,7 +2186,9 @@ class EmployeePortal extends HTMLElement {
                 </div>
                 <div class="ep-progress-breakdown">
                     ${breakdownPart('משמרות', shifts)}
+                    ${aeNote}
                     ${breakdownPart('שישי', fridays)}
+                    ${fridaySplitNote}
                     ${breakdownPart('שבת', saturdays)}
                     ${totals.vacation > 0 ? `<span class="vac-note">🌴 חופשה מפחיתה מהדרישה</span>` : ''}
                 </div>
@@ -3000,7 +3019,7 @@ class EmployeePortal extends HTMLElement {
                 const startTime = normalizeTimeStr(this.querySelector('#epShiftStart')?.value);
                 const endTime = normalizeTimeStr(this.querySelector('#epShiftEnd')?.value);
                 const bounds = sub ? this._getShortDayBounds(sub.date) : null;
-                if (!isShiftWithinShortDayBounds(startTime, endTime, bounds)) {
+                if (bounds && !isShiftWithinShortDayBounds(startTime, endTime, bounds)) {
                     this._toast(`ביום מקוצר ניתן לבחור רק בין ${bounds.shortStart} ל-${bounds.shortEnd}.`, 'error');
                     return;
                 }
@@ -3014,7 +3033,7 @@ class EmployeePortal extends HTMLElement {
                 const requestedStartTime = normalizeTimeStr(this.querySelector('#epShiftStart')?.value);
                 const requestedEndTime = normalizeTimeStr(this.querySelector('#epShiftEnd')?.value);
                 const bounds = sub ? this._getShortDayBounds(sub.date) : null;
-                if (!isShiftWithinShortDayBounds(requestedStartTime, requestedEndTime, bounds)) {
+                if (bounds && !isShiftWithinShortDayBounds(requestedStartTime, requestedEndTime, bounds)) {
                     this._toast(`ביום מקוצר ניתן לבחור רק בין ${bounds.shortStart} ל-${bounds.shortEnd}.`, 'error');
                     return;
                 }
@@ -3290,6 +3309,7 @@ class EmployeePortal extends HTMLElement {
             const defaults = this._defaultShiftTimes();
             const bounds = this._getShortDayBounds(dateKey);
             if (!Array.isArray(entry.slots)) entry.slots = [];
+            const allowedSlotIds = slotsForDate(dateKey).map(s => s.id);
             if (slotId === 'custom') {
                 if (input.checked) {
                     entry.slots = ['custom'];
@@ -3299,6 +3319,7 @@ class EmployeePortal extends HTMLElement {
                     entry.slots = entry.slots.filter(s => s !== 'custom');
                 }
             } else if (input.checked) {
+                if (!allowedSlotIds.includes(slotId)) { input.checked = false; return; }
                 entry.slots = entry.slots.filter(s => s !== 'custom');
                 if (!entry.slots.includes(slotId)) entry.slots.push(slotId);
             } else {

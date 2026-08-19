@@ -4,7 +4,7 @@ import { motion } from 'framer-motion';
 import { format } from 'date-fns';
 import { he } from 'date-fns/locale';
 import { getSlotLocalDate, getSlotTimeRange } from '@/lib/slotTime';
-import { computeCeramicsPrice } from '@/lib/ceramicsPricing';
+import { computeCeramicsPrice, resolveCeramicsDayPricing } from '@/lib/ceramicsPricing';
 
 // Order summary for the ceramics workshop — participant ticket line + the
 // "כלי קרמיקה נוסף" surcharge line (if any) and the total, followed by the
@@ -29,7 +29,7 @@ export default function CeramicsOrderSummarySection({
     };
   }, [selectedSlot]);
 
-  const pricing = servicePricing?.[selectedSlot?.serviceId];
+  const pricing = resolveCeramicsDayPricing(servicePricing?.[selectedSlot?.serviceId], selectedSlot);
   const { basePriceTotal, extraItemsTotal } = useMemo(
     () => computeCeramicsPrice({ participants, extraItems }, pricing),
     [pricing, participants, extraItems]

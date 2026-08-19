@@ -4,14 +4,11 @@ import {
     createAndCheckout, getCourseSessions, getServicePricing,
 } from 'backend/bookingService.web.js';
 
-// Ceramics Workshop ("סדנת קרמיקה") Service IDs — thin Velo bridge for the
-// "ceramics" React route. Kept separate from the Tufting/Candles pages so
-// those flows are never touched by this file.
-const CERAMICS_SERVICE_IDS = {
-    weekday: 'ad89914a-1845-48c6-804d-544cd17f179b',
-    weekend: '06508cd0-92ec-49d9-bd27-a3d4999afc89',
-};
-const CERAMICS_SERVICE_ID_LIST = Object.values(CERAMICS_SERVICE_IDS);
+// Ceramics Workshop ("סדנת קרמיקה") — single consolidated Wix Bookings
+// service. Thin Velo bridge for the "ceramics" React route. Kept separate
+// from the Tufting/Candles pages so those flows are never touched by this file.
+const CERAMICS_SERVICE_ID = 'ad89914a-1845-48c6-804d-544cd17f179b';
+const CERAMICS_SERVICE_ID_LIST = [CERAMICS_SERVICE_ID];
 
 $w.onReady(function () {
     const mainIframe = $w('#htmlComponent1');
@@ -41,7 +38,7 @@ async function initData(iframe) {
             type: 'WIX_DATA',
             slots,
             servicePricing,
-            serviceIds: CERAMICS_SERVICE_IDS,
+            serviceId: CERAMICS_SERVICE_ID,
         });
     } catch (err) {
         console.error('[Wix][ceramics] Failed to init data:', err?.message || err);

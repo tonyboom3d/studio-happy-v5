@@ -5,6 +5,26 @@
 // Model: one "משתתף" ticket per person (no adult/child split); each
 // participant may add up to one "כלי קרמיקה נוסף" (extra item), a
 // surcharge-only add-on with no Wix Bookings seat of its own.
+//
+// Pricing is defined in Wix per day-of-week (single consolidated service
+// with ticket variants), not per serviceId — resolveCeramicsDayPricing picks
+// out the {base, extraItem} pair for the selected slot's day.
+
+import { getSlotWeekdayEnum } from './slotTime';
+
+/**
+ * @param {{ byDay?: Record<string, { solo: number|null, extraItem: number|null }> }} servicePricing
+ * @param {object} slot - the selected slot (needs slot.start.timestamp)
+ * @returns {{ base: number, extraItem: number } | null}
+ */
+export function resolveCeramicsDayPricing(servicePricing, slot) {
+  const byDay = servicePricing?.byDay;
+  if (!byDay || !slot) return null;
+  const dayEnum = getSlotWeekdayEnum(slot);
+  const entry = dayEnum ? byDay[dayEnum] : null;
+  if (!entry || typeof entry.solo !== 'number') return null;
+  return { base: entry.solo, extraItem: entry.extraItem || 0 };
+}
 
 /** Extra ceramic items never exceed one per participant. */
 export function getMaxExtraItems(participants) {

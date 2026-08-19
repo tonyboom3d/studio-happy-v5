@@ -46,30 +46,25 @@ function isCandlesServiceId(serviceId) {
     return !!serviceId && CANDLES_ID_SET.has(serviceId);
 }
 
-// Ceramics Workshop ("סדנת קרמיקה") Service IDs — see src/pages/Ceramic order flow.cwdtj.js
-const CERAMICS_SERVICE_IDS = {
-    weekday: 'ad89914a-1845-48c6-804d-544cd17f179b',
-    weekend: '06508cd0-92ec-49d9-bd27-a3d4999afc89',
-};
-const CERAMICS_ID_SET = new Set(Object.values(CERAMICS_SERVICE_IDS));
+// Ceramics Workshop ("סדנת קרמיקה") — a single consolidated Wix Bookings
+// service. Pricing per day-of-week ("יחיד" / "כלי נוסף") comes from its
+// ticket variants (see _fetchCeramicsPricingInternal below), not from a
+// hardcoded table. See src/pages/Ceramic order flow.cwdtj.js.
+// The second (legacy) ID is kept only so historical orders still classify
+// as ceramics; it is no longer used for new bookings/pricing.
+const CERAMICS_SERVICE_ID = 'ad89914a-1845-48c6-804d-544cd17f179b';
+const CERAMICS_LEGACY_SERVICE_IDS = ['06508cd0-92ec-49d9-bd27-a3d4999afc89'];
+const CERAMICS_ID_SET = new Set([CERAMICS_SERVICE_ID, ...CERAMICS_LEGACY_SERVICE_IDS]);
 
-/** True if serviceId belongs to the ceramics ("סדנת קרמיקה") workshop. */
+/** True if serviceId belongs to the ceramics ("סדנת קרמיקה") workshop (current or legacy). */
 function isCeramicsServiceId(serviceId) {
     return !!serviceId && CERAMICS_ID_SET.has(serviceId);
 }
 
-// Ceramics pricing is fixed (not fetched from Wix Bookings Variants) — one
-// "משתתף" ticket type per person, plus an optional "כלי קרמיקה נוסף" surcharge
-// (max 1 per participant), modeled purely as a checkout custom line item.
-const CERAMICS_PRICING_BY_SERVICE = {
-    'ad89914a-1845-48c6-804d-544cd17f179b': { base: 170, extraItem: 80 }, // אמצע שבוע
-    '06508cd0-92ec-49d9-bd27-a3d4999afc89': { base: 195, extraItem: 90 }, // סופ"ש
-};
-
 /** Resolve the full sibling-service-id group (used for multi-service availability/pricing) for a given serviceId. */
 function getServiceIdsGroupFor(serviceId) {
     if (isCandlesServiceId(serviceId)) return Object.values(CANDLES_SERVICE_IDS);
-    if (isCeramicsServiceId(serviceId)) return Object.values(CERAMICS_SERVICE_IDS);
+    if (isCeramicsServiceId(serviceId)) return [CERAMICS_SERVICE_ID];
     return Object.values(TUFTING_SERVICE_IDS);
 }
 
@@ -165,6 +160,18 @@ function toIsraelLocalDateTime(dateObj) {
         hourOfDay: Number(get('hour')),
         minutesOfHour: Number(get('minute')),
     };
+}
+
+/**
+ * Day-of-week (Israel timezone) as a Wix Bookings-style enum string, e.g.
+ * 'SUNDAY'..'SATURDAY'. Used to resolve ceramics ticket-variant pricing,
+ * which is defined per day-of-week in Wix rather than per serviceId.
+ */
+function getIsraelWeekdayEnum(dateInput) {
+    const dateObj = dateInput instanceof Date ? dateInput : new Date(dateInput);
+    if (isNaN(dateObj.getTime())) return null;
+    const weekday = new Intl.DateTimeFormat('en-US', { timeZone: ISRAEL_TZ, weekday: 'long' }).format(dateObj);
+    return weekday.toUpperCase();
 }
 
 /**
@@ -578,7 +585,7 @@ export const createAndCheckout = webMethod(Permissions.Anyone, async (orderData)
         throw new Error('No slots provided for booking');
     }
 
-    // --- חישוב מחיר (טאפטינג/נרות: Wix Variants API; קרמיקה: מחיר קבוע) ---
+    // --- חישוב מחיר: כולם דרך Wix Bookings Variants API (קרמיקה: לפי יום בשבוע) ---
     const serviceId = slotsList[0].serviceId;
     const isCandles = isCandlesServiceId(serviceId);
     const isCeramics = isCeramicsServiceId(serviceId);
@@ -588,9 +595,15 @@ export const createAndCheckout = webMethod(Permissions.Anyone, async (orderData)
     }
     const allPricing = await getServicePricingCached(getServiceIdsGroupFor(serviceId));
     const servicePricing = allPricing[serviceId];
+    // קרמיקה: המחיר תלוי ביום בשבוע של הסלוט (ולא בסרוויס — יש סרוויס אחד
+    // מאוחד עם ticket variants לפי יום). נפתור את יום השבוע כאן, לפני חישוב basePrice.
+    let ceramicsDayPricing = null;
     if (isCeramics) {
-        if (!servicePricing || typeof servicePricing.base !== 'number') {
-            throw new Error(`No ceramics pricing configured for service: ${serviceId}`);
+        const ceramicsSlotStartIso = slotsList[0].date || slotsList[0].startDate || slotsList[0].start?.timestamp || slotsList[0].start;
+        const ceramicsDayEnum = getIsraelWeekdayEnum(ceramicsSlotStartIso);
+        ceramicsDayPricing = servicePricing?.byDay?.[ceramicsDayEnum];
+        if (!ceramicsDayEnum || !ceramicsDayPricing || typeof ceramicsDayPricing.solo !== 'number') {
+            throw new Error(`No ceramics pricing configured for day: ${ceramicsDayEnum || 'unknown'}`);
         }
     } else if (!servicePricing || !servicePricing.solo) {
         throw new Error(`No pricing found for service: ${serviceId}. Make sure Wix Bookings variants are configured.`);
@@ -617,7 +630,7 @@ export const createAndCheckout = webMethod(Permissions.Anyone, async (orderData)
         extraChildren = 0;
         extraCandles = Math.max(0, Math.min(Number(rawExtraItems) || 0, numAdults));
         rugCount = numAdults + extraCandles; // סה"כ יחידות קרמיקה (בסיס + נוספות)
-        basePrice = (numAdults * (servicePricing.base || 0)) + (extraCandles * (servicePricing.extraItem || 0));
+        basePrice = (numAdults * (ceramicsDayPricing.solo || 0)) + (extraCandles * (ceramicsDayPricing.extraItem || 0));
     } else if (isCandles) {
         const parentChildPairsCalc = Math.min(numAdults, numChildren);
         const remainingChildren = numChildren - parentChildPairsCalc;
@@ -923,7 +936,7 @@ export const createAndCheckout = webMethod(Permissions.Anyone, async (orderData)
     // Add-On/seat involved), mirroring how candles' cups are represented.
     const ceramicsExtraItemLineItems = (isCeramics && extraCandles > 0) ? [{
         quantity: extraCandles,
-        price: (servicePricing.extraItem || 0).toFixed(2),
+        price: (ceramicsDayPricing?.extraItem || 0).toFixed(2),
         productName: { original: 'כלי קרמיקה נוסף' },
         itemType: { preset: 'PHYSICAL' },
     }] : [];
@@ -2146,20 +2159,65 @@ async function _fetchServicePricingInternal(serviceIds) {
     return result;
 }
 
+/**
+ * שליפת מחירי הקרמיקה ("יחיד" / "כלי נוסף") מ-Wix Bookings Variants API,
+ * לפי יום בשבוע (הסרוויס המאוחד מגדיר תמחור שונה לכל יום via DATE_TIME
+ * option/ticket variants). "הורה וילד" קיים כטיקט בוויקס אך לא נצרך כאן —
+ * תהליך ההזמנה של קרמיקה לא תומך בהפרדת מבוגר/ילד.
+ * מחזיר: { byDay: { SUNDAY: {solo, extraItem}, ..., SATURDAY: {...} }, currency }
+ */
+async function _fetchCeramicsPricingInternal(serviceId) {
+    const ALL_DAYS = ['SUNDAY', 'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY'];
+    const byDay = ALL_DAYS.reduce((acc, day) => { acc[day] = { solo: null, extraItem: null }; return acc; }, {});
+
+    const response = await serviceOptionsAndVariants.queryServiceOptionsAndVariants({
+        filter: { serviceId: { $in: [serviceId] } },
+    });
+    const list = response?.serviceOptionsAndVariantsList || [];
+    const item = list.find((entry) => entry.serviceId === serviceId);
+    const variants = item?.variants?.values || [];
+
+    for (const variant of variants) {
+        const choice = variant.choices?.[0] || {};
+        const dateTime = choice.dateTime || null;
+        const name = (choice.custom || dateTime?.name || '').trim();
+        const days = dateTime?.hoursAndDaysRule?.days || [];
+        const price = parseFloat(variant.price?.value);
+        if (isNaN(price) || days.length === 0 || !name) continue;
+
+        let key = null;
+        if (name.includes('כלי נוסף')) key = 'extraItem';
+        else if (name.includes('יחיד')) key = 'solo';
+        if (!key) continue; // e.g. "הורה וילד" — not used by this flow
+
+        for (const day of days) {
+            if (byDay[day]) byDay[day][key] = price;
+        }
+    }
+
+    console.log('[CeramicsPricing] Fetched by-day variant pricing:', JSON.stringify(byDay));
+    return { byDay, currency: item?.minPrice?.currency || 'ILS' };
+}
+
 /** Internal: get cached or fresh pricing for a given group of serviceIds (defaults to Tufting). */
 async function getServicePricingCached(serviceIds) {
     const targetServiceIds = Array.isArray(serviceIds) && serviceIds.length > 0 ?
         serviceIds :
         Object.values(TUFTING_SERVICE_IDS);
 
-    // Ceramics pricing is fixed/hardcoded — never call the Wix Bookings
-    // Variants API for it.
+    // Ceramics: pricing comes dynamically from the single consolidated
+    // service's ticket variants (per day-of-week), never from the generic
+    // Tufting/Candles variant parser below.
     if (targetServiceIds.every(isCeramicsServiceId)) {
-        return targetServiceIds.reduce((acc, svcId) => {
-            const pricing = CERAMICS_PRICING_BY_SERVICE[svcId];
-            if (pricing) acc[svcId] = { ...pricing };
-            return acc;
-        }, {});
+        const cacheKey = `ceramics:${CERAMICS_SERVICE_ID}`;
+        const now = Date.now();
+        const cached = _servicePricingCache.get(cacheKey);
+        if (cached && (now - cached.at) < PRICING_CACHE_TTL_MS) {
+            return { [CERAMICS_SERVICE_ID]: cached.data };
+        }
+        const pricing = await _fetchCeramicsPricingInternal(CERAMICS_SERVICE_ID);
+        _servicePricingCache.set(cacheKey, { data: pricing, at: now });
+        return { [CERAMICS_SERVICE_ID]: pricing };
     }
 
     const cacheKey = [...targetServiceIds].sort().join(',');

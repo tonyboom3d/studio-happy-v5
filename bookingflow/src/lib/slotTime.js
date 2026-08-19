@@ -56,6 +56,14 @@ export function getSlotLocalDate(slot) {
   };
 }
 
+/** Day-of-week (Israel timezone) as 'SUNDAY'..'SATURDAY' — mirrors the backend's getIsraelWeekdayEnum. */
+export function getSlotWeekdayEnum(slot) {
+  const ts = slot?.start?.timestamp;
+  if (!ts) return null;
+  const weekday = new Intl.DateTimeFormat('en-US', { timeZone: IL_TZ, weekday: 'long' }).format(new Date(ts));
+  return weekday.toUpperCase();
+}
+
 export function sortSlotsByStartTime(a, b) {
   const ta = a?.start?.timestamp ? new Date(a.start.timestamp).getTime() : 0;
   const tb = b?.start?.timestamp ? new Date(b.start.timestamp).getTime() : 0;

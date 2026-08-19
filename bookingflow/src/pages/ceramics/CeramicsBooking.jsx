@@ -8,7 +8,7 @@ import CeramicsParticipantsSection from '@/components/ceramics/CeramicsParticipa
 import CeramicsOrderSummarySection from '@/components/ceramics/CeramicsOrderSummarySection';
 import { submitBooking, subscribeToWix, notifyProgress, isWixEditorOrPreview } from '@/api/wixBridge';
 import { addLog } from '@/components/VersionLogger';
-import { computeCeramicsPrice, getMaxExtraItems } from '@/lib/ceramicsPricing';
+import { computeCeramicsPrice, getMaxExtraItems, resolveCeramicsDayPricing } from '@/lib/ceramicsPricing';
 
 // Ceramics workshop ("סדנת קרמיקה") booking flow — same accordion shape as
 // Candels/WorkshopBooking, but simpler: no adult/child split (single
@@ -141,7 +141,7 @@ export default function CeramicsBooking() {
   }, [extraItems, maxExtraItems]);
 
   const slotPricing = useMemo(
-    () => servicePricing?.[selectedSlot?.serviceId] || null,
+    () => resolveCeramicsDayPricing(servicePricing?.[selectedSlot?.serviceId], selectedSlot),
     [selectedSlot, servicePricing]
   );
   const { totalPrice: orderTotalPreview } = useMemo(

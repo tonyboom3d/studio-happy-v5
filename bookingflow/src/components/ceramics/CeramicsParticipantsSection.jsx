@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Minus, Plus, Users, MessageCircle, AlertTriangle, Sparkles } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { validateFirstOrderMinimum, FIRST_ORDER_MIN_TICKETS_MESSAGE } from '@/lib/firstOrderMinimum';
-import { computeCeramicsPrice, getMaxExtraItems } from '@/lib/ceramicsPricing';
+import { computeCeramicsPrice, getMaxExtraItems, resolveCeramicsDayPricing } from '@/lib/ceramicsPricing';
 
 // Ceramics workshop ("סדנת קרמיקה") participants step. One "משתתף" ticket
 // per person (no adult/child split). Each participant may add up to one
@@ -24,10 +24,10 @@ export default function CeramicsParticipantsSection({
   const isGroupTooLarge = participants > 9;
   const spotsExceeded = participants > maxParticipants;
 
-  const slotPricing = useMemo(() => {
-    if (!selectedSlot?.serviceId || !servicePricing) return null;
-    return servicePricing[selectedSlot.serviceId] || null;
-  }, [selectedSlot, servicePricing]);
+  const slotPricing = useMemo(
+    () => resolveCeramicsDayPricing(servicePricing?.[selectedSlot?.serviceId], selectedSlot),
+    [selectedSlot, servicePricing]
+  );
 
   const { extraItemUnitPrice, basePriceTotal, extraItemsTotal, totalPrice } = useMemo(
     () => computeCeramicsPrice({ participants, extraItems }, slotPricing),
@@ -83,6 +83,14 @@ export default function CeramicsParticipantsSection({
       <p className="text-[17px] text-[#5E2F88] mb-4 font-semibold">
         כל משתתף יכול להוסיף <span className="underline underline-offset-2">כלי קרמיקה נוסף אחד</span> להזמנה
       </p>
+
+      <div className="w-full max-w-md rounded-xl border border-[#e8e8e8] bg-[#f9f6fd] p-3 mb-4">
+        <p className="text-[13px] text-[#464646]/80 leading-relaxed text-center">
+          בסדנה תוכלו לבחור מתוך מגוון כלים שימושיים, כגון צלחות, קערות, ספלים ועוד – הכלולים במחיר הסדנה.
+          <br />
+          בנוסף, בסטודיו מחכה לכם מבחר של כלים מיוחדים ובגדלים שונים, אותם ניתן לבחור במקום בתוספת תשלום
+        </p>
+      </div>
 
       {/* משתתפים */}
       <div className="w-full max-w-md rounded-xl border border-[#e8e8e8] bg-white p-3 mb-2">

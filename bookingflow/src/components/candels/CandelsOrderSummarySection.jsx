@@ -144,7 +144,7 @@ export default function CandelsOrderSummarySection({
         {hasTicketLines && (
           <div className="mt-2 pt-2 border-t border-[#e8e8e8]">
             <p className="text-[13px] text-[#464646]/75 leading-relaxed">
-              מקומות הישיבה מוגבלים — לא ניתן להביא מלווים מעבר למשתתפים שנרשמו; מלווה נוסף יוכל להישאר רק אם יישאר מקום פנוי.
+              מקומות הישיבה מוגבלים — לא ניתן להביא מלווים מעבר למשתתפים שנרשמו.
             </p>
           </div>
         )}

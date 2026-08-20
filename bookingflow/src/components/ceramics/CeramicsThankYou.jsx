@@ -30,7 +30,7 @@ export default function CeramicsThankYou({
     ? format(new Date(new Date(order.workshopStart).getTime() + 2 * 60 * 60 * 1000), 'HH:mm')
     : null;
 
-  const displayAddress = 'הדובדבן 7, קריית אונו - קומה 3';
+  const displayAddress = 'הדובדבן 7, קריית אונו - קומה 5';
 
   const organizerPhone = order?.organizerPhone || ecomSummary?.buyerPhone || '';
   const formatPhone = (phone) => {

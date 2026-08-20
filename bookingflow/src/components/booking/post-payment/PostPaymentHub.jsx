@@ -941,7 +941,7 @@ export default function PostPaymentHub({
     // Workshop schedule, address, and organizer contact info must always be
     // visible to any participant with a valid link — independent of any
     // organizer-controlled share/price setting.
-    const displayAddress = 'הדובדבן 7, קריית אונו - קומה 3';
+    const displayAddress = 'הדובדבן 7, קריית אונו - קומה 5';
     const workshopDate = localOrder?.workshopStart
       ? format(new Date(localOrder.workshopStart), 'EEEE, d בMMMM yyyy', { locale: he })
       : null;

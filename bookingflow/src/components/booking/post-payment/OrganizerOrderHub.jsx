@@ -163,7 +163,7 @@ export default function OrganizerOrderHub({
     ? format(new Date(new Date(order.workshopStart).getTime() + 4 * 60 * 60 * 1000), 'HH:mm')
     : null;
 
-  const displayAddress = 'הדובדבן 7, קריית אונו - קומה 3';
+  const displayAddress = 'הדובדבן 7, קריית אונו - קומה 5';
 
   const whatsappText = encodeURIComponent(
     `שלום! ביצעתי הרגע הזמנה על שם ${ecomSummary?.buyerName || ''}, מספר ההזמנה שלי הוא ${ecomSummary?.orderNumber || ''}`

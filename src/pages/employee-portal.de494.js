@@ -71,6 +71,7 @@ import {
     rejectEmployeeVacation,
     listEmployeeUpcomingShifts,
     removeEmployeeUpcomingShifts,
+    getWorkshopOrderGroups,
 } from 'backend/staffAdminService.web.js';
 import {
     runSchedulingNow,
@@ -828,6 +829,18 @@ async function handlePortalAction(portalEl, detail) {
             pushActionResult(portalEl, { type, ...result });
             // A blocked swap (conflict) doesn't mutate anything — skip the refetch/collapse.
             refreshAdmin = !result?.blocked;
+            break;
+        }
+
+        case 'adminLoadWorkshopOrders': {
+            try {
+                const groups = await getWorkshopOrderGroups(payload?.dateKey, payload?.workshopTypeId);
+                pushActionResult(portalEl, { type, ok: true, key: payload?.key, groups });
+            } catch (err) {
+                pushActionResult(portalEl, { type, ok: false, key: payload?.key, message: friendlyError(err) });
+            }
+            refreshPortal = false;
+            refreshAdmin = false;
             break;
         }
 

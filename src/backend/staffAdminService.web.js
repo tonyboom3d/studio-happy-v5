@@ -491,6 +491,46 @@ async function persistEmployeePatch(roleId, patch, { callerRole, permissions } =
     }
 }
 
+/**
+ * Paid WorkshopOrders "groups" (client/participant records) for one workshop
+ * type on one day — powers the expandable detail in the day panel's
+ * "תפוסת סדנאות" grid. Kept intentionally light (no sketches/legacy-booking
+ * merge) — the full order-management pipeline lives in dashboardService.web.js.
+ */
+export const getWorkshopOrderGroups = webMethod(Permissions.SiteMember, async (dateKey, workshopTypeId) => {
+    await assertEmployeeAccess('manageScheduling');
+    if (!dateKey || !workshopTypeId) throw new Error('BAD_REQUEST: חסרים פרטים.');
+
+    const { serviceIdToTypeId } = await loadWorkshopTypeMap();
+    const serviceIds = Object.entries(serviceIdToTypeId)
+        .filter(([, typeId]) => typeId === workshopTypeId)
+        .map(([serviceId]) => serviceId);
+    if (!serviceIds.length) return [];
+
+    const start = new Date(`${dateKey}T00:00:00Z`);
+    start.setUTCDate(start.getUTCDate() - 1);
+    const end = new Date(`${dateKey}T23:59:59Z`);
+    end.setUTCDate(end.getUTCDate() + 1);
+
+    const result = await wixData.query('WorkshopOrders')
+        .eq('status', 'paid')
+        .hasSome('serviceId', serviceIds)
+        .ge('workshopStart', start).le('workshopStart', end)
+        .limit(200).find(SA).catch(() => ({ items: [] }));
+
+    return (result.items || [])
+        .filter(o => !o.cancelledAt && toDateKey(o.workshopStart) === dateKey)
+        .map(o => ({
+            id: o._id,
+            organizerName: o.organizerName || 'ללא שם',
+            organizerPhone: o.organizerPhone || '',
+            adults: o.adults || 0,
+            children: o.children || 0,
+            paidTotal: o.paidTotal || o.basePrice || 0,
+            notes: o.customerNotes || o.internalNotes || '',
+        }));
+});
+
 /** Atomic employee save — profile, skills, rates, and optional permissions in one CMS write. */
 export const saveEmployeeAdmin = webMethod(Permissions.SiteMember, async (roleId, patch, permissions) => {
     const { role } = await assertEmployeeAccess('manageEmployees');

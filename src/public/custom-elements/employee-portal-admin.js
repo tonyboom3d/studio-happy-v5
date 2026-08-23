@@ -241,6 +241,12 @@ export const ADMIN_STYLE = `
 .epa-ws-meta { display: flex; flex-wrap: wrap; gap: 9px; margin: 0 0 8px; font-size: 11px; color: #64748b; }
 .epa-chip.suggest { background: #fff; border: 1px dashed #cbd5e1; color: #64748b; cursor: pointer; font-family: inherit; }
 .epa-chip.suggest:hover { border-color: #2563eb; color: #1d4ed8; background: #eff6ff; }
+.epa-ws-head-btn { width: 100%; border: 0; background: transparent; cursor: pointer; font-family: inherit; padding: 0; text-align: inherit; }
+.epa-ws-head-btn:hover h4 { color: #1d4ed8; }
+.epa-ws-groups { margin-top: 10px; padding-top: 10px; border-top: 1px dashed #cbd5e1; overflow-x: auto; }
+.epa-table.small th, .epa-table.small td { padding: 5px 7px; font-size: 11px; }
+.ep-loading.small { padding: 6px 0; font-size: 12px; display: flex; align-items: center; gap: 8px; }
+.ep-loading.small .ep-spinner { width: 14px; height: 14px; }
 .epa-day-tabs { display: flex; gap: 3px; margin: 0 0 12px; background: #fff7ed; border: 1px solid #fde68a; border-radius: 999px; padding: 3px; overflow-x: auto; }
 .epa-day-tab { flex: 1 1 0; white-space: nowrap; border: none; background: none; cursor: pointer; font-family: inherit; padding: 7px 10px; border-radius: 999px; font-size: 11.5px; font-weight: 700; color: #92400e; }
 .epa-day-tab.active { background: #fff; box-shadow: 0 1px 2px rgba(15,23,42,.08); color: #92400e; }
@@ -1044,8 +1050,16 @@ function renderDayPeopleList(ce, d, dateKey) {
     const statusOpts = boardStatusOptions().filter(o => dayRows.some(r => r.status === o.value));
     const hasFilter = !!(f.employeeIds?.length || f.statuses?.length || f.workshopIds?.length);
     const rows = items.map(r => renderDayPeopleRow(ce, d, r, dateKey)).join('');
+    const canManageScheduling = d.permissions.manageScheduling;
+    const canSeeGlobalScope = d.permissions.manageRules || d.permissions.manageScheduling;
     return `<div class="epa-day-people">
-        <div class="epa-panel-title"><h3>עובדים ביום זה (${total})</h3></div>
+        <div class="epa-panel-title">
+            <h3>עובדים ביום זה (${total})</h3>
+            <div style="display:flex;gap:6px;flex-wrap:wrap">
+                ${canManageScheduling ? `<button type="button" class="epa-btn primary" data-action="admin-open-assign-day" data-date="${esc(dateKey)}">👤 שיבוץ עובד/ת ליום זה</button>` : ''}
+                ${canSeeGlobalScope ? `<button type="button" class="epa-btn" data-action="admin-open-day-settings" data-date="${esc(dateKey)}">⚙️ הגדרות ליום זה</button>` : ''}
+            </div>
+        </div>
         <div class="epa-filter-row">
             ${renderMultiSelect('day', 'employeeIds', 'עובדים', empOpts, f.employeeIds, ce._dayMsOpen)}
             ${renderMultiSelect('day', 'statuses', 'סטטוסים', statusOpts, f.statuses, ce._dayMsOpen)}
@@ -1074,37 +1088,49 @@ function renderDayStatChips(subs, info) {
     return `<div class="epa-stat-row">${chips.join('')}</div>`;
 }
 
-/** Workshop capacity cards for the day: fraction/bar, meta, assigned chips (✕ to remove) and dashed suggest chips (quick-assign) for submitted-but-unassigned employees. */
-function renderWorkshopCapacityGrid(d, dateKey, info, subs) {
+/** Renders the paid-order "groups" (client/participant detail) for one expanded workshop card. Lazily fetched — cached in ce._workshopOrderGroups by cardKey. */
+function renderWorkshopGroupsDetail(ce, cardKey) {
+    const groups = ce._workshopOrderGroups?.[cardKey];
+    if (!groups) {
+        return `<div class="epa-ws-groups"><div class="ep-loading small"><div class="ep-spinner"></div>טוען פרטי קבוצות…</div></div>`;
+    }
+    if (!groups.length) {
+        return `<div class="epa-ws-groups"><div class="ep-empty">לא נמצאו הזמנות משולמות לסדנה זו</div></div>`;
+    }
+    const rows = groups.map(g => `<tr>
+        <td>${esc(g.organizerName)}</td>
+        <td>${g.adults} מבוגרים${g.children ? ` + ${g.children} ילדים` : ''}</td>
+        <td>${esc(g.organizerPhone || '—')}</td>
+        <td>${g.paidTotal ? `₪${g.paidTotal}` : '—'}</td>
+        <td>${esc(g.notes || '—')}</td>
+    </tr>`).join('');
+    return `<div class="epa-ws-groups"><table class="epa-table small"><thead><tr>
+        <th>לקוח/ה</th><th>משתתפים</th><th>טלפון</th><th>שולם</th><th>הערות הזמנה</th>
+    </tr></thead><tbody>${rows}</tbody></table></div>`;
+}
+
+/** Workshop capacity cards for the day: fraction/bar + aggregate meta (adults/children/times) only — no employee add/remove here. Click a card to expand its paid-order groups (client/participant detail), fetched on demand. */
+function renderWorkshopCapacityGrid(ce, d, dateKey, info, subs) {
     const types = info?.types || [];
     if (!types.length) {
         return `<div class="ep-empty">אין סדנאות ביום זה${subs.length ? ` — ${subs.length} הגשות זמינות (יום סטודיו)` : ''}</div>`;
     }
-    const canManage = d.permissions.manageScheduling;
     const cards = types.map(t => {
-        const assignedIds = new Set(t.assignedEmployeeIds);
-        const assignedChips = subs
-            .filter(s => assignedIds.has(s.employeeId))
-            .map(s => `<span class="epa-chip assigned">${esc(s.employeeName)}
-                ${canManage ? `<button type="button" data-action="admin-cancel-assign" data-date="${dateKey}" data-type="${t.typeId}" data-emp="${s.employeeId}" title="הסרה מהמשמרת">✕</button>` : ''}
-            </span>`).join('');
-        const suggestChips = subs
-            .filter(s => !assignedIds.has(s.employeeId))
-            .map(s => s.status === 'STANDBY'
-                ? `<span class="epa-chip standby">${esc(s.employeeName)} (המתנה)</span>`
-                : (canManage
-                    ? `<button type="button" class="epa-chip suggest" data-action="admin-assign-ws" data-date="${dateKey}" data-type="${t.typeId}" data-emp="${s.employeeId}">+ ${esc(s.employeeName)}</button>`
-                    : `<span class="epa-chip">${esc(s.employeeName)}</span>`))
-            .join('');
         const filled = Math.min(t.filled, t.required);
         const full = t.required > 0 && filled >= t.required;
         const pct = t.required ? Math.min(100, Math.round((filled / t.required) * 100)) : 0;
         const times = (t.timeRanges || []).map(r => r.end ? `${fmtTimeHe(r.start)}–${fmtTimeHe(r.end)}` : fmtTimeHe(r.start)).filter(Boolean).join(', ');
+        const cardKey = `${dateKey}::${t.typeId}`;
+        const isOpen = ce._dayWsOpenCard === cardKey;
         return `<div class="epa-ws-card">
-            <div class="epa-ws-head"><h4>${esc(t.name)}</h4><span class="epa-ws-fraction ${full ? 'full' : ''}">${filled}/${t.required} צוות</span></div>
+            <button type="button" class="epa-ws-head epa-ws-head-btn" data-action="admin-toggle-ws-card" data-date="${esc(dateKey)}" data-type="${esc(t.typeId)}">
+                <h4>${esc(t.name)}</h4>
+                <span class="epa-ws-fraction ${full ? 'full' : ''}">${filled}/${t.required} צוות</span>
+                <span class="epa-accordion-arrow">${isOpen ? '▲' : '▼'}</span>
+            </button>
             <div class="epa-capacity-track"><div class="epa-capacity-fill ${full ? 'full' : ''}" style="width:${pct}%"></div></div>
             <div class="epa-ws-meta"><span>${t.adults} מבוגרים</span><span>${t.children} ילדים</span>${times ? `<span>${esc(times)}</span>` : ''}${t.standbyCount ? `<span>בהמתנה: ${t.standbyCount}</span>` : ''}</div>
-            <div class="epa-chips">${assignedChips}${suggestChips}</div>
+            ${isOpen ? renderWorkshopGroupsDetail(ce, cardKey) : ''}
         </div>`;
     }).join('');
     return `<div class="epa-ws-grid">${cards}</div>`;
@@ -1115,30 +1141,14 @@ function renderDayDetail(ce, d) {
     const info = d.days?.[dateKey];
     const subs = submissionsByDate(d)[dateKey] || [];
     const blocked = (d.settings?.blockedDates || []).includes(dateKey);
-    const promoted = (d.settings?.promotedDates || []).includes(dateKey);
     const holidayEntry = getHolidayEntry(d, dateKey);
     const note = getDayNote(d, dateKey);
-    const activeEmployees = (d.employees || []).filter(e => e.active);
     const dayTag = blocked ? 'יום חסום' : (holidayEntry ? `${holidayEntry.mode === 'CLOSED' ? 'עסק סגור' : 'יום מקוצר'} — ${holidayEntry.name || 'חג/מועד'}` : 'יום רגיל');
     const banners = [
         blocked ? `<div class="epa-day-banner blocked">🚫 היום חסום להגשות</div>` : '',
         holidayEntry ? `<div class="epa-day-banner holiday">🕎 ${esc(holidayEntry.name || 'חג')}${holidayModeMarker(holidayEntry)}</div>` : '',
         note?.message ? `<div class="epa-day-banner note">✉ ${esc(note.message)}</div>` : '',
     ].join('');
-
-    const assignSection = d.permissions.manageScheduling
-        ? renderManualAssignSection(ce, d, dateKey, info, activeEmployees) : '';
-
-    const canSeeGlobalScope = d.permissions.manageRules || d.permissions.manageScheduling;
-    const globalOpen = !!ce._adminDayGlobalOpen;
-    const globalSection = canSeeGlobalScope ? `
-        <div class="epa-panel epa-scope-global" style="margin-top:12px">
-            <button type="button" class="epa-accordion-toggle" data-action="admin-toggle-day-global">
-                <span>⚙️ הגדרות ליום זה <span class="epa-scope-tag all">משפיע על כל העובדים</span></span>
-                <span class="epa-accordion-arrow">${globalOpen ? '▲' : '▼'}</span>
-            </button>
-            ${globalOpen ? `<div class="epa-accordion-body">${renderDayGlobalSection(ce, d, dateKey, blocked, promoted, info)}</div>` : ''}
-        </div>` : '';
 
     return `<div class="epa-detail">
         <div class="epa-detail-head">
@@ -1152,9 +1162,7 @@ function renderDayDetail(ce, d) {
         ${banners}
         ${renderDayStatChips(subs, info)}
         <div class="epa-panel" style="margin-top:0">${renderDayPeopleList(ce, d, dateKey)}</div>
-        <div class="epa-panel"><div class="epa-panel-title"><h3>תפוסת סדנאות</h3></div>${renderWorkshopCapacityGrid(d, dateKey, info, subs)}</div>
-        ${assignSection}
-        ${globalSection}
+        <div class="epa-panel"><div class="epa-panel-title"><h3>תפוסת סדנאות</h3></div>${renderWorkshopCapacityGrid(ce, d, dateKey, info, subs)}</div>
     </div>`;
 }
 
@@ -1176,8 +1184,8 @@ function renderManualAssignSection(ce, d, dateKey, info, activeEmployees) {
         ? '<div class="ep-empty" style="margin:6px 0 0">אין סדנאות מתוזמנות ביום זה — אפשר עדיין לשבץ עובד/ת (לדוגמה לפתיחה/קיפול) ולבחור סוג עבודה.</div>'
         : '';
     const hasMorningWorkshop = types.some(t => t.isMorning);
-    return `<div class="epa-panel epa-scope-personal" style="margin-top:12px" id="epaAssignSection">
-        <div class="epa-panel-title"><h3>👤 שיבוץ עובד/ת ליום זה <span class="epa-scope-tag one">משפיע רק על העובד/ת שנבחר/ה</span></h3></div>
+    return `<div id="epaAssignSection">
+        <p class="epa-scope-tag one" style="display:inline-block;margin-bottom:10px">משפיע רק על העובד/ת שנבחר/ה</p>
         <div class="epa-form">
             <div><label>עובד/ת</label><select id="epaAssignEmp">${empOptions}</select></div>
             <div><label>סוג עבודה (מתלה)</label><select id="epaAssignWorkType">${workTypeOptions()}</select></div>
@@ -2196,6 +2204,17 @@ function renderModal(ce, d) {
         const employee = findEmployee(ce, d, modal.id);
         title = `השבתת עובד/ת — ${esc(employee?.displayName || '')}`;
         body = renderConfirmDeactivateForm(ce, modal.id);
+    } else if (modal.type === 'assignDay') {
+        const info = d.days?.[modal.dateKey];
+        const activeEmployees = (d.employees || []).filter(e => e.active);
+        title = `👤 שיבוץ עובד/ת ליום זה — ${fmtDate(modal.dateKey)}`;
+        body = renderManualAssignSection(ce, d, modal.dateKey, info, activeEmployees);
+    } else if (modal.type === 'daySettings') {
+        const info = d.days?.[modal.dateKey];
+        const blocked = (d.settings?.blockedDates || []).includes(modal.dateKey);
+        const promoted = (d.settings?.promotedDates || []).includes(modal.dateKey);
+        title = `⚙️ הגדרות ליום זה — ${fmtDate(modal.dateKey)}`;
+        body = renderDayGlobalSection(ce, d, modal.dateKey, blocked, promoted, info);
     } else if (modal.type === 'confirmCancelAssign') {
         const employee = findEmployee(ce, d, modal.employeeId);
         title = 'הסרה מהמשמרת';
@@ -2493,6 +2512,7 @@ export function handleAdminClick(ce, action, target) {
             ce._dayRowMenuOpen = null;
             ce._dayAssignPrefillEmp = null;
             ce._dayAssignShowMorning = false;
+            ce._dayWsOpenCard = null;
             ce.render();
             ce.querySelector('.epa-detail')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
             return true;
@@ -2504,6 +2524,7 @@ export function handleAdminClick(ce, action, target) {
             ce._dayRowMenuOpen = null;
             ce._dayAssignPrefillEmp = null;
             ce._dayAssignShowMorning = false;
+            ce._dayWsOpenCard = null;
             ce.render();
             return true;
         case 'admin-toggle-holidays':
@@ -2704,16 +2725,38 @@ export function handleAdminClick(ce, action, target) {
             const shiftNote = ce.querySelector('#epaAssignShiftNote')?.value || '';
             ce._dayAssignPrefillEmp = null;
             ce._dayAssignShowMorning = false;
+            ce._adminModal = null;
             ce._startBusy('משבץ…');
             ce._dispatch('adminManualAssign', { dateKey: target.dataset.date, workshopTypeIds, employeeId: emp, workType, notify, taskType, shiftNote });
+            return true;
+        }
+        case 'admin-open-assign-day':
+            ce._dayAssignPrefillEmp = null;
+            ce._dayAssignShowMorning = false;
+            ce._adminModal = { type: 'assignDay', dateKey: target.dataset.date };
+            ce.render();
+            return true;
+        case 'admin-open-day-settings':
+            ce._adminModal = { type: 'daySettings', dateKey: target.dataset.date };
+            ce.render();
+            return true;
+        case 'admin-toggle-ws-card': {
+            const dateKey = target.dataset.date;
+            const cardKey = `${dateKey}::${target.dataset.type}`;
+            const wasOpen = ce._dayWsOpenCard === cardKey;
+            ce._dayWsOpenCard = wasOpen ? null : cardKey;
+            ce.render();
+            if (!wasOpen && !ce._workshopOrderGroups?.[cardKey]) {
+                ce._dispatch('adminLoadWorkshopOrders', { dateKey, workshopTypeId: target.dataset.type, key: cardKey });
+            }
             return true;
         }
         case 'admin-day-row-assign': {
             ce._dayAssignPrefillEmp = target.dataset.emp;
             const info = d?.days?.[target.dataset.date];
             ce._dayAssignShowMorning = !!(info?.types || []).some(t => t.isMorning);
+            ce._adminModal = { type: 'assignDay', dateKey: target.dataset.date };
             ce.render();
-            ce.querySelector('#epaAssignSection')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
             return true;
         }
         case 'admin-day-row-note': {
@@ -2745,6 +2788,7 @@ export function handleAdminClick(ce, action, target) {
             ce._dayMsOpen = null;
             ce._dayAssignPrefillEmp = null;
             ce._dayAssignShowMorning = false;
+            ce._dayWsOpenCard = null;
             ce._adminSelectedDay = nextKey;
             if (nextKey.slice(0, 7) !== ce._adminMonth) {
                 ce._adminMonth = nextKey.slice(0, 7);

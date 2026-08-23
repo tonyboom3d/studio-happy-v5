@@ -1032,12 +1032,10 @@ class EmployeePortal extends HTMLElement {
 
     _startBusy(message) {
         this._busy = message || 'מעדכן…';
-        // Keep the admin modal form intact while saving — a full render would rebuild it from stale data.
-        if (this._adminModal) {
-            this._syncBusyOverlay();
-            return;
-        }
-        this.render();
+        // Overlay-only (no full re-render): keeps the current view — including any open
+        // modal's form — intact and visible under the spinner instead of tearing down and
+        // rebuilding the whole component twice (once here, once when the data arrives).
+        this._syncBusyOverlay();
     }
 
     _syncBusyOverlay() {
@@ -1290,6 +1288,17 @@ class EmployeePortal extends HTMLElement {
                 this.render();
                 return;
             }
+        }
+        if (result.type === 'adminLoadWorkshopOrders') {
+            this._workshopOrderGroups = this._workshopOrderGroups || {};
+            if (result.ok) {
+                this._workshopOrderGroups[result.key] = result.groups || [];
+            } else {
+                this._workshopOrderGroups[result.key] = [];
+                this._toast('טעינת פרטי הסדנה נכשלה.', 'error');
+            }
+            this.render();
+            return;
         }
         if (result.type?.startsWith('admin') && result.ok) {
             this._toast('הפעולה בוצעה בהצלחה.', 'success');

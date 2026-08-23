@@ -1152,7 +1152,7 @@ function renderBatchToolbar(ce) {
                 <input type="checkbox" data-action="admin-batch-toggle" checked>
                 <span class="epa-switch-slider"></span>
             </label>
-            <span class="epa-switch-status on">מצב אצווה פעיל</span>
+            <span class="epa-switch-status on">איסוף פעולות לאישור</span>
             <button class="epa-btn" data-action="admin-batch-open-history">היסטוריית פעולות (${n})</button>
             <button class="epa-btn primary" data-action="admin-batch-save" ${(n && !ce._batchSaving) ? '' : 'disabled'}>${ce._batchSaving ? 'שומר…' : `שמירת הכל (${n})`}</button>
             ${n && ce._batchExpiresAt ? `<span class="epa-chip" id="epaBatchClock" data-until="${ce._batchExpiresAt}">⏳ ${ce._formatCountdown(remainMs)}</span>` : ''}

@@ -1553,7 +1553,6 @@ class EmployeePortal extends HTMLElement {
     _loadBatch() {
         let raw = null;
         try { raw = JSON.parse(localStorage.getItem(this._batchKey()) || 'null'); } catch (_) { raw = null; }
-        this._batchMode = !!raw?.mode;
         this._batchQueue = Array.isArray(raw?.queue) ? raw.queue : [];
         this._batchExpiresAt = raw?.expiresAt || null;
         if (this._batchQueue.length && this._batchExpiresAt && Date.now() > this._batchExpiresAt) {
@@ -1563,6 +1562,8 @@ class EmployeePortal extends HTMLElement {
             this._saveBatch();
             if (hadItems) this._toast('התור הקודם של פעולות אצווה פג תוקף (30 דק׳) ונוקה.', 'error');
         }
+        // Off by default; re-enable only when returning with a non-empty pending queue.
+        this._batchMode = this._batchQueue.length > 0;
     }
 
     _saveBatch() {

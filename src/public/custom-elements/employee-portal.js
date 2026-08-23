@@ -298,21 +298,15 @@ employee-portal * { box-sizing: border-box; }
   100% { box-shadow: 0 0 0 0 rgba(37,99,235,0); transform: scale(1); }
 }
 .ep-urgent-list { max-height: 46vh; overflow-y: auto; margin: 10px 0; border: 1px solid #e2e8f0; border-radius: 10px; }
-.ep-urgent-row { display: flex; align-items: center; gap: 9px; padding: 8px 11px; font-size: 12.5px; border-bottom: 1px solid #f1f5f9; cursor: pointer; }
-.ep-urgent-row:last-child { border-bottom: none; }
+.ep-urgent-day-group:not(:first-child) { border-top: 1px solid #e2e8f0; }
+.ep-urgent-row { display: flex; align-items: center; gap: 9px; padding: 8px 11px; font-size: 12.5px; cursor: pointer; }
 .ep-urgent-row:hover { background: #f8fafc; }
 .ep-urgent-row input { flex-shrink: 0; width: 16px; height: 16px; cursor: pointer; }
-.ep-urgent-row.is-blocked { opacity: .45; cursor: not-allowed; background: #f8fafc; }
-.ep-urgent-row.is-blocked input { cursor: not-allowed; }
 .ep-urgent-row-date { font-weight: 700; color: #1f2937; white-space: nowrap; }
-.ep-urgent-row-time { font-weight: 700; color: #1f2937; white-space: nowrap; font-variant-numeric: tabular-nums; }
-.ep-urgent-row-name { color: #1e40af; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ep-urgent-day-group:not(:first-child) { border-top: 1px solid #e2e8f0; }
-.ep-urgent-day-head { font-weight: 700; font-size: 12.5px; color: #1f2937; padding: 8px 11px 4px; background: #f8fafc; }
-.ep-urgent-parallel-hint { font-size: 11px; font-weight: 600; color: #b45309; padding: 6px 11px 2px; }
-.ep-urgent-parallel-row { display: flex; gap: 8px; padding: 2px 11px 6px; }
-.ep-urgent-parallel-col { flex: 1; min-width: 0; border: 1px solid #fde68a; border-radius: 9px; background: #fffbeb; }
-.ep-urgent-parallel-col .ep-urgent-row { border-bottom: none; }
+.ep-urgent-hours { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 0 11px 10px 33px; }
+.ep-urgent-slot-select { border: 1px solid #d1d5db; border-radius: 7px; padding: 5px 8px; font-size: 12.5px; font-family: inherit; background: #fff; cursor: pointer; }
+.ep-urgent-slot-select:focus { outline: 0; border-color: #2563eb; box-shadow: 0 0 0 2px rgba(37,99,235,.12); }
+.ep-urgent-custom-times { display: flex; align-items: center; gap: 8px; }
 .ep-urgent-submit:disabled { opacity: .5; cursor: default; }
 .ep-msg-card { border: 1px solid #e5e7eb; background: #fff; border-radius: 12px; padding: 12px 14px; margin-bottom: 10px; }
 .ep-msg-card.system { border-color: #bfdbfe; background: #f5f9ff; }
@@ -678,7 +672,7 @@ class EmployeePortal extends HTMLElement {
         this._editWindowTimer = null;           // 1s ticker for the 30-min free-edit countdown
         this._autoApprovedPopup = null;         // shifts array shown right after an instant auto-approve
         this._urgentPopupOpen = false;          // urgent open-calls selection popup
-        this._urgentSelected = new Set();       // selected open-call ids in the popup
+        this._urgentSelected = new Map();       // dateKey -> { slotId, startTime, endTime } for the popup
         this._urgentSummary = null;             // bulk-claim result array shown after submission
         this._swapCandidates = null;            // { submissionId, candidates: [{id,name}] } for the swap modal
         this._calLegendOpen = false;            // calendar color legend accordion
@@ -710,10 +704,17 @@ class EmployeePortal extends HTMLElement {
         this.addEventListener('change', (e) => this._onChange(e));
         this.addEventListener('input', (e) => {
             const input = e.target;
-            if (input?.classList?.contains('epa-time-input') || input?.classList?.contains('ep-time-input')) {
+            if (input?.classList?.contains('epa-time-input') || input?.classList?.contains('ep-time-input') || input?.classList?.contains('ep-urgent-time-input')) {
                 maskTimeInput(input);
                 if (input.classList.contains('ep-time-input')) {
                     const entry = this._selected.get(input.dataset.date);
+                    if (entry) {
+                        if (input.dataset.role === 'start') entry.startTime = input.value;
+                        if (input.dataset.role === 'end') entry.endTime = input.value;
+                    }
+                }
+                if (input.classList.contains('ep-urgent-time-input')) {
+                    const entry = this._urgentSelected.get(input.dataset.date);
                     if (entry) {
                         if (input.dataset.role === 'start') entry.startTime = input.value;
                         if (input.dataset.role === 'end') entry.endTime = input.value;
@@ -1265,7 +1266,7 @@ class EmployeePortal extends HTMLElement {
         if (result.type === 'claimOpenCall' && result.ok) {
             this._toast('המשמרת נתפסה ושובצה לך! 🎉', 'success');
         }
-        if (result.type === 'claimOpenCalls' && result.ok) {
+        if ((result.type === 'claimOpenCalls' || result.type === 'claimOpenCallsWithHours') && result.ok) {
             this._urgentSummary = result.results || [];
             const successCount = this._urgentSummary.filter(r => r.ok).length;
             this._toast(successCount ? `${successCount} משמרות שובצו לך! 🎉` : 'לא נותרו משמרות פנויות מהבחירה שלכם.', successCount ? 'success' : 'error');
@@ -2632,87 +2633,76 @@ class EmployeePortal extends HTMLElement {
         </div>`;
     }
 
-    /** Groups open calls by date, then by exact session start time — same-time calls are mutually-exclusive (parallel) slots. */
+    /** Groups skill-matched open calls by date only — the popup no longer exposes exact session times. */
     _groupOpenCallsForUrgentPopup() {
         const calls = this._skillMatchedOpenCalls();
         const byDate = new Map();
         for (const c of calls) {
-            if (!byDate.has(c.date)) byDate.set(c.date, new Map());
-            const byTime = byDate.get(c.date);
-            const timeKey = c.sessionTime || '';
-            if (!byTime.has(timeKey)) byTime.set(timeKey, []);
-            byTime.get(timeKey).push(c);
+            if (!byDate.has(c.date)) byDate.set(c.date, []);
+            byDate.get(c.date).push(c.id);
         }
-        return [...byDate.entries()].map(([date, byTime]) => ({
-            date,
-            slots: [...byTime.entries()].map(([sessionTime, items]) => ({ sessionTime, items })),
-        }));
+        return [...byDate.entries()]
+            .map(([date, callIds]) => ({ date, callIds }))
+            .sort((a, b) => a.date.localeCompare(b.date));
     }
 
-    _isParallelUrgentCall(call, calls = this._skillMatchedOpenCalls()) {
-        if (!call) return false;
-        const time = call.sessionTime || '';
-        return calls.filter(c => c.date === call.date && (c.sessionTime || '') === time).length > 1;
-    }
-
-    /** Other limiting/parallel workshops on the same day as an already-picked limiting shift. */
-    _urgentBlockedIds() {
-        const calls = this._skillMatchedOpenCalls();
-        const blocked = new Set();
-        for (const id of this._urgentSelected) {
-            const picked = calls.find(c => c.id === id);
-            if (!this._isParallelUrgentCall(picked, calls)) continue;
-            for (const c of calls) {
-                if (c.id === id || c.date !== picked.date) continue;
-                if (this._isParallelUrgentCall(c, calls)) blocked.add(c.id);
-            }
+    /** True once a day's entry has a usable start/end time for the claim request. */
+    _urgentEntryReady(entry) {
+        if (!entry || !entry.slotId) return false;
+        if (entry.slotId === 'custom') {
+            return isValidTimeStr(entry.startTime) && isValidTimeStr(entry.endTime) && normalizeTimeStr(entry.startTime) < normalizeTimeStr(entry.endTime);
         }
-        return blocked;
+        return true;
     }
 
-    _syncUrgentPopupSelection() {
-        const blocked = this._urgentBlockedIds();
-        for (const el of this.querySelectorAll('input[data-action="urgent-toggle"]')) {
-            const id = el.dataset.id;
-            el.checked = this._urgentSelected.has(id);
-            el.disabled = blocked.has(id);
-            el.closest('.ep-urgent-row')?.classList.toggle('is-blocked', blocked.has(id));
-        }
-        const submitBtn = this.querySelector('.ep-urgent-submit');
-        if (submitBtn) submitBtn.disabled = this._urgentSelected.size === 0;
+    _renderUrgentTimeField(dateKey, role, value) {
+        const val = escapeHtml(normalizeTimeStr(value) || value || '');
+        const label = role === 'start' ? 'מ-' : 'עד-';
+        return `<span class="ep-time-field">
+            <span class="ep-time-label">${label}</span>
+            <span class="ep-time-wrap">
+                <input type="text" inputmode="numeric" maxlength="5" class="ep-urgent-time-input" data-role="${role}" data-date="${dateKey}" value="${val}" placeholder="HH:MM">
+                <input type="time" class="ep-urgent-time-native" data-role="${role}" data-date="${dateKey}" value="${val}" tabindex="-1" aria-hidden="true">
+                <button type="button" class="ep-time-clock" data-action="open-urgent-time-picker" data-role="${role}" data-date="${dateKey}" title="בחירת שעה">🕐</button>
+            </span>
+        </span>`;
     }
 
-    /** Compact selection popup for all pending urgent open calls, grouped by date/time so parallel slots are visually distinct. */
+    /** Selection popup for urgent open calls — grouped by day only; the employee picks the hours they can work via a dropdown (or custom times). */
     _renderUrgentPopup() {
         const dayGroups = this._groupOpenCallsForUrgentPopup();
-        const blocked = this._urgentBlockedIds();
-        const callTimeLabel = (c) => c.sessionEnd
-            ? formatTimeRangeHe(c.sessionTime, c.sessionEnd)
-            : formatTimeHe(c.sessionTime);
-        const renderCall = (c, showTime) => `
-            <label class="ep-urgent-row ${blocked.has(c.id) ? 'is-blocked' : ''}">
-                <input type="checkbox" data-action="urgent-toggle" data-id="${escapeHtml(c.id)}" ${this._urgentSelected.has(c.id) ? 'checked' : ''} ${blocked.has(c.id) ? 'disabled' : ''}>
-                ${showTime && c.sessionTime ? `<span class="ep-urgent-row-time">${escapeHtml(callTimeLabel(c))}</span>` : ''}
-                <span class="ep-urgent-row-name">בקשת שיבוץ</span>
-            </label>`;
-        const body = dayGroups.map(({ date, slots }) => {
-            const slotsHtml = slots.map(({ sessionTime, items }) => {
-                if (items.length > 1) {
-                    return `<div class="ep-urgent-parallel-hint">⚡ ${sessionTime ? escapeHtml(formatTimeHe(sessionTime)) : ''} — בקשות שיבוץ באותה שעה, ניתן לבחור רק אחת</div>
-                        <div class="ep-urgent-parallel-row">${items.map(c => `<div class="ep-urgent-parallel-col">${renderCall(c, false)}</div>`).join('')}</div>`;
-                }
-                return renderCall(items[0], true);
-            }).join('');
+        const defaults = this._defaultShiftTimes();
+        const body = dayGroups.map(({ date }) => {
+            const entry = this._urgentSelected.get(date);
+            const checked = !!entry;
+            const slotOptions = slotsForDate(date).map(slot => `
+                <option value="${slot.id}" ${entry?.slotId === slot.id ? 'selected' : ''}>${escapeHtml(slot.label)} (${slot.startTime}–${slot.endTime})</option>`).join('');
+            const hoursHtml = checked ? `
+                <div class="ep-urgent-hours">
+                    <select class="ep-urgent-slot-select" data-action="urgent-slot-select" data-date="${date}">
+                        <option value="">בחר/י שעות</option>
+                        ${slotOptions}
+                        <option value="custom" ${entry.slotId === 'custom' ? 'selected' : ''}>שעות משלי</option>
+                    </select>
+                    ${entry.slotId === 'custom' ? `
+                        <span class="ep-urgent-custom-times">
+                            ${this._renderUrgentTimeField(date, 'start', entry.startTime || defaults.start)}
+                            ${this._renderUrgentTimeField(date, 'end', entry.endTime || defaults.end)}
+                        </span>` : ''}
+                </div>` : '';
             return `<div class="ep-urgent-day-group">
-                <div class="ep-urgent-day-head">${escapeHtml(formatDateHe(date))}</div>
-                ${slotsHtml}
+                <label class="ep-urgent-row">
+                    <input type="checkbox" data-action="urgent-day-toggle" data-date="${date}" ${checked ? 'checked' : ''}>
+                    <span class="ep-urgent-row-date">${escapeHtml(formatDateHe(date))}</span>
+                </label>
+                ${hoursHtml}
             </div>`;
         }).join('');
-        const hasSelection = this._urgentSelected.size > 0;
+        const hasSelection = [...this._urgentSelected.values()].some(e => this._urgentEntryReady(e));
         return `<div class="epa-modal-backdrop">
             <div class="epa-modal" role="dialog" aria-modal="true" aria-label="משמרות דחופות פתוחות">
                 <div class="epa-modal-head"><h2>📣 משמרות דחופות פתוחות</h2><button class="epa-modal-close" data-action="urgent-close" aria-label="סגירה">×</button></div>
-                <div class="ep-empty" style="text-align:right;margin-bottom:6px">סמנו את המשמרות שתרצו לקחת — כל הקודם/ת זוכה. הרשימה כבר מסוננת לפי ההכשרות שלכם ומקובצת לפי תאריך.</div>
+                <div class="ep-empty" style="text-align:right;margin-bottom:6px">סמנו את הימים שבהם תוכלו לעבוד ובחרו שעות — כל הקודם/ת זוכה. הרשימה כבר מסוננת לפי ההכשרות שלכם.</div>
                 <div class="ep-urgent-list">${body || '<div class="ep-empty">אין כרגע משמרות דחופות פתוחות.</div>'}</div>
                 <div class="epa-inline">
                     <button type="button" class="epa-btn primary ep-urgent-submit" data-action="urgent-submit" ${hasSelection ? '' : 'disabled'}>✅ שיבוץ המשמרות שנבחרו</button>
@@ -3269,16 +3259,24 @@ class EmployeePortal extends HTMLElement {
                 this._dispatch('claimOpenCall', { callId: target.dataset.id });
                 return;
             case 'urgent-open':
-                this._urgentSelected = new Set();
+                this._urgentSelected = new Map();
                 this._urgentPopupOpen = true;
-                this._pruneUrgentSelection();
                 this.render();
                 return;
             case 'urgent-close':
                 this._urgentPopupOpen = false;
-                this._urgentSelected = new Set();
+                this._urgentSelected = new Map();
                 this.render();
                 return;
+            case 'open-urgent-time-picker': {
+                const dateKey = target.dataset.date;
+                const role = target.dataset.role;
+                const native = this.querySelector(`input.ep-urgent-time-native[data-date="${dateKey}"][data-role="${role}"]`);
+                if (native && typeof native.showPicker === 'function') {
+                    try { native.showPicker(); } catch (_) { /* blocked */ }
+                }
+                return;
+            }
             case 'urgent-submit':
                 this._submitUrgentCalls();
                 return;
@@ -3435,26 +3433,59 @@ class EmployeePortal extends HTMLElement {
             captureEmployeeFormDraft(this, this._adminData);
             return;
         }
-        if (input?.dataset?.action === 'urgent-toggle') {
-            const id = input.dataset.id;
-            const calls = this._skillMatchedOpenCalls();
-            const picked = calls.find(c => c.id === id);
+        if (input?.dataset?.action === 'urgent-day-toggle') {
+            const dateKey = input.dataset.date;
             if (input.checked) {
-                if (this._urgentBlockedIds().has(id)) {
-                    input.checked = false;
-                    return;
-                }
-                this._urgentSelected.add(id);
-                if (this._isParallelUrgentCall(picked, calls)) {
-                    for (const c of calls) {
-                        if (c.id === id || c.date !== picked.date) continue;
-                        if (this._isParallelUrgentCall(c, calls)) this._urgentSelected.delete(c.id);
-                    }
-                }
+                this._urgentSelected.set(dateKey, { slotId: '', startTime: '', endTime: '' });
             } else {
-                this._urgentSelected.delete(id);
+                this._urgentSelected.delete(dateKey);
             }
-            this._syncUrgentPopupSelection();
+            this.render();
+            return;
+        }
+        if (input?.dataset?.action === 'urgent-slot-select') {
+            const dateKey = input.dataset.date;
+            const entry = this._urgentSelected.get(dateKey);
+            if (!entry) return;
+            const slotId = input.value;
+            entry.slotId = slotId;
+            if (slotId === 'custom') {
+                const defaults = this._defaultShiftTimes();
+                if (!entry.startTime) entry.startTime = defaults.start;
+                if (!entry.endTime) entry.endTime = defaults.end;
+            } else if (slotId) {
+                const slot = slotsForDate(dateKey).find(s => s.id === slotId);
+                if (slot) { entry.startTime = slot.startTime; entry.endTime = slot.endTime; }
+            } else {
+                entry.startTime = '';
+                entry.endTime = '';
+            }
+            this.render();
+            return;
+        }
+        if (input.classList?.contains('ep-urgent-time-native')) {
+            const dateKey = input.dataset.date;
+            const entry = this._urgentSelected.get(dateKey);
+            if (!entry) return;
+            const role = input.dataset.role;
+            const value = normalizeTimeStr(input.value);
+            if (role === 'start') entry.startTime = value;
+            if (role === 'end') entry.endTime = value;
+            this.render();
+            return;
+        }
+        if (input.classList?.contains('ep-urgent-time-input')) {
+            const dateKey = input.dataset.date;
+            const entry = this._urgentSelected.get(dateKey);
+            if (!entry) return;
+            const role = input.dataset.role;
+            let value = normalizeTimeStr(input.value);
+            input.value = value;
+            if (role === 'start') entry.startTime = value;
+            if (role === 'end') entry.endTime = value;
+            const native = this.querySelector(`input.ep-urgent-time-native[data-date="${dateKey}"][data-role="${role}"]`);
+            if (native && value) native.value = value;
+            this.render();
             return;
         }
         if (input?.dataset?.action === 'toggle-day-off') {
@@ -3542,24 +3573,34 @@ class EmployeePortal extends HTMLElement {
     }
 
     _submitUrgentCalls() {
-        if (!this._urgentSelected.size) return;
-        const eligibleIds = new Set(this._skillMatchedOpenCalls().map(c => c.id));
-        const callIds = Array.from(this._urgentSelected).filter(id => eligibleIds.has(id));
-        if (!callIds.length) {
-            this._toast('לא נבחרו משמרות מתאימות להכשרות שלכם.', 'error');
+        const dayGroups = this._groupOpenCallsForUrgentPopup();
+        const callIdsByDate = new Map(dayGroups.map(g => [g.date, g.callIds]));
+        const requests = [];
+        for (const [date, entry] of this._urgentSelected.entries()) {
+            if (!this._urgentEntryReady(entry)) continue;
+            const callIds = callIdsByDate.get(date) || [];
+            if (!callIds.length) continue;
+            let startTime, endTime;
+            if (entry.slotId === 'custom') {
+                startTime = normalizeTimeStr(entry.startTime);
+                endTime = normalizeTimeStr(entry.endTime);
+            } else {
+                const slot = slotsForDate(date).find(s => s.id === entry.slotId);
+                if (!slot) continue;
+                startTime = slot.startTime;
+                endTime = slot.endTime;
+            }
+            if (!isValidTimeStr(startTime) || !isValidTimeStr(endTime) || startTime >= endTime) continue;
+            requests.push({ date, callIds, startTime, endTime });
+        }
+        if (!requests.length) {
+            this._toast('יש לבחור יום ושעות לפני השיבוץ.', 'error');
             return;
         }
         this._urgentPopupOpen = false;
-        this._urgentSelected = new Set();
+        this._urgentSelected = new Map();
         this._startBusy('בודק זמינות ומשבץ את המשמרות שנבחרו…');
-        this._dispatch('claimOpenCalls', { callIds });
-    }
-
-    _pruneUrgentSelection() {
-        const eligibleIds = new Set(this._skillMatchedOpenCalls().map(c => c.id));
-        for (const id of this._urgentSelected) {
-            if (!eligibleIds.has(id)) this._urgentSelected.delete(id);
-        }
+        this._dispatch('claimOpenCallsWithHours', { requests });
     }
 
     _toast(message, kind) {

@@ -80,6 +80,7 @@ import {
     respondToOffer,
     claimOpenCall,
     claimOpenCalls,
+    claimOpenCallsWithHours,
 } from 'backend/schedulingService.web.js';
 import {
     getMyTimeEntries,
@@ -446,6 +447,12 @@ async function handlePortalAction(portalEl, detail) {
 
         case 'claimOpenCalls': {
             const result = await claimOpenCalls(payload?.callIds || []);
+            pushActionResult(portalEl, { type, ...result });
+            break;
+        }
+
+        case 'claimOpenCallsWithHours': {
+            const result = await claimOpenCallsWithHours(payload?.requests || []);
             pushActionResult(portalEl, { type, ...result });
             break;
         }

@@ -26,6 +26,11 @@ export const ADMIN_STYLE = `
 .epa-day.blocked { background: #e5e7eb; }
 .epa-day .hol { display: block; font-size: 11px; color: #b45309; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .epa-day .cnt { display: block; font-size: 11.5px; color: #4b5563; line-height: 1.3; margin-top: 1px; }
+.epa-day-cov { position: absolute; bottom: 4px; inset-inline: 4px; height: 4px; background: #e5e7eb; border-radius: 999px; overflow: hidden; }
+.epa-day-cov-fill { height: 100%; border-radius: 999px; transition: width .2s; }
+.epa-day-cov-fill.full { background: #22c55e; }
+.epa-day-cov-fill.partial { background: #f59e0b; }
+.epa-day-cov-fill.none { background: #ef4444; }
 .epa-flag { position: absolute; top: 3px; inset-inline-start: 4px; font-size: 10px; }
 .epa-day-plus { position: absolute; top: 3px; inset-inline-end: 4px; width: 15px; height: 15px; line-height: 15px; text-align: center; font-size: 11px; font-weight: 700; border-radius: 50%; background: #dbeafe; color: #1d4ed8; cursor: help; }
 .epa-day-staff { position: absolute; top: 3px; inset-inline-end: 22px; width: 15px; height: 15px; line-height: 15px; text-align: center; font-size: 9px; border-radius: 50%; background: #d1fae5; color: #065f46; cursor: help; }
@@ -65,7 +70,8 @@ export const ADMIN_STYLE = `
 .epa-rule-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(150px,1fr)); gap: 8px; margin-bottom: 10px; }
 .epa-list-day { border: 1px solid #e5e7eb; border-radius: 10px; padding: 9px 11px; margin-bottom: 8px; font-size: 12.5px; background: #fff; }
 .epa-list-day.no-ws { background: #f9fafb; color: #9ca3af; }
-.epa-list-head { display: flex; justify-content: space-between; font-weight: 700; }
+.epa-list-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-weight: 700; }
+.epa-list-head .epa-day-cov { position: static; width: 72px; flex-shrink: 0; height: 5px; inset-inline: auto; bottom: auto; }
 .epa-shell { display: grid; grid-template-columns: minmax(0,1fr) 238px; gap: 16px; min-height: 640px; align-items: start; direction: ltr; transition: grid-template-columns .22s ease; }
 .epa-shell.collapsed { grid-template-columns: minmax(0,1fr) 68px; }
 .epa-sidebar { direction: rtl; position: sticky; top: 12px; padding: 12px; border: 1px solid #dbeafe; border-radius: 18px; background: linear-gradient(180deg,#fff 0%,#f8fbff 100%); box-shadow: 0 10px 30px rgba(30,64,175,.09); transition: width .22s ease; overflow: hidden; }
@@ -732,6 +738,23 @@ function coverageClass(day) {
     return filled > 0 ? 'cov-partial' : 'cov-none';
 }
 
+function dayCoverageStats(info) {
+    const types = info?.types || [];
+    if (!info?.hasWorkshops || !types.length) return null;
+    const required = types.reduce((s, t) => s + t.required, 0);
+    if (!required) return null;
+    const filled = types.reduce((s, t) => s + Math.min(t.filled, t.required), 0);
+    const pct = Math.min(100, Math.round((filled / required) * 100));
+    return { pct, filled, required };
+}
+
+function renderDayCoverageBar(info) {
+    const cov = dayCoverageStats(info);
+    if (!cov) return '';
+    const cls = cov.pct >= 100 ? 'full' : cov.pct > 0 ? 'partial' : 'none';
+    return `<div class="epa-day-cov" title="${cov.filled}/${cov.required} מקומות צוות מאוישים"><div class="epa-day-cov-fill ${cls}" style="width:${cov.pct}%"></div></div>`;
+}
+
 // ---------------------------------------------------------------------------
 // Render
 // ---------------------------------------------------------------------------
@@ -1290,6 +1313,7 @@ function renderHeatmap(ce, d) {
             <span class="num">${day}</span>
             ${holidays[dateKey] ? `<span class="hol">${esc(holidays[dateKey])}${holidayModeMarker(holidayEntry)}</span>` : ''}
             ${summary}
+            ${renderDayCoverageBar(info)}
         </div>`;
     }
 
@@ -1338,7 +1362,7 @@ function renderListView(ce, d) {
             </div>`;
         }).join('');
         rows.push(`<div class="epa-list-day" data-action="admin-select-day" data-date="${dateKey}">
-            <div class="epa-list-head"><span>${fmtDate(dateKey)}${holiday}${noteFlag}</span></div>
+            <div class="epa-list-head"><span>${fmtDate(dateKey)}${holiday}${noteFlag}</span>${renderDayCoverageBar(info)}</div>
             ${typeRows}
         </div>`);
     }

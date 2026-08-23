@@ -48,6 +48,7 @@ import {
     DEFAULT_RULE_TYPE_BY_WORKSHOP_ID,
     runScheduling,
     publishSchedulingUpdate,
+    closeResolvedOffersForDate,
     OFFER_STATUS,
     ASSIGNMENT_STATUS,
 } from 'backend/schedulingEngine.js';
@@ -337,6 +338,11 @@ export const getStaffAdminData = webMethod(Permissions.SiteMember, async (monthK
 
     const openOffers = (board.offers || [])
         .filter(o => o.status === OFFER_STATUS.PENDING || o.status === OFFER_STATUS.OPEN)
+        .filter(o => {
+            const dateKey = o.dateKey || toDateKey(o.date);
+            const t = board.days[dateKey]?.types?.[o.workshopTypeId];
+            return !t || typeFilledCount(t) < t.required;
+        })
         .map(o => ({
             id: o._id,
             kind: o.kind,
@@ -1342,6 +1348,7 @@ async function _manualAssignCore(role, dateKey, workshopTypeIds, employeeId, wor
 export const manualAssign = webMethod(Permissions.SiteMember, async (dateKey, workshopTypeIds, employeeId, workType, opts = {}) => {
     const { role } = await assertEmployeeAccess('manageScheduling');
     const result = await _manualAssignCore(role, dateKey, workshopTypeIds, employeeId, workType, opts);
+    await closeResolvedOffersForDate(dateKey);
     if (opts?.notify !== false) {
         await flushOutbox({ force: true }).catch(err => console.error('[staffAdminService] flushOutbox failed:', err?.message || err));
     }
@@ -1677,6 +1684,7 @@ export const approveSubmission = webMethod(Permissions.SiteMember, async (submis
         workType: normalizedWorkType,
     }, SA);
 
+    await closeResolvedOffersForDate(dateKey);
     await publishSchedulingUpdate('approve-submission', { submissionId, dateKey });
 
     const target = await wixData.get('Dashboard_Roles', employeeId, SA).catch(() => null);

@@ -164,8 +164,13 @@ export const ADMIN_STYLE = `
 .epa-accordion-body { padding: 2px 15px 15px; border-top: 1px solid #fde68a; }
 .epa-accordion-body .epa-field-block { margin-top: 10px; }
 .epa-accordion-body .epa-field-block b { font-size: 12px; color: #78350f; display: block; margin-bottom: 5px; }
-.epa-assign-ws { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; padding: 4px 10px; border: 1px solid #bfdbfe; border-radius: 999px; cursor: pointer; margin: 3px 4px 0 0; background: #fff; }
+.epa-assign-ws { display: inline-flex; flex-direction: column; align-items: flex-start; gap: 2px; font-size: 12px; padding: 6px 10px; border: 1px solid #bfdbfe; border-radius: 8px; cursor: pointer; margin: 3px 4px 0 0; background: #fff; vertical-align: top; }
 .epa-assign-ws:hover { border-color: #60a5fa; }
+.epa-assign-ws.disabled { cursor: not-allowed; opacity: .55; border-color: #e2e8f0; background: #f8fafc; }
+.epa-assign-ws-top { display: flex; align-items: center; gap: 6px; }
+.epa-assign-ws-name { font-weight: 600; }
+.epa-assign-ws-time { font-size: 10px; color: #6b7280; margin-inline-start: 20px; }
+.epa-assign-ws-hint { font-size: 10.5px; color: #dc2626; margin-inline-start: 20px; }
 .epa-pick-row { display: flex; justify-content: space-between; align-items: center; padding: 7px 4px; border-bottom: 1px solid #f1f5f9; font-size: 12.5px; }
 .epa-pick-row:last-child { border-bottom: none; }
 .epa-pick-row input:disabled { opacity: .35; cursor: not-allowed; }
@@ -747,6 +752,18 @@ const BOARD_STATUS = {
     HOLIDAY: { label: 'חג / מועד', badge: 'warn' },
 };
 
+/**
+ * Manual assignment without picking a specific workshop (e.g. opening/closing, or the manager
+ * just didn't select one) is still stored as SCHEDULED, but displayed distinctly so it's clear
+ * it isn't tied to a workshop slot.
+ */
+function rowStatusMeta(row) {
+    if (row.kind === 'submission' && row.status === 'SCHEDULED' && row.managerOverride && !row.workshopTypeId) {
+        return { label: 'הוגש - ידני', badge: 'kind' };
+    }
+    return BOARD_STATUS[row.status] || { label: row.status, badge: 'kind' };
+}
+
 function monthBounds(monthKey) {
     const [y, m] = (monthKey || '').split('-').map(Number);
     const last = new Date(y, m, 0).getDate();
@@ -783,6 +800,7 @@ function buildBoardMonthRows(d) {
             workshopTypeId: s.workshopTypeId || null,
             workshopName: s.workshopName || '',
             status: s.status,
+            managerOverride: !!s.managerOverride,
             extra: s.managerOverride ? 'ידני' : '',
         });
     }
@@ -937,8 +955,8 @@ function rowSelectDate(row, monthKey) {
 }
 
 function renderBoardRow(ce, row, selectedDay, employees, monthKey) {
-    const meta = BOARD_STATUS[row.status] || { label: row.status, badge: 'kind' };
-    const extra = row.kind === 'submission' && row.extra ? ` · ${esc(row.extra)}` : '';
+    const meta = rowStatusMeta(row);
+    const extra = row.kind === 'submission' && row.extra && !meta.label.includes('ידני') ? ` · ${esc(row.extra)}` : '';
     const employee = (employees || []).find(e => e.id === row.employeeId);
     const dot = row.employeeId ? `<span class="epa-dot-lg" style="background:${esc(employee?.color || '#2563eb')}"></span>` : '';
     const selectDate = rowSelectDate(row, monthKey);
@@ -1252,8 +1270,8 @@ function renderDayRowMenu(ce, d, row, dateKey) {
 }
 
 function renderDayPeopleRow(ce, d, row, dateKey) {
-    const meta = BOARD_STATUS[row.status] || { label: row.status, badge: 'kind' };
-    const extra = row.kind === 'submission' && row.extra ? ` · ${esc(row.extra)}` : '';
+    const meta = rowStatusMeta(row);
+    const extra = row.kind === 'submission' && row.extra && !meta.label.includes('ידני') ? ` · ${esc(row.extra)}` : '';
     const employee = (d.employees || []).find(e => e.id === row.employeeId);
     const dot = row.employeeId ? `<span class="epa-dot-lg" style="background:${esc(employee?.color || '#2563eb')}"></span>` : '';
     return `<tr>
@@ -1401,12 +1419,45 @@ function taskTypeOptions(d, selected) {
 }
 
 /** Employee-specific actions for a day: manual assignment (any # of workshops incl. zero) + a shortcut to a personal note. */
+/** True when two workshop time-ranges ({start,end} ISO strings) overlap. Open-ended (`end` null) ranges are treated as a point-in-time. */
+function timeRangesOverlap(a, b) {
+    const aStart = new Date(a.start).getTime();
+    const aEnd = a.end ? new Date(a.end).getTime() : aStart;
+    const bStart = new Date(b.start).getTime();
+    const bEnd = b.end ? new Date(b.end).getTime() : bStart;
+    return aStart < bEnd && bStart < aEnd;
+}
+
+/** True when workshop `t`'s time-ranges overlap any of `assignedTypes`' time-ranges (the employee's existing commitments that day). */
+function workshopOverlapsAssigned(t, assignedTypes) {
+    return assignedTypes.some(at => (t.timeRanges || []).some(r1 => (at.timeRanges || []).some(r2 => timeRangesOverlap(r1, r2))));
+}
+
 function renderManualAssignSection(ce, d, dateKey, info, activeEmployees) {
-    const prefillEmp = ce._dayAssignPrefillEmp || '';
+    // Mirrors the <select>'s own default (browsers auto-select the first <option>) so the
+    // overlap/duplicate checks below are correct even before the manager touches the dropdown.
+    const prefillEmp = ce._dayAssignPrefillEmp || activeEmployees[0]?.id || '';
     const empOptions = activeEmployees.map(e => `<option value="${e.id}" ${e.id === prefillEmp ? 'selected' : ''}>${esc(e.displayName)}</option>`).join('');
     const types = info?.types || [];
-    const workshopChecks = types.map(t =>
-        `<label class="epa-assign-ws"><input type="checkbox" class="epaAssignWs" data-action="admin-assign-ws-toggle" data-morning="${t.isMorning ? '1' : '0'}" value="${esc(t.typeId)}"> ${esc(t.name)}</label>`).join('');
+    // Workshops the selected employee is already assigned to that day — block re-selecting them,
+    // and block any other workshop whose time overlaps one they're already committed to.
+    const assignedTypes = prefillEmp ? types.filter(t => t.assignedEmployeeIds.includes(prefillEmp)) : [];
+    const assignedTypeIds = new Set(assignedTypes.map(t => t.typeId));
+    const workshopChecks = types.map(t => {
+        const alreadyAssigned = assignedTypeIds.has(t.typeId);
+        const overlapping = !alreadyAssigned && assignedTypes.length > 0 && workshopOverlapsAssigned(t, assignedTypes);
+        const disabled = alreadyAssigned || overlapping;
+        const hint = alreadyAssigned ? 'משובץ/ת כבר לסדנה זו' : (overlapping ? 'חופפת לסדנה שאליה משובץ/ת' : '');
+        const times = (t.timeRanges || []).map(r => r.end ? `${fmtTimeHe(r.start)}–${fmtTimeHe(r.end)}` : fmtTimeHe(r.start)).filter(Boolean).join(', ');
+        return `<label class="epa-assign-ws${disabled ? ' disabled' : ''}"${hint ? ` title="${esc(hint)}"` : ''}>
+            <span class="epa-assign-ws-top">
+                <input type="checkbox" class="epaAssignWs" data-action="admin-assign-ws-toggle" data-morning="${t.isMorning ? '1' : '0'}" value="${esc(t.typeId)}" ${disabled ? 'disabled' : ''}>
+                <span class="epa-assign-ws-name">${esc(t.name)}</span>
+            </span>
+            ${times ? `<span class="epa-assign-ws-time">${esc(times)}</span>` : ''}
+            ${hint ? `<span class="epa-assign-ws-hint">${esc(hint)}</span>` : ''}
+        </label>`;
+    }).join('');
     const noWorkshopsHint = !info?.hasWorkshops
         ? '<div class="ep-empty" style="margin:6px 0 0">אין סדנאות מתוזמנות ביום זה — אפשר עדיין לשבץ עובד/ת (לדוגמה לפתיחה/קיפול) ולבחור סוג עבודה.</div>'
         : '';
@@ -1414,10 +1465,11 @@ function renderManualAssignSection(ce, d, dateKey, info, activeEmployees) {
     return `<div id="epaAssignSection">
         <p class="epa-scope-tag one" style="display:inline-block;margin-bottom:10px">משפיע רק על העובד/ת שנבחר/ה</p>
         <div class="epa-form">
-            <div><label>עובד/ת</label><select id="epaAssignEmp">${empOptions}</select></div>
+            <div><label>עובד/ת</label><select id="epaAssignEmp" data-action="admin-assign-emp-change">${empOptions}</select></div>
             <div><label>סוג עבודה (מתלה)</label><select id="epaAssignWorkType">${workTypeOptions()}</select></div>
         </div>
         ${workshopChecks ? `<div style="margin-top:8px"><label style="font-size:11px;color:#6b7280;display:block;margin-bottom:3px">סדנאות ביום זה (ניתן לבחור כמה)</label>${workshopChecks}</div>` : ''}
+        <div class="ep-empty" style="margin:6px 0 0;font-size:11px">💡 אם לא תבחרו סדנה, העובד/ת יוצג/תוצג בסטטוס "הוגש - ידני".</div>
         ${noWorkshopsHint}
         ${hasMorningWorkshop ? `<div class="epa-form" id="epaAssignMorningFields" style="display:${ce._dayAssignShowMorning ? '' : 'none'}">
             <div><label>סוג משימה (משמרת בוקר)</label><select id="epaAssignTaskType">${taskTypeOptions(d, '')}</select></div>
@@ -2603,6 +2655,12 @@ function renderConfirmDeactivateForm(ce, roleId) {
 // ---------------------------------------------------------------------------
 
 export function handleAdminChange(ce, input) {
+    if (input?.dataset?.action === 'admin-assign-emp-change') {
+        ce._dayAssignPrefillEmp = input.value || null;
+        ce._dayAssignShowMorning = false;
+        ce.render();
+        return true;
+    }
     if (input?.dataset?.action === 'admin-batch-toggle') {
         ce._batchMode = input.checked;
         ce._saveBatch();
@@ -2711,6 +2769,25 @@ export function handleAdminChange(ce, input) {
         return true;
     }
     if (input?.dataset?.action === 'admin-assign-ws-toggle') {
+        if (input.checked) {
+            // Block checking a workshop that overlaps in time with one already checked in this
+            // form, or one the employee is already assigned to — can't work two slots at once.
+            const dateKey = ce._adminModal?.dateKey || ce._adminSelectedDay;
+            const types = ce._adminData?.days?.[dateKey]?.types || [];
+            const thisType = types.find(t => t.typeId === input.value);
+            const empId = ce.querySelector('#epaAssignEmp')?.value;
+            const assignedTypes = empId ? types.filter(t => t.assignedEmployeeIds.includes(empId)) : [];
+            const otherCheckedTypes = [...ce.querySelectorAll('.epaAssignWs:checked')]
+                .filter(x => x !== input)
+                .map(x => types.find(t => t.typeId === x.value))
+                .filter(Boolean);
+            const conflict = thisType && [...assignedTypes, ...otherCheckedTypes].find(ct => workshopOverlapsAssigned(thisType, [ct]));
+            if (conflict) {
+                input.checked = false;
+                ce._toast(`לא ניתן לשבץ לסדנה זו — היא חופפת בזמן ל"${conflict.name}".`, 'error');
+                return true;
+            }
+        }
         // Reveal the morning task-type/note fields only while a morning workshop is checked.
         ce._dayAssignShowMorning = [...ce.querySelectorAll('.epaAssignWs:checked')].some(x => x.dataset.morning === '1');
         const block = ce.querySelector('#epaAssignMorningFields');

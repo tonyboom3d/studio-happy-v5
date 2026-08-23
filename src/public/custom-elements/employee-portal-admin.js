@@ -263,6 +263,7 @@ export const ADMIN_STYLE = `
 .epa-batch-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; padding: 9px 11px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 9px; }
 .epa-batch-row-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .epa-batch-row-label { font-size: 13px; font-weight: 600; color: #1e293b; }
+.epa-batch-time { font-size: 11px; color: #6b7280; }
 .epa-batch-meta { font-size: 11px; color: #9ca3af; }
 .epa-batch-remove { flex-shrink: 0; border: none; background: none; cursor: pointer; color: #9ca3af; font-size: 15px; line-height: 1; padding: 2px 4px; }
 .epa-batch-remove:hover { color: #dc2626; }
@@ -280,6 +281,8 @@ export const ADMIN_STYLE = `
 .epa-batch-summary-reason { color: #dc2626; font-size: 11px; }
 .epa-btn.small { padding: 3px 9px; font-size: 11px; }
 .epa-pending-chip { display: inline-flex; align-items: center; margin-inline-start: 6px; font-size: 10.5px; font-weight: 700; padding: 2px 7px; border-radius: 999px; background: #fef3c7; color: #92400e; border: 1px solid #fde68a; cursor: default; white-space: nowrap; }
+.epa-row-pending { opacity: .55; }
+.epa-badge.pending { background: #fef3c7; color: #92400e; }
 .epa-day-tabs { display: flex; gap: 3px; margin: 0 0 12px; background: #fff7ed; border: 1px solid #fde68a; border-radius: 999px; padding: 3px; overflow-x: auto; }
 .epa-day-tab { flex: 1 1 0; white-space: nowrap; border: none; background: none; cursor: pointer; font-family: inherit; padding: 7px 10px; border-radius: 999px; font-size: 11.5px; font-weight: 700; color: #92400e; }
 .epa-day-tab.active { background: #fff; box-shadow: 0 1px 2px rgba(15,23,42,.08); color: #92400e; }
@@ -503,6 +506,25 @@ function batchWsName(d, dateKey, workshopTypeId) {
     return (d.days?.[dateKey]?.types || []).find(t => t.typeId === workshopTypeId)?.name || 'סדנה';
 }
 
+/** Start–end time text for a workshop that day, shown as small meta under a queued action's label. */
+function batchWsTimes(d, dateKey, workshopTypeId) {
+    if (!workshopTypeId) return '';
+    const t = (d.days?.[dateKey]?.types || []).find(x => x.typeId === workshopTypeId);
+    if (!t) return '';
+    return (t.timeRanges || []).map(r => r.end ? `${fmtTimeHe(r.start)}–${fmtTimeHe(r.end)}` : fmtTimeHe(r.start)).filter(Boolean).join(', ');
+}
+
+/** Time info shown alongside a queued action's label in the action-history panel. */
+function buildBatchTimeInfo(d, type, payload) {
+    if (type === 'adminManualAssign') {
+        return (payload.workshopTypeIds || []).map(id => batchWsTimes(d, payload.dateKey, id)).filter(Boolean).join(' · ');
+    }
+    if (type === 'adminCancelAssignment' || type === 'adminSwapAssignment') {
+        return batchWsTimes(d, payload.dateKey, payload.workshopTypeId);
+    }
+    return '';
+}
+
 /** Builds a human-readable Hebrew label for a queued action, used in the action-history panel. */
 function buildBatchLabel(d, type, payload) {
     const date = fmtDate(payload.dateKey);
@@ -551,15 +573,17 @@ function batchDedupeKey(type, payload) {
  * If an equivalent action (same target/date/effect) is already queued, it's updated in place instead of
  * duplicated — so performing "the same" action twice only ever saves once.
  */
-function enqueueBatchAction(ce, type, payload, label) {
+function enqueueBatchAction(ce, d, type, payload) {
     const clean = { ...payload };
     delete clean.notify;
     delete clean.notifyFrom;
     delete clean.notifyTo;
+    const label = buildBatchLabel(d, type, clean);
+    const time = buildBatchTimeInfo(d, type, clean);
     const key = batchDedupeKey(type, clean);
     const existingIdx = (ce._batchQueue || []).findIndex(item => batchDedupeKey(item.type, item.payload) === key);
     if (existingIdx >= 0) {
-        ce._batchQueue[existingIdx] = { ...ce._batchQueue[existingIdx], payload: clean, label, at: Date.now() };
+        ce._batchQueue[existingIdx] = { ...ce._batchQueue[existingIdx], payload: clean, label, time, at: Date.now() };
         ce._saveBatch();
         ce._adminModal = null;
         ce._toast(`הפעולה כבר הייתה בתור — עודכנה (${ce._batchQueue.length})`, 'success');
@@ -576,6 +600,7 @@ function enqueueBatchAction(ce, type, payload, label) {
         type,
         payload: clean,
         label,
+        time,
         at: Date.now(),
     });
     ce._saveBatch();
@@ -609,6 +634,66 @@ function pendingBatchDot(ce, dateKey, employeeId) {
     if (!items.length) return '';
     const tip = `ממתין לשמירה:\n${items.map(it => it.label).join('\n')}`;
     return `<span class="ep-tip-trigger" tabindex="0" data-tip="${esc(tip)}" style="margin-inline-start:3px">⏳</span>`;
+}
+
+/** True (marks a real row as "pending removal") when a queued cancel/swap-out action targets exactly this employee+workshop+date row. */
+function pendingBatchOverlayForRow(ce, row) {
+    if (!ce._batchMode || row.kind !== 'submission' || !row.employeeId) return null;
+    for (const item of (ce._batchQueue || [])) {
+        const p = item.payload || {};
+        if (p.dateKey !== row.date) continue;
+        if (item.type === 'adminCancelAssignment' && p.employeeId === row.employeeId && (p.workshopTypeId || null) === (row.workshopTypeId || null)) {
+            return 'remove';
+        }
+        if (item.type === 'adminSwapAssignment' && p.fromEmployeeId === row.employeeId && p.workshopTypeId === row.workshopTypeId) {
+            return 'remove';
+        }
+    }
+    return null;
+}
+
+function pendingBatchSyntheticRow(item, dateKey, employeeId, employeeName, workshopTypeId, workshopName) {
+    return {
+        key: `pending-${item.id}-${workshopTypeId || 'none'}`,
+        kind: 'submission',
+        date: dateKey,
+        dateEnd: dateKey,
+        employeeId,
+        employeeName,
+        startTime: '',
+        endTime: '',
+        workshopTypeId: workshopTypeId || null,
+        workshopName: workshopName || '',
+        status: 'SCHEDULED',
+        managerOverride: true,
+        extra: '',
+        pendingBatch: 'add',
+    };
+}
+
+/** Virtual rows for queued assign/swap-in actions on a date, so the manager sees the pending change in the table (dimmed, "ממתין לשמירה") before saving. */
+function pendingBatchSyntheticRows(ce, d, dateKey) {
+    if (!ce._batchMode) return [];
+    const rows = [];
+    for (const item of (ce._batchQueue || [])) {
+        const p = item.payload || {};
+        if (p.dateKey !== dateKey) continue;
+        if (item.type === 'adminManualAssign') {
+            const empName = batchEmpName(d, p.employeeId);
+            const ids = p.workshopTypeIds || [];
+            if (!ids.length) {
+                rows.push(pendingBatchSyntheticRow(item, dateKey, p.employeeId, empName, null, ''));
+            } else {
+                for (const typeId of ids) {
+                    rows.push(pendingBatchSyntheticRow(item, dateKey, p.employeeId, empName, typeId, batchWsName(d, dateKey, typeId)));
+                }
+            }
+        } else if (item.type === 'adminSwapAssignment') {
+            const empName = batchEmpName(d, p.toEmployeeId);
+            rows.push(pendingBatchSyntheticRow(item, dateKey, p.toEmployeeId, empName, p.workshopTypeId, batchWsName(d, dateKey, p.workshopTypeId)));
+        }
+    }
+    return rows;
 }
 
 function renderWorkshopCell(ce, d, s, canEdit) {
@@ -758,6 +843,9 @@ const BOARD_STATUS = {
  * it isn't tied to a workshop slot.
  */
 function rowStatusMeta(row) {
+    if (row.pendingBatch) {
+        return { label: 'ממתין לשמירה', badge: 'pending' };
+    }
     if (row.kind === 'submission' && row.status === 'SCHEDULED' && row.managerOverride && !row.workshopTypeId) {
         return { label: 'הוגש - ידני', badge: 'kind' };
     }
@@ -881,8 +969,13 @@ function filteredBoardRows(ce, d) {
 
 function filteredDayRows(ce, d, dateKey) {
     const f = dayFilter(ce);
-    return filterBoardRows(buildBoardMonthRows(d), { ...f, from: dateKey, to: dateKey }, monthBounds(d.monthKey))
-        .filter(r => r.kind === 'submission' || r.kind === 'vacation');
+    const filterOpts = { ...f, from: dateKey, to: dateKey };
+    const bounds = monthBounds(d.monthKey);
+    const real = filterBoardRows(buildBoardMonthRows(d), filterOpts, bounds)
+        .filter(r => r.kind === 'submission' || r.kind === 'vacation')
+        .map(r => ({ ...r, pendingBatch: pendingBatchOverlayForRow(ce, r) }));
+    const synthetic = filterBoardRows(pendingBatchSyntheticRows(ce, d, dateKey), filterOpts, bounds);
+    return [...real, ...synthetic];
 }
 
 function applyMsOpt(list, value, checked) {
@@ -1255,6 +1348,7 @@ function renderListView(ce, d) {
 /** Kebab dropdown of per-row actions in the day's employee list. */
 function renderDayRowMenu(ce, d, row, dateKey) {
     if (row.kind !== 'submission' || !d.permissions.manageScheduling) return '';
+    if (row.pendingBatch === 'add') return ''; // virtual row — nothing saved yet to act on
     const isOpen = ce._dayRowMenuOpen === row.key;
     const isScheduled = row.status === 'SCHEDULED';
     const hasWorkshop = !!row.workshopTypeId;
@@ -1274,11 +1368,11 @@ function renderDayPeopleRow(ce, d, row, dateKey) {
     const extra = row.kind === 'submission' && row.extra && !meta.label.includes('ידני') ? ` · ${esc(row.extra)}` : '';
     const employee = (d.employees || []).find(e => e.id === row.employeeId);
     const dot = row.employeeId ? `<span class="epa-dot-lg" style="background:${esc(employee?.color || '#2563eb')}"></span>` : '';
-    return `<tr>
+    return `<tr class="${row.pendingBatch ? 'epa-row-pending' : ''}">
         <td>${dot}${esc(row.employeeName || '—')}</td>
         <td>${formatBoardHours(row)}</td>
         <td>${formatBoardDetails(row)}</td>
-        <td><span class="epa-badge ${meta.badge}">${esc(meta.label)}${extra}</span>${pendingBatchBadge(ce, dateKey, row.employeeId)}</td>
+        <td><span class="epa-badge ${meta.badge}">${esc(meta.label)}${extra}</span></td>
         <td>${renderDayRowMenu(ce, d, row, dateKey)}</td>
     </tr>`;
 }
@@ -1301,7 +1395,7 @@ function renderDayPeopleList(ce, d, dateKey) {
         <div class="epa-panel-title">
             <h3>עובדים משובצים והגשות פעילות ליום - ${fmtDate(dateKey)} (${total})</h3>
             <div style="display:flex;gap:6px;flex-wrap:wrap">
-                ${canManageScheduling ? `<button type="button" class="epa-btn primary" data-action="admin-open-assign-day" data-date="${esc(dateKey)}">👤 שיבוץ עובד/ת ליום זה</button>` : ''}
+                ${canManageScheduling ? `<button type="button" class="epa-btn primary" data-action="admin-open-assign-day" data-date="${esc(dateKey)}">👤 שיבוץ עובד/ת ידני ליום זה</button>` : ''}
                 ${canSeeGlobalScope ? `<button type="button" class="epa-btn" data-action="admin-open-day-settings" data-date="${esc(dateKey)}">⚙️ הגדרות ליום זה</button>` : ''}
             </div>
         </div>
@@ -1443,20 +1537,29 @@ function renderManualAssignSection(ce, d, dateKey, info, activeEmployees) {
     // and block any other workshop whose time overlaps one they're already committed to.
     const assignedTypes = prefillEmp ? types.filter(t => t.assignedEmployeeIds.includes(prefillEmp)) : [];
     const assignedTypeIds = new Set(assignedTypes.map(t => t.typeId));
-    const workshopChecks = types.map(t => {
+    // A workshop type can run more than one session that day (e.g. two time slots of the same
+    // workshop) — show each session as its own selectable row so the manager can pick exactly
+    // which time the employee works, and so overlap checks are scoped to that specific session
+    // rather than the type's full (possibly non-overlapping) set of sessions.
+    const workshopChecks = types.flatMap(t => {
         const alreadyAssigned = assignedTypeIds.has(t.typeId);
-        const overlapping = !alreadyAssigned && assignedTypes.length > 0 && workshopOverlapsAssigned(t, assignedTypes);
-        const disabled = alreadyAssigned || overlapping;
-        const hint = alreadyAssigned ? 'משובץ/ת כבר לסדנה זו' : (overlapping ? 'חופפת לסדנה שאליה משובץ/ת' : '');
-        const times = (t.timeRanges || []).map(r => r.end ? `${fmtTimeHe(r.start)}–${fmtTimeHe(r.end)}` : fmtTimeHe(r.start)).filter(Boolean).join(', ');
-        return `<label class="epa-assign-ws${disabled ? ' disabled' : ''}"${hint ? ` title="${esc(hint)}"` : ''}>
-            <span class="epa-assign-ws-top">
-                <input type="checkbox" class="epaAssignWs" data-action="admin-assign-ws-toggle" data-morning="${t.isMorning ? '1' : '0'}" value="${esc(t.typeId)}" ${disabled ? 'disabled' : ''}>
-                <span class="epa-assign-ws-name">${esc(t.name)}</span>
-            </span>
-            ${times ? `<span class="epa-assign-ws-time">${esc(times)}</span>` : ''}
-            ${hint ? `<span class="epa-assign-ws-hint">${esc(hint)}</span>` : ''}
-        </label>`;
+        const sessions = (t.timeRanges && t.timeRanges.length) ? t.timeRanges : [null];
+        return sessions.map((range, idx) => {
+            const sessionType = { typeId: t.typeId, timeRanges: range ? [range] : [] };
+            const overlapping = !alreadyAssigned && assignedTypes.length > 0 && workshopOverlapsAssigned(sessionType, assignedTypes);
+            const disabled = alreadyAssigned || overlapping;
+            const hint = alreadyAssigned ? 'משובץ/ת כבר לסדנה זו' : (overlapping ? 'חופפת לסדנה שאליה משובץ/ת' : '');
+            const timeText = range ? (range.end ? `${fmtTimeHe(range.start)}–${fmtTimeHe(range.end)}` : fmtTimeHe(range.start)) : '';
+            const name = sessions.length > 1 ? `${t.name} — מפגש ${idx + 1}` : t.name;
+            return `<label class="epa-assign-ws${disabled ? ' disabled' : ''}"${hint ? ` title="${esc(hint)}"` : ''}>
+                <span class="epa-assign-ws-top">
+                    <input type="checkbox" class="epaAssignWs" data-action="admin-assign-ws-toggle" data-morning="${t.isMorning ? '1' : '0'}" data-start="${esc(range?.start || '')}" data-end="${esc(range?.end || '')}" value="${esc(t.typeId)}" ${disabled ? 'disabled' : ''}>
+                    <span class="epa-assign-ws-name">${esc(name)}</span>
+                </span>
+                ${timeText ? `<span class="epa-assign-ws-time">${esc(timeText)}</span>` : ''}
+                ${hint ? `<span class="epa-assign-ws-hint">${esc(hint)}</span>` : ''}
+            </label>`;
+        });
     }).join('');
     const noWorkshopsHint = !info?.hasWorkshops
         ? '<div class="ep-empty" style="margin:6px 0 0">אין סדנאות מתוזמנות ביום זה — אפשר עדיין לשבץ עובד/ת (לדוגמה לפתיחה/קיפול) ולבחור סוג עבודה.</div>'
@@ -2445,6 +2548,7 @@ function renderBatchHistory(ce, d) {
         <div class="epa-batch-row">
             <div class="epa-batch-row-main">
                 <div class="epa-batch-row-label">${esc(item.label)}</div>
+                ${item.time ? `<div class="epa-batch-time">🕒 ${esc(item.time)}</div>` : ''}
                 <div class="epa-batch-meta">נוסף · ${relTimeHe(item.at)} · ${fmtTimeHe(new Date(item.at).toISOString())}${item.failReason ? ` · <span style="color:#dc2626">${esc(item.failReason)}</span>` : ''}</div>
             </div>
             <button class="epa-batch-remove" data-action="admin-batch-remove" data-id="${esc(item.id)}" aria-label="הסרה">✕</button>
@@ -2538,7 +2642,7 @@ function renderModal(ce, d) {
     } else if (modal.type === 'assignDay') {
         const info = d.days?.[modal.dateKey];
         const activeEmployees = (d.employees || []).filter(e => e.active);
-        title = `👤 שיבוץ עובד/ת ליום זה — ${fmtDate(modal.dateKey)}`;
+        title = `👤 שיבוץ עובד/ת ידני ליום זה — ${fmtDate(modal.dateKey)}`;
         body = renderManualAssignSection(ce, d, modal.dateKey, info, activeEmployees);
     } else if (modal.type === 'daySettings') {
         const info = d.days?.[modal.dateKey];
@@ -2770,21 +2874,27 @@ export function handleAdminChange(ce, input) {
     }
     if (input?.dataset?.action === 'admin-assign-ws-toggle') {
         if (input.checked) {
-            // Block checking a workshop that overlaps in time with one already checked in this
+            // Block checking a session that overlaps in time with one already checked in this
             // form, or one the employee is already assigned to — can't work two slots at once.
+            // Scoped to the specific session (data-start/data-end), not the workshop type's
+            // full set of sessions, so picking a non-conflicting session of the same type works.
             const dateKey = ce._adminModal?.dateKey || ce._adminSelectedDay;
             const types = ce._adminData?.days?.[dateKey]?.types || [];
-            const thisType = types.find(t => t.typeId === input.value);
             const empId = ce.querySelector('#epaAssignEmp')?.value;
             const assignedTypes = empId ? types.filter(t => t.assignedEmployeeIds.includes(empId)) : [];
-            const otherCheckedTypes = [...ce.querySelectorAll('.epaAssignWs:checked')]
+            const sessionOf = (el) => ({
+                typeId: el.value,
+                timeRanges: el.dataset.start ? [{ start: el.dataset.start, end: el.dataset.end || null }] : [],
+            });
+            const thisSession = sessionOf(input);
+            const otherSessions = [...ce.querySelectorAll('.epaAssignWs:checked')]
                 .filter(x => x !== input)
-                .map(x => types.find(t => t.typeId === x.value))
-                .filter(Boolean);
-            const conflict = thisType && [...assignedTypes, ...otherCheckedTypes].find(ct => workshopOverlapsAssigned(thisType, [ct]));
+                .map(sessionOf);
+            const conflict = [...assignedTypes, ...otherSessions].find(ct => workshopOverlapsAssigned(thisSession, [ct]));
             if (conflict) {
                 input.checked = false;
-                ce._toast(`לא ניתן לשבץ לסדנה זו — היא חופפת בזמן ל"${conflict.name}".`, 'error');
+                const name = conflict.name || types.find(t => t.typeId === conflict.typeId)?.name || 'סדנה אחרת';
+                ce._toast(`לא ניתן לשבץ לסדנה זו — היא חופפת בזמן ל"${name}".`, 'error');
                 return true;
             }
         }
@@ -3100,7 +3210,7 @@ export function handleAdminClick(ce, action, target) {
             ce._dayAssignPrefillEmp = null;
             ce._dayAssignShowMorning = false;
             if (ce._batchMode) {
-                enqueueBatchAction(ce, 'adminManualAssign', assignPayload, buildBatchLabel(d, 'adminManualAssign', assignPayload));
+                enqueueBatchAction(ce, d, 'adminManualAssign', assignPayload);
                 return true;
             }
             ce._adminModal = null;
@@ -3235,7 +3345,7 @@ export function handleAdminClick(ce, action, target) {
                 shiftNote,
             };
             if (ce._batchMode) {
-                enqueueBatchAction(ce, 'adminManualAssign', wsAssignPayload, buildBatchLabel(d, 'adminManualAssign', wsAssignPayload));
+                enqueueBatchAction(ce, d, 'adminManualAssign', wsAssignPayload);
                 return true;
             }
             ce._adminModal = null;
@@ -3267,7 +3377,7 @@ export function handleAdminClick(ce, action, target) {
                 notifyTo,
             };
             if (ce._batchMode) {
-                enqueueBatchAction(ce, 'adminSwapAssignment', swapPayload, buildBatchLabel(d, 'adminSwapAssignment', swapPayload));
+                enqueueBatchAction(ce, d, 'adminSwapAssignment', swapPayload);
                 return true;
             }
             ce._adminModal = null;
@@ -3314,7 +3424,7 @@ export function handleAdminClick(ce, action, target) {
                 notify,
             };
             if (ce._batchMode) {
-                enqueueBatchAction(ce, 'adminCancelAssignment', cancelPayload, buildBatchLabel(d, 'adminCancelAssignment', cancelPayload));
+                enqueueBatchAction(ce, d, 'adminCancelAssignment', cancelPayload);
                 return true;
             }
             ce._adminModal = null;

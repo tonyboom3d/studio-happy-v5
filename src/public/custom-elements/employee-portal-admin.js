@@ -274,6 +274,7 @@ export const ADMIN_STYLE = `
 .epa-batch-summary-label { color: #1e293b; flex: 1; }
 .epa-batch-summary-reason { color: #dc2626; font-size: 11px; }
 .epa-btn.small { padding: 3px 9px; font-size: 11px; }
+.epa-pending-chip { display: inline-flex; align-items: center; margin-inline-start: 6px; font-size: 10.5px; font-weight: 700; padding: 2px 7px; border-radius: 999px; background: #fef3c7; color: #92400e; border: 1px solid #fde68a; cursor: default; white-space: nowrap; }
 .epa-day-tabs { display: flex; gap: 3px; margin: 0 0 12px; background: #fff7ed; border: 1px solid #fde68a; border-radius: 999px; padding: 3px; overflow-x: auto; }
 .epa-day-tab { flex: 1 1 0; white-space: nowrap; border: none; background: none; cursor: pointer; font-family: inherit; padding: 7px 10px; border-radius: 999px; font-size: 11.5px; font-weight: 700; color: #92400e; }
 .epa-day-tab.active { background: #fff; box-shadow: 0 1px 2px rgba(15,23,42,.08); color: #92400e; }
@@ -524,16 +525,46 @@ function buildBatchLabel(d, type, payload) {
     return `פעולה · ${date}`;
 }
 
-/** Queues a scheduling action locally instead of dispatching it, enforcing the 50-item cap and persisting. */
-function enqueueBatchAction(ce, type, payload, label) {
-    if (ce._batchQueue.length >= BATCH_QUEUE_CAP) {
-        ce._toast(`תור הפעולות מלא (עד ${BATCH_QUEUE_CAP} פעולות). שמרו או הסירו פעולות כדי להמשיך.`, 'error');
-        return false;
+/** Identifies "the same action" for de-duplication — same target(s), same date, same effect. */
+function batchDedupeKey(type, payload) {
+    const p = payload || {};
+    if (type === 'adminManualAssign') {
+        const ids = (p.workshopTypeIds || []).slice().sort().join(',');
+        return `assign:${p.dateKey}:${p.employeeId}:${ids}`;
     }
+    if (type === 'adminCancelAssignment') {
+        return `cancel:${p.dateKey}:${p.workshopTypeId || ''}:${p.employeeId}:${p.disposition}`;
+    }
+    if (type === 'adminSwapAssignment') {
+        return `swap:${p.dateKey}:${p.workshopTypeId}:${p.fromEmployeeId}:${p.toEmployeeId}`;
+    }
+    return `${type}:${JSON.stringify(p)}`;
+}
+
+/**
+ * Queues a scheduling action locally instead of dispatching it, enforcing the 50-item cap and persisting.
+ * If an equivalent action (same target/date/effect) is already queued, it's updated in place instead of
+ * duplicated — so performing "the same" action twice only ever saves once.
+ */
+function enqueueBatchAction(ce, type, payload, label) {
     const clean = { ...payload };
     delete clean.notify;
     delete clean.notifyFrom;
     delete clean.notifyTo;
+    const key = batchDedupeKey(type, clean);
+    const existingIdx = (ce._batchQueue || []).findIndex(item => batchDedupeKey(item.type, item.payload) === key);
+    if (existingIdx >= 0) {
+        ce._batchQueue[existingIdx] = { ...ce._batchQueue[existingIdx], payload: clean, label, at: Date.now() };
+        ce._saveBatch();
+        ce._adminModal = null;
+        ce._toast(`הפעולה כבר הייתה בתור — עודכנה (${ce._batchQueue.length})`, 'success');
+        ce.render();
+        return true;
+    }
+    if (ce._batchQueue.length >= BATCH_QUEUE_CAP) {
+        ce._toast(`תור הפעולות מלא (עד ${BATCH_QUEUE_CAP} פעולות). שמרו או הסירו פעולות כדי להמשיך.`, 'error');
+        return false;
+    }
     if (!ce._batchExpiresAt) ce._batchExpiresAt = Date.now() + 30 * 60 * 1000;
     ce._batchQueue.push({
         id: `b${Date.now()}${Math.random().toString(36).slice(2, 7)}`,
@@ -547,6 +578,32 @@ function enqueueBatchAction(ce, type, payload, label) {
     ce._toast(`נוסף לתור הפעולות (${ce._batchQueue.length})`, 'success');
     ce.render();
     return true;
+}
+
+/** Queued batch items that touch a given employee on a given date — as the direct target, or on either side of a swap. */
+function pendingBatchItemsFor(ce, dateKey, employeeId) {
+    if (!ce._batchMode || !employeeId || !dateKey) return [];
+    return (ce._batchQueue || []).filter(item => {
+        const p = item.payload || {};
+        if (p.dateKey !== dateKey) return false;
+        return p.employeeId === employeeId || p.fromEmployeeId === employeeId || p.toEmployeeId === employeeId;
+    });
+}
+
+/** Small "ממתין לשמירה" chip shown next to an employee's row when a queued (unsaved) batch action affects them that day. */
+function pendingBatchBadge(ce, dateKey, employeeId) {
+    const items = pendingBatchItemsFor(ce, dateKey, employeeId);
+    if (!items.length) return '';
+    const tip = items.map(it => it.label).join('\n');
+    return `<span class="epa-pending-chip ep-tip-trigger" tabindex="0" data-tip="${esc(tip)}">⏳ ממתין לשמירה${items.length > 1 ? ` (${items.length})` : ''}</span>`;
+}
+
+/** Compact "⏳" marker (no pill) for embedding inside an existing name chip, e.g. the monthly list's assigned/submitted names. */
+function pendingBatchDot(ce, dateKey, employeeId) {
+    const items = pendingBatchItemsFor(ce, dateKey, employeeId);
+    if (!items.length) return '';
+    const tip = `ממתין לשמירה:\n${items.map(it => it.label).join('\n')}`;
+    return `<span class="ep-tip-trigger" tabindex="0" data-tip="${esc(tip)}" style="margin-inline-start:3px">⏳</span>`;
 }
 
 function renderWorkshopCell(ce, d, s, canEdit) {
@@ -879,7 +936,7 @@ function rowSelectDate(row, monthKey) {
     return row.date;
 }
 
-function renderBoardRow(row, selectedDay, employees, monthKey) {
+function renderBoardRow(ce, row, selectedDay, employees, monthKey) {
     const meta = BOARD_STATUS[row.status] || { label: row.status, badge: 'kind' };
     const extra = row.kind === 'submission' && row.extra ? ` · ${esc(row.extra)}` : '';
     const employee = (employees || []).find(e => e.id === row.employeeId);
@@ -890,7 +947,7 @@ function renderBoardRow(row, selectedDay, employees, monthKey) {
         <td>${dot}${esc(row.employeeName || '—')}</td>
         <td>${formatBoardHours(row)}</td>
         <td>${formatBoardDetails(row)}</td>
-        <td><span class="epa-badge ${meta.badge}">${esc(meta.label)}${extra}</span></td>
+        <td><span class="epa-badge ${meta.badge}">${esc(meta.label)}${extra}</span>${pendingBatchBadge(ce, row.date, row.employeeId)}</td>
     </tr>`;
 }
 
@@ -936,7 +993,7 @@ function renderBoardSubmissions(ce, d) {
     const blocked = filtered.filter(r => r.kind === 'blocked').length;
     const fromVal = f.from || bounds.from;
     const toVal = f.to || bounds.to;
-    const rows = items.map(r => renderBoardRow(r, ce._adminSelectedDay, d.employees, d.monthKey)).join('');
+    const rows = items.map(r => renderBoardRow(ce, r, ce._adminSelectedDay, d.employees, d.monthKey)).join('');
 
     return `<div class="epa-panel-title"><h3>כל ההגשות והשיבוצים — ${monthTitle(d.monthKey)}</h3>${renderPageSizeSelect(ce, 'admin-board-page-size')}</div>
         <div class="epa-board-stats">
@@ -1158,14 +1215,14 @@ function renderListView(ce, d) {
             continue;
         }
         const typeRows = (info.types || []).map(t => {
-            const assigned = subs.filter(s => t.assignedEmployeeIds.includes(s.employeeId)).map(s => esc(s.employeeName));
-            const submitted = subs.filter(s => !t.assignedEmployeeIds.includes(s.employeeId) && s.status !== 'STANDBY').map(s => esc(s.employeeName));
+            const assigned = subs.filter(s => t.assignedEmployeeIds.includes(s.employeeId));
+            const submitted = subs.filter(s => !t.assignedEmployeeIds.includes(s.employeeId) && s.status !== 'STANDBY');
             const times = (t.timeRanges || []).map(r => r.end ? `${fmtTimeHe(r.start)}–${fmtTimeHe(r.end)}` : fmtTimeHe(r.start)).filter(Boolean).join(', ');
             return `<div style="margin-top:5px">
                 <b>${esc(t.name)}</b> — נדרשים ${t.required}, שובצו ${Math.min(t.filled, t.required)}${t.standbyCount ? `, בהמתנה ${t.standbyCount}` : ''}${times ? ` <span style="color:#6b7280">(${esc(times)})</span>` : ''}
                 <div class="epa-chips">
-                    ${assigned.map(n => `<span class="epa-chip assigned">${n}</span>`).join('')}
-                    ${submitted.map(n => `<span class="epa-chip">${n}</span>`).join('')}
+                    ${assigned.map(s => `<span class="epa-chip assigned">${esc(s.employeeName)}${pendingBatchDot(ce, dateKey, s.employeeId)}</span>`).join('')}
+                    ${submitted.map(s => `<span class="epa-chip">${esc(s.employeeName)}${pendingBatchDot(ce, dateKey, s.employeeId)}</span>`).join('')}
                 </div>
             </div>`;
         }).join('');
@@ -1203,7 +1260,7 @@ function renderDayPeopleRow(ce, d, row, dateKey) {
         <td>${dot}${esc(row.employeeName || '—')}</td>
         <td>${formatBoardHours(row)}</td>
         <td>${formatBoardDetails(row)}</td>
-        <td><span class="epa-badge ${meta.badge}">${esc(meta.label)}${extra}</span></td>
+        <td><span class="epa-badge ${meta.badge}">${esc(meta.label)}${extra}</span>${pendingBatchBadge(ce, dateKey, row.employeeId)}</td>
         <td>${renderDayRowMenu(ce, d, row, dateKey)}</td>
     </tr>`;
 }

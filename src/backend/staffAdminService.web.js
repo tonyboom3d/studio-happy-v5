@@ -32,7 +32,9 @@ import {
     WORK_TYPE_LABELS,
     DEFAULT_WORK_TYPE,
     normalizeWorkType,
+    classifyShiftSlot,
 } from 'backend/availabilityRules.js';
+import { TASK_TYPES, TASK_LABELS } from 'backend/timeClockService.web.js';
 import { syncHebcalHolidays } from 'backend/holidayService.js';
 import { TUFTING_SERVICE_IDS } from 'backend/sketchEditingPolicy.js';
 import {
@@ -69,6 +71,12 @@ import { enqueueNotification, flushOutbox, PRIORITY } from 'backend/notification
 const PORTAL_URL = 'https://www.studiohappy.art/employee-portal';
 
 const SA = { suppressAuth: true };
+
+/** Normalizes a shift task-type value against TASK_TYPES (from timeClockService); returns null if unset/invalid. */
+function normalizeTaskType(value) {
+    const raw = String(value || '').trim().toUpperCase();
+    return TASK_TYPES.includes(raw) ? raw : null;
+}
 
 async function queryStaffMembers(query, options) {
     return staffMembers.queryStaffMembers(query, options);
@@ -278,6 +286,8 @@ export const getStaffAdminData = webMethod(Permissions.SiteMember, async (monthK
             workshopTypeId: assignedType?.typeId || null,
             workshopName: assignedType?.name || null,
             workType: normalizeWorkType(s.workType),
+            taskType: normalizeTaskType(s.taskType),
+            shiftNote: s.shiftNote || '',
         };
     });
 
@@ -287,17 +297,23 @@ export const getStaffAdminData = webMethod(Permissions.SiteMember, async (monthK
         days[dateKey] = {
             hasWorkshops: day.hasWorkshops,
             hasTufting: Object.keys(day.types).some(id => tuftingTypeIds.has(id)),
-            types: Object.values(day.types).map(t => ({
-                typeId: t.typeId,
-                name: t.name,
-                adults: t.adults,
-                children: t.children,
-                required: t.required,
-                filled: typeFilledCount(t),
-                assignedEmployeeIds: t.assignedEmployeeIds,
-                standbyCount: t.standbyQueue.length,
-                timeRanges: [...t.sessions].sort().map(start => ({ start, end: t.sessionEnds?.[start] || null })),
-            })),
+            types: Object.values(day.types).map(t => {
+                const sortedSessions = [...t.sessions].sort();
+                const timeRanges = sortedSessions.map(start => ({ start, end: t.sessionEnds?.[start] || null }));
+                const earliestStart = sortedSessions[0] || null;
+                return {
+                    typeId: t.typeId,
+                    name: t.name,
+                    adults: t.adults,
+                    children: t.children,
+                    required: t.required,
+                    filled: typeFilledCount(t),
+                    assignedEmployeeIds: t.assignedEmployeeIds,
+                    standbyCount: t.standbyQueue.length,
+                    timeRanges,
+                    isMorning: earliestStart ? classifyShiftSlot(dateKey, earliestStart) === 'morning' : false,
+                };
+            }),
         };
     }
 
@@ -369,6 +385,7 @@ export const getStaffAdminData = webMethod(Permissions.SiteMember, async (monthK
         pendingVacationsCount: canManageEmployees ? pendingVacationsTotal : 0,
         workshopTypes: Object.values(board.typesById),
         workTypes: WORK_TYPES.map(value => ({ value, label: WORK_TYPE_LABELS[value] })),
+        taskTypes: TASK_TYPES.map(value => ({ value, label: TASK_LABELS[value] })),
         roleTypes: ROLE_TYPES.map(rt => ({ value: rt, label: ROLE_TYPE_LABELS[rt] })),
         ...(canManageRoles ? {
             permissionKeys: PERMISSION_KEYS,
@@ -1155,8 +1172,15 @@ export const sendAvailabilityNudge = webMethod(Permissions.SiteMember, async (ro
  * workshopTypeIds array is valid — used for days with no workshops, where the
  * manager still wants to schedule the employee (e.g. for opening/closing).
  */
-export const manualAssign = webMethod(Permissions.SiteMember, async (dateKey, workshopTypeIds, employeeId, workType) => {
-    const { role } = await assertEmployeeAccess('manageScheduling');
+/**
+ * Core assignment logic shared by `manualAssign` and `swapAssignment`.
+ * Does not run the scheduling engine or flush the outbox — callers own
+ * that so a swap (cancel + assign) only triggers it once, at the end.
+ */
+async function _manualAssignCore(role, dateKey, workshopTypeIds, employeeId, workType, opts = {}) {
+    const notify = opts.notify !== false;
+    const taskType = normalizeTaskType(opts.taskType);
+    const shiftNote = String(opts.shiftNote || '').trim();
     if (!/^\d{4}-\d{2}-\d{2}$/.test(dateKey || '') || !employeeId) {
         throw new Error('BAD_REQUEST: חסרים פרטים לשיבוץ.');
     }
@@ -1189,13 +1213,21 @@ export const manualAssign = webMethod(Permissions.SiteMember, async (dateKey, wo
         .limit(1).find(SA).catch(() => ({ items: [] }));
 
     let submission = existing.items?.[0] || null;
+    const needsUpdate = submission && (
+        submission.status !== SUBMISSION_STATUS.SCHEDULED ||
+        normalizeWorkType(submission.workType) !== normalizedWorkType ||
+        normalizeTaskType(submission.taskType) !== taskType ||
+        (submission.shiftNote || '') !== shiftNote
+    );
     if (submission) {
-        if (submission.status !== SUBMISSION_STATUS.SCHEDULED || normalizeWorkType(submission.workType) !== normalizedWorkType) {
+        if (needsUpdate) {
             submission = await wixData.update('AvailabilitySubmissions', {
                 ...submission,
                 status: SUBMISSION_STATUS.SCHEDULED,
                 managerOverride: true,
                 workType: normalizedWorkType,
+                taskType,
+                shiftNote,
             }, SA);
         }
     } else {
@@ -1209,6 +1241,8 @@ export const manualAssign = webMethod(Permissions.SiteMember, async (dateKey, wo
             monthKey: dateKey.slice(0, 7),
             managerOverride: true,
             workType: normalizedWorkType,
+            taskType,
+            shiftNote,
             submittedByName: role.displayName || 'מנהל/ת',
             notes: 'שיבוץ ידני על ידי מנהל/ת',
         }, SA);
@@ -1227,13 +1261,15 @@ export const manualAssign = webMethod(Permissions.SiteMember, async (dateKey, wo
             status: ASSIGNMENT_STATUS.APPROVED,
             source: 'MANUAL',
             workType: normalizedWorkType,
+            taskType,
+            shiftNote,
         }, SA);
     }
 
     await publishSchedulingUpdate('manual-assign', { dateKey });
 
-    // Schedule-change notification (Module D)
-    if (target.phone) {
+    // Schedule-change notification (Module D) — queued only; caller flushes.
+    if (notify && target.phone) {
         const [y, m, d] = dateKey.split('-').map(Number);
         const dow = new Intl.DateTimeFormat('he-IL', { weekday: 'long' }).format(new Date(Date.UTC(y, m - 1, d)));
         const names = toAssign.map(id => typesById[id]?.name || 'סדנה');
@@ -1247,15 +1283,37 @@ export const manualAssign = webMethod(Permissions.SiteMember, async (dateKey, wo
             digest: { line: `${dow}, ${d}.${m}.${y} — ${names.join(', ') || 'סדנה'}`, kind: 'assigned' },
             vars: { displayName: target.displayName || '', detail, dow, date: `${d}.${m}.${y}`, portalLink: PORTAL_URL },
         });
-        await flushOutbox({ force: true }).catch(err => console.error('[staffAdminService] flushOutbox failed:', err?.message || err));
     }
 
     console.log(`[staffAdminService] manualAssign: ${employeeId} → ${dateKey}/[${toAssign.join(',')}] workType=${normalizedWorkType} by ${role._id}`);
-    return { ok: true, assigned: toAssign.length, skipped: alreadyAssigned.length };
+    return { ok: true, assigned: toAssign.length, skipped: alreadyAssigned.length, target };
+}
+
+/**
+ * Manager assigns an employee to a day — zero, one, or several workshops at
+ * once (each becomes its own ShiftAssignments row on the shared submission),
+ * plus a single work-type ("מתלה": סדנה/פתיחה/קיפול) for that day. An empty
+ * workshopTypeIds array is valid — used for days with no workshops, where the
+ * manager still wants to schedule the employee (e.g. for opening/closing).
+ *
+ * `opts`: { notify = true, taskType = null, shiftNote = '' } — taskType/shiftNote
+ * are only meaningful for morning shifts, validated against TASK_TYPES.
+ */
+export const manualAssign = webMethod(Permissions.SiteMember, async (dateKey, workshopTypeIds, employeeId, workType, opts = {}) => {
+    const { role } = await assertEmployeeAccess('manageScheduling');
+    const result = await _manualAssignCore(role, dateKey, workshopTypeIds, employeeId, workType, opts);
+    if (opts?.notify !== false) {
+        await flushOutbox({ force: true }).catch(err => console.error('[staffAdminService] flushOutbox failed:', err?.message || err));
+    }
+    return result;
 });
 
-export const cancelAssignment = webMethod(Permissions.SiteMember, async (dateKey, workshopTypeId, employeeId, disposition = 'restore') => {
-    const { role } = await assertEmployeeAccess('manageScheduling');
+/**
+ * Core cancel/restore logic shared by `cancelAssignment` and `swapAssignment`.
+ * Does not run the scheduling engine or flush the outbox — see note above.
+ */
+async function _cancelAssignmentCore(role, dateKey, workshopTypeId, employeeId, disposition = 'restore', opts = {}) {
+    const notify = opts.notify !== false;
     const mode = disposition === 'delete' ? 'delete' : 'restore';
     const result = await wixData.query('ShiftAssignments')
         .eq('dateKey', dateKey)
@@ -1293,9 +1351,9 @@ export const cancelAssignment = webMethod(Permissions.SiteMember, async (dateKey
         }
     }
 
-    // Schedule-change notification (Module D)
+    // Schedule-change notification (Module D) — queued only; caller flushes.
     const target = await wixData.get('Dashboard_Roles', employeeId, SA).catch(() => null);
-    if (target?.phone) {
+    if (notify && target?.phone) {
         const [y, m, d] = dateKey.split('-').map(Number);
         const dow = new Intl.DateTimeFormat('he-IL', { weekday: 'long' }).format(new Date(Date.UTC(y, m - 1, d)));
         await enqueueNotification({
@@ -1309,13 +1367,94 @@ export const cancelAssignment = webMethod(Permissions.SiteMember, async (dateKey
         });
     }
 
+    console.log(`[staffAdminService] cancelAssignment: ${employeeId} @ ${dateKey}/${workshopTypeId} disposition=${mode} by ${role._id}`);
+    return { ok: true, disposition: mode, target };
+}
+
+/**
+ * `opts`: { notify = true } — controls whether a WhatsApp update is queued
+ * for the removed employee (manager checkbox, checked by default).
+ */
+export const cancelAssignment = webMethod(Permissions.SiteMember, async (dateKey, workshopTypeId, employeeId, disposition = 'restore', opts = {}) => {
+    const { role } = await assertEmployeeAccess('manageScheduling');
+    const result = await _cancelAssignmentCore(role, dateKey, workshopTypeId, employeeId, disposition, opts);
     // Freed capacity: rerun the engine for that day (auto-fill / offers / open call);
     // its own flushOutbox handles both this cancellation and any resulting refill notice.
     await runScheduling(dateKey, dateKey);
     await flushOutbox({ force: true }).catch(err => console.error('[staffAdminService] flushOutbox failed:', err?.message || err));
-    await publishSchedulingUpdate('cancel-assignment', { dateKey, employeeId, disposition: mode });
-    console.log(`[staffAdminService] cancelAssignment: ${employeeId} @ ${dateKey}/${workshopTypeId} disposition=${mode} by ${role._id}`);
-    return { ok: true, disposition: mode };
+    await publishSchedulingUpdate('cancel-assignment', { dateKey, employeeId, disposition: result.disposition });
+    return { ok: true, disposition: result.disposition };
+});
+
+/**
+ * Manager replaces one employee with another for a specific workshop/slot on
+ * a day, in one atomic operation (cancel outgoing + assign incoming, single
+ * scheduling-engine run + outbox flush). Validates the replacement before
+ * mutating anything:
+ *  - approved vacation that day → blocked
+ *  - already assigned to this exact workshopTypeId that day (status משובץ) →
+ *    blocked until their status is changed back to הוגש
+ *  - already משובץ elsewhere that day → allowed, returned as a non-blocking
+ *    `warning` for the manager UI to surface
+ *
+ * `opts`: { notifyFrom = true, notifyTo = true, fromDisposition = 'restore',
+ *           workType, taskType, shiftNote }
+ */
+export const swapAssignment = webMethod(Permissions.SiteMember, async (dateKey, workshopTypeId, fromEmployeeId, toEmployeeId, opts = {}) => {
+    const { role } = await assertEmployeeAccess('manageScheduling');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateKey || '') || !workshopTypeId || !fromEmployeeId || !toEmployeeId) {
+        throw new Error('BAD_REQUEST: חסרים פרטים להחלפה.');
+    }
+    if (fromEmployeeId === toEmployeeId) {
+        throw new Error('BAD_REQUEST: יש לבחור עובד/ת אחר/ת להחלפה.');
+    }
+
+    const toTarget = await wixData.get('Dashboard_Roles', toEmployeeId, SA).catch(() => null);
+    if (!toTarget) throw new Error('NOT_FOUND: העובד/ת המחליף/ה לא נמצא/ה.');
+
+    const approvedVacations = await loadVacationsForEmployee(toEmployeeId);
+    const onVacation = approvedVacations.some(v => v.startDate <= dateKey && dateKey <= v.endDate);
+    if (onVacation) {
+        return { ok: false, blocked: true, reason: `לא ניתן לשבץ את ${toTarget.displayName || 'העובד/ת'} בתאריך זה — יש לו/ה חופשה מאושרת ביום זה.` };
+    }
+
+    const board = await buildBoard(dateKey, dateKey, { consistent: true });
+    const type = board.days[dateKey]?.types?.[workshopTypeId];
+
+    // Exact same slot/workshop: block until the candidate's status is changed off משובץ.
+    if (type?.assignedEmployeeIds?.includes(toEmployeeId)) {
+        return {
+            ok: false,
+            blocked: true,
+            reason: `${toTarget.displayName || 'העובד/ת'} כבר משובץ/ת לאותה סדנה/משמרת ביום זה — יש לשנות את הסטטוס שלו/ה ל"הוגש" לפני ההחלפה.`,
+        };
+    }
+
+    // Working a different slot that day with משובץ status: allow, but flag for the manager.
+    let warning = null;
+    const toSubResult = await wixData.query('AvailabilitySubmissions')
+        .eq('employeeId', toEmployeeId)
+        .between('date', new Date(`${dateKey}T00:00:00Z`), new Date(`${dateKey}T23:59:59Z`))
+        .limit(1).find(SA).catch(() => ({ items: [] }));
+    const existingToSub = toSubResult.items?.[0] || null;
+    if (existingToSub?.status === SUBMISSION_STATUS.SCHEDULED) {
+        warning = `${toTarget.displayName || 'העובד/ת'} משובץ/ת גם למשמרת/סדנה אחרת ביום זה.`;
+    }
+
+    const workType = normalizeWorkType(opts.workType);
+    const cancelResult = await _cancelAssignmentCore(role, dateKey, workshopTypeId, fromEmployeeId, opts.fromDisposition || 'restore', { notify: opts.notifyFrom !== false });
+    const assignResult = await _manualAssignCore(role, dateKey, [workshopTypeId], toEmployeeId, workType, {
+        notify: opts.notifyTo !== false,
+        taskType: opts.taskType,
+        shiftNote: opts.shiftNote,
+    });
+
+    await runScheduling(dateKey, dateKey);
+    await flushOutbox({ force: true }).catch(err => console.error('[staffAdminService] flushOutbox failed:', err?.message || err));
+    await publishSchedulingUpdate('swap-assignment', { dateKey, workshopTypeId, fromEmployeeId, toEmployeeId });
+
+    console.log(`[staffAdminService] swapAssignment: ${fromEmployeeId} → ${toEmployeeId} @ ${dateKey}/${workshopTypeId} by ${role._id}`);
+    return { ok: true, warning, disposition: cancelResult.disposition, assigned: assignResult.assigned };
 });
 
 async function notifyShiftChange(target, actionKey, vars, dateKey) {

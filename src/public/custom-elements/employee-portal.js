@@ -1279,6 +1279,18 @@ class EmployeePortal extends HTMLElement {
         if (result.type === 'adminDeleteSketchDuty' && result.ok) {
             this._pendingSketchDutyConfirm = null;
         }
+        if (result.type === 'adminSwapAssignment') {
+            if (result.blocked) {
+                this._toast(result.reason || 'לא ניתן לבצע את ההחלפה.', 'error');
+                this.render();
+                return;
+            }
+            if (result.ok) {
+                this._toast(result.warning ? `ההחלפה בוצעה. ${result.warning}` : 'ההחלפה בוצעה בהצלחה.', 'success');
+                this.render();
+                return;
+            }
+        }
         if (result.type?.startsWith('admin') && result.ok) {
             this._toast('הפעולה בוצעה בהצלחה.', 'success');
         }
@@ -2872,6 +2884,10 @@ class EmployeePortal extends HTMLElement {
         if ((this._boardMsOpen || this._dayMsOpen) && !e.target.closest('.epa-ms')) {
             this._boardMsOpen = null;
             this._dayMsOpen = null;
+            if (!target) { this.render(); return; }
+        }
+        if (this._dayRowMenuOpen && !e.target.closest('.epa-row-menu-wrap')) {
+            this._dayRowMenuOpen = null;
             if (!target) { this.render(); return; }
         }
         if (this._slotMenuOpen && !e.target.closest('.ep-slot-ms')) {

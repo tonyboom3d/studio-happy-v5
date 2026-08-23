@@ -57,6 +57,7 @@ import {
     sendAvailabilityNudge,
     manualAssign,
     cancelAssignment,
+    swapAssignment,
     approveSubmission,
     rejectSubmission,
     updateSubmissionWorkType,
@@ -765,7 +766,11 @@ async function handlePortalAction(portalEl, detail) {
         }
 
         case 'adminManualAssign': {
-            const result = await manualAssign(payload?.dateKey, payload?.workshopTypeIds || [], payload?.employeeId, payload?.workType);
+            const result = await manualAssign(payload?.dateKey, payload?.workshopTypeIds || [], payload?.employeeId, payload?.workType, {
+                notify: payload?.notify !== false,
+                taskType: payload?.taskType || null,
+                shiftNote: payload?.shiftNote || '',
+            });
             pushActionResult(portalEl, { type, ...result });
             refreshAdmin = true;
             break;
@@ -798,9 +803,31 @@ async function handlePortalAction(portalEl, detail) {
                 payload?.workshopTypeId,
                 payload?.employeeId,
                 payload?.disposition || 'restore',
+                { notify: payload?.notify !== false },
             );
             pushActionResult(portalEl, { type, ...result });
             refreshAdmin = true;
+            break;
+        }
+
+        case 'adminSwapAssignment': {
+            const result = await swapAssignment(
+                payload?.dateKey,
+                payload?.workshopTypeId,
+                payload?.fromEmployeeId,
+                payload?.toEmployeeId,
+                {
+                    notifyFrom: payload?.notifyFrom !== false,
+                    notifyTo: payload?.notifyTo !== false,
+                    fromDisposition: payload?.fromDisposition || 'restore',
+                    workType: payload?.workType,
+                    taskType: payload?.taskType || null,
+                    shiftNote: payload?.shiftNote || '',
+                },
+            );
+            pushActionResult(portalEl, { type, ...result });
+            // A blocked swap (conflict) doesn't mutate anything — skip the refetch/collapse.
+            refreshAdmin = !result?.blocked;
             break;
         }
 

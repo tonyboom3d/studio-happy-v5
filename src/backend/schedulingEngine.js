@@ -381,6 +381,47 @@ async function loadOffers(fromKey, toKey) {
 // Board — per-day / per-workshop-type capacity picture
 // ---------------------------------------------------------------------------
 
+/** Rounds an ISO start time to the minute so calendar slots and order timestamps bucket together. */
+export function canonicalSessionKey(iso) {
+    if (!iso) return null;
+    const ms = new Date(iso).getTime();
+    if (Number.isNaN(ms)) return null;
+    return new Date(Math.floor(ms / 60000) * 60000).toISOString();
+}
+
+const EMPTY_SESSION_COMP = { adults: 0, children: 0, pairs: 0, soloAdults: 0, extraChildren: 0, people: 0 };
+
+function mergeSessionComp(into, from) {
+    into.adults += from.adults || 0;
+    into.children += from.children || 0;
+    into.pairs += from.pairs || 0;
+    into.soloAdults += from.soloAdults || 0;
+    into.extraChildren += from.extraChildren || 0;
+    into.people += from.people || 0;
+}
+
+/** Collapses duplicate session keys (calendar vs orders) and re-keys sessionComps/sessionEnds. */
+function normalizeTypeSessions(t) {
+    const mergedComps = {};
+    for (const [rawKey, comp] of Object.entries(t.sessionComps || {})) {
+        const key = canonicalSessionKey(rawKey);
+        if (!key) continue;
+        if (!mergedComps[key]) mergedComps[key] = { ...EMPTY_SESSION_COMP };
+        mergeSessionComp(mergedComps[key], comp);
+    }
+    const mergedEnds = {};
+    for (const [rawKey, endIso] of Object.entries(t.sessionEnds || {})) {
+        const key = canonicalSessionKey(rawKey);
+        if (key && endIso) mergedEnds[key] = endIso;
+    }
+    t.sessionComps = mergedComps;
+    t.sessionEnds = mergedEnds;
+    t.sessions = [...new Set([
+        ...t.sessions.map(s => canonicalSessionKey(s)).filter(Boolean),
+        ...Object.keys(mergedComps),
+    ])].sort();
+}
+
 /**
  * @returns {Promise<{
  *   days: Object<string, { hasWorkshops: boolean, types: Object<string, {
@@ -433,6 +474,7 @@ export async function buildBoard(fromKey, toKey, { consistent = false, includeOf
                 assignedCount: 0, assignedEmployeeIds: [],
                 sessions: [], // distinct workshopStart ISO timestamps that day (calendar display)
                 sessionEnds: {}, // startIso -> endIso, resolved from Bookings availability where known
+                sessionComps: {}, // startIso -> per-session participant composition (for split occupancy UI)
                 hasActiveCustomers: false, // true when paid WorkshopOrders or live Wix Bookings exist
             };
         }
@@ -440,6 +482,19 @@ export async function buildBoard(fromKey, toKey, { consistent = false, includeOf
     };
 
     const coveredBookingIds = new Set();
+    const bumpSessionComp = (t, startIso, orderAdults, orderChildren) => {
+        const key = canonicalSessionKey(startIso);
+        if (!key) return;
+        if (!t.sessionComps[key]) t.sessionComps[key] = { ...EMPTY_SESSION_COMP };
+        const sc = t.sessionComps[key];
+        const orderPairs = Math.min(orderAdults, orderChildren);
+        sc.adults += orderAdults;
+        sc.children += orderChildren;
+        sc.pairs += orderPairs;
+        sc.soloAdults += orderAdults - orderPairs;
+        sc.extraChildren += orderChildren - orderPairs;
+        sc.people += orderAdults + orderChildren;
+    };
     for (const order of orders) {
         for (const id of (order.bookingIds || [])) if (id) coveredBookingIds.add(id);
         if (order.bookingId) coveredBookingIds.add(order.bookingId);
@@ -457,7 +512,9 @@ export async function buildBoard(fromKey, toKey, { consistent = false, includeOf
         t.extraChildren += orderChildren - orderPairs;
         t.people += orderAdults + orderChildren;
         const startIso = order.workshopStart instanceof Date ? order.workshopStart.toISOString() : new Date(order.workshopStart).toISOString();
-        if (!t.sessions.includes(startIso)) t.sessions.push(startIso);
+        bumpSessionComp(t, startIso, orderAdults, orderChildren);
+        const sessionKey = canonicalSessionKey(startIso);
+        if (sessionKey && !t.sessions.includes(sessionKey)) t.sessions.push(sessionKey);
         days[dateKey].hasWorkshops = true;
     }
 
@@ -471,19 +528,23 @@ export async function buildBoard(fromKey, toKey, { consistent = false, includeOf
         t.soloAdults += b.adults - orderPairs;
         t.extraChildren += b.children - orderPairs;
         t.people += b.adults + b.children;
-        if (!t.sessions.includes(b.startIso)) t.sessions.push(b.startIso);
+        bumpSessionComp(t, b.startIso, b.adults, b.children);
+        const sessionKey = canonicalSessionKey(b.startIso);
+        if (sessionKey && !t.sessions.includes(sessionKey)) t.sessions.push(sessionKey);
         days[b.dateKey].hasWorkshops = true;
     }
 
     for (const { dateKey, typeId, startIso, endIso } of sessionRows) {
         const t = dayType(dateKey, typeId);
-        if (!t.sessions.includes(startIso)) t.sessions.push(startIso);
-        if (endIso) t.sessionEnds[startIso] = endIso;
+        const sessionKey = canonicalSessionKey(startIso);
+        if (sessionKey && !t.sessions.includes(sessionKey)) t.sessions.push(sessionKey);
+        if (sessionKey && endIso) t.sessionEnds[sessionKey] = new Date(endIso).toISOString();
         days[dateKey].hasWorkshops = true;
     }
 
     for (const dateKey of Object.keys(days)) {
         for (const t of Object.values(days[dateKey].types)) {
+            normalizeTypeSessions(t);
             t.hasActiveCustomers = (t.people || 0) > 0;
             t.required = requiredInstructorsFor(rules[t.typeId], t);
         }
@@ -529,6 +590,20 @@ export function typeFilledCount(t) {
     return t.assignedCount + t.activeCount;
 }
 
+function sessionMsRanges(t) {
+    return [...(t?.sessions || [])].map(start => {
+        const startMs = new Date(start).getTime();
+        if (Number.isNaN(startMs)) return null;
+        const endRaw = t.sessionEnds?.[start];
+        const endMs = endRaw ? new Date(endRaw).getTime() : startMs + 1;
+        return { startMs, endMs: Number.isNaN(endMs) || endMs <= startMs ? startMs + 1 : endMs };
+    }).filter(Boolean);
+}
+
+function sessionRangesOverlap(a, b) {
+    return sessionMsRanges(a).some(r1 => sessionMsRanges(b).some(r2 => r1.startMs < r2.endMs && r2.startMs < r1.endMs));
+}
+
 /** Personalized day state for an employee's skills. */
 export function personalDayState(day, skillTypeIds) {
     if (!day || !day.hasWorkshops) return DAY_STATE.FREE;
@@ -571,6 +646,22 @@ function formatDateHe(dateKey) {
 
 function offersFor(offers, dateKey, typeId) {
     return offers.filter(o => (o.dateKey || toDateKey(o.date)) === dateKey && o.workshopTypeId === typeId);
+}
+
+/** Marks OPEN/PENDING offers as FILLED when a day/type is already fully staffed. */
+export async function closeResolvedOffersForDate(dateKey) {
+    if (!dateKey) return { closed: 0 };
+    const board = await buildBoard(dateKey, dateKey, { consistent: true, includeOffers: true });
+    let closed = 0;
+    for (const t of Object.values(board.days[dateKey]?.types || {})) {
+        if (typeFilledCount(t) < t.required) continue;
+        for (const o of offersFor(board.offers, dateKey, t.typeId)) {
+            if (o.status !== OFFER_STATUS.PENDING && o.status !== OFFER_STATUS.OPEN) continue;
+            await wixData.update('ShiftOffers', { ...o, status: OFFER_STATUS.FILLED }, SA);
+            closed++;
+        }
+    }
+    return { closed };
 }
 
 /**
@@ -693,7 +784,13 @@ export async function runScheduling(fromKey, toKey, { batchNotify = false } = {}
             if (!typeHasActiveCustomers(t)) continue;
 
             let shortage = t.required - t.assignedCount;
-            if (shortage <= 0) continue;
+            if (shortage <= 0) {
+                for (const o of offersFor(board.offers, dateKey, t.typeId)) {
+                    if (o.status !== OFFER_STATUS.PENDING && o.status !== OFFER_STATUS.OPEN) continue;
+                    await wixData.update('ShiftOffers', { ...o, status: OFFER_STATUS.FILLED }, SA);
+                }
+                continue;
+            }
 
             // Candidates: this day's SUBMITTED/SCHEDULED-not-assigned submissions with the skill.
             const candidates = submissions
@@ -1125,7 +1222,13 @@ export async function claimOpenCall(callId, role, settings) {
         await wixData.update('ShiftOffers', { ...call, status: OFFER_STATUS.FILLED }, SA);
         throw new Error('CONFLICT: המשמרת כבר אוישה.');
     }
-    if (t.assignedEmployeeIds.includes(role._id)) throw new Error('CONFLICT: כבר שובצת ליום זה.');
+    if (t.assignedEmployeeIds.includes(role._id)) throw new Error('CONFLICT: כבר שובצת לסדנה זו.');
+
+    const assignedTypes = Object.values(board.days[dateKey]?.types || {})
+        .filter(other => other.assignedEmployeeIds.includes(role._id));
+    if (assignedTypes.some(other => sessionRangesOverlap(t, other))) {
+        throw new Error('CONFLICT: בקשת השיבוץ חופפת למשמרת שכבר שובצת אליה.');
+    }
 
     // Reuse the employee's submission for that date, or create one.
     const existing = await wixData.query('AvailabilitySubmissions')
@@ -1166,12 +1269,11 @@ export async function claimOpenCalls(callIds, role, settings) {
     for (const callId of ids) {
         const call = await wixData.get('ShiftOffers', callId, SAC).catch(() => null);
         const dateKey = call ? (call.dateKey || toDateKey(call.date)) : null;
-        const workshopName = call?.workshopName || 'סדנה';
         try {
             const outcome = await claimOpenCall(callId, role, settings);
-            results.push({ callId, ok: true, dateKey: outcome.dateKey || dateKey, workshopName });
+            results.push({ callId, ok: true, dateKey: outcome.dateKey || dateKey });
         } catch (err) {
-            results.push({ callId, ok: false, dateKey, workshopName, error: err?.message || String(err) });
+            results.push({ callId, ok: false, dateKey, error: err?.message || String(err) });
         }
     }
     return { ok: true, results };

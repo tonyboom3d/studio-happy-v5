@@ -321,6 +321,7 @@ async function loadScheduledWorkshopDetails(scheduledSubmissions) {
 
     return relevant.map(order => ({
         orderId: order._id,
+        serviceId: order.serviceId || '',
         date: toDateKey(order.workshopStart),
         workshopStart: order.workshopStart,
         workshopEnd: resolveWorkshopEnd(order, slotsByService),
@@ -334,6 +335,58 @@ async function loadScheduledWorkshopDetails(scheduledSubmissions) {
         participants: participantsByOrderId[order._id] || [],
         sketches: sketchesByOrderId[order._id] || [],
     })).sort((a, b) => new Date(a.workshopStart) - new Date(b.workshopStart));
+}
+
+function hmToMinutes(t) {
+    const m = /^(\d{1,2}):(\d{2})$/.exec(String(t || '').trim());
+    return m ? Number(m[1]) * 60 + Number(m[2]) : null;
+}
+
+function isoToHm(iso) {
+    if (!iso) return null;
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return null;
+    return new Intl.DateTimeFormat('en-GB', {
+        timeZone: 'Asia/Jerusalem', hour: '2-digit', minute: '2-digit', hour12: false,
+    }).format(d);
+}
+
+function hmRangesOverlap(aStart, aEnd, bStart, bEnd) {
+    const as = hmToMinutes(aStart);
+    const bs = hmToMinutes(bStart);
+    if (as == null || bs == null) return false;
+    const ae = hmToMinutes(aEnd);
+    const be = hmToMinutes(bEnd);
+    const a2 = ae == null || ae <= as ? as + 1 : ae;
+    const b2 = be == null || be <= bs ? bs + 1 : be;
+    return as < b2 && bs < a2;
+}
+
+function typeSessionRanges(t) {
+    return [...(t?.sessions || [])].sort().map(start => ({
+        start,
+        end: t.sessionEnds?.[start] || null,
+        startHm: isoToHm(start),
+        endHm: isoToHm(t.sessionEnds?.[start]),
+    }));
+}
+
+function assignedTypesForEmployee(day, employeeId) {
+    return Object.values(day?.types || {}).filter(t => t.assignedEmployeeIds?.includes(employeeId));
+}
+
+function rangesOverlapAny(a, b) {
+    return a.some(r1 => b.some(r2 => hmRangesOverlap(r1.startHm, r1.endHm, r2.startHm, r2.endHm)));
+}
+
+/** Keep only workshops the employee is actually assigned to that day. */
+function filterAssignedWorkshopDetails(details, board, serviceIdToTypeId, employeeId) {
+    return (details || [])
+        .filter(w => {
+            const typeId = serviceIdToTypeId[w.serviceId];
+            return !!(typeId && board.days[w.date]?.types?.[typeId]?.assignedEmployeeIds?.includes(employeeId));
+        })
+        .map(({ serviceId, ...rest }) => rest);
 }
 
 function buildMonthsSummary(role, settings, submissions, now, vacations) {
@@ -413,7 +466,8 @@ export const getMyPortalData = webMethod(Permissions.Anyone, async () => {
     ]);
     const submissions = rawSubmissions.map(mapSubmission);
     const scheduled = submissions.filter(s => s.status === SUBMISSION_STATUS.SCHEDULED);
-    const scheduledWorkshops = await loadScheduledWorkshopDetails(scheduled);
+    const scheduledByDate = {};
+    for (const s of scheduled) scheduledByDate[s.date] = s;
 
     // Personalized day states + offers/open calls (per-skill capacity model).
     const openMonths = getOpenMonthKeys(settings, now);
@@ -421,29 +475,28 @@ export const getMyPortalData = webMethod(Permissions.Anyone, async () => {
     const [ly, lm] = lastMonth.split('-').map(Number);
     const rangeFrom = toDateKey(now);
     const rangeTo = `${lastMonth}-${String(new Date(Date.UTC(ly, lm, 0)).getUTCDate()).padStart(2, '0')}`;
-    const [board, { typesById }] = await Promise.all([
+    const [board, { typesById, serviceIdToTypeId }, rawScheduledWorkshops] = await Promise.all([
         buildBoard(rangeFrom, rangeTo, { includeOffers: true }),
         loadWorkshopTypeMap(),
+        loadScheduledWorkshopDetails(scheduled),
     ]);
     const mySkills = getRoleSkillWorkshopIds(roleRow);
+    const scheduledWorkshops = filterAssignedWorkshopDetails(rawScheduledWorkshops, board, serviceIdToTypeId, roleRow._id);
 
     const dayStates = {};
     for (const [dateKey, day] of Object.entries(board.days)) {
         if (dateKey <= rangeFrom) continue;
+        const assignedTypes = assignedTypesForEmployee(day, roleRow._id);
         dayStates[dateKey] = {
             state: personalDayState(day, mySkills),
-            // Times let the calendar show every session (incl. several of the
-            // same workshop type on one day) instead of just its name. Strictly
-            // filtered to the employee's own skills — workshops they cannot
-            // instruct are never shown to them, even as informational text.
-            workshops: Object.values(day.types)
-                .filter(t => mySkills.includes(t.typeId))
-                .map(t => ({
-                    id: t.typeId,
-                    name: t.name,
-                    times: [...t.sessions].sort(),
-                    timeRanges: [...t.sessions].sort().map(start => ({ start, end: t.sessionEnds?.[start] || null })),
-                })),
+            // Only workshops this employee is assigned to — other same-day
+            // sessions stay hidden so the calendar cannot leak the schedule.
+            workshops: assignedTypes.map(t => ({
+                id: t.typeId,
+                name: t.name,
+                times: [...t.sessions].sort(),
+                timeRanges: typeSessionRanges(t).map(({ start, end }) => ({ start, end })),
+            })),
         };
     }
 
@@ -464,26 +517,38 @@ export const getMyPortalData = webMethod(Permissions.Anyone, async () => {
             const dateKey = o.dateKey || toDateKey(o.date);
             const t = board.days[dateKey]?.types?.[o.workshopTypeId];
             if (t?.assignedEmployeeIds?.includes(roleRow._id)) return false;
+            const callRanges = typeSessionRanges(t);
+            const assignedRanges = assignedTypesForEmployee(board.days[dateKey], roleRow._id)
+                .flatMap(type => typeSessionRanges(type));
+            if (assignedRanges.length) {
+                if (!callRanges.length || rangesOverlapAny(assignedRanges, callRanges)) return false;
+                return true;
+            }
+            const sub = scheduledByDate[dateKey];
+            if (sub?.startTime && sub.endTime) {
+                if (!callRanges.length) return false;
+                if (callRanges.some(r => hmRangesOverlap(sub.startTime, sub.endTime, r.startHm, r.endHm))) return false;
+            }
             return true;
         })
         .map(o => {
             const dateKey = o.dateKey || toDateKey(o.date);
-            const sessions = board.days[dateKey]?.types?.[o.workshopTypeId]?.sessions || [];
-            const sessionTime = [...sessions].sort()[0] || null;
+            const t = board.days[dateKey]?.types?.[o.workshopTypeId];
+            const ranges = typeSessionRanges(t);
+            const first = ranges[0] || {};
             return {
                 id: o._id,
                 date: dateKey,
                 workshopTypeId: o.workshopTypeId || null,
-                workshopName: o.workshopName || 'סדנה',
-                sessionTime,
+                sessionTime: first.start || null,
+                sessionEnd: first.end || null,
+                timeRanges: ranges.map(({ start, end }) => ({ start, end })),
             };
         })
         .sort((a, b) => {
             const byDate = (a.date || '').localeCompare(b.date || '');
             if (byDate) return byDate;
-            const byTime = (a.sessionTime || '').localeCompare(b.sessionTime || '');
-            if (byTime) return byTime;
-            return (a.workshopName || '').localeCompare(b.workshopName || '', 'he');
+            return (a.sessionTime || '').localeCompare(b.sessionTime || '');
         });
 
     return {
@@ -757,5 +822,12 @@ export const getMyScheduledWorkshops = webMethod(Permissions.Anyone, async (mont
     }
     const result = await query.ascending('date').limit(500).find(SA).catch(() => ({ items: [] }));
     const scheduled = (result.items || []).map(mapSubmission);
-    return loadScheduledWorkshopDetails(scheduled);
+    const details = await loadScheduledWorkshopDetails(scheduled);
+    if (!details.length) return [];
+    const dates = details.map(w => w.date).filter(Boolean).sort();
+    const [board, { serviceIdToTypeId }] = await Promise.all([
+        buildBoard(dates[0], dates[dates.length - 1]),
+        loadWorkshopTypeMap(),
+    ]);
+    return filterAssignedWorkshopDetails(details, board, serviceIdToTypeId, roleRow._id);
 });

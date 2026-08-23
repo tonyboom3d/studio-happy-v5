@@ -1473,6 +1473,18 @@ function renderWorkshopGroupsDetail(ce, cardKey) {
     </tr></thead><tbody>${rows}</tbody></table></div>`;
 }
 
+/** Prefer totals from loaded order groups (matches the table); fall back to server slot stats. */
+function sessionParticipantTotals(ce, cardKey, slot) {
+    const groups = ce._workshopOrderGroups?.[cardKey];
+    if (Array.isArray(groups)) {
+        return {
+            adults: groups.reduce((s, g) => s + (g.adults || 0), 0),
+            children: groups.reduce((s, g) => s + (g.children || 0), 0),
+        };
+    }
+    return { adults: slot.adults || 0, children: slot.children || 0 };
+}
+
 /** Workshop capacity cards for the day: one card per session/time-slot. Click to expand paid-order groups for that slot. */
 function renderWorkshopCapacityGrid(ce, d, dateKey, info, subs) {
     const types = info?.types || [];
@@ -1497,6 +1509,7 @@ function renderWorkshopCapacityGrid(ce, d, dateKey, info, subs) {
             const title = slot.label ? `${t.name} — ${slot.label}` : t.name;
             const cardKey = slot.start ? `${dateKey}::${t.typeId}::${slot.start}` : `${dateKey}::${t.typeId}`;
             const isOpen = ce._dayWsOpenCard === cardKey;
+            const parts = sessionParticipantTotals(ce, cardKey, slot);
             return `<div class="epa-ws-card">
                 <button type="button" class="epa-ws-head epa-ws-head-btn" data-action="admin-toggle-ws-card" data-date="${esc(dateKey)}" data-type="${esc(t.typeId)}" data-start="${esc(slot.start || '')}">
                     <h4>${esc(title)}${timeText ? ` <span class="epa-ws-head-time">${esc(timeText)}</span>` : ''}</h4>
@@ -1504,7 +1517,7 @@ function renderWorkshopCapacityGrid(ce, d, dateKey, info, subs) {
                     <span class="epa-accordion-arrow">${isOpen ? '▲' : '▼'}</span>
                 </button>
                 <div class="epa-capacity-track"><div class="epa-capacity-fill ${full ? 'full' : ''}" style="width:${pct}%"></div></div>
-                <div class="epa-ws-meta"><span>${slot.adults} מבוגרים</span><span>${slot.children} ילדים</span>${t.standbyCount ? `<span>בהמתנה: ${t.standbyCount}</span>` : ''}</div>
+                <div class="epa-ws-meta"><span>${parts.adults} מבוגרים</span><span>${parts.children} ילדים</span>${t.standbyCount ? `<span>בהמתנה: ${t.standbyCount}</span>` : ''}</div>
                 ${isOpen ? renderWorkshopGroupsDetail(ce, cardKey) : ''}
             </div>`;
         });

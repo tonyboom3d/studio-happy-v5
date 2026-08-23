@@ -41,6 +41,7 @@ import {
     buildBoard,
     typeFilledCount,
     requiredInstructorsFor,
+    canonicalSessionKey,
     loadSettings,
     loadRulesByTypeId,
     loadWorkshopTypeMap,
@@ -305,12 +306,15 @@ export const getStaffAdminData = webMethod(Permissions.SiteMember, async (monthK
                 const earliestStart = sortedSessions[0] || null;
                 const rule = board.rules[t.typeId];
                 const slots = (sortedSessions.length ? sortedSessions : [null]).map((start, idx) => {
-                    const comp = start && t.sessionComps?.[start]
-                        ? t.sessionComps[start]
-                        : { adults: t.adults, children: t.children, pairs: t.pairs, soloAdults: t.soloAdults, extraChildren: t.extraChildren, people: t.people };
+                    const key = start ? canonicalSessionKey(start) : null;
+                    const comp = key && t.sessionComps?.[key]
+                        ? t.sessionComps[key]
+                        : (sortedSessions.length <= 1
+                            ? { adults: t.adults, children: t.children, pairs: t.pairs, soloAdults: t.soloAdults, extraChildren: t.extraChildren, people: t.people }
+                            : { adults: 0, children: 0, pairs: 0, soloAdults: 0, extraChildren: 0, people: 0 });
                     return {
-                        start,
-                        end: start ? (t.sessionEnds?.[start] || null) : null,
+                        start: key || start,
+                        end: key ? (t.sessionEnds?.[key] || null) : null,
                         adults: comp.adults || 0,
                         children: comp.children || 0,
                         required: requiredInstructorsFor(rule, comp),
@@ -545,10 +549,10 @@ export const getWorkshopOrderGroups = webMethod(Permissions.SiteMember, async (d
         .ge('workshopStart', start).le('workshopStart', end)
         .limit(200).find(SA).catch(() => ({ items: [] }));
 
-    const sessionIso = sessionStart ? new Date(sessionStart).toISOString() : null;
+    const sessionKey = sessionStart ? canonicalSessionKey(sessionStart) : null;
     return (result.items || [])
         .filter(o => !o.cancelledAt && toDateKey(o.workshopStart) === dateKey)
-        .filter(o => !sessionIso || new Date(o.workshopStart).toISOString() === sessionIso)
+        .filter(o => !sessionKey || canonicalSessionKey(o.workshopStart) === sessionKey)
         .map(o => ({
             id: o._id,
             organizerName: o.organizerName || 'ללא שם',

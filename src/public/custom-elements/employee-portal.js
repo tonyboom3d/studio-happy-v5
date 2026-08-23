@@ -559,6 +559,22 @@ function uniqueDayDots(dots, max = 4) {
 function escapeHtml(str) {
     return String(str ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
+function hmToMinutes(t) {
+    const m = /^(\d{1,2}):(\d{2})$/.exec(String(t || '').trim());
+    return m ? Number(m[1]) * 60 + Number(m[2]) : null;
+}
+
+function hmRangesOverlap(aStart, aEnd, bStart, bEnd) {
+    const as = hmToMinutes(aStart);
+    const bs = hmToMinutes(bStart);
+    if (as == null || bs == null) return false;
+    const ae = hmToMinutes(aEnd);
+    const be = hmToMinutes(bEnd);
+    const a2 = ae == null || ae <= as ? as + 1 : ae;
+    const b2 = be == null || be <= bs ? bs + 1 : be;
+    return as < b2 && bs < a2;
+}
+
 /** Prefixes a workshop name with "סדנת" — unless it already carries that (or an equivalent) prefix, avoiding "סדנת סדנת X". */
 function workshopLabel(name) {
     const clean = String(name ?? '').trim();
@@ -1761,19 +1777,47 @@ class EmployeePortal extends HTMLElement {
         }, 6000);
     }
 
+    _employeeBusyRanges(dateKey) {
+        const fromAssigned = (this._data.scheduledWorkshops || [])
+            .filter(w => w.date === dateKey)
+            .map(w => ({ start: formatTimeHe(w.workshopStart), end: formatTimeHe(w.workshopEnd) }))
+            .filter(r => r.start);
+        if (fromAssigned.length) return fromAssigned;
+        const dayWs = this._data.dayStates?.[dateKey]?.workshops || [];
+        const fromDay = dayWs.flatMap(w => {
+            const ranges = (w.timeRanges && w.timeRanges.length)
+                ? w.timeRanges
+                : (w.times || []).map(start => ({ start, end: null }));
+            return ranges.map(r => ({ start: formatTimeHe(r.start), end: formatTimeHe(r.end) }));
+        }).filter(r => r.start);
+        if (fromDay.length) return fromDay;
+        const sub = (this._data.submissions || []).find(s => s.date === dateKey && s.status === 'SCHEDULED');
+        if (sub?.startTime && sub.endTime) return [{ start: sub.startTime, end: sub.endTime }];
+        return [];
+    }
+
+    _openCallOverlapsAssignment(call) {
+        const busy = this._employeeBusyRanges(call.date);
+        if (!busy.length) return false;
+        const callRanges = (call.timeRanges && call.timeRanges.length)
+            ? call.timeRanges.map(r => ({ start: formatTimeHe(r.start) || formatTimeHe(call.sessionTime), end: formatTimeHe(r.end) }))
+            : [{ start: formatTimeHe(call.sessionTime), end: formatTimeHe(call.sessionEnd) }];
+        const usable = callRanges.filter(r => r.start);
+        if (!usable.length) return true;
+        return busy.some(b => usable.some(r => hmRangesOverlap(b.start, b.end, r.start, r.end)));
+    }
+
     /** Waiting-list offers addressed to me + a single unified banner for open calls matching my skills. */
     _skillMatchedOpenCalls() {
         const skillTypeIds = new Set((this._data.allWorkshopTypes || []).map(t => t.id).filter(Boolean));
-        const skillNames = new Set((this._data.allWorkshopTypes || []).map(t => workshopLabel(t.name)));
         return (this._data.openCalls || []).filter(c => {
-            if (c.workshopTypeId) return skillTypeIds.has(c.workshopTypeId);
-            return skillNames.has(workshopLabel(c.workshopName));
+            if (skillTypeIds.size && c.workshopTypeId && !skillTypeIds.has(c.workshopTypeId)) return false;
+            if (this._openCallOverlapsAssignment(c)) return false;
+            return true;
         }).sort((a, b) => {
             const byDate = (a.date || '').localeCompare(b.date || '');
             if (byDate) return byDate;
-            const byTime = (a.sessionTime || '').localeCompare(b.sessionTime || '');
-            if (byTime) return byTime;
-            return workshopLabel(a.workshopName).localeCompare(workshopLabel(b.workshopName), 'he');
+            return (a.sessionTime || '').localeCompare(b.sessionTime || '');
         });
     }
 
@@ -1791,9 +1835,10 @@ class EmployeePortal extends HTMLElement {
             </div>`;
         }
         if (calls.length) {
+            const firstTime = calls[0].sessionTime ? ` · ${escapeHtml(formatTimeHe(calls[0].sessionTime))}` : '';
             const label = calls.length === 1
-                ? `📣 <b>דרושה עובד/ת:</b> ${escapeHtml(workshopLabel(calls[0].workshopName))} · ${formatDateHe(calls[0].date)} — כל הקודם/ת זוכה!`
-                : `📣 <b>${calls.length} משמרות דחופות דורשות עובד/ת</b> — כל הקודם/ת זוכה!`;
+                ? `📣 <b>בקשת שיבוץ דחופה:</b> ${formatDateHe(calls[0].date)}${firstTime} — כל הקודם/ת זוכה!`
+                : `📣 <b>${calls.length} בקשות שיבוץ דחופות</b> — כל הקודם/ת זוכה!`;
             html += `
                 <button type="button" class="ep-offer call ep-urgent-banner" data-action="urgent-open">
                     <span>${label}</span>
@@ -2126,7 +2171,9 @@ class EmployeePortal extends HTMLElement {
 
             if (holidayByDate[dateKey] && !holidayClosed) addDot('#b45309', `חג: ${holidayByDate[dateKey]}`);
 
-            const dayWorkshops = this._data.dayStates?.[dateKey]?.workshops || [];
+            const dayWorkshops = sub?.status === 'SCHEDULED'
+                ? (this._data.dayStates?.[dateKey]?.workshops || [])
+                : [];
             const wsList = dayWorkshops.length
                 ? `<div class="ep-day-ws">${dayWorkshops.map(w => {
                     const times = (w.times || []).map(t => formatTimeHe(t)).filter(Boolean);
@@ -2639,16 +2686,19 @@ class EmployeePortal extends HTMLElement {
     _renderUrgentPopup() {
         const dayGroups = this._groupOpenCallsForUrgentPopup();
         const blocked = this._urgentBlockedIds();
+        const callTimeLabel = (c) => c.sessionEnd
+            ? formatTimeRangeHe(c.sessionTime, c.sessionEnd)
+            : formatTimeHe(c.sessionTime);
         const renderCall = (c, showTime) => `
             <label class="ep-urgent-row ${blocked.has(c.id) ? 'is-blocked' : ''}">
                 <input type="checkbox" data-action="urgent-toggle" data-id="${escapeHtml(c.id)}" ${this._urgentSelected.has(c.id) ? 'checked' : ''} ${blocked.has(c.id) ? 'disabled' : ''}>
-                ${showTime && c.sessionTime ? `<span class="ep-urgent-row-time">${escapeHtml(formatTimeHe(c.sessionTime))}</span>` : ''}
-                <span class="ep-urgent-row-name">${escapeHtml(workshopLabel(c.workshopName))}</span>
+                ${showTime && c.sessionTime ? `<span class="ep-urgent-row-time">${escapeHtml(callTimeLabel(c))}</span>` : ''}
+                <span class="ep-urgent-row-name">בקשת שיבוץ</span>
             </label>`;
         const body = dayGroups.map(({ date, slots }) => {
             const slotsHtml = slots.map(({ sessionTime, items }) => {
                 if (items.length > 1) {
-                    return `<div class="ep-urgent-parallel-hint">⚡ ${sessionTime ? escapeHtml(formatTimeHe(sessionTime)) : ''} — סדנאות מגבילות, ניתן לבחור רק אחת ביום זה</div>
+                    return `<div class="ep-urgent-parallel-hint">⚡ ${sessionTime ? escapeHtml(formatTimeHe(sessionTime)) : ''} — בקשות שיבוץ באותה שעה, ניתן לבחור רק אחת</div>
                         <div class="ep-urgent-parallel-row">${items.map(c => `<div class="ep-urgent-parallel-col">${renderCall(c, false)}</div>`).join('')}</div>`;
                 }
                 return renderCall(items[0], true);
@@ -2679,7 +2729,7 @@ class EmployeePortal extends HTMLElement {
         const failed = results.filter(r => !r.ok);
         const rows = results.map(r => `
             <div class="ep-aa-item">
-                <span>${formatDateHe(r.dateKey)} · ${escapeHtml(workshopLabel(r.workshopName))}</span>
+                <span>${formatDateHe(r.dateKey)} · בקשת שיבוץ</span>
                 <span class="${r.ok ? 'ep-lock-badge' : 'ep-status REJECTED'}">${r.ok ? '✔ שובץ בהצלחה' : `✕ ${escapeHtml(r.error || 'לא הצליח')}`}</span>
             </div>`).join('');
         const summaryLine = failed.length

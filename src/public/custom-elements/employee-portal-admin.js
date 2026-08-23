@@ -28,6 +28,10 @@ export const ADMIN_STYLE = `
 .epa-day .cnt { display: block; font-size: 11.5px; color: #4b5563; line-height: 1.3; margin-top: 1px; }
 .epa-flag { position: absolute; top: 3px; inset-inline-start: 4px; font-size: 10px; }
 .epa-day-plus { position: absolute; top: 3px; inset-inline-end: 4px; width: 15px; height: 15px; line-height: 15px; text-align: center; font-size: 11px; font-weight: 700; border-radius: 50%; background: #dbeafe; color: #1d4ed8; cursor: help; }
+.epa-day-staff { position: absolute; top: 3px; inset-inline-end: 22px; width: 15px; height: 15px; line-height: 15px; text-align: center; font-size: 9px; border-radius: 50%; background: #d1fae5; color: #065f46; cursor: help; }
+@media (hover: none) { .epa-day-staff { display: none !important; } }
+.epa-page-size { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: #64748b; }
+.epa-page-size select { border: 1px solid #e2e8f0; border-radius: 7px; padding: 4px 7px; font-size: 12px; font-family: inherit; background: #fff; }
 .epa-detail { border: 1px solid #bfdbfe; background: #eff6ff; border-radius: 12px; padding: 12px; margin-top: 12px; font-size: 12.5px; }
 .epa-detail h3 { margin: 0 0 8px; font-size: 14px; }
 .epa-type-row { background: #fff; border: 1px solid #e5e7eb; border-radius: 9px; padding: 8px 10px; margin-bottom: 6px; }
@@ -247,15 +251,40 @@ export const ADMIN_STYLE = `
 .epa-table.small th, .epa-table.small td { padding: 5px 7px; font-size: 11px; }
 .ep-loading.small { padding: 6px 0; font-size: 12px; display: flex; align-items: center; gap: 8px; }
 .ep-loading.small .ep-spinner { width: 14px; height: 14px; }
+.epa-batch-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 8px; padding: 8px 12px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; }
+.epa-batch-bar.on { background: #f0fdf4; border-color: #bbf7d0; }
+.epa-batch-bar .epa-chip { background: #fef3c7; color: #92400e; font-weight: 700; }
+.epa-batch-list { display: flex; flex-direction: column; gap: 6px; max-height: 50vh; overflow-y: auto; margin-bottom: 12px; }
+.epa-batch-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; padding: 9px 11px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 9px; }
+.epa-batch-row-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.epa-batch-row-label { font-size: 13px; font-weight: 600; color: #1e293b; }
+.epa-batch-meta { font-size: 11px; color: #9ca3af; }
+.epa-batch-remove { flex-shrink: 0; border: none; background: none; cursor: pointer; color: #9ca3af; font-size: 15px; line-height: 1; padding: 2px 4px; }
+.epa-batch-remove:hover { color: #dc2626; }
+.epa-batch-footer { display: flex; flex-direction: column; gap: 10px; padding-top: 10px; border-top: 1px solid #e2e8f0; }
+.epa-batch-saving { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 24px 10px; color: #475569; font-size: 13px; }
+.epa-batch-saving-bar { width: 100%; height: 6px; background: #e2e8f0; border-radius: 999px; overflow: hidden; }
+.epa-batch-saving-fill { height: 100%; width: 40%; background: #2563eb; border-radius: 999px; animation: epaBatchSaving 1.1s ease-in-out infinite; }
+@keyframes epaBatchSaving { 0% { transform: translateX(-100%); } 100% { transform: translateX(250%); } }
+.epa-batch-summary { margin-bottom: 12px; padding: 10px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 9px; }
+.epa-batch-summary-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+.epa-batch-summary-row { display: flex; align-items: center; gap: 8px; padding: 4px 0; font-size: 12.5px; }
+.epa-batch-summary-row.ok { color: #16a34a; }
+.epa-batch-summary-row.fail { color: #dc2626; }
+.epa-batch-summary-label { color: #1e293b; flex: 1; }
+.epa-batch-summary-reason { color: #dc2626; font-size: 11px; }
+.epa-btn.small { padding: 3px 9px; font-size: 11px; }
 .epa-day-tabs { display: flex; gap: 3px; margin: 0 0 12px; background: #fff7ed; border: 1px solid #fde68a; border-radius: 999px; padding: 3px; overflow-x: auto; }
 .epa-day-tab { flex: 1 1 0; white-space: nowrap; border: none; background: none; cursor: pointer; font-family: inherit; padding: 7px 10px; border-radius: 999px; font-size: 11.5px; font-weight: 700; color: #92400e; }
 .epa-day-tab.active { background: #fff; box-shadow: 0 1px 2px rgba(15,23,42,.08); color: #92400e; }
 .epa-check-item { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: #334155; cursor: pointer; }
 .epa-check-item input { width: 15px; height: 15px; accent-color: #2563eb; }
 .epa-row-menu-wrap { position: relative; display: inline-block; }
+.epa-row-menu-wrap.open { z-index: 10050; }
 .epa-row-menu-btn { border: 1px solid #e2e8f0; background: #fff; border-radius: 7px; width: 26px; height: 24px; cursor: pointer; font-size: 13px; line-height: 1; color: #475569; }
 .epa-row-menu-btn:hover { border-color: #60a5fa; color: #1d4ed8; }
-.epa-row-menu-drop { position: absolute; z-index: 20; top: calc(100% + 3px); inset-inline-end: 0; min-width: 160px; background: #fff; border: 1px solid #dbeafe; border-radius: 10px; box-shadow: 0 12px 28px rgba(15,23,42,.14); padding: 5px; display: flex; flex-direction: column; }
+.epa-row-menu-drop { position: absolute; z-index: 10050; top: calc(100% + 3px); inset-inline-end: 0; min-width: 160px; background: #fff; border: 1px solid #dbeafe; border-radius: 10px; box-shadow: 0 12px 28px rgba(15,23,42,.14); padding: 5px; display: flex; flex-direction: column; }
+.epa-day-people .epa-table-wrap.menu-open { overflow: visible; }
 .epa-row-menu-drop button { text-align: right; border: none; background: none; cursor: pointer; font-family: inherit; font-size: 12px; padding: 7px 9px; border-radius: 7px; color: #1f2937; }
 .epa-row-menu-drop button:hover { background: #eff6ff; color: #1d4ed8; }
 .epa-row-menu-drop button.danger { color: #b91c1c; }
@@ -454,6 +483,72 @@ function workshopOptionsForSubmission(d, s) {
     return opts;
 }
 
+// -----------------------------------------------------------------
+// Batch scheduling mode — queue assign/remove/swap actions locally.
+// -----------------------------------------------------------------
+const BATCH_QUEUE_CAP = 50;
+
+function batchEmpName(d, employeeId) {
+    return (d.employees || []).find(e => e.id === employeeId)?.displayName || 'עובד/ת';
+}
+
+function batchWsName(d, dateKey, workshopTypeId) {
+    if (!workshopTypeId) return '';
+    return (d.days?.[dateKey]?.types || []).find(t => t.typeId === workshopTypeId)?.name || 'סדנה';
+}
+
+/** Builds a human-readable Hebrew label for a queued action, used in the action-history panel. */
+function buildBatchLabel(d, type, payload) {
+    const date = fmtDate(payload.dateKey);
+    if (type === 'adminManualAssign') {
+        const empName = batchEmpName(d, payload.employeeId);
+        const wsNames = (payload.workshopTypeIds || []).map(id => batchWsName(d, payload.dateKey, id)).filter(Boolean);
+        const wsPart = wsNames.length ? ` ל${wsNames.join(', ')}` : '';
+        return `שיבוץ ${empName}${wsPart} · ${date}`;
+    }
+    if (type === 'adminCancelAssignment') {
+        const empName = batchEmpName(d, payload.employeeId);
+        const wsName = batchWsName(d, payload.dateKey, payload.workshopTypeId);
+        const wsPart = wsName ? ` מ${wsName}` : '';
+        return payload.disposition === 'delete'
+            ? `הסרת ${empName}${wsPart} · ${date}`
+            : `החזרת ${empName}${wsPart} להגשות · ${date}`;
+    }
+    if (type === 'adminSwapAssignment') {
+        const fromName = batchEmpName(d, payload.fromEmployeeId);
+        const toName = batchEmpName(d, payload.toEmployeeId);
+        const wsName = batchWsName(d, payload.dateKey, payload.workshopTypeId);
+        const wsPart = wsName ? ` ב${wsName}` : '';
+        return `החלפה: ${toName} במקום ${fromName}${wsPart} · ${date}`;
+    }
+    return `פעולה · ${date}`;
+}
+
+/** Queues a scheduling action locally instead of dispatching it, enforcing the 50-item cap and persisting. */
+function enqueueBatchAction(ce, type, payload, label) {
+    if (ce._batchQueue.length >= BATCH_QUEUE_CAP) {
+        ce._toast(`תור הפעולות מלא (עד ${BATCH_QUEUE_CAP} פעולות). שמרו או הסירו פעולות כדי להמשיך.`, 'error');
+        return false;
+    }
+    const clean = { ...payload };
+    delete clean.notify;
+    delete clean.notifyFrom;
+    delete clean.notifyTo;
+    if (!ce._batchExpiresAt) ce._batchExpiresAt = Date.now() + 30 * 60 * 1000;
+    ce._batchQueue.push({
+        id: `b${Date.now()}${Math.random().toString(36).slice(2, 7)}`,
+        type,
+        payload: clean,
+        label,
+        at: Date.now(),
+    });
+    ce._saveBatch();
+    ce._adminModal = null;
+    ce._toast(`נוסף לתור הפעולות (${ce._batchQueue.length})`, 'success');
+    ce.render();
+    return true;
+}
+
 function renderWorkshopCell(ce, d, s, canEdit) {
     if (s.status === 'SCHEDULED' && s.workshopName) return esc(s.workshopName);
     if (!canEdit || s.status === 'REJECTED') return s.workshopName ? esc(s.workshopName) : '—';
@@ -581,6 +676,7 @@ function renderBoardPage(ce, d) {
 }
 
 const BOARD_PAGE_SIZE = 10;
+const BOARD_PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
 
 const BOARD_STATUS = {
     SUBMITTED: { label: 'הוגש', badge: 'kind' },
@@ -806,8 +902,21 @@ function paginateSlice(items, page, pageSize = BOARD_PAGE_SIZE) {
     return { items: items.slice(start, start + pageSize), page: safePage, totalPages, total };
 }
 
-function renderPager(page, totalPages, total, prevAction, nextAction) {
-    if (total <= BOARD_PAGE_SIZE) return '';
+function boardPageSize(ce) {
+    const size = ce._boardSubsPageSize || BOARD_PAGE_SIZE;
+    return BOARD_PAGE_SIZE_OPTIONS.includes(size) ? size : BOARD_PAGE_SIZE;
+}
+
+function renderPageSizeSelect(ce, action) {
+    const size = boardPageSize(ce);
+    return `<div class="epa-page-size"><label for="epaBoardPageSize">הצג</label>
+        <select id="epaBoardPageSize" data-action="${action}">${BOARD_PAGE_SIZE_OPTIONS.map(n =>
+            `<option value="${n}" ${n === size ? 'selected' : ''}>${n}</option>`).join('')}</select>
+        <span>רשומות</span></div>`;
+}
+
+function renderPager(page, totalPages, total, prevAction, nextAction, pageSize = BOARD_PAGE_SIZE) {
+    if (total <= pageSize) return '';
     return `<div class="epa-pager">
         <button type="button" class="epa-btn" data-action="${prevAction}" ${page <= 0 ? 'disabled' : ''}>הקודם</button>
         <span class="epa-pager-info">דף ${page + 1} מתוך ${totalPages} (${total} רשומות)</span>
@@ -820,7 +929,8 @@ function renderBoardSubmissions(ce, d) {
     const bounds = monthBounds(d.monthKey);
     const f = boardFilter(ce);
     const filtered = filteredBoardRows(ce, d);
-    const { items, page, totalPages, total } = paginateSlice(filtered, ce._boardSubsPage || 0);
+    const pageSize = boardPageSize(ce);
+    const { items, page, totalPages, total } = paginateSlice(filtered, ce._boardSubsPage || 0, pageSize);
     const scheduled = filtered.filter(r => r.status === 'SCHEDULED').length;
     const vacations = filtered.filter(r => r.kind === 'vacation').length;
     const blocked = filtered.filter(r => r.kind === 'blocked').length;
@@ -828,7 +938,7 @@ function renderBoardSubmissions(ce, d) {
     const toVal = f.to || bounds.to;
     const rows = items.map(r => renderBoardRow(r, ce._adminSelectedDay, d.employees, d.monthKey)).join('');
 
-    return `<div class="epa-panel-title"><h3>כל ההגשות והשיבוצים — ${monthTitle(d.monthKey)}</h3></div>
+    return `<div class="epa-panel-title"><h3>כל ההגשות והשיבוצים — ${monthTitle(d.monthKey)}</h3>${renderPageSizeSelect(ce, 'admin-board-page-size')}</div>
         <div class="epa-board-stats">
             <span class="epa-board-stat">${total} ברשימה</span>
             <span class="epa-board-stat">${scheduled} משובצים</span>
@@ -852,7 +962,33 @@ function renderBoardSubmissions(ce, d) {
         <div class="epa-table-wrap"><table class="epa-table"><thead><tr><th>תאריך</th><th>עובד/ת</th><th>שעות</th><th>סדנה / פרטים</th><th>סטטוס</th></tr></thead>
             <tbody>${rows || '<tr><td colspan="5" class="ep-empty">אין רשומות התואמות את הסינון</td></tr>'}</tbody>
         </table></div>
-        ${renderPager(page, totalPages, total, 'admin-board-subs-prev', 'admin-board-subs-next')}`;
+        ${renderPager(page, totalPages, total, 'admin-board-subs-prev', 'admin-board-subs-next', pageSize)}`;
+}
+
+function renderBatchToolbar(ce) {
+    if (!ce._batchMode) {
+        return `
+            <div class="epa-batch-bar">
+                <label class="epa-switch">
+                    <input type="checkbox" data-action="admin-batch-toggle">
+                    <span class="epa-switch-slider"></span>
+                </label>
+                <span class="epa-switch-status off">בצע כמה שינויים ואשר יחד</span>
+            </div>`;
+    }
+    const n = ce._batchQueue.length;
+    const remainMs = ce._batchExpiresAt ? (ce._batchExpiresAt - Date.now()) : 0;
+    return `
+        <div class="epa-batch-bar on">
+            <label class="epa-switch">
+                <input type="checkbox" data-action="admin-batch-toggle" checked>
+                <span class="epa-switch-slider"></span>
+            </label>
+            <span class="epa-switch-status on">מצב אצווה פעיל</span>
+            <button class="epa-btn" data-action="admin-batch-open-history">היסטוריית פעולות (${n})</button>
+            <button class="epa-btn primary" data-action="admin-batch-save" ${(n && !ce._batchSaving) ? '' : 'disabled'}>${ce._batchSaving ? 'שומר…' : `שמירת הכל (${n})`}</button>
+            ${n && ce._batchExpiresAt ? `<span class="epa-chip" id="epaBatchClock" data-until="${ce._batchExpiresAt}">⏳ ${ce._formatCountdown(remainMs)}</span>` : ''}
+        </div>`;
 }
 
 function renderToolbar(ce, d) {
@@ -866,7 +1002,8 @@ function renderToolbar(ce, d) {
             <button class="epa-btn ${ce._adminView !== 'list' ? 'active' : ''}" data-action="admin-view-heat">לוח חודשי</button>
             <button class="epa-btn ${ce._adminView === 'list' ? 'active' : ''}" data-action="admin-view-list">רשימה</button>
             ${d.permissions.manageScheduling ? `<button class="epa-btn primary" data-action="admin-open-auto-assign">✨ שיבוץ אוטומטי לעובדים נבחרים</button>` : ''}
-        </div>`;
+        </div>
+        ${d.permissions.manageScheduling ? renderBatchToolbar(ce) : ''}`;
 }
 
 function submissionsByDate(d) {
@@ -923,6 +1060,37 @@ function renderDayWorkshopsPlus(info) {
     return `<span class="epa-day-plus ep-tip-trigger" tabindex="0" data-tip="${esc(lines.join('\n'))}" aria-label="פרטי סדנאות היום">+</span>`;
 }
 
+/** Staff icon — desktop hover only: per-workshop headcount + assigned (משובץ) / submitted (הוגש) employees. */
+function renderDayStaffTip(info, subs) {
+    const types = info?.types || [];
+    if (!types.length && !subs.length) return '';
+
+    const blocks = types.map(t => {
+        const people = `${t.adults} מבוגרים${t.children ? `, ${t.children} ילדים` : ''}`;
+        const assigned = subs
+            .filter(s => t.assignedEmployeeIds.includes(s.employeeId) && s.status === 'SCHEDULED')
+            .map(s => esc(s.employeeName));
+        const submitted = subs
+            .filter(s => !t.assignedEmployeeIds.includes(s.employeeId) && s.status === 'SUBMITTED')
+            .map(s => esc(s.employeeName));
+        let html = `<div class="ep-tip-line"><b>${esc(t.name)}</b> — ${people}</div>`;
+        if (assigned.length) html += `<div class="ep-tip-line">משובצים: ${assigned.join(', ')}</div>`;
+        if (submitted.length) html += `<div class="ep-tip-line">הוגש: ${submitted.join(', ')}</div>`;
+        if (!assigned.length && !submitted.length) html += `<div class="ep-tip-line" style="opacity:.75">אין עובדים משובצים/הוגשים</div>`;
+        return html;
+    });
+
+    if (!types.length) {
+        const scheduled = subs.filter(s => s.status === 'SCHEDULED').map(s => esc(s.employeeName));
+        const submitted = subs.filter(s => s.status === 'SUBMITTED').map(s => esc(s.employeeName));
+        if (scheduled.length) blocks.push(`<div class="ep-tip-line">משובצים: ${scheduled.join(', ')}</div>`);
+        if (submitted.length) blocks.push(`<div class="ep-tip-line">הוגש: ${submitted.join(', ')}</div>`);
+    }
+
+    if (!blocks.length) return '';
+    return `<span class="epa-day-staff ep-tip-trigger ep-tip-desktop-only" tabindex="0" data-tip-html="${esc(blocks.join(''))}" aria-label="עובדים לפי סדנה">👥</span>`;
+}
+
 function renderHeatmap(ce, d) {
     const [y, m] = d.monthKey.split('-').map(Number);
     const firstDow = new Date(y, m - 1, 1).getDay();
@@ -949,6 +1117,7 @@ function renderHeatmap(ce, d) {
             : (subs.length ? `<span class="cnt">${subs.length} הגשות</span>` : '');
         cells += `<div class="${cls}" data-action="admin-select-day" data-date="${dateKey}" ${note ? `title="${esc(note.message)}"` : ''}>
             ${flags ? `<span class="epa-flag">${flags}</span>` : ''}
+            ${renderDayStaffTip(info, subs)}
             ${renderDayWorkshopsPlus(info)}
             <span class="num">${day}</span>
             ${holidays[dateKey] ? `<span class="hol">${esc(holidays[dateKey])}${holidayModeMarker(holidayEntry)}</span>` : ''}
@@ -1014,7 +1183,7 @@ function renderDayRowMenu(ce, d, row, dateKey) {
     const isOpen = ce._dayRowMenuOpen === row.key;
     const isScheduled = row.status === 'SCHEDULED';
     const hasWorkshop = !!row.workshopTypeId;
-    return `<div class="epa-row-menu-wrap">
+    return `<div class="epa-row-menu-wrap${isOpen ? ' open' : ''}">
         <button type="button" class="epa-row-menu-btn" data-action="admin-day-row-menu" data-row="${esc(row.key)}" aria-label="פעולות נוספות">⋮</button>
         ${isOpen ? `<div class="epa-row-menu-drop">
             <button type="button" data-action="admin-day-row-assign" data-date="${esc(dateKey)}" data-emp="${esc(row.employeeId)}">🗂 שיבוץ לסדנה</button>
@@ -1052,9 +1221,10 @@ function renderDayPeopleList(ce, d, dateKey) {
     const rows = items.map(r => renderDayPeopleRow(ce, d, r, dateKey)).join('');
     const canManageScheduling = d.permissions.manageScheduling;
     const canSeeGlobalScope = d.permissions.manageRules || d.permissions.manageScheduling;
+    const menuOpen = !!ce._dayRowMenuOpen;
     return `<div class="epa-day-people">
         <div class="epa-panel-title">
-            <h3>עובדים ביום זה (${total})</h3>
+            <h3>עובדים משובצים והגשות פעילות ליום - ${fmtDate(dateKey)} (${total})</h3>
             <div style="display:flex;gap:6px;flex-wrap:wrap">
                 ${canManageScheduling ? `<button type="button" class="epa-btn primary" data-action="admin-open-assign-day" data-date="${esc(dateKey)}">👤 שיבוץ עובד/ת ליום זה</button>` : ''}
                 ${canSeeGlobalScope ? `<button type="button" class="epa-btn" data-action="admin-open-day-settings" data-date="${esc(dateKey)}">⚙️ הגדרות ליום זה</button>` : ''}
@@ -1066,7 +1236,7 @@ function renderDayPeopleList(ce, d, dateKey) {
             ${renderMultiSelect('day', 'workshopIds', 'סדנאות', wsOpts, f.workshopIds, ce._dayMsOpen)}
             ${hasFilter ? `<button type="button" class="epa-btn" data-action="admin-day-filter-clear">איפוס סינון</button>` : ''}
         </div>
-        <div class="epa-table-wrap"><table class="epa-table"><thead><tr><th>עובד/ת</th><th>שעות</th><th>סדנה / פרטים</th><th>סטטוס</th><th></th></tr></thead>
+        <div class="epa-table-wrap${menuOpen ? ' menu-open' : ''}"><table class="epa-table"><thead><tr><th>עובד/ת</th><th>שעות</th><th>סדנה / פרטים</th><th>סטטוס</th><th></th></tr></thead>
             <tbody>${rows || '<tr><td colspan="5" class="ep-empty">אין עובדים התואמים את הסינון ביום זה</td></tr>'}</tbody>
         </table></div>
         ${renderPager(page, totalPages, total, 'admin-day-list-prev', 'admin-day-list-next')}
@@ -2133,6 +2303,55 @@ function renderVacationForm(ce, d, vacation) {
         </div>`;
 }
 
+function relTimeHe(ts) {
+    const diffMin = Math.max(0, Math.floor((Date.now() - ts) / 60000));
+    if (diffMin < 1) return 'הרגע';
+    if (diffMin === 1) return 'לפני דקה';
+    return `לפני ${diffMin} דק׳`;
+}
+
+function renderBatchHistory(ce, d) {
+    const queue = ce._batchQueue || [];
+    const summary = ce._batchSummary;
+    const summaryHtml = summary ? `
+        <div class="epa-batch-summary">
+            <div class="epa-batch-summary-head">
+                <b>סיכום השמירה</b>
+                <button class="epa-btn small" data-action="admin-batch-dismiss-summary">סגירה</button>
+            </div>
+            ${summary.map(r => `<div class="epa-batch-summary-row ${r.ok ? 'ok' : 'fail'}">
+                <span>${r.ok ? '✓' : '✗'}</span>
+                <span class="epa-batch-summary-label">${esc(r.label)}</span>
+                ${!r.ok ? `<span class="epa-batch-summary-reason">${esc(r.reason || r.message || 'נכשל')}</span>` : ''}
+            </div>`).join('')}
+        </div>` : '';
+    if (ce._batchSaving) {
+        return `${summaryHtml}
+            <div class="epa-batch-saving">
+                <div class="epa-batch-saving-bar"><div class="epa-batch-saving-fill"></div></div>
+                <div>שומר ${queue.length} פעולות…</div>
+            </div>`;
+    }
+    const rows = queue.length ? queue.map(item => `
+        <div class="epa-batch-row">
+            <div class="epa-batch-row-main">
+                <div class="epa-batch-row-label">${esc(item.label)}</div>
+                <div class="epa-batch-meta">נוסף · ${relTimeHe(item.at)} · ${fmtTimeHe(new Date(item.at).toISOString())}${item.failReason ? ` · <span style="color:#dc2626">${esc(item.failReason)}</span>` : ''}</div>
+            </div>
+            <button class="epa-batch-remove" data-action="admin-batch-remove" data-id="${esc(item.id)}" aria-label="הסרה">✕</button>
+        </div>`).join('') : `<div class="ep-empty">התור ריק — כל הפעולות שתוסיפו יופיעו כאן.</div>`;
+    return `${summaryHtml}
+        <div class="epa-batch-list">${rows}</div>
+        <div class="epa-batch-footer">
+            <label class="epa-check-item"><input type="checkbox" data-action="admin-batch-notify-global" ${ce._batchNotify ? 'checked' : ''}> שליחת התראות וואטסאפ לעובדים המשויכים</label>
+            <div class="epa-inline">
+                <button class="epa-btn primary" data-action="admin-batch-save" ${queue.length ? '' : 'disabled'}>שמירת הכל (${queue.length})</button>
+
+                <button class="epa-btn danger" data-action="admin-batch-clear" ${queue.length ? '' : 'disabled'}>ניקוי הכל</button>
+            </div>
+        </div>`;
+}
+
 function renderModal(ce, d) {
     const modal = ce._adminModal;
     if (!modal) return '';
@@ -2200,6 +2419,9 @@ function renderModal(ce, d) {
     } else if (modal.type === 'autoAssignSummary') {
         title = '📋 שיבוץ אוטומטי — סיכום תוצאות';
         body = renderAutoAssignSummaryStep(ce);
+    } else if (modal.type === 'batch') {
+        title = '📋 היסטוריית פעולות — מצב אצווה';
+        body = renderBatchHistory(ce, d);
     } else if (modal.type === 'confirmDeactivate') {
         const employee = findEmployee(ce, d, modal.id);
         title = `השבתת עובד/ת — ${esc(employee?.displayName || '')}`;
@@ -2324,6 +2546,16 @@ function renderConfirmDeactivateForm(ce, roleId) {
 // ---------------------------------------------------------------------------
 
 export function handleAdminChange(ce, input) {
+    if (input?.dataset?.action === 'admin-batch-toggle') {
+        ce._batchMode = input.checked;
+        ce._saveBatch();
+        ce.render();
+        return true;
+    }
+    if (input?.dataset?.action === 'admin-batch-notify-global') {
+        ce._batchNotify = input.checked;
+        return true;
+    }
     if (input?.dataset?.action === 'admin-toggle-active') {
         const roleId = input.dataset.emp;
         if (!input.checked) {
@@ -2405,6 +2637,13 @@ export function handleAdminChange(ce, input) {
         const end = ce.querySelector('#epaHolEnd');
         if (start) start.disabled = !isShort;
         if (end) end.disabled = !isShort;
+        return true;
+    }
+    if (input?.dataset?.action === 'admin-board-page-size') {
+        const size = parseInt(input.value, 10);
+        ce._boardSubsPageSize = BOARD_PAGE_SIZE_OPTIONS.includes(size) ? size : BOARD_PAGE_SIZE;
+        ce._boardSubsPage = 0;
+        ce.render();
         return true;
     }
     if (input?.dataset?.action === 'admin-swap-candidate-change') {
@@ -2594,7 +2833,7 @@ export function handleAdminClick(ce, action, target) {
             ce.render();
             return true;
         case 'admin-board-subs-next': {
-            const totalPages = Math.max(1, Math.ceil(filteredBoardRows(ce, d).length / BOARD_PAGE_SIZE));
+            const totalPages = Math.max(1, Math.ceil(filteredBoardRows(ce, d).length / boardPageSize(ce)));
             ce._boardSubsPage = Math.min(totalPages - 1, (ce._boardSubsPage || 0) + 1);
             ce.render();
             return true;
@@ -2723,11 +2962,16 @@ export function handleAdminClick(ce, action, target) {
             const notify = ce.querySelector('#epaAssignNotify')?.checked !== false;
             const taskType = ce.querySelector('#epaAssignTaskType')?.value || null;
             const shiftNote = ce.querySelector('#epaAssignShiftNote')?.value || '';
+            const assignPayload = { dateKey: target.dataset.date, workshopTypeIds, employeeId: emp, workType, notify, taskType, shiftNote };
             ce._dayAssignPrefillEmp = null;
             ce._dayAssignShowMorning = false;
+            if (ce._batchMode) {
+                enqueueBatchAction(ce, 'adminManualAssign', assignPayload, buildBatchLabel(d, 'adminManualAssign', assignPayload));
+                return true;
+            }
             ce._adminModal = null;
             ce._startBusy('משבץ…');
-            ce._dispatch('adminManualAssign', { dateKey: target.dataset.date, workshopTypeIds, employeeId: emp, workType, notify, taskType, shiftNote });
+            ce._dispatch('adminManualAssign', assignPayload);
             return true;
         }
         case 'admin-open-assign-day':
@@ -2740,6 +2984,38 @@ export function handleAdminClick(ce, action, target) {
             ce._adminModal = { type: 'daySettings', dateKey: target.dataset.date };
             ce.render();
             return true;
+        case 'admin-batch-open-history':
+            ce._batchSummary = null;
+            ce._adminModal = { type: 'batch' };
+            ce.render();
+            return true;
+        case 'admin-batch-dismiss-summary':
+            ce._batchSummary = null;
+            ce.render();
+            return true;
+        case 'admin-batch-remove': {
+            const id = target.dataset.id;
+            ce._batchQueue = ce._batchQueue.filter(item => item.id !== id);
+            if (!ce._batchQueue.length) ce._batchExpiresAt = null;
+            ce._saveBatch();
+            ce.render();
+            return true;
+        }
+        case 'admin-batch-clear':
+            ce._clearBatch();
+            ce._batchSummary = null;
+            ce.render();
+            return true;
+        case 'admin-batch-save': {
+            if (!ce._batchQueue.length || ce._batchSaving) return true;
+            ce._batchSaving = true;
+            ce._batchSummary = null;
+            ce._batchSaveSnapshot = ce._batchQueue.map(item => ({ ...item }));
+            const actions = ce._batchSaveSnapshot.map(item => ({ type: item.type, payload: item.payload }));
+            ce.render();
+            ce._dispatch('adminApplyBatch', { actions, notify: ce._batchNotify !== false });
+            return true;
+        }
         case 'admin-toggle-ws-card': {
             const dateKey = target.dataset.date;
             const cardKey = `${dateKey}::${target.dataset.type}`;
@@ -2815,9 +3091,7 @@ export function handleAdminClick(ce, action, target) {
             const notify = ce.querySelector('#epaWsAssignNotify')?.checked !== false;
             const taskType = ce.querySelector('#epaWsAssignTaskType')?.value || null;
             const shiftNote = ce.querySelector('#epaWsAssignNote')?.value || '';
-            ce._adminModal = null;
-            ce._startBusy('משבץ…');
-            ce._dispatch('adminManualAssign', {
+            const wsAssignPayload = {
                 dateKey: target.dataset.date,
                 workshopTypeIds: [target.dataset.type],
                 employeeId: target.dataset.emp,
@@ -2825,7 +3099,14 @@ export function handleAdminClick(ce, action, target) {
                 notify,
                 taskType,
                 shiftNote,
-            });
+            };
+            if (ce._batchMode) {
+                enqueueBatchAction(ce, 'adminManualAssign', wsAssignPayload, buildBatchLabel(d, 'adminManualAssign', wsAssignPayload));
+                return true;
+            }
+            ce._adminModal = null;
+            ce._startBusy('משבץ…');
+            ce._dispatch('adminManualAssign', wsAssignPayload);
             return true;
         }
         case 'admin-open-swap':
@@ -2843,16 +3124,21 @@ export function handleAdminClick(ce, action, target) {
             if (!modal || modal.type !== 'swapAssign' || !modal.toEmployeeId) return true;
             const notifyFrom = ce.querySelector('#epaSwapNotifyFrom')?.checked !== false;
             const notifyTo = ce.querySelector('#epaSwapNotifyTo')?.checked !== false;
-            ce._adminModal = null;
-            ce._startBusy('מבצע החלפה…');
-            ce._dispatch('adminSwapAssignment', {
+            const swapPayload = {
                 dateKey: modal.dateKey,
                 workshopTypeId: modal.workshopTypeId,
                 fromEmployeeId: modal.fromEmployeeId,
                 toEmployeeId: modal.toEmployeeId,
                 notifyFrom,
                 notifyTo,
-            });
+            };
+            if (ce._batchMode) {
+                enqueueBatchAction(ce, 'adminSwapAssignment', swapPayload, buildBatchLabel(d, 'adminSwapAssignment', swapPayload));
+                return true;
+            }
+            ce._adminModal = null;
+            ce._startBusy('מבצע החלפה…');
+            ce._dispatch('adminSwapAssignment', swapPayload);
             return true;
         }
         case 'admin-quick-note': {
@@ -2886,15 +3172,20 @@ export function handleAdminClick(ce, action, target) {
             return true;
         case 'admin-confirm-cancel-assign': {
             const notify = ce.querySelector('#epaCancelNotify')?.checked !== false;
-            ce._adminModal = null;
-            ce._startBusy(target.dataset.disposition === 'delete' ? 'מסיר הגשה…' : 'מחזיר להגשות פעילות…');
-            ce._dispatch('adminCancelAssignment', {
+            const cancelPayload = {
                 dateKey: target.dataset.date,
                 workshopTypeId: target.dataset.type,
                 employeeId: target.dataset.emp,
                 disposition: target.dataset.disposition === 'delete' ? 'delete' : 'restore',
                 notify,
-            });
+            };
+            if (ce._batchMode) {
+                enqueueBatchAction(ce, 'adminCancelAssignment', cancelPayload, buildBatchLabel(d, 'adminCancelAssignment', cancelPayload));
+                return true;
+            }
+            ce._adminModal = null;
+            ce._startBusy(target.dataset.disposition === 'delete' ? 'מסיר הגשה…' : 'מחזיר להגשות פעילות…');
+            ce._dispatch('adminCancelAssignment', cancelPayload);
             return true;
         }
         case 'admin-approve-submission': {

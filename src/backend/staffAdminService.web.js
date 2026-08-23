@@ -1440,8 +1440,11 @@ export const cancelAssignment = webMethod(Permissions.SiteMember, async (dateKey
  * `opts`: { notifyFrom = true, notifyTo = true, fromDisposition = 'restore',
  *           workType, taskType, shiftNote }
  */
-export const swapAssignment = webMethod(Permissions.SiteMember, async (dateKey, workshopTypeId, fromEmployeeId, toEmployeeId, opts = {}) => {
-    const { role } = await assertEmployeeAccess('manageScheduling');
+/**
+ * Core swap logic shared by `swapAssignment` and `applyScheduleBatch`.
+ * Does not run the scheduling engine, flush the outbox, or publish — callers do that once.
+ */
+async function _swapAssignmentCore(role, dateKey, workshopTypeId, fromEmployeeId, toEmployeeId, opts = {}) {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(dateKey || '') || !workshopTypeId || !fromEmployeeId || !toEmployeeId) {
         throw new Error('BAD_REQUEST: חסרים פרטים להחלפה.');
     }
@@ -1489,12 +1492,82 @@ export const swapAssignment = webMethod(Permissions.SiteMember, async (dateKey, 
         shiftNote: opts.shiftNote,
     });
 
+    console.log(`[staffAdminService] swapAssignment: ${fromEmployeeId} → ${toEmployeeId} @ ${dateKey}/${workshopTypeId} by ${role._id}`);
+    return { ok: true, warning, disposition: cancelResult.disposition, assigned: assignResult.assigned };
+}
+
+export const swapAssignment = webMethod(Permissions.SiteMember, async (dateKey, workshopTypeId, fromEmployeeId, toEmployeeId, opts = {}) => {
+    const { role } = await assertEmployeeAccess('manageScheduling');
+    const result = await _swapAssignmentCore(role, dateKey, workshopTypeId, fromEmployeeId, toEmployeeId, opts);
+    if (!result.ok) return result;
+
     await runScheduling(dateKey, dateKey);
     await flushOutbox({ force: true }).catch(err => console.error('[staffAdminService] flushOutbox failed:', err?.message || err));
     await publishSchedulingUpdate('swap-assignment', { dateKey, workshopTypeId, fromEmployeeId, toEmployeeId });
+    return result;
+});
 
-    console.log(`[staffAdminService] swapAssignment: ${fromEmployeeId} → ${toEmployeeId} @ ${dateKey}/${workshopTypeId} by ${role._id}`);
-    return { ok: true, warning, disposition: cancelResult.disposition, assigned: assignResult.assigned };
+/**
+ * Applies a queued batch of scheduling actions (assign / cancel / swap) built by the
+ * manager's local "batch mode" queue, in order, as one atomic-ish operation: each action
+ * runs through its core helper (so per-action validation/notifications still apply), then
+ * the scheduling engine, outbox flush, and update publish happen exactly once for the
+ * whole batch. `opts.notify` overrides every per-action notify flag (the queue's global toggle).
+ * One action failing does not abort the rest — failures are collected and returned so the
+ * frontend can prune succeeded items and keep failed ones queued for retry.
+ */
+export const applyScheduleBatch = webMethod(Permissions.SiteMember, async (actions, opts = {}) => {
+    const { role } = await assertEmployeeAccess('manageScheduling');
+    const list = Array.isArray(actions) ? actions : [];
+    const notify = opts.notify !== false;
+    const results = [];
+    const affectedDates = new Set();
+
+    for (let i = 0; i < list.length; i++) {
+        const action = list[i] || {};
+        const { type, payload = {} } = action;
+        try {
+            if (type === 'adminManualAssign') {
+                const r = await _manualAssignCore(role, payload.dateKey, payload.workshopTypeIds, payload.employeeId, payload.workType, {
+                    notify,
+                    taskType: payload.taskType,
+                    shiftNote: payload.shiftNote,
+                });
+                affectedDates.add(payload.dateKey);
+                results.push({ index: i, ok: true, ...r });
+            } else if (type === 'adminCancelAssignment') {
+                const r = await _cancelAssignmentCore(role, payload.dateKey, payload.workshopTypeId, payload.employeeId, payload.disposition, { notify });
+                affectedDates.add(payload.dateKey);
+                results.push({ index: i, ok: true, ...r });
+            } else if (type === 'adminSwapAssignment') {
+                const r = await _swapAssignmentCore(role, payload.dateKey, payload.workshopTypeId, payload.fromEmployeeId, payload.toEmployeeId, {
+                    notifyFrom: notify,
+                    notifyTo: notify,
+                });
+                affectedDates.add(payload.dateKey);
+                if (!r.ok) {
+                    results.push({ index: i, ok: false, blocked: true, reason: r.reason });
+                } else {
+                    results.push({ index: i, ok: true, warning: r.warning });
+                }
+            } else {
+                results.push({ index: i, ok: false, reason: `סוג פעולה לא ידוע: ${type}` });
+            }
+        } catch (err) {
+            const message = String(err?.message || err || '');
+            results.push({ index: i, ok: false, reason: message.replace(/^[A-Z_]+:\s*/, '') || 'הפעולה נכשלה.' });
+        }
+    }
+
+    if (affectedDates.size) {
+        const dates = [...affectedDates].sort();
+        await runScheduling(dates[0], dates[dates.length - 1]);
+    }
+    await flushOutbox({ force: true }).catch(err => console.error('[staffAdminService] flushOutbox failed:', err?.message || err));
+    await publishSchedulingUpdate('batch-apply', { count: list.length, dates: [...affectedDates] });
+
+    console.log(`[staffAdminService] applyScheduleBatch: ${list.length} actions, ${results.filter(r => r.ok).length} ok by ${role._id}`);
+    return { ok: true, results };
 });
 
 async function notifyShiftChange(target, actionKey, vars, dateKey) {

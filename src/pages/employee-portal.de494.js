@@ -72,6 +72,7 @@ import {
     listEmployeeUpcomingShifts,
     removeEmployeeUpcomingShifts,
     getWorkshopOrderGroups,
+    applyScheduleBatch,
 } from 'backend/staffAdminService.web.js';
 import {
     runSchedulingNow,
@@ -829,6 +830,17 @@ async function handlePortalAction(portalEl, detail) {
             pushActionResult(portalEl, { type, ...result });
             // A blocked swap (conflict) doesn't mutate anything — skip the refetch/collapse.
             refreshAdmin = !result?.blocked;
+            break;
+        }
+
+        case 'adminApplyBatch': {
+            try {
+                const result = await applyScheduleBatch(payload?.actions || [], { notify: payload?.notify !== false });
+                pushActionResult(portalEl, { type, ...result });
+            } catch (err) {
+                pushActionResult(portalEl, { type, ok: false, message: friendlyError(err) });
+            }
+            refreshAdmin = true;
             break;
         }
 

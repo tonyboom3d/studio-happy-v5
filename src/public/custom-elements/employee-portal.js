@@ -638,6 +638,7 @@ class EmployeePortal extends HTMLElement {
         this._openOffersWsFilter = '';
         this._boardSubsOpen = true;
         this._boardSubsPage = 0;
+        this._boardSubsPageSize = 10;
         this._boardListFilter = { employeeIds: [], statuses: [], workshopIds: [], from: '', to: '' };
         this._boardMsOpen = null;
         this._dayListFilter = { employeeIds: [], statuses: [], workshopIds: [] };
@@ -647,6 +648,15 @@ class EmployeePortal extends HTMLElement {
         this._wsAccordionOpen = new Set();      // open workshop-accordion keys in day modal
         this._lightboxImage = null;             // full-size sketch image URL shown in the lightbox
         this._sketchGalleryOrderId = null;      // orderId whose full sketch grid is open (overflow view)
+        // Batch scheduling mode — queue assign/remove/swap actions and save them all at once.
+        this._batchMode = false;
+        this._batchQueue = [];                  // [{ id, type, payload, label, at }]
+        this._batchExpiresAt = null;            // Date.now() + 30min from the first queued item
+        this._batchHistoryOpen = false;
+        this._batchNotify = true;               // global "send WhatsApp" choice at save time
+        this._batchSaving = false;
+        this._batchSummary = null;              // [{ ok, blocked, reason, warning, label }] shown after save
+        this._batchTimer = null;                // 1s ticker for the expiry countdown chip
         this._shiftModal = null;                // { type: 'edit'|'requestEdit'|'requestDelete'|'swap', submissionId }
         this._busy = null;                      // busy-overlay message while a mutation is in flight
         this._editWindowTimer = null;           // 1s ticker for the 30-min free-edit countdown
@@ -735,6 +745,7 @@ class EmployeePortal extends HTMLElement {
     disconnectedCallback() {
         clearInterval(this._msgCarTimer);
         clearInterval(this._editWindowTimer);
+        clearInterval(this._batchTimer);
         clearTimeout(this._tipTimer);
         if (this._tipDocClick) document.removeEventListener('click', this._tipDocClick);
         if (this._tipEl?.parentNode) this._tipEl.parentNode.removeChild(this._tipEl);
@@ -780,7 +791,7 @@ class EmployeePortal extends HTMLElement {
         const related = e.relatedTarget;
         if (related && el.contains(related)) return;
         if (this._tipPinned && this._tipPinned !== el) return;
-        if (el.classList.contains('ep-b-info') && window.matchMedia('(hover: none)').matches) return;
+        if ((el.classList.contains('ep-b-info') || el.classList.contains('ep-tip-desktop-only')) && window.matchMedia('(hover: none)').matches) return;
         clearTimeout(this._tipTimer);
         const content = this._tipContentFrom(el);
         if (!content) return;
@@ -801,6 +812,7 @@ class EmployeePortal extends HTMLElement {
         const el = e.target.closest?.('[data-tip], [data-tip-html]');
         if (!el || !this.contains(el)) return;
         const touchMode = window.matchMedia('(hover: none)').matches;
+        if (el.classList.contains('ep-tip-desktop-only') && touchMode) return;
         const pin = el.classList.contains('ep-b-info') || el.classList.contains('ep-day-plus') || (touchMode && el.classList.contains('ep-tip-trigger'));
         if (!pin) return;
         e.preventDefault();
@@ -910,6 +922,7 @@ class EmployeePortal extends HTMLElement {
             if (!this._empSaveFinishing) this._clearBusyOverlay();
             this._pendingWorkTypes = null;
             if (this._adminData?.monthKey) this._adminMonth = this._adminData.monthKey;
+            this._loadBatch();
             console.log('[employee-portal] admin-data received', {
                 month: this._adminData.monthKey,
                 employees: this._adminData.employees?.length ?? 0,
@@ -1289,6 +1302,33 @@ class EmployeePortal extends HTMLElement {
                 return;
             }
         }
+        if (result.type === 'adminApplyBatch') {
+            this._batchSaving = false;
+            if (!result.ok) {
+                this._toast(result.message || 'שמירת האצווה נכשלה.', 'error');
+                this.render();
+                return;
+            }
+            const results = result.results || [];
+            const savedSnapshot = this._batchSaveSnapshot || [];
+            // Keep only the failed items in the queue (tagged with their failure reason) so the manager can retry/remove them.
+            const survivors = [];
+            results.forEach((r, i) => {
+                if (r.ok) return;
+                const item = savedSnapshot[i];
+                if (item) survivors.push({ ...item, failReason: r.reason || r.message || 'הפעולה נכשלה' });
+            });
+            this._batchQueue = survivors;
+            this._batchExpiresAt = survivors.length ? (this._batchExpiresAt || (Date.now() + 30 * 60 * 1000)) : null;
+            this._batchSaveSnapshot = null;
+            this._saveBatch();
+            this._batchSummary = results.map((r, i) => ({ ...r, label: savedSnapshot[i]?.label || `פעולה ${i + 1}` }));
+            this._batchHistoryOpen = true;
+            const okCount = results.filter(r => r.ok).length;
+            this._toast(`נשמרו ${okCount} מ-${results.length} פעולות.`, okCount === results.length ? 'success' : 'error');
+            this.render();
+            return;
+        }
         if (result.type === 'adminLoadWorkshopOrders') {
             this._workshopOrderGroups = this._workshopOrderGroups || {};
             if (result.ok) {
@@ -1388,6 +1428,7 @@ class EmployeePortal extends HTMLElement {
         this._restoreToast();
         this._setupMsgCarousel();
         this._setupEditWindowTimer();
+        this._setupBatchTimer();
     }
 
     /** "השעות שלי" — monthly time-clock history + approval (Module E). */
@@ -1499,6 +1540,65 @@ class EmployeePortal extends HTMLElement {
     _unreadCount(scope) {
         const seen = this._getSeenMsgs();
         return this._msgListFor(scope).filter(m => !seen.has(this._msgId(m))).length;
+    }
+
+    // -----------------------------------------------------------------
+    // Batch scheduling mode — per-device queue with a 30-min expiry.
+    // -----------------------------------------------------------------
+    _batchKey() {
+        const u = this._data?.user || {};
+        return `epBatchQueue:${u.id || u.email || u.name || 'anon'}`;
+    }
+
+    _loadBatch() {
+        let raw = null;
+        try { raw = JSON.parse(localStorage.getItem(this._batchKey()) || 'null'); } catch (_) { raw = null; }
+        this._batchMode = !!raw?.mode;
+        this._batchQueue = Array.isArray(raw?.queue) ? raw.queue : [];
+        this._batchExpiresAt = raw?.expiresAt || null;
+        if (this._batchQueue.length && this._batchExpiresAt && Date.now() > this._batchExpiresAt) {
+            const hadItems = this._batchQueue.length;
+            this._batchQueue = [];
+            this._batchExpiresAt = null;
+            this._saveBatch();
+            if (hadItems) this._toast('התור הקודם של פעולות אצווה פג תוקף (30 דק׳) ונוקה.', 'error');
+        }
+    }
+
+    _saveBatch() {
+        try {
+            localStorage.setItem(this._batchKey(), JSON.stringify({
+                mode: this._batchMode,
+                queue: this._batchQueue,
+                expiresAt: this._batchExpiresAt,
+            }));
+        } catch (_) { /* storage unavailable */ }
+    }
+
+    _clearBatch() {
+        this._batchQueue = [];
+        this._batchExpiresAt = null;
+        this._saveBatch();
+    }
+
+    /** 1s ticker that updates the expiry countdown chip in place; drops the queue once it actually expires. */
+    _setupBatchTimer() {
+        clearInterval(this._batchTimer);
+        if (!this.querySelector('#epaBatchClock')) return;
+        this._batchTimer = setInterval(() => {
+            const clockEl = this.querySelector('#epaBatchClock');
+            if (!clockEl) { clearInterval(this._batchTimer); return; }
+            const until = Number(clockEl.dataset.until);
+            const remainMs = until - Date.now();
+            if (remainMs <= 0) {
+                clearInterval(this._batchTimer);
+                this._clearBatch();
+                this._toast('פעולות האצווה פגו תוקף (30 דק׳) ונוקו.', 'error');
+                this.render();
+                return;
+            }
+            clockEl.textContent = this._formatCountdown(remainMs);
+        }, 1000);
     }
 
     _renderStatusGuide() {

@@ -248,6 +248,7 @@ export const ADMIN_STYLE = `
 .epa-ws-card { border: 1px solid #e2e8f0; border-radius: 12px; padding: 12px; background: #f8fafc; }
 .epa-ws-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
 .epa-ws-head h4 { margin: 0; font-size: 13.5px; font-weight: 700; color: #0f172a; }
+.epa-ws-head-time { font-size: 12px; font-weight: 500; color: #6b7280; }
 .epa-ws-fraction { font-size: 12px; font-weight: 700; color: #475569; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .epa-ws-fraction.full { color: #16a34a; }
 .epa-capacity-track { height: 6px; border-radius: 999px; background: #e2e8f0; overflow: hidden; margin-bottom: 7px; }
@@ -1472,29 +1473,41 @@ function renderWorkshopGroupsDetail(ce, cardKey) {
     </tr></thead><tbody>${rows}</tbody></table></div>`;
 }
 
-/** Workshop capacity cards for the day: fraction/bar + aggregate meta (adults/children/times) only — no employee add/remove here. Click a card to expand its paid-order groups (client/participant detail), fetched on demand. */
+/** Workshop capacity cards for the day: one card per session/time-slot. Click to expand paid-order groups for that slot. */
 function renderWorkshopCapacityGrid(ce, d, dateKey, info, subs) {
     const types = info?.types || [];
     if (!types.length) {
         return `<div class="ep-empty">אין סדנאות ביום זה${subs.length ? ` — ${subs.length} הגשות זמינות (יום סטודיו)` : ''}</div>`;
     }
-    const cards = types.map(t => {
-        const filled = Math.min(t.filled, t.required);
-        const full = t.required > 0 && filled >= t.required;
-        const pct = t.required ? Math.min(100, Math.round((filled / t.required) * 100)) : 0;
-        const times = (t.timeRanges || []).map(r => r.end ? `${fmtTimeHe(r.start)}–${fmtTimeHe(r.end)}` : fmtTimeHe(r.start)).filter(Boolean).join(', ');
-        const cardKey = `${dateKey}::${t.typeId}`;
-        const isOpen = ce._dayWsOpenCard === cardKey;
-        return `<div class="epa-ws-card">
-            <button type="button" class="epa-ws-head epa-ws-head-btn" data-action="admin-toggle-ws-card" data-date="${esc(dateKey)}" data-type="${esc(t.typeId)}">
-                <h4>${esc(t.name)}</h4>
-                <span class="epa-ws-fraction ${full ? 'full' : ''}">${filled}/${t.required} צוות</span>
-                <span class="epa-accordion-arrow">${isOpen ? '▲' : '▼'}</span>
-            </button>
-            <div class="epa-capacity-track"><div class="epa-capacity-fill ${full ? 'full' : ''}" style="width:${pct}%"></div></div>
-            <div class="epa-ws-meta"><span>${t.adults} מבוגרים</span><span>${t.children} ילדים</span>${times ? `<span>${esc(times)}</span>` : ''}${t.standbyCount ? `<span>בהמתנה: ${t.standbyCount}</span>` : ''}</div>
-            ${isOpen ? renderWorkshopGroupsDetail(ce, cardKey) : ''}
-        </div>`;
+    const cards = types.flatMap(t => {
+        const slots = (t.slots && t.slots.length) ? t.slots : [{
+            start: t.timeRanges?.[0]?.start || null,
+            end: t.timeRanges?.[0]?.end || null,
+            adults: t.adults,
+            children: t.children,
+            required: t.required,
+            filled: t.filled,
+            label: '',
+        }];
+        return slots.map(slot => {
+            const filled = Math.min(slot.filled ?? 0, slot.required ?? 0);
+            const full = slot.required > 0 && filled >= slot.required;
+            const pct = slot.required ? Math.min(100, Math.round((filled / slot.required) * 100)) : 0;
+            const timeText = slot.start ? (slot.end ? `${fmtTimeHe(slot.start)}–${fmtTimeHe(slot.end)}` : fmtTimeHe(slot.start)) : '';
+            const title = slot.label ? `${t.name} — ${slot.label}` : t.name;
+            const cardKey = slot.start ? `${dateKey}::${t.typeId}::${slot.start}` : `${dateKey}::${t.typeId}`;
+            const isOpen = ce._dayWsOpenCard === cardKey;
+            return `<div class="epa-ws-card">
+                <button type="button" class="epa-ws-head epa-ws-head-btn" data-action="admin-toggle-ws-card" data-date="${esc(dateKey)}" data-type="${esc(t.typeId)}" data-start="${esc(slot.start || '')}">
+                    <h4>${esc(title)}${timeText ? ` <span class="epa-ws-head-time">${esc(timeText)}</span>` : ''}</h4>
+                    <span class="epa-ws-fraction ${full ? 'full' : ''}">${filled}/${slot.required} צוות</span>
+                    <span class="epa-accordion-arrow">${isOpen ? '▲' : '▼'}</span>
+                </button>
+                <div class="epa-capacity-track"><div class="epa-capacity-fill ${full ? 'full' : ''}" style="width:${pct}%"></div></div>
+                <div class="epa-ws-meta"><span>${slot.adults} מבוגרים</span><span>${slot.children} ילדים</span>${t.standbyCount ? `<span>בהמתנה: ${t.standbyCount}</span>` : ''}</div>
+                ${isOpen ? renderWorkshopGroupsDetail(ce, cardKey) : ''}
+            </div>`;
+        });
     }).join('');
     return `<div class="epa-ws-grid">${cards}</div>`;
 }
@@ -1729,7 +1742,7 @@ function renderOpenOffers(ce, d) {
 
     return `<div class="epa-board-acc">
         <button type="button" class="epa-accordion-toggle" data-action="admin-toggle-open-offers">
-            <span>הצעות וקריאות פתוחות (${allOffers.length})</span>
+            <span>סדנאות ללא שיבוץ פעיל (${allOffers.length})</span>
             <span class="epa-accordion-arrow">${open ? '▲' : '▼'}</span>
         </button>
         ${open ? `<div class="epa-accordion-body">
@@ -3286,12 +3299,13 @@ export function handleAdminClick(ce, action, target) {
         }
         case 'admin-toggle-ws-card': {
             const dateKey = target.dataset.date;
-            const cardKey = `${dateKey}::${target.dataset.type}`;
+            const sessionStart = target.dataset.start || '';
+            const cardKey = sessionStart ? `${dateKey}::${target.dataset.type}::${sessionStart}` : `${dateKey}::${target.dataset.type}`;
             const wasOpen = ce._dayWsOpenCard === cardKey;
             ce._dayWsOpenCard = wasOpen ? null : cardKey;
             ce.render();
             if (!wasOpen && !ce._workshopOrderGroups?.[cardKey]) {
-                ce._dispatch('adminLoadWorkshopOrders', { dateKey, workshopTypeId: target.dataset.type, key: cardKey });
+                ce._dispatch('adminLoadWorkshopOrders', { dateKey, workshopTypeId: target.dataset.type, sessionStart: sessionStart || undefined, key: cardKey });
             }
             return true;
         }

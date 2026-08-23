@@ -40,6 +40,7 @@ import { TUFTING_SERVICE_IDS } from 'backend/sketchEditingPolicy.js';
 import {
     buildBoard,
     typeFilledCount,
+    requiredInstructorsFor,
     loadSettings,
     loadRulesByTypeId,
     loadWorkshopTypeMap,
@@ -302,6 +303,25 @@ export const getStaffAdminData = webMethod(Permissions.SiteMember, async (monthK
                 const sortedSessions = [...t.sessions].sort();
                 const timeRanges = sortedSessions.map(start => ({ start, end: t.sessionEnds?.[start] || null }));
                 const earliestStart = sortedSessions[0] || null;
+                const rule = board.rules[t.typeId];
+                const slots = (sortedSessions.length ? sortedSessions : [null]).map((start, idx) => {
+                    const comp = start && t.sessionComps?.[start]
+                        ? t.sessionComps[start]
+                        : { adults: t.adults, children: t.children, pairs: t.pairs, soloAdults: t.soloAdults, extraChildren: t.extraChildren, people: t.people };
+                    return {
+                        start,
+                        end: start ? (t.sessionEnds?.[start] || null) : null,
+                        adults: comp.adults || 0,
+                        children: comp.children || 0,
+                        required: requiredInstructorsFor(rule, comp),
+                        label: sortedSessions.length > 1 ? `מפגש ${idx + 1}` : '',
+                    };
+                });
+                let fillRemaining = typeFilledCount(t);
+                for (const slot of slots) {
+                    slot.filled = Math.min(fillRemaining, slot.required);
+                    fillRemaining -= slot.filled;
+                }
                 return {
                     typeId: t.typeId,
                     name: t.name,
@@ -312,6 +332,7 @@ export const getStaffAdminData = webMethod(Permissions.SiteMember, async (monthK
                     assignedEmployeeIds: t.assignedEmployeeIds,
                     standbyCount: t.standbyQueue.length,
                     timeRanges,
+                    slots,
                     isMorning: earliestStart ? classifyShiftSlot(dateKey, earliestStart) === 'morning' : false,
                 };
             }),
@@ -503,7 +524,7 @@ async function persistEmployeePatch(roleId, patch, { callerRole, permissions } =
  * "תפוסת סדנאות" grid. Kept intentionally light (no sketches/legacy-booking
  * merge) — the full order-management pipeline lives in dashboardService.web.js.
  */
-export const getWorkshopOrderGroups = webMethod(Permissions.SiteMember, async (dateKey, workshopTypeId) => {
+export const getWorkshopOrderGroups = webMethod(Permissions.SiteMember, async (dateKey, workshopTypeId, sessionStart) => {
     await assertEmployeeAccess('manageScheduling');
     if (!dateKey || !workshopTypeId) throw new Error('BAD_REQUEST: חסרים פרטים.');
 
@@ -524,8 +545,10 @@ export const getWorkshopOrderGroups = webMethod(Permissions.SiteMember, async (d
         .ge('workshopStart', start).le('workshopStart', end)
         .limit(200).find(SA).catch(() => ({ items: [] }));
 
+    const sessionIso = sessionStart ? new Date(sessionStart).toISOString() : null;
     return (result.items || [])
         .filter(o => !o.cancelledAt && toDateKey(o.workshopStart) === dateKey)
+        .filter(o => !sessionIso || new Date(o.workshopStart).toISOString() === sessionIso)
         .map(o => ({
             id: o._id,
             organizerName: o.organizerName || 'ללא שם',

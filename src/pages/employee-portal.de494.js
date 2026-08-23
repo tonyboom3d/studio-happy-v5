@@ -846,7 +846,7 @@ async function handlePortalAction(portalEl, detail) {
 
         case 'adminLoadWorkshopOrders': {
             try {
-                const groups = await getWorkshopOrderGroups(payload?.dateKey, payload?.workshopTypeId);
+                const groups = await getWorkshopOrderGroups(payload?.dateKey, payload?.workshopTypeId, payload?.sessionStart);
                 pushActionResult(portalEl, { type, ok: true, key: payload?.key, groups });
             } catch (err) {
                 pushActionResult(portalEl, { type, ok: false, key: payload?.key, message: friendlyError(err) });

@@ -18,7 +18,6 @@ import { normalizeIsraeliPhone } from 'backend/orderUtils.js';
 
 const MANYCHAT_BASE_URL = 'https://api.manychat.com';
 const ISRAEL_TZ = 'Asia/Jerusalem';
-const ADMIN_ORDER_BASE_URL = 'https://www.studiohappy.art/user-selections?admin=';
 
 // Custom field names — must match ManyChat (see create-manychat-fields.js).
 export const MC_FIELDS = {
@@ -310,8 +309,11 @@ function buildOrderCustomFields(order) {
         fields.push({ name: MC_FIELDS.orderNumber, value: order.ecomOrderNumber });
     }
 
+    // The ManyChat template already contains the full base URL
+    // (https://www.studiohappy.art/user-selections?admin=) — only the
+    // dynamic order id goes into the field, or it gets double-prefixed.
     if (workshopType === 'tufting' && order?._id) {
-        fields.push({ name: MC_FIELDS.orderUrl, value: `${ADMIN_ORDER_BASE_URL}${order._id}` });
+        fields.push({ name: MC_FIELDS.orderUrl, value: order._id });
     }
 
     if (workshopType === 'candles' && cupsCount > 0) {

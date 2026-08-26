@@ -202,7 +202,7 @@ function hasManyChatFieldValue(value) {
 }
 
 function toManyChatFieldValue(value) {
-    if (typeof value === 'number' && !Number.isNaN(value)) return value;
+    // All order-confirmation fields are Text type in ManyChat — must be strings.
     return String(value);
 }
 
@@ -226,11 +226,11 @@ async function setCustomFieldsByName(subscriberId, fields) {
         });
     } catch (err) {
         console.warn('[ManyChat] setCustomFields batch failed, falling back to individual:', err?.message || err);
-        for (const { name, value } of payload) {
+        for (const { field_name, field_value } of payload) {
             try {
-                await setCustomFieldByName(subscriberId, name, toManyChatFieldValue(value));
+                await setCustomFieldByName(subscriberId, field_name, field_value);
             } catch (fieldErr) {
-                console.warn(`[ManyChat] setCustomFieldByName failed for "${name}":`, fieldErr?.message || fieldErr);
+                console.warn(`[ManyChat] setCustomFieldByName failed for "${field_name}":`, fieldErr?.message || fieldErr);
             }
         }
     }

@@ -14,11 +14,31 @@ import { fetch } from 'wix-fetch';
 import { normalizeIsraeliPhone } from 'backend/orderUtils.js';
 
 const MANYCHAT_BASE_URL = 'https://api.manychat.com';
+const ISRAEL_TZ = 'Asia/Jerusalem';
+const ADMIN_ORDER_BASE_URL = 'https://www.studiohappy.art/user-selections?admin=';
+
+// Custom field names — must match ManyChat (see create-manychat-fields.js).
+export const MC_FIELDS = {
+    workshopType: 'workshop_type',
+    organizerName: 'organizer_name',
+    organizerPhone: 'organizer_phone',
+    organizerEmail: 'organizer_email',
+    workshopName: 'workshop_name',
+    workshopDate: 'workshop_date',
+    workshopTime: 'workshop_time',
+    participantsLine: 'participants_line',
+    itemCount: 'item_count',
+    cupsCount: 'cups_count',
+    extraItems: 'extra_items',
+    amount: 'amount',
+    orderUrl: 'order_url',
+    orderNumber: 'order_number',
+};
 
 // Custom field created manually in ManyChat (Settings > Custom Fields, type "Text")
 // used by the flow's conditions to branch per workshop. Values mirror the
 // existing `workshopType` values already used across the codebase.
-export const WORKSHOP_CUSTOM_FIELD_NAME = 'workshop_type';
+export const WORKSHOP_CUSTOM_FIELD_NAME = MC_FIELDS.workshopType;
 
 // content20260826091942_789880 — shared "אישור הזמנה" flow, branches
 // internally per WORKSHOP_CUSTOM_FIELD_NAME condition.
@@ -174,6 +194,116 @@ async function setCustomFieldByName(subscriberId, fieldName, fieldValue) {
     });
 }
 
+/** POST /fb/subscriber/setCustomFields — batch update by field_name */
+async function setCustomFieldsByName(subscriberId, fields) {
+    const payload = fields
+        .filter(({ name }) => !!name)
+        .map(({ name, value }) => ({
+            field_name: name,
+            field_value: value == null ? '' : String(value),
+        }));
+
+    if (!payload.length) return;
+
+    try {
+        await manychatRequest('/fb/subscriber/setCustomFields', {
+            method: 'POST',
+            body: {
+                subscriber_id: subscriberId,
+                fields: payload,
+            },
+        });
+    } catch (err) {
+        console.warn('[ManyChat] setCustomFields batch failed, falling back to individual:', err?.message || err);
+        for (const { name, value } of fields) {
+            await setCustomFieldByName(subscriberId, name, value == null ? '' : String(value));
+        }
+    }
+}
+
+function formatWorkshopDate(dateObj) {
+    if (!dateObj) return '';
+    const d = new Date(dateObj);
+    const parts = new Intl.DateTimeFormat('he-IL', {
+        timeZone: ISRAEL_TZ,
+        weekday: 'long',
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+    }).formatToParts(d);
+    const get = (t) => parts.find(p => p.type === t)?.value || '';
+    return `${get('weekday')}, ${get('day')} ${get('month')} ${get('year')} בשעה ${get('hour')}:${get('minute')}`;
+}
+
+function formatWorkshopTime(dateObj) {
+    if (!dateObj) return '';
+    const d = new Date(dateObj);
+    const parts = new Intl.DateTimeFormat('he-IL', {
+        timeZone: ISRAEL_TZ,
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+    }).formatToParts(d);
+    const get = (t) => parts.find(p => p.type === t)?.value || '';
+    return `${get('hour')}:${get('minute')}`;
+}
+
+function workshopTypeLabel(workshopType) {
+    if (workshopType === 'candles') return 'סדנת נרות';
+    if (workshopType === 'ceramics') return 'סדנת קרמיקה';
+    return 'טאפטינג';
+}
+
+function buildParticipantsLine(order, workshopType) {
+    const adults = order?.adults || 0;
+    const children = order?.children || 0;
+    if (workshopType === 'ceramics') return String(adults + children);
+    return `${adults} מבוגרים${children > 0 ? ` + ${children} ילדים` : ''}`;
+}
+
+function buildOrderCustomFields(order) {
+    const workshopType = order?.workshopType || 'tufting';
+    const total = order?.paidTotal || order?.basePrice || 0;
+    const cupsCount = Array.isArray(order?.selectedProducts)
+        ? order.selectedProducts.reduce((sum, p) => sum + (Number(p.quantity) || 1), 0)
+        : 0;
+    const extraItems = order?.extraCandleCount || 0;
+
+    const fields = [
+        { name: MC_FIELDS.workshopType, value: workshopType },
+        { name: MC_FIELDS.organizerName, value: order?.organizerName || '' },
+        { name: MC_FIELDS.organizerPhone, value: order?.organizerPhone || '' },
+        { name: MC_FIELDS.organizerEmail, value: order?.organizerEmail || '' },
+        { name: MC_FIELDS.workshopName, value: workshopTypeLabel(workshopType) },
+        { name: MC_FIELDS.workshopDate, value: formatWorkshopDate(order?.workshopStart) },
+        { name: MC_FIELDS.workshopTime, value: formatWorkshopTime(order?.workshopStart) },
+        { name: MC_FIELDS.participantsLine, value: buildParticipantsLine(order, workshopType) },
+        { name: MC_FIELDS.itemCount, value: order?.rugCount || 0 },
+        { name: MC_FIELDS.amount, value: total },
+        { name: MC_FIELDS.orderNumber, value: order?.ecomOrderNumber || '' },
+    ];
+
+    if (workshopType === 'tufting' && order?._id) {
+        fields.push({ name: MC_FIELDS.orderUrl, value: `${ADMIN_ORDER_BASE_URL}${order._id}` });
+    } else {
+        fields.push({ name: MC_FIELDS.orderUrl, value: '' });
+    }
+
+    fields.push({ name: MC_FIELDS.cupsCount, value: workshopType === 'candles' ? cupsCount : '' });
+    fields.push({ name: MC_FIELDS.extraItems, value: workshopType === 'ceramics' && extraItems > 0 ? extraItems : '' });
+
+    return fields;
+}
+
+async function setOrderCustomFields(subscriberId, order) {
+    const fields = buildOrderCustomFields(order);
+    console.log('[ManyChat] setCustomFields:', fields.map(f => f.name).join(', '));
+    await setCustomFieldsByName(subscriberId, fields);
+}
+
 /** POST /fb/sending/sendFlow */
 async function sendFlow(subscriberId, flowNs) {
     return manychatRequest('/fb/sending/sendFlow', {
@@ -221,7 +351,7 @@ async function runOrderConfirmationManyChat(order, { allowCreate = true } = {}) 
         throw new Error('[ManyChat] No subscriber id after find/create');
     }
 
-    await setCustomFieldByName(subscriber.id, WORKSHOP_CUSTOM_FIELD_NAME, workshopType);
+    await setOrderCustomFields(subscriber.id, order);
     await sendFlow(subscriber.id, ORDER_CONFIRMATION_FLOW_NS);
 
     console.log('[ManyChat] Flow sent. orderId:', order?._id, 'subscriberId:', subscriber.id, 'workshopType:', workshopType);
@@ -269,8 +399,14 @@ export async function testManyChatFlow(overrides) {
         _id: 'sandbox-test-' + Date.now(),
         organizerName: 'בדיקת מנצ׳אט',
         organizerPhone: '0523813929',
-        organizerEmail: '',
+        organizerEmail: 'test@studiohappy.art',
         workshopType: 'tufting',
+        workshopStart: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+        adults: 2,
+        children: 1,
+        rugCount: 3,
+        basePrice: 450,
+        paidTotal: 450,
         ...orderOverrides,
     };
 

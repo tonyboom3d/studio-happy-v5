@@ -165,38 +165,82 @@ async function sendFlow(subscriberId, flowNs) {
 /**
  * Finds-or-creates the ManyChat subscriber for this order's organizer, sets
  * the workshop-routing custom field, and sends the "אישור הזמנה" flow.
- * Swallows all errors — caller should not await-and-throw on this.
+ * Throws on failure — used internally by both the production hook (which
+ * catches) and the sandbox test helper below (which wants the real error).
+ */
+async function runOrderConfirmationManyChat(order) {
+    const phone = normalizeIsraeliPhone(order?.organizerPhone);
+    const email = order?.organizerEmail || '';
+    const workshopType = order?.workshopType || 'tufting';
+
+    if (!phone) {
+        throw new Error('[ManyChat] Skipping — no organizerPhone on order');
+    }
+
+    let subscriber = await findSubscriber({ email, phone });
+
+    if (!subscriber) {
+        const { firstName, lastName } = splitName(order?.organizerName);
+        console.log('[ManyChat] Subscriber not found, creating. orderId:', order?._id, 'phone:', phone);
+        subscriber = await createSubscriber({ firstName, lastName, phone, email });
+    } else {
+        console.log('[ManyChat] Subscriber found. orderId:', order?._id, 'subscriberId:', subscriber.id);
+    }
+
+    if (!subscriber?.id) {
+        throw new Error('[ManyChat] No subscriber id after find/create');
+    }
+
+    await setCustomFieldByName(subscriber.id, WORKSHOP_CUSTOM_FIELD_NAME, workshopType);
+    await sendFlow(subscriber.id, ORDER_CONFIRMATION_FLOW_NS);
+
+    console.log('[ManyChat] Flow sent. orderId:', order?._id, 'subscriberId:', subscriber.id, 'workshopType:', workshopType);
+    return { subscriberId: subscriber.id, workshopType };
+}
+
+/**
+ * Production entry point — called from data.js on every paid order.
+ * Never throws — a ManyChat failure must never block the order.
  */
 export async function sendOrderConfirmationManyChat(order) {
     try {
-        const phone = normalizeIsraeliPhone(order?.organizerPhone);
-        const email = order?.organizerEmail || '';
-        const workshopType = order?.workshopType || 'tufting';
-
-        if (!phone) {
-            console.warn('[ManyChat] Skipping — no organizerPhone. orderId:', order?._id);
-            return;
-        }
-
-        let subscriber = await findSubscriber({ email, phone });
-
-        if (!subscriber) {
-            const { firstName, lastName } = splitName(order?.organizerName);
-            console.log('[ManyChat] Subscriber not found, creating. orderId:', order?._id, 'phone:', phone);
-            subscriber = await createSubscriber({ firstName, lastName, phone, email });
-        } else {
-            console.log('[ManyChat] Subscriber found. orderId:', order?._id, 'subscriberId:', subscriber.id);
-        }
-
-        if (!subscriber?.id) {
-            throw new Error('[ManyChat] No subscriber id after find/create');
-        }
-
-        await setCustomFieldByName(subscriber.id, WORKSHOP_CUSTOM_FIELD_NAME, workshopType);
-        await sendFlow(subscriber.id, ORDER_CONFIRMATION_FLOW_NS);
-
-        console.log('[ManyChat] Flow sent. orderId:', order?._id, 'subscriberId:', subscriber.id, 'workshopType:', workshopType);
+        await runOrderConfirmationManyChat(order);
     } catch (err) {
         console.error('[ManyChat] sendOrderConfirmationManyChat failed. orderId:', order?._id, 'error:', err?.message || err);
+    }
+}
+
+// --- Sandbox test helper ---
+//
+// Run this directly from the Velo Editor without creating a real order:
+// 1. Open backend/manychatService.jsw in the Wix Editor.
+// 2. Click the ▶ "Run" icon next to `testManyChatFlow`.
+// 3. (Optional) pass a JSON param to override fields, e.g.:
+//      { "organizerPhone": "0557040944", "workshopType": "candles" }
+// 4. Check the Output/Console panel — it prints every step
+//    ([ManyChat] find / create / setCustomField / sendFlow) and returns a
+//    plain result object (no need to dig through order records).
+//
+// Defaults to the first TEST_ALLOWED_PHONES number and workshopType
+// 'tufting' so you can just hit Run with no params for a quick smoke test.
+export async function testManyChatFlow(overrides = {}) {
+    const mockOrder = {
+        _id: 'sandbox-test-' + Date.now(),
+        organizerName: 'בדיקת מנצ׳אט',
+        organizerPhone: '0523813929',
+        organizerEmail: '',
+        workshopType: 'tufting',
+        ...overrides,
+    };
+
+    console.log('[ManyChat TEST] Running with mock order:', JSON.stringify(mockOrder));
+
+    try {
+        const result = await runOrderConfirmationManyChat(mockOrder);
+        console.log('[ManyChat TEST] SUCCESS:', JSON.stringify(result));
+        return { success: true, ...result, mockOrder };
+    } catch (err) {
+        console.error('[ManyChat TEST] FAILED:', err?.message || err);
+        return { success: false, error: err?.message || String(err), mockOrder };
     }
 }

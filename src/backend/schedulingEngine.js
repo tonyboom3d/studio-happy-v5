@@ -273,16 +273,21 @@ async function loadActiveWixBookings(fromKey, toKey, serviceIdToTypeId) {
 
     try {
         do {
-            const response = await elevatedQueryExtendedBookings({
-                filter: {
-                    'bookedEntity.item.slot.serviceId': { $in: serviceIds },
-                    $and: [
-                        { startDate: { $gte: startDate.toISOString() } },
-                        { startDate: { $lte: endDate.toISOString() } },
-                    ],
-                },
-                cursorPaging: { limit: 100, cursor },
-            });
+            // Wix Bookings API: filter/sort cannot be sent together with a cursor
+            // once paging past the first page (the cursor already encodes them).
+            const request = cursor
+                ? { cursorPaging: { limit: 100, cursor } }
+                : {
+                    filter: {
+                        'bookedEntity.item.slot.serviceId': { $in: serviceIds },
+                        $and: [
+                            { startDate: { $gte: startDate.toISOString() } },
+                            { startDate: { $lte: endDate.toISOString() } },
+                        ],
+                    },
+                    cursorPaging: { limit: 100 },
+                };
+            const response = await elevatedQueryExtendedBookings(request);
             for (const ext of (response.extendedBookings || [])) {
                 const booking = ext.booking;
                 if (!booking?._id || booking.status === 'CANCELED') continue;

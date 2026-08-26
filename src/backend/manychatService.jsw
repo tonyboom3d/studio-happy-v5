@@ -76,6 +76,23 @@ async function manychatRequest(path, { method = 'GET', query, body } = {}) {
 
 // --- Subscriber lookup / creation ---
 
+/** ManyChat often stores phone as 972XXXXXXXXX (no +). Try that first. */
+function getManyChatPhoneLookupVariants(phone) {
+    const e164 = normalizeIsraeliPhone(phone); // +972523813929
+    if (!e164) return [];
+
+    const digits = e164.replace(/\D/g, ''); // 972523813929
+    const local = digits.startsWith('972') ? '0' + digits.slice(3) : ''; // 0523813929
+
+    return [...new Set([digits, e164, local].filter(Boolean))];
+}
+
+/** Canonical format for createSubscriber — digits only, no leading +. */
+function formatPhoneForManyChat(phone) {
+    const e164 = normalizeIsraeliPhone(phone);
+    return e164 ? e164.replace(/^\+/, '') : '';
+}
+
 /** GET /fb/subscriber/findBySystemField — query params only, one field at a time. */
 async function findSubscriberByField(field, value) {
     if (!value) return null;
@@ -93,9 +110,9 @@ async function findSubscriberByField(field, value) {
 
 /**
  * Looks up an existing subscriber by email first (most reliable), then by
- * phone. WhatsApp-only subscribers are known to sometimes not be found by
- * phone via this endpoint (ManyChat platform limitation) — email is tried
- * first for that reason.
+ * phone using multiple format variants (972..., +972..., 05...).
+ * WhatsApp-only subscribers may still not be found via phone — email is
+ * tried first for that reason.
  */
 async function findSubscriber({ email, phone }) {
     if (email) {
@@ -103,8 +120,15 @@ async function findSubscriber({ email, phone }) {
         if (byEmail) return byEmail;
     }
     if (phone) {
-        const byPhone = await findSubscriberByField('phone', phone);
-        if (byPhone) return byPhone;
+        const variants = getManyChatPhoneLookupVariants(phone);
+        for (const variant of variants) {
+            console.log('[ManyChat] findBySystemField phone try:', variant);
+            const byPhone = await findSubscriberByField('phone', variant);
+            if (byPhone) {
+                console.log('[ManyChat] Subscriber found via phone format:', variant);
+                return byPhone;
+            }
+        }
     }
     return null;
 }
@@ -121,15 +145,16 @@ function splitName(fullName) {
 
 /** POST /fb/subscriber/createSubscriber */
 async function createSubscriber({ firstName, lastName, phone, email }) {
+    const mcPhone = formatPhoneForManyChat(phone);
     const json = await manychatRequest('/fb/subscriber/createSubscriber', {
         method: 'POST',
         body: {
             first_name: firstName || undefined,
             last_name: lastName || undefined,
-            phone: phone || undefined,
-            whatsapp_phone: phone || undefined,
+            phone: mcPhone || undefined,
+            whatsapp_phone: mcPhone || undefined,
             email: email || undefined,
-            has_opt_in_sms: !!phone,
+            has_opt_in_sms: !!mcPhone,
             has_opt_in_email: !!email,
             consent_phrase: 'אישור הזמנת סדנה באתר Studio Happy',
         },
@@ -186,7 +211,8 @@ async function runOrderConfirmationManyChat(order, { allowCreate = true } = {}) 
     } else if (!subscriber) {
         // allowCreate=false (sandbox test with ManyChat import permission not
         // yet approved) — don't hit createSubscriber, fail with a clear hint.
-        throw new Error(`[ManyChat] No subscriber found for phone=${phone} email=${email || '(none)'}. Create the contact manually in ManyChat first (createSubscriber is skipped), then re-run.`);
+        const tried = getManyChatPhoneLookupVariants(order?.organizerPhone).join(', ') || phone;
+        throw new Error(`[ManyChat] No subscriber found for phone variants tried: [${tried}] email=${email || '(none)'}. Create the contact manually in ManyChat first (createSubscriber is skipped), then re-run.`);
     } else {
         console.log('[ManyChat] Subscriber found. orderId:', order?._id, 'subscriberId:', subscriber.id);
     }

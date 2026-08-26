@@ -392,43 +392,64 @@ export async function sendOrderConfirmationManyChat(order) {
     }
 }
 
-// --- Sandbox test helper ---
+// --- Sandbox test helpers ---
 //
-// Run this directly from the Velo Editor without creating a real order:
-// 1. Open backend/manychatService.jsw in the Wix Editor.
-// 2. Click the ▶ "Run" icon next to `testManyChatFlow`.
-// 3. (Optional) pass a JSON param to override fields, e.g.:
-//      { "organizerPhone": "0557040944", "workshopType": "candles" }
-// 4. Check the Output/Console panel — it prints every step
-//    ([ManyChat] find / setCustomField / sendFlow) and returns a plain
-//    result object (no need to dig through order records).
+// Run ▶ directly from the Velo Editor (no real order needed):
+//   testManyChatFlowTufting()   — אישור הזמנה לטאפטינג
+//   testManyChatFlowCandles()   — אישור הזמנה לסדנת נרות
+//   testManyChatFlowCeramics()  — אישור הזמנה לסדנת קרמיקה
 //
-// NOTE: skips createSubscriber by default (allowCreate: false) — ManyChat's
-// import-permission approval ("Permission denied to import phone/wa_id") is
-// still pending, so createSubscriber will keep failing with 400 until
-// ManyChat support enables it. Make sure the test contact already exists in
-// ManyChat (Contacts > add manually with the same phone) before running.
-// Once the permission is approved, pass { "_allowCreate": true } to also
-// exercise the create-subscriber path.
-//
-// Defaults to the first TEST_ALLOWED_PHONES number and workshopType
-// 'tufting' so you can just hit Run with no params for a quick smoke test.
-export async function testManyChatFlow(overrides) {
-    const safeOverrides = overrides && typeof overrides === 'object' ? overrides : {};
-    const { _allowCreate = false, ...orderOverrides } = safeOverrides;
+// Or testManyChatFlow({ "workshopType": "candles", ... }) for custom overrides.
+// Pass { "_allowCreate": true } to also test createSubscriber (needs ManyChat import permission).
+// Contact must already exist in ManyChat (same phone as organizerPhone).
 
-    const mockOrder = {
-        _id: 'sandbox-test-' + Date.now(),
+function buildMockOrderForWorkshop(workshopType) {
+    const workshopStart = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+    const base = {
+        _id: `sandbox-test-${workshopType}-${Date.now()}`,
         organizerName: 'בדיקת מנצ׳אט',
         organizerPhone: '0523813929',
         organizerEmail: 'test@studiohappy.art',
-        workshopType: 'tufting',
-        workshopStart: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+        workshopType,
+        workshopStart,
         adults: 2,
-        children: 1,
-        rugCount: 3,
         basePrice: 450,
         paidTotal: 450,
+    };
+
+    if (workshopType === 'candles') {
+        return {
+            ...base,
+            children: 1,
+            rugCount: 4,
+            selectedProducts: [{ quantity: 2 }, { quantity: 1 }],
+        };
+    }
+
+    if (workshopType === 'ceramics') {
+        return {
+            ...base,
+            children: 0,
+            rugCount: 2,
+            extraCandleCount: 1,
+        };
+    }
+
+    // tufting (default)
+    return {
+        ...base,
+        children: 1,
+        rugCount: 3,
+    };
+}
+
+export async function testManyChatFlow(overrides) {
+    const safeOverrides = overrides && typeof overrides === 'object' ? overrides : {};
+    const { _allowCreate = false, _preset, ...orderOverrides } = safeOverrides;
+
+    const presetType = _preset || orderOverrides.workshopType || 'tufting';
+    const mockOrder = {
+        ...buildMockOrderForWorkshop(presetType),
         ...orderOverrides,
     };
 
@@ -442,4 +463,19 @@ export async function testManyChatFlow(overrides) {
         console.error('[ManyChat TEST] FAILED:', err?.message || err);
         return { success: false, error: err?.message || String(err), mockOrder };
     }
+}
+
+/** Sandbox: בדיקת הודעת אישור הזמנה — טאפטינג */
+export async function testManyChatFlowTufting(overrides) {
+    return testManyChatFlow({ ...(overrides || {}), _preset: 'tufting' });
+}
+
+/** Sandbox: בדיקת הודעת אישור הזמנה — סדנת נרות */
+export async function testManyChatFlowCandles(overrides) {
+    return testManyChatFlow({ ...(overrides || {}), _preset: 'candles' });
+}
+
+/** Sandbox: בדיקת הודעת אישור הזמנה — סדנת קרמיקה */
+export async function testManyChatFlowCeramics(overrides) {
+    return testManyChatFlow({ ...(overrides || {}), _preset: 'ceramics' });
 }

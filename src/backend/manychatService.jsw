@@ -1,0 +1,202 @@
+/**
+ * manychatService.jsw — ManyChat integration for the "אישור הזמנה" flow.
+ *
+ * TEST MODE: only organizerPhone numbers in TEST_ALLOWED_PHONES trigger this
+ * module. Every other order keeps using the existing Green API path in
+ * whatsappService.jsw untouched. Remove the TEST_ALLOWED_PHONES gate (see
+ * isTestAllowedPhone) once ManyChat is approved for all orders.
+ *
+ * Never throws out of sendOrderConfirmationManyChat — a ManyChat failure
+ * must never block order creation/payment. All errors are caught and logged.
+ */
+import wixSecretsBackend from 'wix-secrets-backend';
+import { fetch } from 'wix-fetch';
+import { normalizeIsraeliPhone } from 'backend/orderUtils.js';
+
+const MANYCHAT_BASE_URL = 'https://api.manychat.com';
+
+// Custom field created manually in ManyChat (Settings > Custom Fields, type "Text")
+// used by the flow's conditions to branch per workshop. Values mirror the
+// existing `workshopType` values already used across the codebase.
+export const WORKSHOP_CUSTOM_FIELD_NAME = 'workshop_type';
+
+// content20260826091942_789880 — shared "אישור הזמנה" flow, branches
+// internally per WORKSHOP_CUSTOM_FIELD_NAME condition.
+const ORDER_CONFIRMATION_FLOW_NS = 'content20260826091942_789880';
+
+// TEST MODE allowlist — only these two numbers (normalized to +972...) run
+// through ManyChat. All other orders keep using Green API.
+const TEST_ALLOWED_PHONES = new Set([
+    normalizeIsraeliPhone('0523813929'),
+    normalizeIsraeliPhone('0557040944'),
+]);
+
+export function isTestAllowedPhone(phone) {
+    const normalized = normalizeIsraeliPhone(phone);
+    return !!normalized && TEST_ALLOWED_PHONES.has(normalized);
+}
+
+async function getManyChatApiKey() {
+    const apiKey = await wixSecretsBackend.getSecret('manychat_apiKey');
+    if (!apiKey) {
+        throw new Error('[ManyChat] Missing "manychat_apiKey" in Wix Secrets Manager');
+    }
+    return apiKey;
+}
+
+async function manychatRequest(path, { method = 'GET', query, body } = {}) {
+    const apiKey = await getManyChatApiKey();
+
+    let url = `${MANYCHAT_BASE_URL}${path}`;
+    if (query) {
+        const qs = new URLSearchParams(
+            Object.entries(query).filter(([, v]) => v !== undefined && v !== null && v !== '')
+        ).toString();
+        if (qs) url += `?${qs}`;
+    }
+
+    const response = await fetch(url, {
+        method,
+        headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${apiKey}`,
+        },
+        body: body ? JSON.stringify(body) : undefined,
+    });
+
+    const json = await response.json().catch(() => null);
+
+    if (!response.ok || json?.status === 'error') {
+        const detail = json ? JSON.stringify(json) : await response.text().catch(() => '');
+        throw new Error(`[ManyChat] ${method} ${path} failed (${response.status}): ${detail}`);
+    }
+
+    return json;
+}
+
+// --- Subscriber lookup / creation ---
+
+/** GET /fb/subscriber/findBySystemField — query params only, one field at a time. */
+async function findSubscriberByField(field, value) {
+    if (!value) return null;
+    const json = await manychatRequest('/fb/subscriber/findBySystemField', {
+        method: 'GET',
+        query: { [field]: value },
+    });
+    // ManyChat returns data: {} (single object) when found, or an empty
+    // array/object when nothing matches.
+    const data = json?.data;
+    if (!data || Array.isArray(data) && data.length === 0) return null;
+    if (Array.isArray(data)) return data[0] || null;
+    return data.id ? data : null;
+}
+
+/**
+ * Looks up an existing subscriber by email first (most reliable), then by
+ * phone. WhatsApp-only subscribers are known to sometimes not be found by
+ * phone via this endpoint (ManyChat platform limitation) — email is tried
+ * first for that reason.
+ */
+async function findSubscriber({ email, phone }) {
+    if (email) {
+        const byEmail = await findSubscriberByField('email', email);
+        if (byEmail) return byEmail;
+    }
+    if (phone) {
+        const byPhone = await findSubscriberByField('phone', phone);
+        if (byPhone) return byPhone;
+    }
+    return null;
+}
+
+function splitName(fullName) {
+    const trimmed = String(fullName || '').trim();
+    if (!trimmed) return { firstName: '', lastName: '' };
+    const parts = trimmed.split(/\s+/);
+    return {
+        firstName: parts[0],
+        lastName: parts.slice(1).join(' ') || '',
+    };
+}
+
+/** POST /fb/subscriber/createSubscriber */
+async function createSubscriber({ firstName, lastName, phone, email }) {
+    const json = await manychatRequest('/fb/subscriber/createSubscriber', {
+        method: 'POST',
+        body: {
+            first_name: firstName || undefined,
+            last_name: lastName || undefined,
+            phone: phone || undefined,
+            whatsapp_phone: phone || undefined,
+            email: email || undefined,
+            has_opt_in_sms: !!phone,
+            has_opt_in_email: !!email,
+            consent_phrase: 'אישור הזמנת סדנה באתר Studio Happy',
+        },
+    });
+    return json?.data || null;
+}
+
+/** POST /fb/subscriber/setCustomFieldByName */
+async function setCustomFieldByName(subscriberId, fieldName, fieldValue) {
+    return manychatRequest('/fb/subscriber/setCustomFieldByName', {
+        method: 'POST',
+        body: {
+            subscriber_id: subscriberId,
+            field_name: fieldName,
+            field_value: fieldValue,
+        },
+    });
+}
+
+/** POST /fb/sending/sendFlow */
+async function sendFlow(subscriberId, flowNs) {
+    return manychatRequest('/fb/sending/sendFlow', {
+        method: 'POST',
+        body: {
+            subscriber_id: subscriberId,
+            flow_ns: flowNs,
+        },
+    });
+}
+
+// --- Order confirmation entry point ---
+
+/**
+ * Finds-or-creates the ManyChat subscriber for this order's organizer, sets
+ * the workshop-routing custom field, and sends the "אישור הזמנה" flow.
+ * Swallows all errors — caller should not await-and-throw on this.
+ */
+export async function sendOrderConfirmationManyChat(order) {
+    try {
+        const phone = normalizeIsraeliPhone(order?.organizerPhone);
+        const email = order?.organizerEmail || '';
+        const workshopType = order?.workshopType || 'tufting';
+
+        if (!phone) {
+            console.warn('[ManyChat] Skipping — no organizerPhone. orderId:', order?._id);
+            return;
+        }
+
+        let subscriber = await findSubscriber({ email, phone });
+
+        if (!subscriber) {
+            const { firstName, lastName } = splitName(order?.organizerName);
+            console.log('[ManyChat] Subscriber not found, creating. orderId:', order?._id, 'phone:', phone);
+            subscriber = await createSubscriber({ firstName, lastName, phone, email });
+        } else {
+            console.log('[ManyChat] Subscriber found. orderId:', order?._id, 'subscriberId:', subscriber.id);
+        }
+
+        if (!subscriber?.id) {
+            throw new Error('[ManyChat] No subscriber id after find/create');
+        }
+
+        await setCustomFieldByName(subscriber.id, WORKSHOP_CUSTOM_FIELD_NAME, workshopType);
+        await sendFlow(subscriber.id, ORDER_CONFIRMATION_FLOW_NS);
+
+        console.log('[ManyChat] Flow sent. orderId:', order?._id, 'subscriberId:', subscriber.id, 'workshopType:', workshopType);
+    } catch (err) {
+        console.error('[ManyChat] sendOrderConfirmationManyChat failed. orderId:', order?._id, 'error:', err?.message || err);
+    }
+}

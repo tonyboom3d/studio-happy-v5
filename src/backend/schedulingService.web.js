@@ -12,6 +12,7 @@ import {
     respondToOffer as engineRespondToOffer,
     claimOpenCall as engineClaimOpenCall,
     claimOpenCalls as engineClaimOpenCalls,
+    claimOpenCallsWithHours as engineClaimOpenCallsWithHours,
     loadSettings,
 } from 'backend/schedulingEngine.js';
 
@@ -74,4 +75,15 @@ export const claimOpenCalls = webMethod(Permissions.SiteMember, async (callIds) 
         loadRoleWithSkills(role),
     ]);
     return engineClaimOpenCalls(callIds, roleWithSkills, settings);
+});
+
+/** Employee: claim one or more urgent-shift days, each with employee-chosen hours ({ date, callIds, startTime, endTime }). */
+export const claimOpenCallsWithHours = webMethod(Permissions.SiteMember, async (requests) => {
+    const { role } = await assertEmployeeAccess('submitAvailability');
+    if (!Array.isArray(requests) || !requests.length) throw new Error('BAD_REQUEST: לא נבחרו ימים.');
+    const [settings, roleWithSkills] = await Promise.all([
+        loadSettings(),
+        loadRoleWithSkills(role),
+    ]);
+    return engineClaimOpenCallsWithHours(requests, roleWithSkills, settings);
 });

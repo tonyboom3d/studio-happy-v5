@@ -18,7 +18,10 @@ import { auth } from '@wix/essentials';
 import { extendedBookings } from '@wix/bookings';
 import { availabilityCalendar } from 'wix-bookings.v2';
 import { publish } from 'wix-realtime-backend';
-import { SUBMISSION_STATUS, toDateKey, normalizeSettings, DEFAULT_WORK_TYPE } from 'backend/availabilityRules.js';
+import {
+    SUBMISSION_STATUS, toDateKey, normalizeSettings, DEFAULT_WORK_TYPE,
+    shiftHours as computeShiftHours, validateShiftWithinShortDay, SHIFT_MIN_TIME, SHIFT_MAX_TIME,
+} from 'backend/availabilityRules.js';
 import { refIds, getRolePermissionValue, attachSkillsToRoles } from 'backend/staffRoles.js';
 import { sendGreenApiWhatsApp } from 'backend/whatsappService.jsw';
 import { enqueueNotification, enqueueManagerNotification, flushOutbox, PRIORITY } from 'backend/notificationOutbox.js';
@@ -1206,8 +1209,33 @@ export async function respondToOffer(offerId, role, accept) {
     return { ok: true, accepted: true, dateKey };
 }
 
-/** Employee claims an open call (first-click wins). */
-export async function claimOpenCall(callId, role, settings) {
+/** Validates+resolves the employee-chosen shift hours for an urgent claim, falling back to the studio default. */
+function resolveRequestedShiftTimes(dateKey, requested, settings) {
+    const startTime = String(requested?.startTime || '').trim();
+    const endTime = String(requested?.endTime || '').trim();
+    if (!startTime || !endTime) {
+        return { startTime: settings?.defaultShiftStart || '10:00', endTime: settings?.defaultShiftEnd || '16:00' };
+    }
+    if (computeShiftHours(startTime, endTime) === null) {
+        throw new Error('BAD_REQUEST: שעות המשמרת שהוזנו אינן תקינות.');
+    }
+    if (startTime < SHIFT_MIN_TIME || endTime > SHIFT_MAX_TIME) {
+        throw new Error(`BAD_REQUEST: שעות המשמרת חייבות להיות בין ${SHIFT_MIN_TIME} ל-${SHIFT_MAX_TIME}.`);
+    }
+    const shortDayErr = validateShiftWithinShortDay(dateKey, startTime, endTime, settings);
+    if (shortDayErr) throw new Error(`BAD_REQUEST: ${shortDayErr}`);
+    return { startTime, endTime };
+}
+
+/**
+ * Employee claims an open call. `requestedHours` ({ startTime, endTime }) lets
+ * the employee pick their own shift hours instead of the workshop's exact
+ * session time — used by the urgent-shifts popup, which no longer exposes
+ * session times to employees. The offer stays OPEN (not FILLED) as long as
+ * the workshop still needs more instructors after this claim, so it keeps
+ * showing up for other skill-matched employees.
+ */
+export async function claimOpenCall(callId, role, settings, requestedHours) {
     const call = await wixData.get('ShiftOffers', callId, SAC).catch(() => null);
     if (!call || call.kind !== OFFER_KIND.OPEN_CALL) throw new Error('NOT_FOUND: הקריאה לא נמצאה.');
     if (call.status !== OFFER_STATUS.OPEN) throw new Error('CONFLICT: המשמרת כבר נתפסה על ידי עובד/ת אחר/ת.');
@@ -1216,6 +1244,7 @@ export async function claimOpenCall(callId, role, settings) {
     if (!skills.includes(call.workshopTypeId)) throw new Error('FORBIDDEN: אין לך הכשרה לסדנה זו.');
 
     const dateKey = call.dateKey || toDateKey(call.date);
+    const { startTime, endTime } = resolveRequestedShiftTimes(dateKey, requestedHours, settings);
     const board = await buildBoard(dateKey, dateKey, { consistent: true });
     const t = board.days[dateKey]?.types?.[call.workshopTypeId];
     if (!t || t.assignedCount >= t.required) {
@@ -1230,7 +1259,7 @@ export async function claimOpenCall(callId, role, settings) {
         throw new Error('CONFLICT: בקשת השיבוץ חופפת למשמרת שכבר שובצת אליה.');
     }
 
-    // Reuse the employee's submission for that date, or create one.
+    // Reuse the employee's submission for that date, or create one with the requested hours.
     const existing = await wixData.query('AvailabilitySubmissions')
         .eq('employeeId', role._id)
         .between('date', new Date(`${dateKey}T00:00:00Z`), new Date(`${dateKey}T23:59:59Z`))
@@ -1241,8 +1270,8 @@ export async function claimOpenCall(callId, role, settings) {
             employeeId: role._id,
             staffId: null,
             date: new Date(`${dateKey}T12:00:00Z`),
-            startTime: settings?.defaultShiftStart || '10:00',
-            endTime: settings?.defaultShiftEnd || '16:00',
+            startTime,
+            endTime,
             status: SUBMISSION_STATUS.SCHEDULED,
             monthKey: dateKey.slice(0, 7),
             managerOverride: false,
@@ -1251,7 +1280,14 @@ export async function claimOpenCall(callId, role, settings) {
     }
 
     await assignFromClaim(dateKey, t, role, submission);
-    await wixData.update('ShiftOffers', { ...call, status: OFFER_STATUS.FILLED, claimedBy: role._id }, SA);
+    // Headcount may still be short after this claim — keep the call OPEN so it
+    // keeps appearing for other skill-matched employees until fully staffed.
+    const stillShort = (t.assignedCount + 1) < t.required;
+    await wixData.update('ShiftOffers', {
+        ...call,
+        status: stillShort ? OFFER_STATUS.OPEN : OFFER_STATUS.FILLED,
+        claimedBy: role._id,
+    }, SA);
     await publishSchedulingUpdate('open-call-claimed', { dateKey });
     return { ok: true, dateKey };
 }
@@ -1274,6 +1310,32 @@ export async function claimOpenCalls(callIds, role, settings) {
             results.push({ callId, ok: true, dateKey: outcome.dateKey || dateKey });
         } catch (err) {
             results.push({ callId, ok: false, dateKey, error: err?.message || String(err) });
+        }
+    }
+    return { ok: true, results };
+}
+
+/**
+ * Employee claims one or more urgent-shift days at once, each with the
+ * hours they chose in the popup (day + dropdown, or custom hours) rather
+ * than a specific call's exact session time. `requests` is an array of
+ * { date, callIds, startTime, endTime } — every callId for that date is
+ * attempted independently, so a partial failure (e.g. lost the race, or an
+ * overlap with another assignment that day) doesn't block the rest.
+ */
+export async function claimOpenCallsWithHours(requests, role, settings) {
+    const results = [];
+    for (const req of (requests || [])) {
+        const dateKey = req?.date || null;
+        const shiftHours = { startTime: req?.startTime, endTime: req?.endTime };
+        const ids = Array.from(new Set((req?.callIds || []).filter(Boolean)));
+        for (const callId of ids) {
+            try {
+                const outcome = await claimOpenCall(callId, role, settings, shiftHours);
+                results.push({ callId, ok: true, dateKey: outcome.dateKey || dateKey });
+            } catch (err) {
+                results.push({ callId, ok: false, dateKey, error: err?.message || String(err) });
+            }
         }
     }
     return { ok: true, results };

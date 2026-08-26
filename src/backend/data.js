@@ -1,5 +1,6 @@
 import wixData from 'wix-data';
 import { sendOrderConfirmationWhatsApp } from 'backend/whatsappService.jsw';
+import { sendOrderConfirmationManyChat, isTestAllowedPhone } from 'backend/manychatService.jsw';
 import { processBookingPaid } from 'backend/schedulingEngine.js';
 
 const SA = { suppressAuth: true, suppressHooks: true };
@@ -44,11 +45,20 @@ export function WorkshopOrders_afterUpdate(item, context) {
     }
 
     const reason = justPaid ? 'status changed to paid' : 'resendWhatsApp triggered';
-    console.log(`[data.js hook] Sending WhatsApp (${reason}). orderId:`, item._id, 'phone:', item.organizerPhone);
 
-    sendOrderConfirmationWhatsApp(item)
+    // TEST MODE: the two allowlisted phone numbers go through the new
+    // ManyChat "אישור הזמנה" flow instead of Green API. Every other order
+    // is untouched and keeps using Green API exactly as before.
+    const useManyChat = isTestAllowedPhone(item.organizerPhone);
+    console.log(`[data.js hook] Sending confirmation via ${useManyChat ? 'ManyChat' : 'WhatsApp/GreenAPI'} (${reason}). orderId:`, item._id, 'phone:', item.organizerPhone);
+
+    const sendPromise = useManyChat
+        ? sendOrderConfirmationManyChat(item)
+        : sendOrderConfirmationWhatsApp(item);
+
+    sendPromise
         .then(() => {
-            console.log('[data.js hook] WhatsApp sent successfully. orderId:', item._id);
+            console.log('[data.js hook] Confirmation sent successfully. orderId:', item._id);
             if (resendRequested) {
                 return wixData.update('WorkshopOrders', {
                     ...item,
@@ -57,7 +67,8 @@ export function WorkshopOrders_afterUpdate(item, context) {
             }
         })
         .catch(err => {
-            console.error('[data.js hook] WhatsApp send failed. orderId:', item._id, 'error:', err?.message || err);
+            // Never let a messaging failure affect the saved order — log only.
+            console.error('[data.js hook] Confirmation send failed. orderId:', item._id, 'error:', err?.message || err);
         });
 
     return item;

@@ -195,12 +195,23 @@ async function setCustomFieldByName(subscriberId, fieldName, fieldValue) {
 }
 
 /** POST /fb/subscriber/setCustomFields — batch update by field_name */
+function hasManyChatFieldValue(value) {
+    if (value === null || value === undefined) return false;
+    if (typeof value === 'string' && value.trim() === '') return false;
+    return true;
+}
+
+function toManyChatFieldValue(value) {
+    if (typeof value === 'number' && !Number.isNaN(value)) return value;
+    return String(value);
+}
+
 async function setCustomFieldsByName(subscriberId, fields) {
     const payload = fields
-        .filter(({ name }) => !!name)
+        .filter(({ name, value }) => !!name && hasManyChatFieldValue(value))
         .map(({ name, value }) => ({
             field_name: name,
-            field_value: value == null ? '' : String(value),
+            field_value: toManyChatFieldValue(value),
         }));
 
     if (!payload.length) return;
@@ -215,8 +226,12 @@ async function setCustomFieldsByName(subscriberId, fields) {
         });
     } catch (err) {
         console.warn('[ManyChat] setCustomFields batch failed, falling back to individual:', err?.message || err);
-        for (const { name, value } of fields) {
-            await setCustomFieldByName(subscriberId, name, value == null ? '' : String(value));
+        for (const { name, value } of payload) {
+            try {
+                await setCustomFieldByName(subscriberId, name, toManyChatFieldValue(value));
+            } catch (fieldErr) {
+                console.warn(`[ManyChat] setCustomFieldByName failed for "${name}":`, fieldErr?.message || fieldErr);
+            }
         }
     }
 }
@@ -274,33 +289,40 @@ function buildOrderCustomFields(order) {
 
     const fields = [
         { name: MC_FIELDS.workshopType, value: workshopType },
-        { name: MC_FIELDS.organizerName, value: order?.organizerName || '' },
-        { name: MC_FIELDS.organizerPhone, value: order?.organizerPhone || '' },
-        { name: MC_FIELDS.organizerEmail, value: order?.organizerEmail || '' },
+        { name: MC_FIELDS.organizerName, value: order?.organizerName },
+        { name: MC_FIELDS.organizerPhone, value: order?.organizerPhone },
+        { name: MC_FIELDS.organizerEmail, value: order?.organizerEmail },
         { name: MC_FIELDS.workshopName, value: workshopTypeLabel(workshopType) },
         { name: MC_FIELDS.workshopDate, value: formatWorkshopDate(order?.workshopStart) },
         { name: MC_FIELDS.workshopTime, value: formatWorkshopTime(order?.workshopStart) },
         { name: MC_FIELDS.participantsLine, value: buildParticipantsLine(order, workshopType) },
-        { name: MC_FIELDS.itemCount, value: order?.rugCount || 0 },
+        { name: MC_FIELDS.itemCount, value: order?.rugCount ?? 0 },
         { name: MC_FIELDS.amount, value: total },
-        { name: MC_FIELDS.orderNumber, value: order?.ecomOrderNumber || '' },
     ];
+
+    if (order?.ecomOrderNumber) {
+        fields.push({ name: MC_FIELDS.orderNumber, value: order.ecomOrderNumber });
+    }
 
     if (workshopType === 'tufting' && order?._id) {
         fields.push({ name: MC_FIELDS.orderUrl, value: `${ADMIN_ORDER_BASE_URL}${order._id}` });
-    } else {
-        fields.push({ name: MC_FIELDS.orderUrl, value: '' });
     }
 
-    fields.push({ name: MC_FIELDS.cupsCount, value: workshopType === 'candles' ? cupsCount : '' });
-    fields.push({ name: MC_FIELDS.extraItems, value: workshopType === 'ceramics' && extraItems > 0 ? extraItems : '' });
+    if (workshopType === 'candles' && cupsCount > 0) {
+        fields.push({ name: MC_FIELDS.cupsCount, value: cupsCount });
+    }
+
+    if (workshopType === 'ceramics' && extraItems > 0) {
+        fields.push({ name: MC_FIELDS.extraItems, value: extraItems });
+    }
 
     return fields;
 }
 
 async function setOrderCustomFields(subscriberId, order) {
     const fields = buildOrderCustomFields(order);
-    console.log('[ManyChat] setCustomFields:', fields.map(f => f.name).join(', '));
+    const sending = fields.filter(f => hasManyChatFieldValue(f.value));
+    console.log('[ManyChat] setCustomFields:', sending.map(f => `${f.name}=${f.value}`).join(', '));
     await setCustomFieldsByName(subscriberId, fields);
 }
 

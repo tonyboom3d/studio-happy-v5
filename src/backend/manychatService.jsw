@@ -168,7 +168,7 @@ async function sendFlow(subscriberId, flowNs) {
  * Throws on failure — used internally by both the production hook (which
  * catches) and the sandbox test helper below (which wants the real error).
  */
-async function runOrderConfirmationManyChat(order) {
+async function runOrderConfirmationManyChat(order, { allowCreate = true } = {}) {
     const phone = normalizeIsraeliPhone(order?.organizerPhone);
     const email = order?.organizerEmail || '';
     const workshopType = order?.workshopType || 'tufting';
@@ -179,10 +179,14 @@ async function runOrderConfirmationManyChat(order) {
 
     let subscriber = await findSubscriber({ email, phone });
 
-    if (!subscriber) {
+    if (!subscriber && allowCreate) {
         const { firstName, lastName } = splitName(order?.organizerName);
         console.log('[ManyChat] Subscriber not found, creating. orderId:', order?._id, 'phone:', phone);
         subscriber = await createSubscriber({ firstName, lastName, phone, email });
+    } else if (!subscriber) {
+        // allowCreate=false (sandbox test with ManyChat import permission not
+        // yet approved) — don't hit createSubscriber, fail with a clear hint.
+        throw new Error(`[ManyChat] No subscriber found for phone=${phone} email=${email || '(none)'}. Create the contact manually in ManyChat first (createSubscriber is skipped), then re-run.`);
     } else {
         console.log('[ManyChat] Subscriber found. orderId:', order?._id, 'subscriberId:', subscriber.id);
     }
@@ -204,7 +208,7 @@ async function runOrderConfirmationManyChat(order) {
  */
 export async function sendOrderConfirmationManyChat(order) {
     try {
-        await runOrderConfirmationManyChat(order);
+        await runOrderConfirmationManyChat(order, { allowCreate: true });
     } catch (err) {
         console.error('[ManyChat] sendOrderConfirmationManyChat failed. orderId:', order?._id, 'error:', err?.message || err);
     }
@@ -218,25 +222,35 @@ export async function sendOrderConfirmationManyChat(order) {
 // 3. (Optional) pass a JSON param to override fields, e.g.:
 //      { "organizerPhone": "0557040944", "workshopType": "candles" }
 // 4. Check the Output/Console panel — it prints every step
-//    ([ManyChat] find / create / setCustomField / sendFlow) and returns a
-//    plain result object (no need to dig through order records).
+//    ([ManyChat] find / setCustomField / sendFlow) and returns a plain
+//    result object (no need to dig through order records).
+//
+// NOTE: skips createSubscriber by default (allowCreate: false) — ManyChat's
+// import-permission approval ("Permission denied to import phone/wa_id") is
+// still pending, so createSubscriber will keep failing with 400 until
+// ManyChat support enables it. Make sure the test contact already exists in
+// ManyChat (Contacts > add manually with the same phone) before running.
+// Once the permission is approved, pass { "_allowCreate": true } to also
+// exercise the create-subscriber path.
 //
 // Defaults to the first TEST_ALLOWED_PHONES number and workshopType
 // 'tufting' so you can just hit Run with no params for a quick smoke test.
 export async function testManyChatFlow(overrides = {}) {
+    const { _allowCreate = false, ...orderOverrides } = overrides;
+
     const mockOrder = {
         _id: 'sandbox-test-' + Date.now(),
         organizerName: 'בדיקת מנצ׳אט',
         organizerPhone: '0523813929',
         organizerEmail: '',
         workshopType: 'tufting',
-        ...overrides,
+        ...orderOverrides,
     };
 
-    console.log('[ManyChat TEST] Running with mock order:', JSON.stringify(mockOrder));
+    console.log('[ManyChat TEST] Running with mock order:', JSON.stringify(mockOrder), 'allowCreate:', _allowCreate);
 
     try {
-        const result = await runOrderConfirmationManyChat(mockOrder);
+        const result = await runOrderConfirmationManyChat(mockOrder, { allowCreate: _allowCreate });
         console.log('[ManyChat TEST] SUCCESS:', JSON.stringify(result));
         return { success: true, ...result, mockOrder };
     } catch (err) {

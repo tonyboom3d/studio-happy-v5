@@ -235,8 +235,9 @@ export async function sendOrderConfirmationManyChat(order) {
 //
 // Defaults to the first TEST_ALLOWED_PHONES number and workshopType
 // 'tufting' so you can just hit Run with no params for a quick smoke test.
-export async function testManyChatFlow(overrides = {}) {
-    const { _allowCreate = false, ...orderOverrides } = overrides;
+export async function testManyChatFlow(overrides) {
+    const safeOverrides = overrides && typeof overrides === 'object' ? overrides : {};
+    const { _allowCreate = false, ...orderOverrides } = safeOverrides;
 
     const mockOrder = {
         _id: 'sandbox-test-' + Date.now(),

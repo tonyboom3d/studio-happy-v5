@@ -1,10 +1,13 @@
 /**
  * manychatService.jsw — ManyChat integration for the "אישור הזמנה" flow.
  *
- * TEST MODE: only organizerPhone numbers in TEST_ALLOWED_PHONES trigger this
- * module. Every other order keeps using the existing Green API path in
- * whatsappService.jsw untouched. Remove the TEST_ALLOWED_PHONES gate (see
- * isTestAllowedPhone) once ManyChat is approved for all orders.
+ * LIVE FOR ALL ORDERS: ManyChat approved the import permission, so every
+ * paid order now goes through this module (see data.js) — no more
+ * test-phone gate / Green API fallback for order confirmations.
+ *
+ * EMPLOYEE_MANYCHAT_ALLOWED_PHONES below is unrelated to orders — it's
+ * reserved for the future employee/manager notifications ManyChat flow
+ * (not built yet), restricted to the owner's own number for testing.
  *
  * Never throws out of sendOrderConfirmationManyChat — a ManyChat failure
  * must never block order creation/payment. All errors are caught and logged.
@@ -44,16 +47,19 @@ export const WORKSHOP_CUSTOM_FIELD_NAME = MC_FIELDS.workshopType;
 // internally per WORKSHOP_CUSTOM_FIELD_NAME condition.
 const ORDER_CONFIRMATION_FLOW_NS = 'content20260826091942_789880';
 
-// TEST MODE allowlist — only these two numbers (normalized to +972...) run
-// through ManyChat. All other orders keep using Green API.
-const TEST_ALLOWED_PHONES = new Set([
+// TEST MODE allowlist for the future employee/manager ManyChat system
+// (schedulingEngine / shiftConfirmations / shiftSwaps notifications).
+// NOT used for order confirmations anymore — those are now open to all
+// customers. Only the owner's own number is allowed while that system is
+// being built and tested.
+const EMPLOYEE_MANYCHAT_ALLOWED_PHONES = new Set([
     normalizeIsraeliPhone('0523813929'),
-    normalizeIsraeliPhone('0557040944'),
 ]);
 
-export function isTestAllowedPhone(phone) {
+/** Gate for the (not-yet-built) employee/manager ManyChat flow — owner-only for now. */
+export function isEmployeeManyChatAllowedPhone(phone) {
     const normalized = normalizeIsraeliPhone(phone);
-    return !!normalized && TEST_ALLOWED_PHONES.has(normalized);
+    return !!normalized && EMPLOYEE_MANYCHAT_ALLOWED_PHONES.has(normalized);
 }
 
 async function getManyChatApiKey() {
@@ -400,8 +406,9 @@ export async function sendOrderConfirmationManyChat(order) {
 //   testManyChatFlowCeramics()  — אישור הזמנה לסדנת קרמיקה
 //
 // Or testManyChatFlow({ "workshopType": "candles", ... }) for custom overrides.
-// Pass { "_allowCreate": true } to also test createSubscriber (needs ManyChat import permission).
-// Contact must already exist in ManyChat (same phone as organizerPhone).
+// ManyChat import permission is approved, so createSubscriber is tested by
+// default (_allowCreate: true). Pass { "_allowCreate": false } to only
+// exercise the find path against an already-existing contact.
 
 function buildMockOrderForWorkshop(workshopType) {
     const workshopStart = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
@@ -445,7 +452,7 @@ function buildMockOrderForWorkshop(workshopType) {
 
 export async function testManyChatFlow(overrides) {
     const safeOverrides = overrides && typeof overrides === 'object' ? overrides : {};
-    const { _allowCreate = false, _preset, ...orderOverrides } = safeOverrides;
+    const { _allowCreate = true, _preset, ...orderOverrides } = safeOverrides;
 
     const presetType = _preset || orderOverrides.workshopType || 'tufting';
     const mockOrder = {

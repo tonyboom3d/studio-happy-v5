@@ -1,6 +1,5 @@
 import wixData from 'wix-data';
-import { sendOrderConfirmationWhatsApp } from 'backend/whatsappService.jsw';
-import { sendOrderConfirmationManyChat, isTestAllowedPhone } from 'backend/manychatService.jsw';
+import { sendOrderConfirmationManyChat } from 'backend/manychatService.jsw';
 import { processBookingPaid } from 'backend/schedulingEngine.js';
 
 const SA = { suppressAuth: true, suppressHooks: true };
@@ -46,17 +45,12 @@ export function WorkshopOrders_afterUpdate(item, context) {
 
     const reason = justPaid ? 'status changed to paid' : 'resendWhatsApp triggered';
 
-    // TEST MODE: the two allowlisted phone numbers go through the new
-    // ManyChat "אישור הזמנה" flow instead of Green API. Every other order
-    // is untouched and keeps using Green API exactly as before.
-    const useManyChat = isTestAllowedPhone(item.organizerPhone);
-    console.log(`[data.js hook] Sending confirmation via ${useManyChat ? 'ManyChat' : 'WhatsApp/GreenAPI'} (${reason}). orderId:`, item._id, 'phone:', item.organizerPhone);
+    // ManyChat import permission was approved by ManyChat support — all
+    // paid orders now go through the "אישור הזמנה" ManyChat flow (no more
+    // Green API / test-phone gate here).
+    console.log(`[data.js hook] Sending confirmation via ManyChat (${reason}). orderId:`, item._id, 'phone:', item.organizerPhone);
 
-    const sendPromise = useManyChat
-        ? sendOrderConfirmationManyChat(item)
-        : sendOrderConfirmationWhatsApp(item);
-
-    sendPromise
+    sendOrderConfirmationManyChat(item)
         .then(() => {
             console.log('[data.js hook] Confirmation sent successfully. orderId:', item._id);
             if (resendRequested) {

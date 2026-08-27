@@ -46,10 +46,8 @@ export const WORKSHOP_CUSTOM_FIELD_NAME = MC_FIELDS.workshopType;
 // internally per WORKSHOP_CUSTOM_FIELD_NAME condition.
 const ORDER_CONFIRMATION_FLOW_NS = 'content20260826091942_789880';
 
-// TODO: paste the real flow_ns of the staff/manager notification flow you
-// built in ManyChat (ManyChat → Automation → the flow → URL/settings has the
-// "content..." id, same place ORDER_CONFIRMATION_FLOW_NS came from).
-const STAFF_NOTIFICATION_FLOW_NS = 'REPLACE_WITH_STAFF_FLOW_NS';
+// Shared employee/manager notification flow — branches internally by action_key.
+const STAFF_NOTIFICATION_FLOW_NS = 'content20260826132939_659401';
 
 // Custom fields used by the staff/manager flow's routing conditions.
 const STAFF_ACTION_KEY_FIELD = 'action_key';

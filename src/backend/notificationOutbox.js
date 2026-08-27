@@ -32,7 +32,7 @@ export const PRIORITY = { URGENT: 'URGENT', NORMAL: 'NORMAL', LOW: 'LOW' };
 export const OUTBOX_STATUS = { PENDING: 'PENDING', SENT: 'SENT', MERGED: 'MERGED', SKIPPED: 'SKIPPED' };
 export const AUDIENCE = { EMPLOYEE: 'EMPLOYEE', MANAGERS: 'MANAGERS' };
 
-const AGGREGATION_WINDOW_MS = 15 * 60 * 1000;
+const AGGREGATION_WINDOW_MS = 30 * 60 * 1000;
 const QUIET_HOUR_START = 22; // 22:00 IL
 const QUIET_HOUR_END = 8;    // 08:00 IL
 const DEDUP_WINDOW_MS = 24 * 3600 * 1000;
@@ -362,7 +362,7 @@ async function flushRecipient(recipientId, recipientPhone, audience, now = new D
  * (safety net, default: only rows whose scheduledFor is due) and inline at
  * the end of batch scheduling runs with `force: true` (immediate aggregation
  * — sends everything just enqueued by that batch regardless of the
- * 15-minute window, since the whole batch already completed synchronously).
+ * 30-minute window, since the whole batch already completed synchronously).
  */
 export async function flushOutbox({ now = new Date(), force = false } = {}) {
     let query = wixData.query('NotificationOutbox').eq('status', OUTBOX_STATUS.PENDING);

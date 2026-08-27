@@ -477,7 +477,11 @@ export async function sendStaffManyChat(actionKey, phone, audience, vars = {}) {
 
 // --- Sandbox test helpers ---
 //
-// Run ▶ directly from the Velo Editor (no real order needed):
+// Run ▶ directly from the Velo Editor (pass JSON as the single argument):
+//   testStaffManyChat({ "actionKey": "employee_shift_assigned", ... })
+//   testStaffManyChatShiftAssigned()  — preset for shift-assigned test
+//
+// Order confirmation tests:
 //   testManyChatFlowTufting()   — אישור הזמנה לטאפטינג
 //   testManyChatFlowCandles()   — אישור הזמנה לסדנת נרות
 //   testManyChatFlowCeramics()  — אישור הזמנה לסדנת קרמיקה
@@ -525,6 +529,39 @@ function buildMockOrderForWorkshop(workshopType) {
         children: 1,
         rugCount: 3,
     };
+}
+
+/** Sandbox: test one employee/manager ManyChat notification — pass a single JSON object. */
+export async function testStaffManyChat(payload) {
+    const p = payload && typeof payload === 'object' ? payload : {};
+    const actionKey = p.actionKey || 'employee_shift_assigned';
+    const phone = p.phone || '0523813929';
+    const audience = p.audience || 'employee';
+    const vars = p.vars && typeof p.vars === 'object' ? p.vars : {};
+
+    console.log('[ManyChat staff TEST]', JSON.stringify({ actionKey, phone, audience, vars }));
+
+    const result = await sendStaffManyChat(actionKey, phone, audience, vars);
+    console.log('[ManyChat staff TEST] result:', JSON.stringify(result));
+    return { success: !!result.sent, ...result, actionKey, phone, audience, vars };
+}
+
+/** Sandbox preset — employee_shift_assigned to 0523813929 */
+export async function testStaffManyChatShiftAssigned(overrides) {
+    const o = overrides && typeof overrides === 'object' ? overrides : {};
+    return testStaffManyChat({
+        actionKey: 'employee_shift_assigned',
+        phone: '0523813929',
+        audience: 'employee',
+        vars: {
+            displayName: 'טוני',
+            detail: 'טאפטינג ',
+            dow: 'שני',
+            date: '01.09.2026',
+            portalLink: 'test-link',
+            ...(o.vars || {}),
+        },
+    });
 }
 
 export async function testManyChatFlow(overrides) {

@@ -46,6 +46,15 @@ export const WORKSHOP_CUSTOM_FIELD_NAME = MC_FIELDS.workshopType;
 // internally per WORKSHOP_CUSTOM_FIELD_NAME condition.
 const ORDER_CONFIRMATION_FLOW_NS = 'content20260826091942_789880';
 
+// TODO: paste the real flow_ns of the staff/manager notification flow you
+// built in ManyChat (ManyChat → Automation → the flow → URL/settings has the
+// "content..." id, same place ORDER_CONFIRMATION_FLOW_NS came from).
+const STAFF_NOTIFICATION_FLOW_NS = 'REPLACE_WITH_STAFF_FLOW_NS';
+
+// Custom fields used by the staff/manager flow's routing conditions.
+const STAFF_ACTION_KEY_FIELD = 'action_key';
+const STAFF_AUDIENCE_FIELD = 'staff_audience';
+
 // TEST MODE allowlist for the future employee/manager ManyChat system
 // (schedulingEngine / shiftConfirmations / shiftSwaps notifications).
 // NOT used for order confirmations anymore — those are now open to all
@@ -397,6 +406,74 @@ export async function sendOrderConfirmationManyChat(order) {
         await runOrderConfirmationManyChat(order, { allowCreate: true });
     } catch (err) {
         console.error('[ManyChat] sendOrderConfirmationManyChat failed. orderId:', order?._id, 'error:', err?.message || err);
+    }
+}
+
+// --- Employee/manager notification flow ---
+
+/** displayName → display_name, hoursWindow → hours_window (matches create-manychat-fields.js). */
+function camelToSnake(key) {
+    return String(key).replace(/([a-z0-9])([A-Z])/g, '$1_$2').toLowerCase();
+}
+
+function buildStaffCustomFields(actionKey, audience, vars) {
+    const fields = [
+        { name: STAFF_ACTION_KEY_FIELD, value: actionKey },
+        { name: STAFF_AUDIENCE_FIELD, value: audience },
+    ];
+    for (const [key, value] of Object.entries(vars || {})) {
+        fields.push({ name: camelToSnake(key), value });
+    }
+    return fields;
+}
+
+/**
+ * Sends one employee/manager notification via ManyChat. Mirrors
+ * runOrderConfirmationManyChat: find-or-create subscriber by phone, set
+ * action_key + staff_audience + every var as a custom field, then send the
+ * shared staff-notification flow (branches internally by action_key).
+ *
+ * TEST MODE: only isEmployeeManyChatAllowedPhone() numbers actually send —
+ * every other recipient is skipped (logged, not an error) until the
+ * employee/manager rollout opens up. Never throws — same contract as
+ * sendOrderConfirmationManyChat.
+ *
+ * @param {string} actionKey - matches EMPLOYEE_ACTION_KEYS in employeeTemplates.js.
+ * @param {string} phone
+ * @param {'employee'|'manager'} audience
+ * @param {object} [vars] - camelCase placeholder vars (e.g. { displayName, date, portalLink }).
+ */
+export async function sendStaffManyChat(actionKey, phone, audience, vars = {}) {
+    if (!isEmployeeManyChatAllowedPhone(phone)) {
+        console.log(`[ManyChat staff] TEST MODE — skipping actionKey=${actionKey} phone=${phone} (not allowlisted)`);
+        return { sent: false, reason: 'not-allowlisted' };
+    }
+
+    try {
+        const normalizedPhone = normalizeIsraeliPhone(phone);
+        if (!normalizedPhone) {
+            console.warn(`[ManyChat staff] no valid phone for actionKey=${actionKey}`);
+            return { sent: false, reason: 'no-phone' };
+        }
+
+        let subscriber = await findSubscriber({ phone: normalizedPhone });
+        if (!subscriber) {
+            subscriber = await createSubscriber({ phone: normalizedPhone });
+        }
+        if (!subscriber?.id) {
+            throw new Error('No subscriber id after find/create');
+        }
+
+        const fields = buildStaffCustomFields(actionKey, audience, vars);
+        console.log('[ManyChat staff] setCustomFields:', fields.filter(f => hasManyChatFieldValue(f.value)).map(f => `${f.name}=${f.value}`).join(', '));
+        await setCustomFieldsByName(subscriber.id, fields);
+        await sendFlow(subscriber.id, STAFF_NOTIFICATION_FLOW_NS);
+
+        console.log(`[ManyChat staff] Flow sent. actionKey=${actionKey} subscriberId=${subscriber.id}`);
+        return { sent: true, subscriberId: subscriber.id };
+    } catch (err) {
+        console.error(`[ManyChat staff] sendStaffManyChat failed. actionKey=${actionKey}:`, err?.message || err);
+        return { sent: false, reason: 'error', error: err?.message || String(err) };
     }
 }
 

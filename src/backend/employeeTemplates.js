@@ -1,21 +1,14 @@
 /**
- * Employee-system WhatsApp templates — resolves the actual message text for
- * a given action from the `WhatsApp_Templates` CMS collection (use='employees',
- * matched by `actionKey`), renders `{{placeholder}}` variables, and sends it.
- *
- * If no CMS row exists for an actionKey, the send is skipped entirely and
- * managers are alerted via WhatsApp instead (throttled to once/day per
- * actionKey, in-memory — resets on redeploy/cold start, which is fine for an
- * ops alert).
- *
- * Every actionKey below is a permanent (isSystem=true) CMS row: managers can
- * edit its title/body freely, but it can't be deleted (see deleteStaffTemplate
- * in staffAdminService.web.js) and the mapping to the action stays intact.
+ * Employee-system notifications — sent via ManyChat (see manychatService.jsw
+ * → sendStaffManyChat), not Green API. The actual approved WhatsApp message
+ * content lives in the ManyChat flow itself, routed by the `actionKey`
+ * (custom field `action_key`); the CMS `WhatsApp_Templates` rows below are
+ * kept only as a **read-only reference/preview** of what each actionKey's
+ * message looks like — editing them no longer changes what gets sent.
  */
 import wixData from 'wix-data';
 import { getRolePermissionValue } from 'backend/staffRoles.js';
-import { sendGreenApiWhatsApp } from 'backend/whatsappService.jsw';
-import { TEMPLATE_USE } from 'backend/whatsappTemplates.js';
+import { sendStaffManyChat } from 'backend/manychatService.jsw';
 
 const SA = { suppressAuth: true };
 
@@ -126,81 +119,31 @@ export function renderTemplate(body, vars = {}) {
     });
 }
 
-async function getEmployeeTemplateBody(actionKey) {
-    const result = await wixData.query('WhatsApp_Templates')
-        .eq('use', TEMPLATE_USE.EMPLOYEES)
-        .eq('actionKey', actionKey)
-        .limit(1).find(SA).catch(() => ({ items: [] }));
-    const row = result.items?.[0];
-    return row?.messageBody || null;
-}
-
-// actionKey -> 'YYYY-MM-DD' of the last manager alert sent for it (in-memory, once/day).
-const _missingAlertedOn = new Map();
-
-async function alertManagersMissingTemplate(actionKey) {
-    const todayKey = new Date().toISOString().slice(0, 10);
-    if (_missingAlertedOn.get(actionKey) === todayKey) return;
-    _missingAlertedOn.set(actionKey, todayKey);
-
-    const label = EMPLOYEE_ACTION_KEYS[actionKey]?.label || actionKey;
-    const message = [
-        `⚠️ חסרה תבנית וואטסאפ במערכת העובדים`,
-        `פעולה: ${label}`,
-        `מפתח (actionKey): ${actionKey}`,
-        `ההודעה לא נשלחה. יש להוסיף תבנית ב-CMS (WhatsApp_Templates, use=employees, actionKey=${actionKey}).`,
-    ].join('\n');
-
-    try {
-        const result = await wixData.query('Dashboard_Roles').ne('active', false).limit(1000).find(SA);
-        const managers = (result.items || []).filter(r => getRolePermissionValue(r, 'manageScheduling') && r.phone);
-        for (const m of managers) {
-            await sendGreenApiWhatsApp(m.phone, message).catch(err =>
-                console.error('[employeeTemplates] manager alert failed:', err?.message || err));
-        }
-    } catch (err) {
-        console.error('[employeeTemplates] alertManagersMissingTemplate failed:', err?.message || err);
-    }
-}
-
 /**
- * Resolves the CMS template for `actionKey`, renders it with `vars`, and
- * sends it to `phone`. If the template is missing, skips the send and
- * alerts managers (throttled). Returns true if a message was sent.
+ * Sends one employee notification via ManyChat (action_key + vars →
+ * ManyChat custom fields, shared staff flow). Returns true if actually sent
+ * (false while in TEST MODE for non-allowlisted phones, or on failure —
+ * sendStaffManyChat never throws).
  */
-export async function sendEmployeeTemplateMessage(actionKey, phone, vars = {}) {
+export async function sendEmployeeTemplateMessage(actionKey, phone, vars = {}, audience = 'employee') {
     if (!phone) {
         console.warn(`[employeeTemplates] no phone for actionKey=${actionKey} — skipping send`);
         return false;
     }
-    const body = await getEmployeeTemplateBody(actionKey);
-    if (!body) {
-        console.warn(`[employeeTemplates] missing template for actionKey=${actionKey}`);
-        await alertManagersMissingTemplate(actionKey);
-        return false;
-    }
-    const rendered = renderTemplate(body, vars);
-    await sendGreenApiWhatsApp(phone, rendered).catch(err =>
-        console.error(`[employeeTemplates] send failed for actionKey=${actionKey}:`, err?.message || err));
-    return true;
+    const result = await sendStaffManyChat(actionKey, phone, audience, vars);
+    return !!result.sent;
 }
 
-/** Sends the same rendered message to every manager (manageScheduling + phone). Same missing-template handling as sendEmployeeTemplateMessage. */
+/** Sends the same notification to every manager (manageScheduling + phone) via ManyChat. */
 export async function sendEmployeeTemplateToManagers(actionKey, vars = {}, rolesById = null) {
-    const body = await getEmployeeTemplateBody(actionKey);
-    if (!body) {
-        console.warn(`[employeeTemplates] missing template for actionKey=${actionKey}`);
-        await alertManagersMissingTemplate(actionKey);
-        return 0;
-    }
-    const rendered = renderTemplate(body, vars);
     const roles = rolesById
         ? Object.values(rolesById)
         : (await wixData.query('Dashboard_Roles').ne('active', false).limit(1000).find(SA).catch(() => ({ items: [] }))).items || [];
     const managers = roles.filter(r => getRolePermissionValue(r, 'manageScheduling') && r.phone);
+    let sent = 0;
     for (const m of managers) {
-        await sendGreenApiWhatsApp(m.phone, rendered).catch(err =>
-            console.error('[employeeTemplates] manager send failed:', err?.message || err));
+        const result = await sendStaffManyChat(actionKey, m.phone, 'manager', vars);
+        if (result.sent) sent++;
     }
-    return managers.length;
+    return sent;
 }

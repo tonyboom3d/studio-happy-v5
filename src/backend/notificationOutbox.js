@@ -276,11 +276,15 @@ async function markRows(ids, status, sentAt = null) {
     }
 }
 
+function staffAudienceOf(audience) {
+    return audience === AUDIENCE.MANAGERS ? 'manager' : 'employee';
+}
+
 async function sendRow(row) {
     const vars = JSON.parse(row.vars || '{}');
     // Manager rows are already resolved to one specific manager by enqueueManagerNotification,
     // so we send directly rather than re-resolving the whole manager list.
-    await sendEmployeeTemplateMessage(row.actionKey, row.recipientPhone, vars).catch(err =>
+    await sendEmployeeTemplateMessage(row.actionKey, row.recipientPhone, vars, staffAudienceOf(row.audience)).catch(err =>
         console.error(`[notificationOutbox] send failed (${row.audience}):`, err?.message || err));
 }
 
@@ -325,10 +329,10 @@ async function flushGroup(rows, now) {
                 ? { count, itemList: text }
                 : { displayName: vars.displayName || '', count, shiftList: text, portalLink: vars.portalLink || '' };
             if (audience === AUDIENCE.MANAGERS) {
-                await sendEmployeeTemplateMessage(actionKey, recipientPhone, rendered).catch(err =>
+                await sendEmployeeTemplateMessage(actionKey, recipientPhone, rendered, 'manager').catch(err =>
                     console.error('[notificationOutbox] manager digest send failed:', err?.message || err));
             } else {
-                await sendEmployeeTemplateMessage(actionKey, recipientPhone, rendered).catch(err =>
+                await sendEmployeeTemplateMessage(actionKey, recipientPhone, rendered, 'employee').catch(err =>
                     console.error('[notificationOutbox] digest send failed:', err?.message || err));
             }
             sent++;

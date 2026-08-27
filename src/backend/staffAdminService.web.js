@@ -1216,6 +1216,7 @@ export const sendAvailabilityNudge = webMethod(Permissions.SiteMember, async (ro
                 recipientPhone: target.phone,
                 priority: PRIORITY.NORMAL,
                 entityKey: `nudge:${monthKey || 'הקרוב'}:${target._id}`,
+                digest: { line: `תזכורת להגיש זמינות לחודש ${monthKey || 'הקרוב'}` },
                 vars: {
                     displayName: target.displayName || '',
                     monthKey: monthKey || 'הקרוב',
@@ -1228,8 +1229,9 @@ export const sendAvailabilityNudge = webMethod(Permissions.SiteMember, async (ro
             failures.push({ id, reason: err?.message || 'שגיאת שליחה' });
         }
     }
-    // Bulk manager action — flush right away (rate limit/quiet hours still apply per recipient).
-    await flushOutbox({ force: true }).catch(err => console.error('[staffAdminService] flushOutbox failed:', err?.message || err));
+    // Informational reminder — no longer force-flushed; rides the aggregation
+    // window and gets swept by the next hourly job (merges with anything
+    // else queued for the same employee in that window).
     console.log(`[staffAdminService] sendAvailabilityNudge: queued=${sent} failures=${failures.length} by ${role._id}`);
     return { ok: true, sent, failures };
 });

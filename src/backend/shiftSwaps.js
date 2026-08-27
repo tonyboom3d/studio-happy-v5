@@ -256,12 +256,15 @@ export async function getSwapRequestForViewer(token) {
     return { viewer, ...publicSwapView(swap) };
 }
 
-async function notify(role, actionKey, vars, entityKey = null) {
+// Status-only notices (no click/decision required) — digest-eligible, so no
+// forced immediate flush here: they wait out the aggregation window and get
+// swept by the hourly job (processAlertsHourly), merging with anything else
+// queued for the same recipient in that window.
+async function notify(role, actionKey, vars, entityKey = null, digest = undefined) {
     if (!role?.phone) { console.warn(`[shiftSwaps] role ${role?._id} has no phone — skipping WhatsApp`); return; }
     await enqueueNotification({
-        actionKey, recipientId: role._id, recipientPhone: role.phone, priority: PRIORITY.NORMAL, entityKey, vars,
+        actionKey, recipientId: role._id, recipientPhone: role.phone, priority: PRIORITY.NORMAL, entityKey, digest, vars,
     }).catch(err => console.error('[shiftSwaps] WhatsApp failed:', err?.message || err));
-    await flushOutbox({ force: true }).catch(err => console.error('[shiftSwaps] flushOutbox failed:', err?.message || err));
 }
 
 /**
@@ -287,6 +290,8 @@ export async function respondToSwapAsTarget(viewerRole, token, accept) {
             targetName: swap.targetEmployeeName,
             date: formatDateHe(swap.dateKey),
             workshopName: swap.workshopName,
+        }, `swap-status:${swap.token}:${requester._id}`, {
+            line: `בקשת ההחלפה שלך למשמרת ${formatDateHe(swap.dateKey)} (${swap.workshopName}) נדחתה ע"י ${swap.targetEmployeeName}`,
         });
         return { ok: true, status: SWAP_STATUS.EMPLOYEE_DECLINED };
     }
@@ -296,6 +301,8 @@ export async function respondToSwapAsTarget(viewerRole, token, accept) {
         targetName: swap.targetEmployeeName,
         date: formatDateHe(swap.dateKey),
         workshopName: swap.workshopName,
+    }, `swap-status:${swap.token}:${requester._id}`, {
+        line: `${swap.targetEmployeeName} אישר/ה את בקשת ההחלפה למשמרת ${formatDateHe(swap.dateKey)} (${swap.workshopName}) — ממתין לאישור מנהל/ת`,
     });
     await enqueueManagerNotification('manager_swap_pending_approval', {
         requesterName: swap.requesterName,
@@ -368,8 +375,11 @@ export async function decideSwapAsManager(viewerRole, token, decision, comment) 
     const vars = approve
         ? { detail }
         : { detail, commentLine: cleanComment ? `\nהערה: ${cleanComment}` : '' };
-    await notify(requester, actionKey, vars);
-    await notify(target, actionKey, vars);
+    const digestLine = approve
+        ? `ההחלפה אושרה סופית — ${detail}`
+        : `בקשת ההחלפה נדחתה ע"י המנהל/ת — ${detail}`;
+    await notify(requester, actionKey, vars, `swap-decision:${swap.token}:${requester._id}`, { line: digestLine });
+    await notify(target, actionKey, vars, `swap-decision:${swap.token}:${target._id}`, { line: digestLine });
 
     console.log(`[shiftSwaps] manager decided: id=${swap._id} status=${status}`);
     return { ok: true, status };

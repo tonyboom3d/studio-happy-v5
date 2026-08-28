@@ -35,6 +35,7 @@ const TAG_NAME = 'studio-upsell-admin';
 // catalog — must match backend/studioUpsell/catalog.js GENERAL_WORKSHOP_TYPE.
 const GENERAL_WORKSHOP_TYPE = '__general__';
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
+const ECOM_ORDER_DASHBOARD_BASE = 'https://manage.wix.com/dashboard/f0548b42-7f52-447c-9076-45112f85765b/ecom-platform/order-details';
 
 const STYLE = `
     @import url('https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;600;700;800;900&display=swap');
@@ -80,6 +81,12 @@ const STYLE = `
         cursor: pointer; font-size: 13px; margin-inline-start: 8px; vertical-align: middle;
     }
     .sa-icon-btn:hover { background: #eef2ff; border-color: #c7d2fe; color: #4338ca; }
+    .sa-ext-link {
+        display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px;
+        border-radius: 6px; border: 1px solid #e5e7eb; background: #f9fafb; color: #4338ca;
+        text-decoration: none; font-size: 12px; flex-shrink: 0;
+    }
+    .sa-ext-link:hover { background: #eef2ff; border-color: #c7d2fe; }
     .sa-setting-label-row { display: flex; align-items: center; gap: 2px; }
     .sa-input, .sa-select, .sa-textarea {
         padding: 9px 12px; border-radius: 9px; border: 1.5px solid #e5e7eb; font-size: 14px; font-family: inherit; background: #f9fafb;
@@ -200,6 +207,15 @@ function staffNameTooltip(name, at) {
     return when
         ? `<span style="cursor:help;border-bottom:1px dotted #9ca3af;" title="${escapeHtml(when)}">${escapeHtml(name)}</span>`
         : escapeHtml(name);
+}
+
+/** Displays the human-readable Wix order number (6–7 digits) + dashboard link via ecomOrderId. */
+function renderOrderNumberCell(t) {
+    if (!t.ecomOrderNumber) return '<span style="color:#9ca3af;">—</span>';
+    const num = escapeHtml(String(t.ecomOrderNumber));
+    if (!t.ecomOrderId) return num;
+    const url = `${ECOM_ORDER_DASHBOARD_BASE}/${encodeURIComponent(t.ecomOrderId)}`;
+    return `<span style="display:inline-flex;align-items:center;gap:6px;white-space:nowrap;">${num}<a href="${url}" target="_blank" rel="noopener noreferrer" class="sa-ext-link" title="פתיחת ההזמנה בלוח הבקרה">↗</a></span>`;
 }
 
 /** Parses generalCategories from CMS (JSON string or array). */
@@ -917,6 +933,7 @@ class StudioUpsellAdminElement extends HTMLElement {
             return `
                 <tr>
                     <td>${formatDate(t._createdDate)}</td>
+                    <td>${renderOrderNumberCell(t)}</td>
                     <td>${escapeHtml(t.workshopTitle || '')}</td>
                     <td>${escapeHtml(t.customerName || '')}<br/><span style="color:#9ca3af;font-size:11px;">${escapeHtml(t.customerPhone || '')}</span></td>
                     <td>${checkoutCell}</td>
@@ -934,7 +951,7 @@ class StudioUpsellAdminElement extends HTMLElement {
             <div class="sa-card">
                 <div class="sa-table-wrap">
                 <table class="sa-table">
-                    <thead><tr><th>תאריך</th><th>סדנה</th><th>הזמנה על שם</th><th>שולם ע"י (צ'קאאוט)</th><th>פריטים</th><th>סכום</th><th>סטטוס</th><th>מקור</th><th>אישור עובד</th></tr></thead>
+                    <thead><tr><th>תאריך</th><th>מספר הזמנה</th><th>סדנה</th><th>הזמנה על שם</th><th>שולם ע"י (צ'קאאוט)</th><th>פריטים</th><th>סכום</th><th>סטטוס</th><th>מקור</th><th>אישור עובד</th></tr></thead>
                     <tbody>${rows}</tbody>
                 </table>
                 </div>

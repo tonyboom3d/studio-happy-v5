@@ -583,7 +583,7 @@ class StudioUpsellAdminElement extends HTMLElement {
                     <div class="sa-hint">אם מוגדרת סיסמה, לקוח שבוחר "סכום פתוח" יתבקש לפנות לעובד/ת שתזין את הקוד כדי להמשיך.</div>
                 </div>
 
-                <div class="sa-checkbox-row" style="margin-bottom:12px;"><input type="checkbox" id="saSettingStaffCode" ${current.showStaffCode ? 'checked' : ''} /><label for="saSettingStaffCode">הצג קוד אימות לצוות בדף התודה</label></div>
+                <div class="sa-checkbox-row" style="margin-bottom:12px;"><input type="checkbox" id="saSettingStaffCode" ${current.showStaffCode ? 'checked' : ''} /><label for="saSettingStaffCode">הצג קוד אימות לצוות בדף התודה <span style="color:#9ca3af; font-size:11px; font-weight:500;">(סיסמה: 1326)</span></label></div>
                 <div class="sa-checkbox-row" style="margin-bottom:20px;"><input type="checkbox" id="saSettingPrint" ${current.printOnPayment !== false ? 'checked' : ''} /><label for="saSettingPrint">הוסף לתור הדפסה עם קבלת תשלום</label></div>
 
                 <button class="sa-btn sa-btn-primary" id="saSettingsSaveBtn">שמירת הגדרות</button>

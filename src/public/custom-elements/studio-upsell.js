@@ -439,32 +439,52 @@ class StudioUpsellElement extends HTMLElement {
         this.render();
     }
 
+    /** Only one of the two payment modes ever counts toward the total — never both at once. */
     _computeTotal() {
+        if (this._state.paymentMode === 'openAmount') {
+            return Number(this._state.openAmount) || 0;
+        }
         const { addOns } = this._state.catalog;
         let total = 0;
-        for (const addOn of addOns) {
+        for (const addOn of (addOns || [])) {
             total += (this._qty(addOn.id) || 0) * (Number(addOn.price) || 0);
         }
-        const open = Number(this._state.openAmount) || 0;
-        if (open > 0) total += open;
         return total;
     }
 
     /** True when the customer picked at least one add-on qty or entered an open amount — even if total is ₪0. */
     _hasSelectedItems() {
+        if (this._state.paymentMode === 'openAmount') {
+            return (Number(this._state.openAmount) || 0) > 0;
+        }
         const { addOns } = this._state.catalog;
-        const hasQty = (addOns || []).some((a) => this._qty(a.id) > 0);
-        const openAmount = Number(this._state.openAmount) || 0;
-        return hasQty || openAmount > 0;
+        return (addOns || []).some((a) => this._qty(a.id) > 0);
+    }
+
+    /** Re-paints just the total + checkout button — avoids a full re-render (and losing input focus) on every keystroke. */
+    _refreshSummary(root) {
+        const s = this._state;
+        const total = this._computeTotal();
+        const canCheckout = this._hasSelectedItems();
+        const summaryValue = root.querySelector('.su-summary span:last-child');
+        if (summaryValue) summaryValue.textContent = formatIls(total);
+        const checkoutBtn = root.querySelector('#suCheckoutBtn');
+        if (checkoutBtn) {
+            checkoutBtn.disabled = s.submitting || !canCheckout;
+            checkoutBtn.textContent = s.submitting ? 'מעביר לתשלום...' : (total > 0 ? 'המשך לתשלום' : 'המשך להזמנה');
+        }
     }
 
     _submitCheckout() {
         const { addOns, settings } = this._state.catalog;
-        const items = addOns
+        const isOpenAmountMode = this._state.paymentMode === 'openAmount';
+
+        // Only one of the two payment modes is ever sent to checkout — never both.
+        const items = isOpenAmountMode ? [] : (addOns || [])
             .filter((a) => this._qty(a.id) > 0)
             .map((a) => ({ id: a.id, title: a.title, price: a.price, quantity: this._qty(a.id), image: a.image }));
 
-        const openAmount = Number(this._state.openAmount) || 0;
+        const openAmount = isOpenAmountMode ? (Number(this._state.openAmount) || 0) : 0;
         if (!items.length && openAmount <= 0) {
             this._state.error = 'יש לבחור לפחות פריט אחד או להזין סכום.';
             this.render();
@@ -871,7 +891,10 @@ class StudioUpsellElement extends HTMLElement {
         });
 
         const openAmountInput = root.querySelector('#suOpenAmount');
-        if (openAmountInput) openAmountInput.addEventListener('input', (e) => { s.openAmount = e.target.value; });
+        if (openAmountInput) openAmountInput.addEventListener('input', (e) => {
+            s.openAmount = e.target.value;
+            this._refreshSummary(root);
+        });
 
         const customerNameInput = root.querySelector('#suCustomerName');
         if (customerNameInput) customerNameInput.addEventListener('input', (e) => { s.customerName = e.target.value; });

@@ -3,7 +3,7 @@
  * ------------------------------------------
  * Admin management page for the in-person QR add-on upsell system.
  *
- * Top-level tabs: סדנאות (workshop cards grid → per-workshop detail with
+ * Top-level tabs: סדנאות (workshop list → per-workshop detail with
  * הגדרות + תוספים sub-tabs, plus a "תוספות כלליות" card for add-ons shown
  * alongside every workshop), מלאי (flat inventory management — unmanaged by
  * default, opt into a numeric stock + out-of-stock WhatsApp alert per
@@ -58,6 +58,29 @@ const STYLE = `
     .sa-field { display: flex; flex-direction: column; gap: 4px; min-width: 140px; flex: 1; }
     .sa-label { font-size: 12px; font-weight: 700; color: #374151; }
     .sa-hint { font-size: 12px; color: #9ca3af; margin-top: 4px; line-height: 1.4; }
+    .sa-info-icon {
+        display: inline-flex; align-items: center; justify-content: center; width: 15px; height: 15px;
+        border-radius: 50%; background: #e5e7eb; color: #6b7280; font-size: 10px; font-weight: 800;
+        margin-inline-start: 5px; cursor: help; position: relative; vertical-align: middle; flex-shrink: 0;
+    }
+    .sa-info-icon:hover .sa-tooltip, .sa-info-icon:focus .sa-tooltip { display: block; }
+    .sa-tooltip {
+        display: none; position: absolute; bottom: 130%; left: 50%; transform: translateX(-50%);
+        background: #111827; color: #fff; padding: 8px 10px; border-radius: 8px; font-size: 12px;
+        font-weight: 500; line-height: 1.45; width: 230px; text-align: right; z-index: 50;
+        box-shadow: 0 6px 18px rgba(0,0,0,.2); direction: rtl;
+    }
+    .sa-tooltip::after {
+        content: ''; position: absolute; top: 100%; left: 50%; transform: translateX(-50%);
+        border: 6px solid transparent; border-top-color: #111827;
+    }
+    .sa-icon-btn {
+        display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px;
+        border-radius: 8px; border: 1px solid #e5e7eb; background: #f9fafb; color: #4b5563;
+        cursor: pointer; font-size: 13px; margin-inline-start: 8px; vertical-align: middle;
+    }
+    .sa-icon-btn:hover { background: #eef2ff; border-color: #c7d2fe; color: #4338ca; }
+    .sa-setting-label-row { display: flex; align-items: center; gap: 2px; }
     .sa-input, .sa-select, .sa-textarea {
         padding: 9px 12px; border-radius: 9px; border: 1.5px solid #e5e7eb; font-size: 14px; font-family: inherit; background: #f9fafb;
     }
@@ -91,20 +114,33 @@ const STYLE = `
     .sa-section-title { font-size: 15px; font-weight: 800; color: #111827; margin: 0 0 12px; }
     .sa-actions-cell { display: flex; gap: 6px; }
     .sa-access-denied { text-align: center; padding: 60px 20px; color: #6b7280; }
-    .sa-workshops-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 18px; }
-    .sa-workshop-card {
-        background: linear-gradient(135deg, #7c3aed 0%, #5b21b6 100%);
-        border: 1.5px solid #6d28d9; border-radius: 20px; padding: 40px 24px; min-height: 150px;
-        display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px;
-        cursor: pointer; transition: box-shadow .15s ease, transform .15s ease; text-align: center;
+    .sa-workshops-list { display: flex; flex-direction: column; gap: 10px; }
+    .sa-workshop-row {
+        display: flex; align-items: center; justify-content: space-between; gap: 14px;
+        padding: 16px 18px; background: #fff; border: 1.5px solid #e5e7eb; border-radius: 14px;
+        transition: box-shadow .15s ease, border-color .15s ease;
     }
-    .sa-workshop-card:hover { box-shadow: 0 10px 26px rgba(91,33,182,.32); transform: translateY(-3px); }
-    .sa-workshop-card-general { background: linear-gradient(135deg, #a78bfa 0%, #7c3aed 100%); border-style: dashed; border-color: #ede9fe; }
-    .sa-workshop-card-title { font-weight: 800; font-size: 20px; color: #fff; line-height: 1.3; }
-    .sa-workshop-card-meta { font-size: 13px; color: rgba(255,255,255,.85); display: flex; align-items: center; justify-content: center; gap: 8px; flex-wrap: wrap; }
-    .sa-workshop-card-chip {
-        font-size: 12px; font-weight: 700; padding: 4px 11px; border-radius: 999px;
-        background: rgba(255,255,255,.22); color: #fff;
+    .sa-workshop-row:hover { box-shadow: 0 4px 16px rgba(91,33,182,.08); border-color: #ddd6fe; }
+    .sa-workshop-row-general { border-style: dashed; background: #faf5ff; border-color: #e9d5ff; }
+    .sa-workshop-row-main { flex: 1; min-width: 0; }
+    .sa-workshop-row-title { font-weight: 800; font-size: 16px; color: #111827; margin-bottom: 8px; line-height: 1.3; }
+    .sa-workshop-row-tags { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+    .sa-workshop-row-actions { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+    .sa-badge-purple { background: #f3e8ff; color: #7c3aed; }
+    .sa-toggle-switch {
+        position: relative; width: 46px; height: 26px; border-radius: 999px; border: none; padding: 0;
+        background: #d1d5db; cursor: pointer; transition: background .2s ease; flex-shrink: 0;
+    }
+    .sa-toggle-switch[data-on="true"] { background: #7c3aed; }
+    .sa-toggle-switch:disabled { cursor: wait; opacity: .75; }
+    .sa-toggle-thumb {
+        position: absolute; top: 3px; right: 3px; width: 20px; height: 20px; border-radius: 50%;
+        background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.18); transition: right .2s ease;
+    }
+    .sa-toggle-switch[data-on="true"] .sa-toggle-thumb { right: 23px; }
+    .sa-toggle-spinner {
+        position: absolute; inset: 0; margin: auto; width: 16px; height: 16px; border-radius: 50%;
+        border: 2px solid rgba(255,255,255,.35); border-top-color: #fff; animation: sa-spin .7s linear infinite;
     }
     .sa-detail-header { display: flex; align-items: center; gap: 14px; margin-bottom: 16px; flex-wrap: wrap; }
     .sa-subtabs { display: flex; gap: 6px; margin-bottom: 16px; }
@@ -128,9 +164,10 @@ const STYLE = `
         .sa-card { padding: 14px; border-radius: 12px; }
         .sa-row { gap: 10px; }
         .sa-field { min-width: 0; flex: 1 1 100%; }
-        .sa-workshops-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
-        .sa-workshop-card { padding: 22px 12px; min-height: 110px; }
-        .sa-workshop-card-title { font-size: 16px; }
+        .sa-workshops-list { gap: 8px; }
+        .sa-workshop-row { padding: 14px; flex-wrap: wrap; }
+        .sa-workshop-row-title { font-size: 15px; }
+        .sa-workshop-row-actions { width: 100%; justify-content: flex-end; }
         .sa-detail-header { gap: 8px; }
         .sa-subtabs { width: 100%; overflow-x: auto; flex-wrap: nowrap; -webkit-overflow-scrolling: touch; }
         .sa-subtab { flex: 0 0 auto; white-space: nowrap; }
@@ -155,6 +192,11 @@ function formatDate(d) {
     const date = new Date(d);
     if (Number.isNaN(date.getTime())) return '';
     return new Intl.DateTimeFormat('he-IL', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }).format(date);
+}
+
+/** Small "ⓘ" hover-tooltip next to a setting's label — explains what it does in plain Hebrew. */
+function tip(text) {
+    return `<span class="sa-info-icon" tabindex="0">i<span class="sa-tooltip">${escapeHtml(text)}</span></span>`;
 }
 
 const STATUS_LABELS = {
@@ -192,6 +234,8 @@ class StudioUpsellAdminElement extends HTMLElement {
             printQueue: null,
             toast: null,
             error: null,
+            togglingWorkshopTypeId: null,
+            quietSettingsSave: false,
         };
     }
 
@@ -294,7 +338,10 @@ class StudioUpsellAdminElement extends HTMLElement {
         if (result && result.error) {
             // Scoped action failure (save/upload/etc.) — surface as a toast, keep the page usable.
             s.uploadingImage = false;
+            s.togglingWorkshopTypeId = null;
+            s.quietSettingsSave = false;
             this._toast(result.error);
+            this.render();
             return;
         }
 
@@ -305,8 +352,10 @@ class StudioUpsellAdminElement extends HTMLElement {
             this._toast(type === 'deleteAddOn' ? 'התוסף נמחק' : 'התוסף נשמר');
             return;
         } else if (type === 'saveSettings') {
+            s.togglingWorkshopTypeId = null;
             this._dispatch('load', {});
-            this._toast('ההגדרות נשמרו');
+            if (!s.quietSettingsSave) this._toast('ההגדרות נשמרו');
+            s.quietSettingsSave = false;
             return;
         } else if (type === 'loadTransactions') {
             s.transactions = result || [];
@@ -395,7 +444,7 @@ class StudioUpsellAdminElement extends HTMLElement {
 
         let body = '';
         if (s.activeTab === 'workshops') {
-            body = s.selectedWorkshopTypeId ? this._renderWorkshopDetail() : this._renderWorkshopsGrid();
+            body = s.selectedWorkshopTypeId ? this._renderWorkshopDetail() : this._renderWorkshopsList();
         } else if (s.activeTab === 'inventory') {
             body = this._renderInventoryTab();
         } else if (s.activeTab === 'transactions') {
@@ -415,27 +464,69 @@ class StudioUpsellAdminElement extends HTMLElement {
         this._bindEvents(root);
     }
 
-    _renderWorkshopsGrid() {
+    _getSettingsRow(workshopTypeId) {
+        return this._state.settings.find((row) => row.workshopType === workshopTypeId) || null;
+    }
+
+    _isWorkshopActive(workshopTypeId) {
+        const row = this._getSettingsRow(workshopTypeId);
+        return row ? row.active !== false : true;
+    }
+
+    _toggleWorkshopActive(workshopTypeId) {
         const s = this._state;
-        const cards = [
+        if (s.togglingWorkshopTypeId) return;
+        s.togglingWorkshopTypeId = workshopTypeId;
+        s.quietSettingsSave = true;
+        this.render();
+        this._dispatch('saveSettings', {
+            workshopType: workshopTypeId,
+            active: !this._isWorkshopActive(workshopTypeId),
+        });
+    }
+
+    _renderWorkshopsList() {
+        const s = this._state;
+        const rows = [
             ...s.workshopTypes.map((w) => ({ id: w.id, title: w.title, isGeneral: false })),
             { id: GENERAL_WORKSHOP_TYPE, title: 'תוספות כלליות', isGeneral: true },
         ].map((w) => {
-            const count = s.addOns.filter((a) => a.workshopType === w.id).length;
-            const settingsRow = !w.isGeneral ? s.settings.find((row) => row.workshopType === w.id) : null;
-            const activeChip = !w.isGeneral
-                ? `<span class="sa-workshop-card-chip">${settingsRow?.active !== false ? 'פעיל' : 'כבוי'}</span>`
-                : '';
+            const addOns = s.addOns.filter((a) => a.workshopType === w.id);
+            const count = addOns.length;
+            const activeCount = addOns.filter((a) => a.active !== false).length;
+            const isActive = !w.isGeneral && this._isWorkshopActive(w.id);
+            const isToggling = s.togglingWorkshopTypeId === w.id;
+
+            const tags = [
+                `<span class="sa-badge sa-badge-purple">${count} תוספים</span>`,
+                count ? `<span class="sa-badge sa-badge-green">${activeCount} פעילים</span>` : '',
+                !w.isGeneral ? `<span class="sa-badge ${isActive ? 'sa-badge-green' : 'sa-badge-gray'}">${isActive ? 'מערכת פעילה' : 'מערכת כבויה'}</span>` : '',
+            ].filter(Boolean).join('');
+
+            const toggleHtml = !w.isGeneral ? `
+                <button type="button" class="sa-toggle-switch" data-toggle-workshop="${escapeHtml(w.id)}"
+                    data-on="${isActive ? 'true' : 'false'}" ${isToggling ? 'disabled' : ''}
+                    title="${isActive ? 'כיבוי מערכת תוספים' : 'הפעלת מערכת תוספים'}">
+                    ${isToggling ? '<span class="sa-toggle-spinner"></span>' : '<span class="sa-toggle-thumb"></span>'}
+                </button>
+            ` : '';
+
             return `
-                <div class="sa-workshop-card ${w.isGeneral ? 'sa-workshop-card-general' : ''}" data-select-workshop="${escapeHtml(w.id)}">
-                    <div class="sa-workshop-card-title">${escapeHtml(w.title)}</div>
-                    <div class="sa-workshop-card-meta"><span>${count} תוספים</span>${activeChip}</div>
+                <div class="sa-workshop-row ${w.isGeneral ? 'sa-workshop-row-general' : ''}">
+                    <div class="sa-workshop-row-main">
+                        <div class="sa-workshop-row-title">${escapeHtml(w.title)}</div>
+                        <div class="sa-workshop-row-tags">${tags}</div>
+                    </div>
+                    <div class="sa-workshop-row-actions">
+                        <button type="button" class="sa-icon-btn" data-edit-workshop="${escapeHtml(w.id)}" title="עריכה">✏️</button>
+                        ${toggleHtml}
+                    </div>
                 </div>
             `;
         }).join('');
 
         return `
-            <div class="sa-workshops-grid">${cards}</div>
+            <div class="sa-workshops-list">${rows}</div>
             ${!s.workshopTypes.length ? '<div class="sa-empty" style="margin-top:16px;">לא נמצאו סוגי סדנאות. יש להוסיף סדנאות במערכת התיאום כדי שיופיעו כאן.</div>' : ''}
         `;
     }
@@ -597,21 +688,49 @@ class StudioUpsellAdminElement extends HTMLElement {
     _renderSettingsTab() {
         const s = this._state;
         const current = s.settings.find((row) => row.workshopType === s.selectedWorkshopTypeId) || {};
+        const openPwEnabled = !!current.openAmountPasswordEnabled;
 
         return `
             <div class="sa-card">
-                <div class="sa-checkbox-row" style="margin-bottom:12px;"><input type="checkbox" id="saSettingActive" ${current.active !== false ? 'checked' : ''} /><label for="saSettingActive">מערכת התוספים פעילה לסוג סדנה זה</label></div>
-
-                <div class="sa-checkbox-row" style="margin-bottom:12px;"><input type="checkbox" id="saSettingOpenAmount" ${current.allowOpenAmount ? 'checked' : ''} /><label for="saSettingOpenAmount">אפשר סכום פתוח (תשלום חופשי)</label></div>
-                <div class="sa-row" style="margin-bottom:16px;">
-                    <div class="sa-field"><label class="sa-label">תווית לשדה הסכום הפתוח</label><input class="sa-input" id="saSettingOpenLabel" value="${escapeHtml(current.openAmountLabel || 'סכום פתוח')}" /></div>
-                    <div class="sa-field"><label class="sa-label">סכום מינימלי</label><input class="sa-input" type="number" min="0" id="saSettingOpenMin" value="${escapeHtml(current.openAmountMin ?? 0)}" /></div>
-                    <div class="sa-field"><label class="sa-label">סכום מקסימלי</label><input class="sa-input" type="number" min="0" id="saSettingOpenMax" value="${escapeHtml(current.openAmountMax ?? '')}" /></div>
+                <div class="sa-checkbox-row" style="margin-bottom:12px;">
+                    <input type="checkbox" id="saSettingActive" ${current.active !== false ? 'checked' : ''} />
+                    <label for="saSettingActive" class="sa-setting-label-row">מערכת התוספים פעילה לסוג סדנה זה ${tip('כשכבוי, לקוחות לא יראו תוספות או אפשרות תשלום לסדנה זו במסך ה-QR בסטודיו.')}</label>
                 </div>
 
-                <div class="sa-checkbox-row" style="margin-bottom:4px;"><input type="checkbox" id="saSettingStaffCode" ${current.showStaffCode ? 'checked' : ''} /><label for="saSettingStaffCode">הצג קוד אימות לצוות בדף התודה</label></div>
-                <div class="sa-hint" style="margin-bottom:12px;">כשמופעל, הלקוח יתבקש להציג את דף התודה לעובד/ת, שיזין את סיסמת הצוות (1326) לפני שההזמנה תושלם ויודפס הבון. אם הלקוח לא הציג את המסך — ניתן לאשר את ההזמנה ידנית מטבלת העסקאות.</div>
-                <div class="sa-checkbox-row" style="margin-bottom:20px;"><input type="checkbox" id="saSettingPrint" ${current.printOnPayment !== false ? 'checked' : ''} /><label for="saSettingPrint">הוסף לתור הדפסה עם קבלת תשלום</label></div>
+                <div class="sa-checkbox-row" style="margin-bottom:12px;">
+                    <input type="checkbox" id="saSettingOpenAmount" ${current.allowOpenAmount ? 'checked' : ''} />
+                    <label for="saSettingOpenAmount" class="sa-setting-label-row">אפשר סכום פתוח (תשלום חופשי) ${tip('מאפשר ללקוח להזין סכום חופשי לתשלום שלא מופיע בקטלוג התוספות, לדוגמה תרומה או תוספת מיוחדת שהוסכמה בעל פה.')}</label>
+                </div>
+                <div class="sa-row" style="margin-bottom:16px;">
+                    <div class="sa-field"><label class="sa-label sa-setting-label-row">תווית לשדה הסכום הפתוח ${tip('הטקסט שמוצג ליד שדה הסכום ללקוח, לדוגמה: "תרומה" או "תוספת מיוחדת".')}</label><input class="sa-input" id="saSettingOpenLabel" value="${escapeHtml(current.openAmountLabel || 'סכום פתוח')}" /></div>
+                    <div class="sa-field"><label class="sa-label sa-setting-label-row">סכום מינימלי ${tip('הסכום הכי נמוך שהלקוח יכול להזין. לדוגמה 20 = לא ניתן להזין פחות מ-20 ש"ח.')}</label><input class="sa-input" type="number" min="0" id="saSettingOpenMin" value="${escapeHtml(current.openAmountMin ?? 0)}" /></div>
+                    <div class="sa-field"><label class="sa-label sa-setting-label-row">סכום מקסימלי ${tip('הסכום הכי גבוה שהלקוח יכול להזין. השאירו ריק = ללא הגבלה.')}</label><input class="sa-input" type="number" min="0" id="saSettingOpenMax" value="${escapeHtml(current.openAmountMax ?? '')}" /></div>
+                </div>
+
+                <div class="sa-checkbox-row" style="margin-bottom:4px;">
+                    <input type="checkbox" id="saSettingOpenPwEnabled" ${openPwEnabled ? 'checked' : ''} />
+                    <label for="saSettingOpenPwEnabled" class="sa-setting-label-row">
+                        הוספת קוד אימות לשדה סכום פתוח <span style="color:#9ca3af; font-size:11px; font-weight:500;">(סיסמה: 1326)</span>
+                        ${tip('כשמופעל, לקוח שבוחר "סכום פתוח" יתבקש להעביר את המכשיר לעובד/ת שתזין סיסמה לפני שניתן להמשיך. ברירת המחדל היא 1326, ואפשר לקבוע סיסמה מותאמת בעזרת אייקון העיפרון.')}
+                        <button type="button" class="sa-icon-btn" id="saSettingOpenPwEditBtn" title="עריכת סיסמה מותאמת" style="${openPwEnabled ? '' : 'display:none;'}">✏️</button>
+                    </label>
+                </div>
+                <div id="saSettingOpenPwWrap" style="display:none; margin:8px 0 12px;">
+                    <label class="sa-label">סיסמה מותאמת (השאירו ריק לברירת המחדל 1326)</label>
+                    <input class="sa-input" type="text" id="saSettingOpenPassword" placeholder="1326" value="${escapeHtml(current.openAmountPassword || '')}" />
+                </div>
+
+                <div class="sa-checkbox-row" style="margin-bottom:4px;">
+                    <input type="checkbox" id="saSettingStaffCode" ${current.showStaffCode ? 'checked' : ''} />
+                    <label for="saSettingStaffCode" class="sa-setting-label-row">
+                        הצג קוד אימות לצוות בדף התודה
+                        ${tip('כשמופעל, אחרי התשלום הלקוח יצטרך להציג את דף התודה לעובד/ת שתזין סיסמת צוות (1326) לפני שההזמנה תושלם ויודפס הבון. אם הלקוח לא הציג את המסך — ניתן לאשר ידנית מטבלת העסקאות.')}
+                    </label>
+                </div>
+                <div class="sa-checkbox-row" style="margin-bottom:20px;">
+                    <input type="checkbox" id="saSettingPrint" ${current.printOnPayment !== false ? 'checked' : ''} />
+                    <label for="saSettingPrint" class="sa-setting-label-row">הוסף לתור הדפסה עם קבלת תשלום ${tip('כשמופעל, כל הזמנה משולמת (או מאושרת ע"י עובד, אם מוגדר אימות) נכנסת אוטומטית לתור ההדפסה של הבונים בעמוד "תור הדפסה".')}</label>
+                </div>
 
                 <button class="sa-btn sa-btn-primary" id="saSettingsSaveBtn">שמירת הגדרות</button>
             </div>
@@ -748,8 +867,18 @@ class StudioUpsellAdminElement extends HTMLElement {
             btn.addEventListener('click', () => this._switchTab(btn.getAttribute('data-tab')));
         });
 
-        root.querySelectorAll('[data-select-workshop]').forEach((card) => {
-            card.addEventListener('click', () => this._selectWorkshop(card.getAttribute('data-select-workshop')));
+        root.querySelectorAll('[data-edit-workshop]').forEach((btn) => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this._selectWorkshop(btn.getAttribute('data-edit-workshop'));
+            });
+        });
+
+        root.querySelectorAll('[data-toggle-workshop]').forEach((btn) => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this._toggleWorkshopActive(btn.getAttribute('data-toggle-workshop'));
+            });
         });
 
         const backBtn = root.querySelector('#saBackToWorkshopsBtn');
@@ -853,6 +982,23 @@ class StudioUpsellAdminElement extends HTMLElement {
             this._dispatch('saveAddOn', payload);
         });
 
+        const openPwEnabledCheckbox = root.querySelector('#saSettingOpenPwEnabled');
+        const openPwEditBtn = root.querySelector('#saSettingOpenPwEditBtn');
+        const openPwWrap = root.querySelector('#saSettingOpenPwWrap');
+        if (openPwEnabledCheckbox && openPwEditBtn) {
+            openPwEnabledCheckbox.addEventListener('change', () => {
+                const on = openPwEnabledCheckbox.checked;
+                openPwEditBtn.style.display = on ? 'inline-flex' : 'none';
+                if (!on && openPwWrap) openPwWrap.style.display = 'none';
+            });
+        }
+        if (openPwEditBtn && openPwWrap) {
+            openPwEditBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                openPwWrap.style.display = openPwWrap.style.display === 'none' ? 'block' : 'none';
+            });
+        }
+
         const saveSettingsBtn = root.querySelector('#saSettingsSaveBtn');
         if (saveSettingsBtn) saveSettingsBtn.addEventListener('click', () => {
             const openMax = root.querySelector('#saSettingOpenMax')?.value;
@@ -863,6 +1009,8 @@ class StudioUpsellAdminElement extends HTMLElement {
                 openAmountLabel: root.querySelector('#saSettingOpenLabel')?.value || 'סכום פתוח',
                 openAmountMin: Number(root.querySelector('#saSettingOpenMin')?.value) || 0,
                 openAmountMax: openMax === '' ? null : Number(openMax),
+                openAmountPasswordEnabled: !!root.querySelector('#saSettingOpenPwEnabled')?.checked,
+                openAmountPassword: (root.querySelector('#saSettingOpenPassword')?.value || '').trim(),
                 showStaffCode: !!root.querySelector('#saSettingStaffCode')?.checked,
                 printOnPayment: !!root.querySelector('#saSettingPrint')?.checked,
             });

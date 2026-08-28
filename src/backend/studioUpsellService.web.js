@@ -206,9 +206,11 @@ export const saveUpsellSettings = webMethod(Permissions.SiteMember, async (setti
     await assertEmployeeAccess('manageAddOnsSystem');
     if (!settings?.workshopType) throw new Error('workshopType is required');
 
+    const openAmountPassword = settings.openAmountPassword != null ? String(settings.openAmountPassword).trim() : '';
+
     const existing = await wixData.query('StudioUpsellSettings').eq('workshopType', settings.workshopType).find(SA);
     if (existing.items?.[0]) {
-        return wixData.update('StudioUpsellSettings', { ...existing.items[0], ...settings }, SA);
+        return wixData.update('StudioUpsellSettings', { ...existing.items[0], ...settings, openAmountPassword }, SA);
     }
 
     return wixData.insert('StudioUpsellSettings', {
@@ -218,6 +220,8 @@ export const saveUpsellSettings = webMethod(Permissions.SiteMember, async (setti
         openAmountLabel: settings.openAmountLabel || 'סכום פתוח',
         openAmountMin: Number(settings.openAmountMin) || 0,
         openAmountMax: settings.openAmountMax != null && settings.openAmountMax !== '' ? Number(settings.openAmountMax) : null,
+        openAmountPasswordEnabled: !!settings.openAmountPasswordEnabled,
+        openAmountPassword,
         showStaffCode: !!settings.showStaffCode,
         printOnPayment: settings.printOnPayment !== false,
     }, SA);

@@ -6,7 +6,8 @@
  *   StudioAddOns:        title, description, price, image, workshopType (ref -> workshops),
  *                         active, sortOrder, maxQuantity
  *   StudioUpsellSettings: workshopType (ref -> workshops), active, allowOpenAmount,
- *                         openAmountLabel, openAmountMin, openAmountMax, openAmountPassword,
+ *                         openAmountLabel, openAmountMin, openAmountMax,
+ *                         openAmountPasswordEnabled, openAmountPassword,
  *                         showStaffCode, printOnPayment
  */
 import wixData from 'wix-data';
@@ -38,17 +39,17 @@ function getEffectiveOpenAmountPassword(row) {
 }
 
 // Customer/staff-facing mapping — NEVER includes the raw openAmountPassword value,
-// only whether staff approval is required (always true when allowOpenAmount is on).
+// only whether staff approval is required for this workshop's "open amount" (a
+// dedicated toggle, independent of allowOpenAmount itself).
 function mapSettingsRow(row) {
     if (!row) return { ...DEFAULT_SETTINGS };
-    const allowOpenAmount = !!row.allowOpenAmount;
     return {
         active: row.active !== false,
-        allowOpenAmount,
+        allowOpenAmount: !!row.allowOpenAmount,
         openAmountLabel: row.openAmountLabel || DEFAULT_SETTINGS.openAmountLabel,
         openAmountMin: Number(row.openAmountMin) || 0,
         openAmountMax: row.openAmountMax != null && row.openAmountMax !== '' ? Number(row.openAmountMax) : null,
-        openAmountRequiresPassword: allowOpenAmount,
+        openAmountRequiresPassword: !!row.openAmountPasswordEnabled,
         showStaffCode: !!row.showStaffCode,
         printOnPayment: row.printOnPayment !== false,
     };
@@ -57,13 +58,14 @@ function mapSettingsRow(row) {
 /**
  * Verifies the staff-entered code for unlocking the "open amount" payment
  * option. Uses StudioUpsellSettings.openAmountPassword when set, otherwise
- * DEFAULT_OPEN_AMOUNT_PASSWORD ('1326').
+ * DEFAULT_OPEN_AMOUNT_PASSWORD ('1326'). Only ever meaningful when
+ * openAmountPasswordEnabled is on for this workshop type.
  */
 export async function verifyOpenAmountPassword(workshopTypeId, code) {
     if (!workshopTypeId) return false;
     const result = await wixData.query('StudioUpsellSettings').eq('workshopType', workshopTypeId).find(SA);
     const row = result.items?.[0];
-    if (!row?.allowOpenAmount) return false;
+    if (!row?.openAmountPasswordEnabled) return true;
     return String(code || '').trim() === getEffectiveOpenAmountPassword(row);
 }
 

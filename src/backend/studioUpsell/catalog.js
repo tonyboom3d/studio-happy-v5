@@ -18,6 +18,9 @@ const SA = { suppressAuth: true };
 /** Sentinel `workshopType` value for add-ons shown alongside every workshop's catalog. */
 export const GENERAL_WORKSHOP_TYPE = '__general__';
 
+/** Default staff code for unlocking the "open amount" payment option. */
+export const DEFAULT_OPEN_AMOUNT_PASSWORD = '1326';
+
 const DEFAULT_SETTINGS = {
     active: true,
     allowOpenAmount: false,
@@ -29,18 +32,23 @@ const DEFAULT_SETTINGS = {
     printOnPayment: true,
 };
 
+function getEffectiveOpenAmountPassword(row) {
+    const stored = row?.openAmountPassword ? String(row.openAmountPassword).trim() : '';
+    return stored || DEFAULT_OPEN_AMOUNT_PASSWORD;
+}
+
 // Customer/staff-facing mapping — NEVER includes the raw openAmountPassword value,
-// only whether one is configured (openAmountRequiresPassword). The kiosk verifies
-// the code server-side via verifyOpenAmountPassword() instead of comparing locally.
+// only whether staff approval is required (always true when allowOpenAmount is on).
 function mapSettingsRow(row) {
     if (!row) return { ...DEFAULT_SETTINGS };
+    const allowOpenAmount = !!row.allowOpenAmount;
     return {
         active: row.active !== false,
-        allowOpenAmount: !!row.allowOpenAmount,
+        allowOpenAmount,
         openAmountLabel: row.openAmountLabel || DEFAULT_SETTINGS.openAmountLabel,
         openAmountMin: Number(row.openAmountMin) || 0,
         openAmountMax: row.openAmountMax != null && row.openAmountMax !== '' ? Number(row.openAmountMax) : null,
-        openAmountRequiresPassword: !!(row.openAmountPassword && String(row.openAmountPassword).trim()),
+        openAmountRequiresPassword: allowOpenAmount,
         showStaffCode: !!row.showStaffCode,
         printOnPayment: row.printOnPayment !== false,
     };
@@ -48,16 +56,15 @@ function mapSettingsRow(row) {
 
 /**
  * Verifies the staff-entered code for unlocking the "open amount" payment
- * option. Returns true when no password is configured for this workshop
- * type (open amount stays freely accessible), otherwise compares against
- * StudioUpsellSettings.openAmountPassword.
+ * option. Uses StudioUpsellSettings.openAmountPassword when set, otherwise
+ * DEFAULT_OPEN_AMOUNT_PASSWORD ('1326').
  */
 export async function verifyOpenAmountPassword(workshopTypeId, code) {
     if (!workshopTypeId) return false;
     const result = await wixData.query('StudioUpsellSettings').eq('workshopType', workshopTypeId).find(SA);
-    const stored = result.items?.[0]?.openAmountPassword ? String(result.items[0].openAmountPassword).trim() : '';
-    if (!stored) return true;
-    return String(code || '').trim() === stored;
+    const row = result.items?.[0];
+    if (!row?.allowOpenAmount) return false;
+    return String(code || '').trim() === getEffectiveOpenAmountPassword(row);
 }
 
 function mapAddOnRow(item) {

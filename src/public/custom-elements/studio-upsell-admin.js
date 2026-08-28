@@ -577,11 +577,6 @@ class StudioUpsellAdminElement extends HTMLElement {
                     <div class="sa-field"><label class="sa-label">סכום מינימלי</label><input class="sa-input" type="number" min="0" id="saSettingOpenMin" value="${escapeHtml(current.openAmountMin ?? 0)}" /></div>
                     <div class="sa-field"><label class="sa-label">סכום מקסימלי</label><input class="sa-input" type="number" min="0" id="saSettingOpenMax" value="${escapeHtml(current.openAmountMax ?? '')}" /></div>
                 </div>
-                <div class="sa-field" style="margin-bottom:16px;">
-                    <label class="sa-label">סיסמה לסכום פתוח (אופציונלי)</label>
-                    <input class="sa-input" type="text" id="saSettingOpenPassword" placeholder="השאירו ריק כדי לאפשר לכל לקוח ללא קוד" value="${escapeHtml(current.openAmountPassword || '')}" />
-                    <div class="sa-hint">אם מוגדרת סיסמה, לקוח שבוחר "סכום פתוח" יתבקש לפנות לעובד/ת שתזין את הקוד כדי להמשיך.</div>
-                </div>
 
                 <div class="sa-checkbox-row" style="margin-bottom:12px;"><input type="checkbox" id="saSettingStaffCode" ${current.showStaffCode ? 'checked' : ''} /><label for="saSettingStaffCode">הצג קוד אימות לצוות בדף התודה <span style="color:#9ca3af; font-size:11px; font-weight:500;">(סיסמה: 1326)</span></label></div>
                 <div class="sa-checkbox-row" style="margin-bottom:20px;"><input type="checkbox" id="saSettingPrint" ${current.printOnPayment !== false ? 'checked' : ''} /><label for="saSettingPrint">הוסף לתור הדפסה עם קבלת תשלום</label></div>
@@ -820,7 +815,6 @@ class StudioUpsellAdminElement extends HTMLElement {
                 openAmountLabel: root.querySelector('#saSettingOpenLabel')?.value || 'סכום פתוח',
                 openAmountMin: Number(root.querySelector('#saSettingOpenMin')?.value) || 0,
                 openAmountMax: openMax === '' ? null : Number(openMax),
-                openAmountPassword: (root.querySelector('#saSettingOpenPassword')?.value || '').trim(),
                 showStaffCode: !!root.querySelector('#saSettingStaffCode')?.checked,
                 printOnPayment: !!root.querySelector('#saSettingPrint')?.checked,
             });

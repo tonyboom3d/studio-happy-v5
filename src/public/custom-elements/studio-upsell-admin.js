@@ -882,17 +882,17 @@ class StudioUpsellAdminElement extends HTMLElement {
                     <input type="checkbox" id="saSettingCollapsed" ${collapsed ? 'checked' : ''} />
                     <label for="saSettingCollapsed" class="sa-setting-label-row">
                         סגירת תוספות הסדנה לתצוגה ממוזערת כברירת מחדל
-                        ${tip('כשמופעל, קטע "תוספות לסדנה" יופיע ללקוח סגור (עם מספר הפריטים בסוגריים) — לחיצה על הכותרת תפתח אותו. שימושי לסדנאות עם קטלוג ארוך.')}
+                        ${tip('כשמופעל, קטע "תוספות לסדנה" (וגם קטגוריות התוספות הכלליות) יופיעו ללקוח סגורים לגמרי, עם מספר הפריטים בסוגריים — לחיצה על הכותרת תפתח אותם. שים לב: אם מוגדרת למטה "כמות מוצרים להצגה כברירת מחדל" גדולה מ-0, ההגדרה הזו לא תחול והפריטים יוצגו ישירות.')}
                     </label>
                 </div>
-                <div class="sa-hint" style="margin-bottom:16px;">כאשר מופעל, ההגדרה "כמות מוצרים להצגה כברירת מחדל" למטה לא רלוונטית עד לפתיחת הקטע.</div>
+                <div class="sa-hint" style="margin-bottom:16px;">אם מוגדרת "כמות מוצרים להצגה כברירת מחדל" שונה מ-0 למטה, הפריטים תמיד יוצגו ישירות (עם כפתור "הצג עוד") גם אם ההגדרה הזו מסומנת.</div>
 
                 <div class="sa-field" style="max-width:320px;">
-                    <label class="sa-label sa-setting-label-row">כמות מוצרים להצגה כברירת מחדל ${tip('מספר התוספים שיוצגו ללקוח מיד בקטע "תוספות לסדנה" (ובכל קטגוריה כללית שנפתחה). אם יש יותר, יופיע כפתור "הצג עוד". 0 = הצג את כל הפריטים.')}</label>
-                    <input class="sa-input" type="number" min="0" id="saSettingVisibleCount" value="${escapeHtml(current.catalogDefaultVisibleCount ?? 0)}" placeholder="0 = הצג הכל" />
+                    <label class="sa-label sa-setting-label-row">כמות מוצרים להצגה כברירת מחדל ${tip('מספר התוספים שיוצגו ללקוח מיד בכל קטע (תוספות לסדנה, וכל קטגוריה כללית) — ללא צורך לפתוח אותו. אם יש יותר, יופיע כפתור "הצג עוד". 0 = השתמש בהגדרת המזעור למעלה.')}</label>
+                    <input class="sa-input" type="number" min="0" id="saSettingVisibleCount" value="${escapeHtml(current.catalogDefaultVisibleCount ?? 0)}" placeholder="0 = הגדרת המזעור למעלה" />
                 </div>
 
-                <p class="sa-hint" style="margin-top:16px;">תוספות כלליות (קטגוריות כמו אוכל/שתייה) תמיד מוצגות ללקוח בקטע ממוזער עם מספר הפריטים בסוגריים, ונפתחות בלחיצה.</p>
+                <p class="sa-hint" style="margin-top:16px;">ההגדרות האלה חלות באופן זהה על תוספות הסדנה ועל כל קטגוריית תוספות כלליות (למשל אוכל/שתייה); קטגוריות כלליות תמיד מציגות את מספר הפריטים בסוגריים ליד השם.</p>
 
                 <button class="sa-btn sa-btn-primary" id="saDisplaySaveBtn" style="margin-top:12px;">שמירת הגדרות תצוגה</button>
             </div>

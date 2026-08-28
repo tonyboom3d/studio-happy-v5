@@ -73,6 +73,11 @@ const STYLE = `
         margin: 0 0 20px;
         line-height: 1.5;
     }
+    .su-orderer-top {
+        font-size: 14px; color: #374151; margin: -12px 0 18px;
+        background: #f3f4ff; border-radius: 10px; padding: 8px 12px;
+    }
+    .su-orderer-top strong { color: #4338ca; }
     .su-label {
         display: block;
         font-size: 13px;
@@ -709,29 +714,37 @@ class StudioUpsellElement extends HTMLElement {
     }
 
     _renderCollapsibleSection(id, title, addOns, opts) {
-        const { collapsibleHeader = false, defaultVisibleCount = 0 } = opts || {};
-        const state = this._getSectionState(id, collapsibleHeader);
+        const { collapsedByDefault = false, defaultVisibleCount = 0, showCount = false } = opts || {};
         const count = addOns.length;
+        const countSuffix = showCount ? ` <span class="su-catalog-section-count">(${count})</span>` : '';
 
-        const header = collapsibleHeader
-            ? `<h2 class="su-catalog-section-title su-catalog-section-title-clickable" data-toggle-section="${id}">
+        // Precedence: an explicit visible-count setting (>0) always wins over the
+        // "collapse to accordion" toggle — items are shown immediately, capped to
+        // N with a "show more" button, never hidden behind a click-to-expand header.
+        if (defaultVisibleCount > 0) {
+            const state = this._getSectionState(id, false);
+            const header = `<h2 class="su-catalog-section-title">${escapeHtml(title)}${countSuffix}</h2>`;
+            let itemsToShow = addOns;
+            let showMoreBtn = '';
+            if (!state.showAll && addOns.length > defaultVisibleCount) {
+                itemsToShow = addOns.slice(0, defaultVisibleCount);
+                showMoreBtn = `<button type="button" class="su-btn su-btn-ghost su-show-more-btn" data-show-more-section="${id}">הצג עוד ${addOns.length - defaultVisibleCount} תוספות</button>`;
+            }
+            return `<div class="su-catalog-section">${header}${itemsToShow.map((a) => this._renderAddonRow(a)).join('')}${showMoreBtn}</div>`;
+        }
+
+        if (collapsedByDefault) {
+            const state = this._getSectionState(id, true);
+            const header = `<h2 class="su-catalog-section-title su-catalog-section-title-clickable" data-toggle-section="${id}">
                     <span>${escapeHtml(title)} <span class="su-catalog-section-count">(${count})</span></span>
                     <span class="su-catalog-section-arrow">${state.expanded ? '▲' : '▼'}</span>
-                </h2>`
-            : `<h2 class="su-catalog-section-title">${escapeHtml(title)}</h2>`;
-
-        if (collapsibleHeader && !state.expanded) {
-            return `<div class="su-catalog-section">${header}</div>`;
+                </h2>`;
+            if (!state.expanded) return `<div class="su-catalog-section">${header}</div>`;
+            return `<div class="su-catalog-section">${header}${addOns.map((a) => this._renderAddonRow(a)).join('')}</div>`;
         }
 
-        let itemsToShow = addOns;
-        let showMoreBtn = '';
-        if (defaultVisibleCount > 0 && !state.showAll && addOns.length > defaultVisibleCount) {
-            itemsToShow = addOns.slice(0, defaultVisibleCount);
-            showMoreBtn = `<button type="button" class="su-btn su-btn-ghost su-show-more-btn" data-show-more-section="${id}">הצג עוד ${addOns.length - defaultVisibleCount} תוספות</button>`;
-        }
-
-        return `<div class="su-catalog-section">${header}${itemsToShow.map((a) => this._renderAddonRow(a)).join('')}${showMoreBtn}</div>`;
+        const header = `<h2 class="su-catalog-section-title">${escapeHtml(title)}${countSuffix}</h2>`;
+        return `<div class="su-catalog-section">${header}${addOns.map((a) => this._renderAddonRow(a)).join('')}</div>`;
     }
 
     _renderCatalog() {
@@ -740,19 +753,22 @@ class StudioUpsellElement extends HTMLElement {
         const w = s.selectedWorkshop || {};
         const workshopItems = workshopAddOns || [];
         const visibleCount = Number(settings?.catalogDefaultVisibleCount) || 0;
+        const collapsedByDefault = !!settings?.catalogCollapsedByDefault;
 
         const generalBlocks = (generalSections || [])
             .filter((sec) => (sec.addOns || []).length)
             .map((sec) => this._renderCollapsibleSection(`general_${sec.id}`, `${sec.title}`, sec.addOns, {
-                collapsibleHeader: true,
+                collapsedByDefault,
                 defaultVisibleCount: visibleCount,
+                showCount: true,
             }))
             .join('');
 
         const workshopBlock = workshopItems.length
             ? this._renderCollapsibleSection('workshop', 'תוספות לסדנה', workshopItems, {
-                collapsibleHeader: !!settings?.catalogCollapsedByDefault,
+                collapsedByDefault,
                 defaultVisibleCount: visibleCount,
+                showCount: false,
             })
             : '';
 
@@ -769,12 +785,14 @@ class StudioUpsellElement extends HTMLElement {
 
         const total = this._computeTotal();
         const canCheckout = this._hasSelectedItems();
+        const ordererName = (s.customerName || w.organizerName || '').trim();
 
         return h`
             <div class="su-card">
                 ${renderSteps(2)}
                 <h1 class="su-title">${escapeHtml(w.workshopTitle || 'תוספות לסדנה')}</h1>
                 <p class="su-subtitle">${escapeHtml(w.startLabel ? `סדנה בשעה ${w.startLabel}` : 'בחרו תוספות לתשלום')}</p>
+                ${ordererName ? `<p class="su-orderer-top">הזמנה בוצע ע"י <strong>${escapeHtml(ordererName)}</strong></p>` : ''}
                 ${s.error ? `<div class="su-error">${escapeHtml(s.error)}</div>` : ''}
                 ${hasAny ? `${workshopBlock}${generalBlocks}` : '<p class="su-subtitle">אין תוספות זמינות לסדנה זו כרגע.</p>'}
                 ${identityBlock}

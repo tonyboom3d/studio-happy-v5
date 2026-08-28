@@ -109,6 +109,10 @@ export const EMPLOYEE_ACTION_KEYS = {
         label: 'התראה למנהלים על פריטים ממתינים לאישור (קישור מרוכז)',
         placeholders: ['count', 'pendingLink'],
     },
+    addon_out_of_stock: {
+        label: 'התראת מלאי — תוסף בסטודיו נגמר (אוטומטי)',
+        placeholders: ['addOnTitle', 'workshopTitle', 'remainingStock'],
+    },
 };
 
 /** Replaces {{key}} tokens; unknown/missing vars render as empty string. */

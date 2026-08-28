@@ -15,12 +15,38 @@ import wixData from 'wix-data';
 import { checkout } from '@wix/ecom';
 import { auth } from '@wix/essentials';
 import { randomBytes } from 'crypto';
+import { getPurchasedQuantityForCustomer } from './inventory.js';
 
 const SA = { suppressAuth: true };
 const elevatedCreateCheckout = auth.elevate(checkout.createCheckout);
 
 function generateToken() {
     return randomBytes(16).toString('hex');
+}
+
+/** Re-validates stock + "per customer" caps server-side (source of truth) right before checkout creation. */
+async function assertItemsAvailable(items, customerPhone) {
+    const withQty = (items || []).filter((i) => i?.id && Number(i.quantity) > 0);
+    for (const item of withQty) {
+        const addOn = await wixData.get('StudioAddOns', item.id, SA).catch(() => null);
+        if (!addOn) continue;
+
+        if (addOn.inventoryManaged) {
+            const stock = Number(addOn.stockQuantity) || 0;
+            if (Number(item.quantity) > stock) {
+                throw new Error(`אין מלאי מספיק עבור "${addOn.title || item.title}" (במלאי: ${stock}).`);
+            }
+        }
+
+        if (addOn.maxQuantityMode === 'perCustomer') {
+            const max = Number(addOn.maxQuantity) || 0;
+            const purchased = await getPurchasedQuantityForCustomer(addOn._id, customerPhone);
+            if (purchased + Number(item.quantity) > max) {
+                const remaining = Math.max(0, max - purchased);
+                throw new Error(`ניתן לרכוש עד ${max} יחידות של "${addOn.title || item.title}" לכל מזמין (נותרו ${remaining}).`);
+            }
+        }
+    }
 }
 
 function buildDescriptionLines(workshopTitle) {
@@ -62,6 +88,8 @@ export async function createAddOnCheckout(params) {
         staffName = null,
         resumeUrl = null,
     } = params || {};
+
+    await assertItemsAvailable(items, customerPhone);
 
     const descriptionLines = buildDescriptionLines(workshopTitle);
 

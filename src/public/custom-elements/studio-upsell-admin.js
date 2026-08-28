@@ -5,13 +5,18 @@
  *
  * Top-level tabs: סדנאות (workshop cards grid → per-workshop detail with
  * הגדרות + תוספים sub-tabs, plus a "תוספות כלליות" card for add-ons shown
- * alongside every workshop), עסקאות (transaction history), תור הדפסה
- * (print queue).
+ * alongside every workshop), מלאי (flat inventory management — unmanaged by
+ * default, opt into a numeric stock + out-of-stock WhatsApp alert per
+ * add-on), עסקאות (transaction history), תור הדפסה (print queue).
  *
  * Add-on images are uploaded to the Wix Media Manager (never a free-text
  * "open" URL) — see backend/studioUpsell/mediaUpload.js. The canonical
  * `wix:image://...` value round-trips through `image`; `imagePreviewUrl`
  * is a derived https URL used only for <img> previews.
+ *
+ * כמות מקסימלית per add-on can be either "פר הזמנה" (per checkout, default)
+ * or "פר מזמין" (lifetime cap per customer phone) — see
+ * backend/studioUpsell/inventory.js getPurchasedQuantityForCustomer.
  *
  * הוראות התקנה בוויקס:
  * 1. בעורך וויקס בעמוד "ניהול מערכת תשלום בסטודיו": הוסף רכיב "Custom Element".
@@ -99,6 +104,10 @@ const STYLE = `
     .sa-image-preview { width: 64px; height: 64px; border-radius: 10px; object-fit: cover; background: #f1f2f4; flex-shrink: 0; }
     .sa-image-preview-empty { display: flex; align-items: center; justify-content: center; font-size: 9px; color: #9ca3af; text-align: center; line-height: 1.2; }
     .sa-image-picker-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .sa-segmented { display: flex; border: 1.5px solid #e5e7eb; border-radius: 9px; overflow: hidden; width: fit-content; background: #f9fafb; }
+    .sa-seg-btn { padding: 9px 14px; border: none; background: transparent; font-family: inherit; font-size: 12px; font-weight: 700; color: #6b7280; cursor: pointer; }
+    .sa-seg-btn.active { background: #4f46e5; color: #fff; }
+    .sa-seg-btn:disabled { opacity: .5; cursor: not-allowed; }
 `;
 
 function escapeHtml(str) {
@@ -139,7 +148,7 @@ class StudioUpsellAdminElement extends HTMLElement {
         this._state = {
             loaded: false,
             accessDenied: false,
-            activeTab: 'workshops', // workshops | transactions | print
+            activeTab: 'workshops', // workshops | inventory | transactions | print
             workshopTypes: [],
             addOns: [],
             settings: [],
@@ -147,6 +156,8 @@ class StudioUpsellAdminElement extends HTMLElement {
             workshopSubTab: 'settings', // settings | addons (detail view only)
             editingAddOn: null,
             uploadingImage: false,
+            inventoryDrafts: {}, // { [addOnId]: { inventoryManaged, stockQuantity, notifyOutOfStock } } — unsaved edits in the מלאי tab
+            transactionFilters: { status: '', workshopTypeId: '', addOnId: '', date: '' },
             transactions: null,
             printQueue: null,
             toast: null,
@@ -185,8 +196,49 @@ class StudioUpsellAdminElement extends HTMLElement {
         setTimeout(() => { s.toast = null; this.render(); }, 3000);
     }
 
+    /** Reads the currently-rendered add-on form's inputs into state before any render() call that would otherwise wipe unsaved typing. */
+    _syncEditingAddOnFromDom() {
+        const s = this._state;
+        if (!s.editingAddOn) return;
+        const root = this.querySelector('#saRoot');
+        if (!root) return;
+        const get = (id) => root.querySelector(id);
+        const title = get('#saAddOnTitle'); if (title) s.editingAddOn.title = title.value;
+        const price = get('#saAddOnPrice'); if (price) s.editingAddOn.price = price.value;
+        const maxQty = get('#saAddOnMaxQty'); if (maxQty) s.editingAddOn.maxQuantity = maxQty.value;
+        const sortOrder = get('#saAddOnSortOrder'); if (sortOrder) s.editingAddOn.sortOrder = sortOrder.value;
+        const description = get('#saAddOnDescription'); if (description) s.editingAddOn.description = description.value;
+        const active = get('#saAddOnActive'); if (active) s.editingAddOn.active = active.checked;
+    }
+
+    /** Returns the current unsaved (or default) inventory settings for one add-on row in the מלאי tab. */
+    _getInventoryDraft(addOn) {
+        const s = this._state;
+        return s.inventoryDrafts[addOn._id] || {
+            inventoryManaged: !!addOn.inventoryManaged,
+            stockQuantity: addOn.stockQuantity ?? 0,
+            notifyOutOfStock: !!addOn.notifyOutOfStock,
+        };
+    }
+
+    /** Reads a מלאי-tab row's current stock/notify inputs into the draft before a re-render (e.g. toggling managed/unmanaged). */
+    _syncInventoryDraftFromDom(root, addOnId) {
+        const s = this._state;
+        const addOn = s.addOns.find((a) => a._id === addOnId) || { _id: addOnId };
+        const draft = this._getInventoryDraft(addOn);
+        const stockInput = root.querySelector(`#saInvStock_${addOnId}`);
+        const notifyInput = root.querySelector(`#saInvNotify_${addOnId}`);
+        s.inventoryDrafts[addOnId] = {
+            ...draft,
+            stockQuantity: stockInput ? stockInput.value : draft.stockQuantity,
+            notifyOutOfStock: notifyInput ? notifyInput.checked : draft.notifyOutOfStock,
+        };
+        return s.inventoryDrafts[addOnId];
+    }
+
     _handleData({ type, result }) {
         const s = this._state;
+        this._syncEditingAddOnFromDom();
 
         if (result && result.error === 'ACCESS_DENIED') {
             s.accessDenied = true;
@@ -218,6 +270,7 @@ class StudioUpsellAdminElement extends HTMLElement {
 
         if (type === 'saveAddOn' || type === 'deleteAddOn') {
             s.editingAddOn = null;
+            s.inventoryDrafts = {};
             this._dispatch('load', {});
             this._toast(type === 'deleteAddOn' ? 'התוסף נמחק' : 'התוסף נשמר');
             return;
@@ -242,11 +295,25 @@ class StudioUpsellAdminElement extends HTMLElement {
         this.render();
     }
 
+    /** Converts the transactions filter bar's UI state (single date, status, etc.) into a listAddOnTransactions payload. */
+    _buildTransactionFilterPayload() {
+        const f = this._state.transactionFilters;
+        const payload = {};
+        if (f.status) payload.status = f.status;
+        if (f.workshopTypeId) payload.workshopTypeId = f.workshopTypeId;
+        if (f.addOnId) payload.addOnId = f.addOnId;
+        if (f.date) {
+            payload.dateFrom = `${f.date}T00:00:00`;
+            payload.dateTo = `${f.date}T23:59:59`;
+        }
+        return payload;
+    }
+
     _switchTab(tab) {
         const s = this._state;
         if (tab === 'workshops' && s.activeTab !== 'workshops') s.selectedWorkshopTypeId = null;
         s.activeTab = tab;
-        if (tab === 'transactions' && s.transactions === null) this._dispatch('loadTransactions', {});
+        if (tab === 'transactions' && s.transactions === null) this._dispatch('loadTransactions', this._buildTransactionFilterPayload());
         if (tab === 'print' && s.printQueue === null) this._dispatch('loadPrintQueue', {});
         this.render();
     }
@@ -288,6 +355,7 @@ class StudioUpsellAdminElement extends HTMLElement {
 
         const tabs = [
             ['workshops', 'סדנאות'],
+            ['inventory', 'מלאי'],
             ['transactions', 'עסקאות'],
             ['print', 'תור הדפסה'],
         ].map(([id, label]) => `<button class="sa-tab ${s.activeTab === id ? 'active' : ''}" data-tab="${id}">${label}</button>`).join('');
@@ -295,6 +363,8 @@ class StudioUpsellAdminElement extends HTMLElement {
         let body = '';
         if (s.activeTab === 'workshops') {
             body = s.selectedWorkshopTypeId ? this._renderWorkshopDetail() : this._renderWorkshopsGrid();
+        } else if (s.activeTab === 'inventory') {
+            body = this._renderInventoryTab();
         } else if (s.activeTab === 'transactions') {
             body = this._renderTransactionsTab();
         } else if (s.activeTab === 'print') {
@@ -370,12 +440,17 @@ class StudioUpsellAdminElement extends HTMLElement {
 
         const rows = addOnsForType.map((a) => {
             const thumb = a.imagePreviewUrl || a.image;
+            const isActive = a.active !== false;
+            const stockLabel = a.inventoryManaged
+                ? `<span class="sa-badge ${Number(a.stockQuantity) > 0 ? 'sa-badge-green' : 'sa-badge-red'}">${Number(a.stockQuantity) || 0} במלאי</span>`
+                : '<span class="sa-badge sa-badge-gray">ללא הגבלה</span>';
             return `
             <tr>
                 <td>${thumb ? `<img class="sa-thumb" src="${escapeHtml(thumb)}" />` : '<div class="sa-thumb"></div>'}</td>
                 <td>${escapeHtml(a.title)}</td>
                 <td>${formatIls(a.price)}</td>
-                <td><span class="sa-badge ${a.active !== false ? 'sa-badge-green' : 'sa-badge-gray'}">${a.active !== false ? 'פעיל' : 'כבוי'}</span></td>
+                <td>${stockLabel}</td>
+                <td><button class="sa-badge ${isActive ? 'sa-badge-green' : 'sa-badge-gray'}" style="border:none;cursor:pointer;" data-toggle-active="${a._id}" data-active-value="${isActive ? 'false' : 'true'}" title="לחצו להחלפת מצב">${isActive ? 'פעיל' : 'כבוי'}</button></td>
                 <td>${Number(a.sortOrder) || 0}</td>
                 <td class="sa-actions-cell">
                     <button class="sa-btn sa-btn-ghost" data-edit-addon="${a._id}">עריכה</button>
@@ -386,14 +461,24 @@ class StudioUpsellAdminElement extends HTMLElement {
         }).join('');
 
         const previewUrl = editing ? (editing.imagePreviewUrl || editing.image || '') : '';
+        const maxQtyMode = editing?.maxQuantityMode === 'perCustomer' ? 'perCustomer' : 'perOrder';
         const formHtml = editing ? `
             <div class="sa-card">
                 <h3 class="sa-section-title">${editing._id ? 'עריכת תוסף' : 'תוסף חדש'}</h3>
                 <div class="sa-row">
                     <div class="sa-field"><label class="sa-label">שם</label><input class="sa-input" id="saAddOnTitle" value="${escapeHtml(editing.title || '')}" /></div>
                     <div class="sa-field"><label class="sa-label">מחיר</label><input class="sa-input" type="number" min="0" id="saAddOnPrice" value="${escapeHtml(editing.price ?? 0)}" /></div>
-                    <div class="sa-field"><label class="sa-label">כמות מקסימלית</label><input class="sa-input" type="number" min="1" id="saAddOnMaxQty" value="${escapeHtml(editing.maxQuantity ?? 10)}" /></div>
                     <div class="sa-field"><label class="sa-label">סדר תצוגה</label><input class="sa-input" type="number" id="saAddOnSortOrder" value="${escapeHtml(editing.sortOrder ?? 0)}" /></div>
+                </div>
+                <div class="sa-row" style="margin-top:10px;">
+                    <div class="sa-field">
+                        <label class="sa-label">הגבלת כמות</label>
+                        <div class="sa-segmented">
+                            <button type="button" class="sa-seg-btn ${maxQtyMode === 'perOrder' ? 'active' : ''}" data-maxqty-mode="perOrder">פר הזמנה</button>
+                            <button type="button" class="sa-seg-btn ${maxQtyMode === 'perCustomer' ? 'active' : ''}" data-maxqty-mode="perCustomer">פר מזמין</button>
+                        </div>
+                    </div>
+                    <div class="sa-field"><label class="sa-label">כמות מקסימלית (${maxQtyMode === 'perCustomer' ? 'פר מזמין' : 'פר הזמנה'})</label><input class="sa-input" type="number" min="1" id="saAddOnMaxQty" value="${escapeHtml(editing.maxQuantity ?? 10)}" /></div>
                 </div>
                 <div class="sa-field" style="margin-top:10px;"><label class="sa-label">תיאור</label><textarea class="sa-textarea" id="saAddOnDescription">${escapeHtml(editing.description || '')}</textarea></div>
                 <div class="sa-field" style="margin-top:10px;">
@@ -422,12 +507,54 @@ class StudioUpsellAdminElement extends HTMLElement {
                 </div>
                 ${addOnsForType.length ? `
                     <table class="sa-table">
-                        <thead><tr><th></th><th>שם</th><th>מחיר</th><th>סטטוס</th><th>סדר</th><th></th></tr></thead>
+                        <thead><tr><th></th><th>שם</th><th>מחיר</th><th>מלאי</th><th>סטטוס</th><th>סדר</th><th></th></tr></thead>
                         <tbody>${rows}</tbody>
                     </table>
                 ` : '<div class="sa-empty">אין תוספים עדיין.</div>'}
             </div>
             ${formHtml}
+        `;
+    }
+
+    _renderInventoryTab() {
+        const s = this._state;
+        if (!s.addOns.length) return `<div class="sa-card sa-empty">אין תוספים עדיין.</div>`;
+
+        const titleById = new Map(s.workshopTypes.map((w) => [w.id, w.title]));
+
+        const rows = [...s.addOns]
+            .sort((a, b) => (a.title || '').localeCompare(b.title || '', 'he'))
+            .map((a) => {
+                const workshopLabel = a.workshopType === GENERAL_WORKSHOP_TYPE ? 'תוספות כלליות' : (titleById.get(a.workshopType) || '—');
+                const draft = this._getInventoryDraft(a);
+                const managed = !!draft.inventoryManaged;
+                const thumb = a.imagePreviewUrl || a.image;
+                return `
+                <tr>
+                    <td>${thumb ? `<img class="sa-thumb" src="${escapeHtml(thumb)}" />` : '<div class="sa-thumb"></div>'}</td>
+                    <td>${escapeHtml(a.title)}</td>
+                    <td>${escapeHtml(workshopLabel)}</td>
+                    <td>
+                        <div class="sa-segmented">
+                            <button type="button" class="sa-seg-btn ${!managed ? 'active' : ''}" data-inv-managed="${a._id}" data-inv-value="false">לא מנוהל</button>
+                            <button type="button" class="sa-seg-btn ${managed ? 'active' : ''}" data-inv-managed="${a._id}" data-inv-value="true">מנוהל</button>
+                        </div>
+                    </td>
+                    <td><input class="sa-input" type="number" min="0" style="width:90px;" id="saInvStock_${a._id}" value="${escapeHtml(draft.stockQuantity ?? 0)}" ${managed ? '' : 'disabled'} /></td>
+                    <td class="sa-checkbox-row" style="justify-content:center;"><input type="checkbox" id="saInvNotify_${a._id}" ${draft.notifyOutOfStock ? 'checked' : ''} ${managed ? '' : 'disabled'} /></td>
+                    <td><button class="sa-btn sa-btn-primary" data-inv-save="${a._id}">שמירה</button></td>
+                </tr>
+            `;
+            }).join('');
+
+        return `
+            <div class="sa-card">
+                <p style="font-size:12px;color:#6b7280;margin:0 0 14px;">כל תוסף חדש נוצר עם מלאי "לא מנוהל" (ללא הגבלה). ניתן להעביר תוסף למלאי מנוהל ולהזין כמות — כל רכישה תפחית מהמלאי אוטומטית, וניתן לבחור לקבל התראת וואטסאפ כשהמלאי מסתיים.</p>
+                <table class="sa-table">
+                    <thead><tr><th></th><th>שם</th><th>סדנה</th><th>ניהול מלאי</th><th>כמות במלאי</th><th>התראה בסיום מלאי</th><th></th></tr></thead>
+                    <tbody>${rows}</tbody>
+                </table>
+            </div>
         `;
     }
 
@@ -454,10 +581,45 @@ class StudioUpsellAdminElement extends HTMLElement {
         `;
     }
 
+    _renderTransactionFiltersBar() {
+        const s = this._state;
+        const f = s.transactionFilters;
+        const statusOptions = [
+            ['', 'כל הסטטוסים'],
+            ['pending_payment', 'ממתין לתשלום'],
+            ['paid', 'שולם'],
+            ['abandoned', 'ננטש'],
+        ].map(([v, label]) => `<option value="${v}" ${f.status === v ? 'selected' : ''}>${label}</option>`).join('');
+
+        const workshopOptions = [
+            ['', 'כל הסדנאות'],
+            ...s.workshopTypes.map((w) => [w.id, w.title]),
+        ].map(([v, label]) => `<option value="${escapeHtml(v)}" ${f.workshopTypeId === v ? 'selected' : ''}>${escapeHtml(label)}</option>`).join('');
+
+        const addOnOptions = [
+            ['', 'כל התוספים'],
+            ...s.addOns.map((a) => [a._id, a.title]),
+        ].map(([v, label]) => `<option value="${escapeHtml(v)}" ${f.addOnId === v ? 'selected' : ''}>${escapeHtml(label)}</option>`).join('');
+
+        return `
+            <div class="sa-card" style="margin-bottom:16px;">
+                <div class="sa-row">
+                    <div class="sa-field"><label class="sa-label">סטטוס</label><select class="sa-select" id="saFilterStatus">${statusOptions}</select></div>
+                    <div class="sa-field"><label class="sa-label">סדנה</label><select class="sa-select" id="saFilterWorkshop">${workshopOptions}</select></div>
+                    <div class="sa-field"><label class="sa-label">תוסף</label><select class="sa-select" id="saFilterAddOn">${addOnOptions}</select></div>
+                    <div class="sa-field"><label class="sa-label">תאריך</label><input class="sa-input" type="date" id="saFilterDate" value="${escapeHtml(f.date || '')}" /></div>
+                    <div class="sa-field" style="flex:0;"><button class="sa-btn sa-btn-ghost" id="saFilterClearBtn">איפוס סינון</button></div>
+                </div>
+            </div>
+        `;
+    }
+
     _renderTransactionsTab() {
         const s = this._state;
-        if (s.transactions === null) return `<div class="sa-card sa-loading"><div class="sa-spinner"></div>טוען עסקאות...</div>`;
-        if (!s.transactions.length) return `<div class="sa-card sa-empty">אין עסקאות עדיין.</div>`;
+        const filtersBar = this._renderTransactionFiltersBar();
+
+        if (s.transactions === null) return `${filtersBar}<div class="sa-card sa-loading"><div class="sa-spinner"></div>טוען עסקאות...</div>`;
+        if (!s.transactions.length) return `${filtersBar}<div class="sa-card sa-empty">אין עסקאות התואמות לסינון.</div>`;
 
         const rows = s.transactions.map((t) => {
             const status = STATUS_LABELS[t.status] || { label: t.status, cls: 'sa-badge-gray' };
@@ -477,6 +639,7 @@ class StudioUpsellAdminElement extends HTMLElement {
         }).join('');
 
         return `
+            ${filtersBar}
             <div class="sa-card">
                 <table class="sa-table">
                     <thead><tr><th>תאריך</th><th>סדנה</th><th>לקוח</th><th>פריטים</th><th>סכום</th><th>סטטוס</th><th>מקור</th></tr></thead>
@@ -543,8 +706,16 @@ class StudioUpsellAdminElement extends HTMLElement {
 
         const newAddOnBtn = root.querySelector('#saAddOnNewBtn');
         if (newAddOnBtn) newAddOnBtn.addEventListener('click', () => {
-            s.editingAddOn = { workshopType: s.selectedWorkshopTypeId, active: true, sortOrder: s.addOns.filter(a => a.workshopType === s.selectedWorkshopTypeId).length };
+            s.editingAddOn = { workshopType: s.selectedWorkshopTypeId, active: true, maxQuantityMode: 'perOrder', sortOrder: s.addOns.filter(a => a.workshopType === s.selectedWorkshopTypeId).length };
             this.render();
+        });
+
+        root.querySelectorAll('[data-maxqty-mode]').forEach((btn) => {
+            btn.addEventListener('click', () => {
+                this._syncEditingAddOnFromDom();
+                if (s.editingAddOn) s.editingAddOn.maxQuantityMode = btn.getAttribute('data-maxqty-mode');
+                this.render();
+            });
         });
 
         root.querySelectorAll('[data-edit-addon]').forEach((btn) => {
@@ -562,6 +733,14 @@ class StudioUpsellAdminElement extends HTMLElement {
             });
         });
 
+        root.querySelectorAll('[data-toggle-active]').forEach((btn) => {
+            btn.addEventListener('click', () => {
+                const id = btn.getAttribute('data-toggle-active');
+                const active = btn.getAttribute('data-active-value') === 'true';
+                this._dispatch('saveAddOn', { _id: id, active });
+            });
+        });
+
         const cancelBtn = root.querySelector('#saAddOnCancelBtn');
         if (cancelBtn) cancelBtn.addEventListener('click', () => { s.editingAddOn = null; this.render(); });
 
@@ -576,6 +755,7 @@ class StudioUpsellAdminElement extends HTMLElement {
             if (file.size > MAX_IMAGE_BYTES) { alert('התמונה גדולה מהמותר (מקסימום 8MB).'); return; }
             const reader = new FileReader();
             reader.onload = () => {
+                this._syncEditingAddOnFromDom();
                 s.uploadingImage = true;
                 this.render();
                 this._dispatch('uploadAddOnImage', { base64: reader.result, filename: file.name });
@@ -586,6 +766,7 @@ class StudioUpsellAdminElement extends HTMLElement {
 
         const imageRemoveBtn = root.querySelector('#saAddOnImageRemoveBtn');
         if (imageRemoveBtn) imageRemoveBtn.addEventListener('click', () => {
+            this._syncEditingAddOnFromDom();
             if (s.editingAddOn) {
                 s.editingAddOn.image = '';
                 s.editingAddOn.imagePreviewUrl = '';
@@ -602,6 +783,7 @@ class StudioUpsellAdminElement extends HTMLElement {
                 title: root.querySelector('#saAddOnTitle')?.value || '',
                 price: Number(root.querySelector('#saAddOnPrice')?.value) || 0,
                 maxQuantity: Number(root.querySelector('#saAddOnMaxQty')?.value) || 10,
+                maxQuantityMode: editing.maxQuantityMode === 'perCustomer' ? 'perCustomer' : 'perOrder',
                 sortOrder: Number(root.querySelector('#saAddOnSortOrder')?.value) || 0,
                 description: root.querySelector('#saAddOnDescription')?.value || '',
                 image: editing.image || '',
@@ -625,6 +807,53 @@ class StudioUpsellAdminElement extends HTMLElement {
                 showStaffCode: !!root.querySelector('#saSettingStaffCode')?.checked,
                 printOnPayment: !!root.querySelector('#saSettingPrint')?.checked,
             });
+        });
+
+        root.querySelectorAll('[data-inv-managed]').forEach((btn) => {
+            btn.addEventListener('click', () => {
+                const id = btn.getAttribute('data-inv-managed');
+                const value = btn.getAttribute('data-inv-value') === 'true';
+                const draft = this._syncInventoryDraftFromDom(root, id);
+                s.inventoryDrafts[id] = { ...draft, inventoryManaged: value };
+                this.render();
+            });
+        });
+
+        root.querySelectorAll('[data-inv-save]').forEach((btn) => {
+            btn.addEventListener('click', () => {
+                const id = btn.getAttribute('data-inv-save');
+                const draft = this._syncInventoryDraftFromDom(root, id);
+                this._dispatch('saveAddOn', {
+                    _id: id,
+                    inventoryManaged: !!draft.inventoryManaged,
+                    stockQuantity: Number(draft.stockQuantity) || 0,
+                    notifyOutOfStock: !!draft.notifyOutOfStock,
+                });
+            });
+        });
+
+        const applyTransactionFilters = () => {
+            s.transactions = null;
+            this.render();
+            this._dispatch('loadTransactions', this._buildTransactionFilterPayload());
+        };
+
+        const filterStatus = root.querySelector('#saFilterStatus');
+        if (filterStatus) filterStatus.addEventListener('change', () => { s.transactionFilters.status = filterStatus.value; applyTransactionFilters(); });
+
+        const filterWorkshop = root.querySelector('#saFilterWorkshop');
+        if (filterWorkshop) filterWorkshop.addEventListener('change', () => { s.transactionFilters.workshopTypeId = filterWorkshop.value; applyTransactionFilters(); });
+
+        const filterAddOn = root.querySelector('#saFilterAddOn');
+        if (filterAddOn) filterAddOn.addEventListener('change', () => { s.transactionFilters.addOnId = filterAddOn.value; applyTransactionFilters(); });
+
+        const filterDate = root.querySelector('#saFilterDate');
+        if (filterDate) filterDate.addEventListener('change', () => { s.transactionFilters.date = filterDate.value; applyTransactionFilters(); });
+
+        const filterClearBtn = root.querySelector('#saFilterClearBtn');
+        if (filterClearBtn) filterClearBtn.addEventListener('click', () => {
+            s.transactionFilters = { status: '', workshopTypeId: '', addOnId: '', date: '' };
+            applyTransactionFilters();
         });
 
         root.querySelectorAll('[data-print-id]').forEach((btn) => {

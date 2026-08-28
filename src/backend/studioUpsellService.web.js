@@ -58,8 +58,8 @@ export const lookupByPhone = webMethod(Permissions.Anyone, async (phone) => {
 });
 
 /** Add-on catalog + upsell settings (open amount, staff code, print toggle) for a workshop type. */
-export const getAddOnCatalogForWorkshop = webMethod(Permissions.Anyone, async (workshopTypeId) => {
-    return getAddOnCatalog(workshopTypeId);
+export const getAddOnCatalogForWorkshop = webMethod(Permissions.Anyone, async (workshopTypeId, customerPhone) => {
+    return getAddOnCatalog(workshopTypeId, customerPhone);
 });
 
 /** Creates the @wix/ecom checkout (digital-only line items) and logs the StudioAddOnOrders row. */
@@ -115,7 +115,15 @@ export const saveAddOn = webMethod(Permissions.SiteMember, async (addOn) => {
     if (addOn?._id) {
         const existing = await wixData.get('StudioAddOns', addOn._id, SA);
         if (!existing) throw new Error('Add-on not found');
-        return wixData.update('StudioAddOns', { ...existing, ...addOn }, SA);
+        const merged = { ...existing, ...addOn };
+        if (addOn.maxQuantity !== undefined) merged.maxQuantity = Number(addOn.maxQuantity) || 10;
+        if (addOn.maxQuantityMode !== undefined) merged.maxQuantityMode = addOn.maxQuantityMode === 'perCustomer' ? 'perCustomer' : 'perOrder';
+        if (addOn.stockQuantity !== undefined) {
+            merged.stockQuantity = Math.max(0, Number(addOn.stockQuantity) || 0);
+            // Manager restocked above 0 -> allow a fresh out-of-stock alert next time it runs out.
+            if (merged.stockQuantity > 0) merged.outOfStockNotifiedAt = null;
+        }
+        return wixData.update('StudioAddOns', merged, SA);
     }
 
     return wixData.insert('StudioAddOns', {
@@ -127,6 +135,11 @@ export const saveAddOn = webMethod(Permissions.SiteMember, async (addOn) => {
         active: addOn?.active !== false,
         sortOrder: Number(addOn?.sortOrder) || 0,
         maxQuantity: Number(addOn?.maxQuantity) || 10,
+        maxQuantityMode: addOn?.maxQuantityMode === 'perCustomer' ? 'perCustomer' : 'perOrder',
+        inventoryManaged: !!addOn?.inventoryManaged,
+        stockQuantity: addOn?.inventoryManaged ? Math.max(0, Number(addOn?.stockQuantity) || 0) : null,
+        notifyOutOfStock: !!addOn?.notifyOutOfStock,
+        outOfStockNotifiedAt: null,
     }, SA);
 });
 
@@ -162,12 +175,21 @@ export const saveUpsellSettings = webMethod(Permissions.SiteMember, async (setti
     }, SA);
 });
 
+/** filters: { status, workshopTypeId, dateFrom, dateTo, addOnId } — addOnId matches inside the `items` array, applied in-memory (wix-data can't filter nested array fields). */
 export const listAddOnTransactions = webMethod(Permissions.SiteMember, async (filters) => {
     await assertEmployeeAccess('manageAddOnsSystem');
-    let query = wixData.query('StudioAddOnOrders').descending('_createdDate').limit(100);
+    let query = wixData.query('StudioAddOnOrders').descending('_createdDate').limit(200);
     if (filters?.status) query = query.eq('status', filters.status);
+    if (filters?.workshopTypeId) query = query.eq('workshopTypeId', filters.workshopTypeId);
+    if (filters?.dateFrom) query = query.ge('_createdDate', new Date(filters.dateFrom));
+    if (filters?.dateTo) query = query.le('_createdDate', new Date(filters.dateTo));
+
     const result = await query.find(SA);
-    return result.items || [];
+    let items = result.items || [];
+    if (filters?.addOnId) {
+        items = items.filter((t) => Array.isArray(t.items) && t.items.some((i) => i.id === filters.addOnId));
+    }
+    return items;
 });
 
 export const listPrintQueue = webMethod(Permissions.SiteMember, async () => {

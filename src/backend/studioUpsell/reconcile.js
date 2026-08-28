@@ -14,6 +14,7 @@ import { auth } from '@wix/essentials';
 import { generateStaffCode } from './staffCode.js';
 import { enqueuePrintJob } from './printQueue.js';
 import { getSettingsForWorkshopType } from './catalog.js';
+import { applyInventoryForPaidOrder } from './inventory.js';
 
 const SA = { suppressAuth: true };
 const SA_CONSISTENT = { suppressAuth: true, consistentRead: true };
@@ -65,6 +66,8 @@ export async function confirmAddOnOrderFromEcom(addOnOrder, ecomOrder) {
     if (!settings || settings.printOnPayment !== false) {
         await enqueuePrintJob(updated);
     }
+
+    await applyInventoryForPaidOrder(updated);
 
     return updated;
 }

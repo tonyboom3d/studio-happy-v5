@@ -16,7 +16,7 @@ const ELEMENT_ID = '#studioUpsell1';
 // TODO: confirm these live URLs against the actual published page paths once
 // the pages are published (Wix page URLs don't always match the file name).
 const THANK_YOU_PAGE_URL = 'https://www.studiohappy.art/דף-תודה-מערכת-תשלומים-עצמאית';
-const QR_LANDING_URL = 'https://www.studiohappy.art/מערכת-תשלומים-עצמאית';
+const QR_LANDING_URL = 'https://www.studiohappy.art/self-payments';
 
 $w.onReady(function () {
     const el = $w(ELEMENT_ID);
@@ -62,7 +62,7 @@ async function handleAction(el, detail) {
             return;
         }
         case 'getAddOnCatalogForWorkshop': {
-            const result = await getAddOnCatalogForWorkshop(payload?.workshopTypeId);
+            const result = await getAddOnCatalogForWorkshop(payload?.workshopTypeId, payload?.customerPhone);
             pushData(el, type, requestId, result);
             return;
         }
@@ -81,7 +81,7 @@ async function handleAction(el, detail) {
             try {
                 await wixEcomFrontend.navigateToCheckoutPage(result.checkoutId, {
                     skipDeliveryStep: true,
-                    hideContinueBrowsingButton: true,
+                    hideContinueBrowsingButton: false,
                     overrideContinueBrowsingUrl: QR_LANDING_URL,
                     overrideThankYouPageUrl: thankYouUrl,
                 });

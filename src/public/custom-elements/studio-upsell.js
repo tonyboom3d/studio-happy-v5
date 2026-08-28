@@ -132,8 +132,12 @@ const STYLE = `
     }
     .su-addon-img {
         width: 52px; height: 52px; border-radius: 10px; object-fit: cover;
-        background: #f1f2f4; flex-shrink: 0;
+        background: #f1f2f4; flex-shrink: 0; display: block;
     }
+    .su-addon-img-btn {
+        border: none; padding: 0; background: none; flex-shrink: 0; cursor: zoom-in;
+    }
+    .su-addon-img-btn:focus-visible { outline: 2px solid #6366f1; outline-offset: 2px; border-radius: 10px; }
     .su-addon-info { flex: 1; min-width: 0; }
     .su-addon-title { font-weight: 700; font-size: 14px; color: #111827; }
     .su-addon-price { font-size: 13px; color: #6b7280; margin-top: 2px; }
@@ -168,6 +172,19 @@ const STYLE = `
     .su-select {
         width: 100%; padding: 12px 14px; border-radius: 12px; border: 1.5px solid #e5e7eb;
         font-size: 15px; font-family: inherit; margin-bottom: 14px; background: #f9fafb;
+    }
+    .su-image-lightbox-backdrop {
+        position: fixed; inset: 0; background: rgba(17, 24, 39, 0.88);
+        display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 20px;
+        cursor: zoom-out;
+    }
+    .su-image-lightbox-img {
+        max-width: min(92vw, 520px); max-height: 85vh; border-radius: 14px;
+        object-fit: contain; box-shadow: 0 8px 32px rgba(0,0,0,.35); cursor: default;
+    }
+    .su-image-lightbox-close {
+        position: absolute; top: 16px; left: 16px; width: 36px; height: 36px; border-radius: 50%;
+        border: none; background: rgba(255,255,255,.15); color: #fff; font-size: 18px; cursor: pointer;
     }
 `;
 
@@ -234,6 +251,7 @@ class StudioUpsellElement extends HTMLElement {
             customerPhone: '',
             error: null,
             submitting: false,
+            imagePreviewUrl: null,
         };
     }
 
@@ -338,7 +356,7 @@ class StudioUpsellElement extends HTMLElement {
         this._state.selectedWorkshop = workshop;
         this._state.screen = 'loading';
         this.render();
-        this._dispatch('getAddOnCatalogForWorkshop', { workshopTypeId: workshop.workshopTypeId });
+        this._dispatch('getAddOnCatalogForWorkshop', { workshopTypeId: workshop.workshopTypeId, customerPhone: this._state.phone || null });
     }
 
     _qty(addOnId) {
@@ -361,6 +379,14 @@ class StudioUpsellElement extends HTMLElement {
         const open = Number(this._state.openAmount) || 0;
         if (open > 0) total += open;
         return total;
+    }
+
+    /** True when the customer picked at least one add-on qty or entered an open amount — even if total is ₪0. */
+    _hasSelectedItems() {
+        const { addOns } = this._state.catalog;
+        const hasQty = (addOns || []).some((a) => this._qty(a.id) > 0);
+        const openAmount = Number(this._state.openAmount) || 0;
+        return hasQty || openAmount > 0;
     }
 
     _submitCheckout() {
@@ -449,7 +475,9 @@ class StudioUpsellElement extends HTMLElement {
             body = this._renderCatalog();
         }
 
-        root.innerHTML = body + (s.staffModalOpen ? this._renderStaffModal() : '');
+        root.innerHTML = body
+            + (s.staffModalOpen ? this._renderStaffModal() : '')
+            + (s.imagePreviewUrl ? this._renderImageLightbox() : '');
         this._bindEvents(root);
     }
 
@@ -518,16 +546,20 @@ class StudioUpsellElement extends HTMLElement {
 
         const rows = addOns.map((a) => h`
             <div class="su-addon-row">
-                ${a.image ? `<img class="su-addon-img" src="${escapeHtml(a.image)}" alt="" />` : '<div class="su-addon-img"></div>'}
+                ${a.image
+                    ? `<button type="button" class="su-addon-img-btn" data-preview-image="${escapeHtml(a.image)}" aria-label="הגדלת תמונה"><img class="su-addon-img" src="${escapeHtml(a.image)}" alt="" /></button>`
+                    : '<div class="su-addon-img"></div>'}
                 <div class="su-addon-info">
                     <div class="su-addon-title">${escapeHtml(a.title)}</div>
                     <div class="su-addon-price">${formatIls(a.price)}</div>
                 </div>
-                <div class="su-stepper">
-                    <button data-addon="${a.id}" data-delta="-1" ${this._qty(a.id) <= 0 ? 'disabled' : ''}>−</button>
-                    <span>${this._qty(a.id)}</span>
-                    <button data-addon="${a.id}" data-max="${a.maxQuantity}" data-delta="1" ${this._qty(a.id) >= a.maxQuantity ? 'disabled' : ''}>+</button>
-                </div>
+                ${a.soldOut
+                    ? '<span style="font-size:12px;font-weight:700;color:#9ca3af;background:#f1f2f4;padding:6px 10px;border-radius:8px;">אין במלאי</span>'
+                    : h`<div class="su-stepper">
+                        <button data-addon="${a.id}" data-delta="-1" ${this._qty(a.id) <= 0 ? 'disabled' : ''}>−</button>
+                        <span>${this._qty(a.id)}</span>
+                        <button data-addon="${a.id}" data-max="${a.maxQuantity}" data-delta="1" ${this._qty(a.id) >= a.maxQuantity ? 'disabled' : ''}>+</button>
+                    </div>`}
             </div>
         `).join('');
 
@@ -548,6 +580,7 @@ class StudioUpsellElement extends HTMLElement {
         ` : '';
 
         const total = this._computeTotal();
+        const canCheckout = this._hasSelectedItems();
 
         return h`
             <div class="su-card">
@@ -559,9 +592,20 @@ class StudioUpsellElement extends HTMLElement {
                 ${openAmountBlock}
                 ${identityBlock}
                 <div class="su-summary"><span>סה"כ לתשלום</span><span>${formatIls(total)}</span></div>
-                <button class="su-btn su-btn-primary" id="suCheckoutBtn" ${s.submitting || total <= 0 ? 'disabled' : ''}>
-                    ${s.submitting ? 'מעביר לתשלום...' : 'המשך לתשלום'}
+                <button class="su-btn su-btn-primary" id="suCheckoutBtn" ${s.submitting || !canCheckout ? 'disabled' : ''}>
+                    ${s.submitting ? 'מעביר לתשלום...' : (total > 0 ? 'המשך לתשלום' : 'המשך להזמנה')}
                 </button>
+            </div>
+        `;
+    }
+
+    _renderImageLightbox() {
+        const url = this._state.imagePreviewUrl;
+        if (!url) return '';
+        return h`
+            <div class="su-image-lightbox-backdrop" id="suImageLightbox">
+                <button type="button" class="su-image-lightbox-close" id="suImageLightboxClose" aria-label="סגירה">✕</button>
+                <img class="su-image-lightbox-img" src="${escapeHtml(url)}" alt="" />
             </div>
         `;
     }
@@ -660,6 +704,30 @@ class StudioUpsellElement extends HTMLElement {
                 const delta = Number(btn.getAttribute('data-delta'));
                 this._setQty(addOnId, max, delta);
             });
+        });
+
+        root.querySelectorAll('[data-preview-image]').forEach((btn) => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                s.imagePreviewUrl = btn.getAttribute('data-preview-image');
+                this.render();
+            });
+        });
+
+        const imageLightbox = root.querySelector('#suImageLightbox');
+        if (imageLightbox) {
+            imageLightbox.addEventListener('click', () => {
+                s.imagePreviewUrl = null;
+                this.render();
+            });
+            const lightboxImg = imageLightbox.querySelector('.su-image-lightbox-img');
+            if (lightboxImg) lightboxImg.addEventListener('click', (e) => e.stopPropagation());
+        }
+        const imageLightboxClose = root.querySelector('#suImageLightboxClose');
+        if (imageLightboxClose) imageLightboxClose.addEventListener('click', (e) => {
+            e.stopPropagation();
+            s.imagePreviewUrl = null;
+            this.render();
         });
 
         const openAmountInput = root.querySelector('#suOpenAmount');

@@ -10,6 +10,7 @@
  */
 import wixData from 'wix-data';
 import { wixMediaToPublicUrl } from './mediaUpload.js';
+import { getPurchasedQuantityForCustomer } from './inventory.js';
 
 const SA = { suppressAuth: true };
 
@@ -47,10 +48,37 @@ function mapAddOnRow(item) {
         price: Number(item.price) || 0,
         image: wixMediaToPublicUrl(item.image) || item.image || null,
         maxQuantity: Number(item.maxQuantity) || 10,
+        maxQuantityMode: item.maxQuantityMode === 'perCustomer' ? 'perCustomer' : 'perOrder',
+        inventoryManaged: !!item.inventoryManaged,
+        stockQuantity: item.inventoryManaged ? (Number(item.stockQuantity) || 0) : null,
     };
 }
 
-export async function getAddOnCatalog(workshopTypeId) {
+/**
+ * Caps each add-on's `maxQuantity` per the current customer/inventory state
+ * and flags `soldOut` — so the kiosk stepper never lets a customer request
+ * more than what's actually still purchasable.
+ */
+async function applyAvailabilityCaps(addOns, customerPhone) {
+    for (const addOn of addOns) {
+        let cap = addOn.maxQuantity;
+
+        if (addOn.maxQuantityMode === 'perCustomer' && customerPhone) {
+            const purchased = await getPurchasedQuantityForCustomer(addOn.id, customerPhone);
+            cap = Math.max(0, addOn.maxQuantity - purchased);
+        }
+
+        if (addOn.inventoryManaged) {
+            cap = Math.max(0, Math.min(cap, addOn.stockQuantity));
+        }
+
+        addOn.maxQuantity = cap;
+        addOn.soldOut = cap <= 0;
+    }
+    return addOns;
+}
+
+export async function getAddOnCatalog(workshopTypeId, customerPhone) {
     if (!workshopTypeId) return { addOns: [], settings: { ...DEFAULT_SETTINGS } };
 
     const [specificResult, generalResult, settingsResult] = await Promise.all([
@@ -73,6 +101,8 @@ export async function getAddOnCatalog(workshopTypeId) {
         ...(specificResult.items || []).map(mapAddOnRow),
         ...(generalResult.items || []).map(mapAddOnRow),
     ];
+
+    await applyAvailabilityCaps(addOns, customerPhone);
 
     return { addOns, settings: mapSettingsRow(settingsResult.items?.[0]) };
 }

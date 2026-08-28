@@ -53,6 +53,7 @@ const STYLE = `
     .sa-row { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; }
     .sa-field { display: flex; flex-direction: column; gap: 4px; min-width: 140px; flex: 1; }
     .sa-label { font-size: 12px; font-weight: 700; color: #374151; }
+    .sa-hint { font-size: 12px; color: #9ca3af; margin-top: 4px; line-height: 1.4; }
     .sa-input, .sa-select, .sa-textarea {
         padding: 9px 12px; border-radius: 9px; border: 1.5px solid #e5e7eb; font-size: 14px; font-family: inherit; background: #f9fafb;
     }
@@ -576,6 +577,11 @@ class StudioUpsellAdminElement extends HTMLElement {
                     <div class="sa-field"><label class="sa-label">סכום מינימלי</label><input class="sa-input" type="number" min="0" id="saSettingOpenMin" value="${escapeHtml(current.openAmountMin ?? 0)}" /></div>
                     <div class="sa-field"><label class="sa-label">סכום מקסימלי</label><input class="sa-input" type="number" min="0" id="saSettingOpenMax" value="${escapeHtml(current.openAmountMax ?? '')}" /></div>
                 </div>
+                <div class="sa-field" style="margin-bottom:16px;">
+                    <label class="sa-label">סיסמה לסכום פתוח (אופציונלי)</label>
+                    <input class="sa-input" type="text" id="saSettingOpenPassword" placeholder="השאירו ריק כדי לאפשר לכל לקוח ללא קוד" value="${escapeHtml(current.openAmountPassword || '')}" />
+                    <div class="sa-hint">אם מוגדרת סיסמה, לקוח שבוחר "סכום פתוח" יתבקש לפנות לעובד/ת שתזין את הקוד כדי להמשיך.</div>
+                </div>
 
                 <div class="sa-checkbox-row" style="margin-bottom:12px;"><input type="checkbox" id="saSettingStaffCode" ${current.showStaffCode ? 'checked' : ''} /><label for="saSettingStaffCode">הצג קוד אימות לצוות בדף התודה</label></div>
                 <div class="sa-checkbox-row" style="margin-bottom:20px;"><input type="checkbox" id="saSettingPrint" ${current.printOnPayment !== false ? 'checked' : ''} /><label for="saSettingPrint">הוסף לתור הדפסה עם קבלת תשלום</label></div>
@@ -814,6 +820,7 @@ class StudioUpsellAdminElement extends HTMLElement {
                 openAmountLabel: root.querySelector('#saSettingOpenLabel')?.value || 'סכום פתוח',
                 openAmountMin: Number(root.querySelector('#saSettingOpenMin')?.value) || 0,
                 openAmountMax: openMax === '' ? null : Number(openMax),
+                openAmountPassword: (root.querySelector('#saSettingOpenPassword')?.value || '').trim(),
                 showStaffCode: !!root.querySelector('#saSettingStaffCode')?.checked,
                 printOnPayment: !!root.querySelector('#saSettingPrint')?.checked,
             });

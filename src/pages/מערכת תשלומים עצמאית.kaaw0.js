@@ -8,6 +8,7 @@ import {
     staffLogin,
     lookupByPhone,
     getAddOnCatalogForWorkshop,
+    verifyOpenAmountCode,
     createAddOnCheckoutRequest,
 } from 'backend/studioUpsellService.web.js';
 
@@ -63,6 +64,11 @@ async function handleAction(el, detail) {
         }
         case 'getAddOnCatalogForWorkshop': {
             const result = await getAddOnCatalogForWorkshop(payload?.workshopTypeId, payload?.customerPhone, payload?.scope);
+            pushData(el, type, requestId, result);
+            return;
+        }
+        case 'verifyOpenAmountCode': {
+            const result = await verifyOpenAmountCode(payload?.workshopTypeId, payload?.code);
             pushData(el, type, requestId, result);
             return;
         }

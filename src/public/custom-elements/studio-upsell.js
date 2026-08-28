@@ -240,7 +240,7 @@ class StudioUpsellElement extends HTMLElement {
         this._requestSeq = 0;
         this._pending = new Map();
         this._state = {
-            screen: 'identify', // identify | pickWorkshop | catalog | notFound | loading | staffModal:false
+            screen: 'identify', // identify | pickWorkshop | catalog | choosePaymentMode | openAmount | notFound | loading | staffModal:false
             staffOptions: [],
             staffOptionsLoading: false,
             staffModalOpen: false,
@@ -254,6 +254,11 @@ class StudioUpsellElement extends HTMLElement {
             catalog: { addOns: [], settings: null },
             quantities: {},
             openAmount: '',
+            paymentMode: null, // null | 'catalog' | 'openAmount' — which payment option the customer picked
+            openAmountUnlocked: false, // true once no password is required, or the staff code was verified
+            openAmountPasswordModalOpen: false,
+            openAmountPasswordInput: '',
+            openAmountVerifying: false,
             customerName: '',
             customerPhone: '',
             error: null,
@@ -342,7 +347,9 @@ class StudioUpsellElement extends HTMLElement {
             }
         } else if (type === 'getAddOnCatalogForWorkshop') {
             this._state.catalog = result || { addOns: [], settings: null };
-            // Re-fetches mid-order keep existing picks, re-clamped to the fresh caps.
+            // Re-fetches mid-order (staff flow, customer phone just entered) keep
+            // existing picks re-clamped to the fresh caps, and stay on whichever
+            // screen (catalog / openAmount) the customer was already on.
             if (this._state.keepQuantitiesOnLoad) {
                 const next = {};
                 for (const addOn of (this._state.catalog.addOns || [])) {
@@ -353,8 +360,28 @@ class StudioUpsellElement extends HTMLElement {
                 this._state.keepQuantitiesOnLoad = false;
             } else {
                 this._state.quantities = {};
+                const settings = this._state.catalog.settings;
+                this._state.openAmountUnlocked = !settings?.openAmountRequiresPassword;
+                if (settings?.allowOpenAmount) {
+                    this._state.paymentMode = null;
+                    this._state.screen = 'choosePaymentMode';
+                } else {
+                    this._state.paymentMode = 'catalog';
+                    this._state.screen = 'catalog';
+                }
             }
-            this._state.screen = 'catalog';
+        } else if (type === 'verifyOpenAmountCode') {
+            this._state.openAmountVerifying = false;
+            if (result?.valid) {
+                this._state.openAmountUnlocked = true;
+                this._state.openAmountPasswordModalOpen = false;
+                this._state.openAmountPasswordInput = '';
+                this._state.quantities = {};
+                this._state.paymentMode = 'openAmount';
+                this._state.screen = 'openAmount';
+            } else {
+                this._state.error = 'קוד שגוי — נסו שוב.';
+            }
         } else if (type === 'checkout') {
             // Navigation away happens on the Velo side on success; only surface errors here.
             if (result && result.success === false) {
@@ -515,10 +542,15 @@ class StudioUpsellElement extends HTMLElement {
             body = this._renderPickWorkshop();
         } else if (s.screen === 'catalog') {
             body = this._renderCatalog();
+        } else if (s.screen === 'choosePaymentMode') {
+            body = this._renderChoosePaymentMode();
+        } else if (s.screen === 'openAmount') {
+            body = this._renderOpenAmount();
         }
 
         root.innerHTML = body
             + (s.staffModalOpen ? this._renderStaffModal() : '')
+            + (s.openAmountPasswordModalOpen ? this._renderOpenAmountPasswordModal() : '')
             + (s.imagePreviewUrl ? this._renderImageLightbox() : '');
         this._bindEvents(root);
     }
@@ -608,13 +640,6 @@ class StudioUpsellElement extends HTMLElement {
             </div>
         `).join('');
 
-        const openAmountBlock = settings?.allowOpenAmount ? h`
-            <div style="margin-top:16px;">
-                <label class="su-label" for="suOpenAmount">${escapeHtml(settings.openAmountLabel || 'סכום פתוח')}</label>
-                <input class="su-input" id="suOpenAmount" type="number" min="0" step="1" placeholder="0" value="${escapeHtml(s.openAmount)}" />
-            </div>
-        ` : '';
-
         const identityBlock = s.createdVia === 'qr_staff' ? h`
             <div style="margin-top:6px;">
                 <label class="su-label" for="suCustomerName">שם הלקוח</label>
@@ -634,12 +659,82 @@ class StudioUpsellElement extends HTMLElement {
                 <p class="su-subtitle">${escapeHtml(w.startLabel ? `סדנה בשעה ${w.startLabel}` : 'בחרו תוספות לתשלום')}</p>
                 ${s.error ? `<div class="su-error">${escapeHtml(s.error)}</div>` : ''}
                 ${addOns.length ? `<div>${rows}</div>` : '<p class="su-subtitle">אין תוספות זמינות לסדנה זו כרגע.</p>'}
-                ${openAmountBlock}
                 ${identityBlock}
                 <div class="su-summary"><span>סה"כ לתשלום</span><span>${formatIls(total)}</span></div>
                 <button class="su-btn su-btn-primary" id="suCheckoutBtn" ${s.submitting || !canCheckout ? 'disabled' : ''}>
                     ${s.submitting ? 'מעביר לתשלום...' : (total > 0 ? 'המשך לתשלום' : 'המשך להזמנה')}
                 </button>
+                ${settings?.allowOpenAmount ? `<div class="su-link-row"><button class="su-btn su-btn-ghost" id="suBackToModeBtn">אפשרויות תשלום אחרות</button></div>` : ''}
+            </div>
+        `;
+    }
+
+    _renderChoosePaymentMode() {
+        const s = this._state;
+        const { settings } = s.catalog;
+        const w = s.selectedWorkshop || {};
+        return h`
+            <div class="su-card">
+                ${renderSteps(2)}
+                <h1 class="su-title">${escapeHtml(w.workshopTitle || 'תוספות לסדנה')}</h1>
+                <p class="su-subtitle">איך תרצו לשלם?</p>
+                ${s.error ? `<div class="su-error">${escapeHtml(s.error)}</div>` : ''}
+                <button class="su-btn su-btn-primary" id="suModeCatalogBtn">בחירה מקטלוג תוספות</button>
+                <button class="su-btn su-btn-secondary" id="suModeOpenBtn" style="margin-top:10px;">${escapeHtml(settings?.openAmountLabel || 'סכום פתוח')}</button>
+            </div>
+        `;
+    }
+
+    _renderOpenAmount() {
+        const s = this._state;
+        const { settings } = s.catalog;
+        const w = s.selectedWorkshop || {};
+
+        const identityBlock = s.createdVia === 'qr_staff' ? h`
+            <div style="margin-top:6px;">
+                <label class="su-label" for="suCustomerName">שם הלקוח</label>
+                <input class="su-input" id="suCustomerName" type="text" required value="${escapeHtml(s.customerName)}" />
+                <label class="su-label" for="suCustomerPhone">טלפון הלקוח</label>
+                <input class="su-input" id="suCustomerPhone" type="tel" inputmode="tel" required value="${escapeHtml(s.customerPhone)}" />
+            </div>
+        ` : '';
+
+        const total = this._computeTotal();
+        const canCheckout = this._hasSelectedItems();
+
+        return h`
+            <div class="su-card">
+                ${renderSteps(2)}
+                <h1 class="su-title">${escapeHtml(w.workshopTitle || 'סכום פתוח')}</h1>
+                <p class="su-subtitle">הזינו את הסכום לתשלום.</p>
+                ${s.error ? `<div class="su-error">${escapeHtml(s.error)}</div>` : ''}
+                <label class="su-label" for="suOpenAmount">${escapeHtml(settings?.openAmountLabel || 'סכום פתוח')}</label>
+                <input class="su-input" id="suOpenAmount" type="number" min="0" step="1" placeholder="0" value="${escapeHtml(s.openAmount)}" />
+                ${identityBlock}
+                <div class="su-summary"><span>סה"כ לתשלום</span><span>${formatIls(total)}</span></div>
+                <button class="su-btn su-btn-primary" id="suCheckoutBtn" ${s.submitting || !canCheckout ? 'disabled' : ''}>
+                    ${s.submitting ? 'מעביר לתשלום...' : (total > 0 ? 'המשך לתשלום' : 'המשך להזמנה')}
+                </button>
+                <div class="su-link-row">
+                    <button class="su-btn su-btn-ghost" id="suBackToModeBtn">חזרה</button>
+                </div>
+            </div>
+        `;
+    }
+
+    _renderOpenAmountPasswordModal() {
+        const s = this._state;
+        return h`
+            <div class="su-modal-backdrop" id="suOpenAmountPwBackdrop">
+                <div class="su-modal">
+                    <h2 class="su-title">אישור עובד/ת</h2>
+                    <p class="su-subtitle">תשלום בסכום פתוח דורש אישור צוות — אנא פנו לעובד/ת להזנת הקוד.</p>
+                    ${s.error ? `<div class="su-error">${escapeHtml(s.error)}</div>` : ''}
+                    <label class="su-label" for="suOpenAmountPw">קוד אישור</label>
+                    <input class="su-input" id="suOpenAmountPw" type="password" inputmode="numeric" value="${escapeHtml(s.openAmountPasswordInput)}" />
+                    <button class="su-btn su-btn-primary" id="suOpenAmountPwSubmitBtn" ${s.openAmountVerifying ? 'disabled' : ''}>${s.openAmountVerifying ? 'בודק...' : 'אישור'}</button>
+                    <div class="su-link-row"><button class="su-btn su-btn-ghost" id="suOpenAmountPwCancelBtn">ביטול</button></div>
+                </div>
             </div>
         `;
     }
@@ -795,6 +890,64 @@ class StudioUpsellElement extends HTMLElement {
 
         const checkoutBtn = root.querySelector('#suCheckoutBtn');
         if (checkoutBtn) checkoutBtn.addEventListener('click', () => this._submitCheckout());
+
+        const modeCatalogBtn = root.querySelector('#suModeCatalogBtn');
+        if (modeCatalogBtn) modeCatalogBtn.addEventListener('click', () => {
+            s.paymentMode = 'catalog';
+            s.screen = 'catalog';
+            s.openAmount = '';
+            s.error = null;
+            this.render();
+        });
+
+        const modeOpenBtn = root.querySelector('#suModeOpenBtn');
+        if (modeOpenBtn) modeOpenBtn.addEventListener('click', () => {
+            s.error = null;
+            if (s.openAmountUnlocked) {
+                s.quantities = {};
+                s.paymentMode = 'openAmount';
+                s.screen = 'openAmount';
+            } else {
+                s.openAmountPasswordModalOpen = true;
+                s.openAmountPasswordInput = '';
+            }
+            this.render();
+        });
+
+        const backToModeBtn = root.querySelector('#suBackToModeBtn');
+        if (backToModeBtn) backToModeBtn.addEventListener('click', () => {
+            s.paymentMode = null;
+            s.screen = 'choosePaymentMode';
+            s.error = null;
+            this.render();
+        });
+
+        const pwCancelBtn = root.querySelector('#suOpenAmountPwCancelBtn');
+        if (pwCancelBtn) pwCancelBtn.addEventListener('click', () => {
+            s.openAmountPasswordModalOpen = false;
+            s.openAmountPasswordInput = '';
+            s.error = null;
+            this.render();
+        });
+
+        const openAmountPwInput = root.querySelector('#suOpenAmountPw');
+        if (openAmountPwInput) openAmountPwInput.addEventListener('input', (e) => { s.openAmountPasswordInput = e.target.value; });
+
+        const pwSubmitBtn = root.querySelector('#suOpenAmountPwSubmitBtn');
+        if (pwSubmitBtn) pwSubmitBtn.addEventListener('click', () => {
+            if (!s.openAmountPasswordInput) {
+                s.error = 'אנא הזינו קוד.';
+                this.render();
+                return;
+            }
+            s.error = null;
+            s.openAmountVerifying = true;
+            this.render();
+            this._dispatch('verifyOpenAmountCode', {
+                workshopTypeId: (s.selectedWorkshop || {}).workshopTypeId,
+                code: s.openAmountPasswordInput.trim(),
+            });
+        });
 
         const staffCancelBtn = root.querySelector('#suStaffCancelBtn');
         if (staffCancelBtn) staffCancelBtn.addEventListener('click', () => {

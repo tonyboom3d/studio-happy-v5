@@ -10,7 +10,7 @@ import wixData from 'wix-data';
 import { assertEmployeeAccess } from 'backend/staffRoles.js';
 import { getTodaySessions } from 'backend/studioUpsell/sessions.js';
 import { findTodayWorkshopsByPhone } from 'backend/studioUpsell/identify.js';
-import { getAddOnCatalog } from 'backend/studioUpsell/catalog.js';
+import { getAddOnCatalog, verifyOpenAmountPassword } from 'backend/studioUpsell/catalog.js';
 import { createAddOnCheckout } from 'backend/studioUpsell/checkout.js';
 import { confirmAddOnOrderByToken, getAddOnOrderByToken } from 'backend/studioUpsell/reconcile.js';
 import { uploadBase64ImageToWixMedia, wixMediaToPublicUrl } from 'backend/studioUpsell/mediaUpload.js';
@@ -64,6 +64,11 @@ export const lookupByPhone = webMethod(Permissions.Anyone, async (phone) => {
  */
 export const getAddOnCatalogForWorkshop = webMethod(Permissions.Anyone, async (workshopTypeId, customerPhone, scope) => {
     return getAddOnCatalog(workshopTypeId, customerPhone, scope);
+});
+
+/** Staff-entered code to unlock the "open amount" payment option, when a workshop type has one configured. */
+export const verifyOpenAmountCode = webMethod(Permissions.Anyone, async (workshopTypeId, code) => {
+    return { valid: await verifyOpenAmountPassword(workshopTypeId, code) };
 });
 
 /** Creates the @wix/ecom checkout (digital-only line items) and logs the StudioAddOnOrders row. */
@@ -162,9 +167,11 @@ export const saveUpsellSettings = webMethod(Permissions.SiteMember, async (setti
     await assertEmployeeAccess('manageAddOnsSystem');
     if (!settings?.workshopType) throw new Error('workshopType is required');
 
+    const openAmountPassword = settings.openAmountPassword != null ? String(settings.openAmountPassword).trim() : '';
+
     const existing = await wixData.query('StudioUpsellSettings').eq('workshopType', settings.workshopType).find(SA);
     if (existing.items?.[0]) {
-        return wixData.update('StudioUpsellSettings', { ...existing.items[0], ...settings }, SA);
+        return wixData.update('StudioUpsellSettings', { ...existing.items[0], ...settings, openAmountPassword }, SA);
     }
 
     return wixData.insert('StudioUpsellSettings', {
@@ -174,6 +181,7 @@ export const saveUpsellSettings = webMethod(Permissions.SiteMember, async (setti
         openAmountLabel: settings.openAmountLabel || 'סכום פתוח',
         openAmountMin: Number(settings.openAmountMin) || 0,
         openAmountMax: settings.openAmountMax != null && settings.openAmountMax !== '' ? Number(settings.openAmountMax) : null,
+        openAmountPassword,
         showStaffCode: !!settings.showStaffCode,
         printOnPayment: settings.printOnPayment !== false,
     }, SA);

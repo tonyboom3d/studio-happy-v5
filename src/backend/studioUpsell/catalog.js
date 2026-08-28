@@ -6,7 +6,8 @@
  *   StudioAddOns:        title, description, price, image, workshopType (ref -> workshops),
  *                         active, sortOrder, maxQuantity
  *   StudioUpsellSettings: workshopType (ref -> workshops), active, allowOpenAmount,
- *                         openAmountLabel, openAmountMin, openAmountMax, showStaffCode, printOnPayment
+ *                         openAmountLabel, openAmountMin, openAmountMax, openAmountPassword,
+ *                         showStaffCode, printOnPayment
  */
 import wixData from 'wix-data';
 import { wixMediaToPublicUrl } from './mediaUpload.js';
@@ -23,10 +24,14 @@ const DEFAULT_SETTINGS = {
     openAmountLabel: 'סכום פתוח',
     openAmountMin: 0,
     openAmountMax: null,
+    openAmountRequiresPassword: false,
     showStaffCode: false,
     printOnPayment: true,
 };
 
+// Customer/staff-facing mapping — NEVER includes the raw openAmountPassword value,
+// only whether one is configured (openAmountRequiresPassword). The kiosk verifies
+// the code server-side via verifyOpenAmountPassword() instead of comparing locally.
 function mapSettingsRow(row) {
     if (!row) return { ...DEFAULT_SETTINGS };
     return {
@@ -35,9 +40,24 @@ function mapSettingsRow(row) {
         openAmountLabel: row.openAmountLabel || DEFAULT_SETTINGS.openAmountLabel,
         openAmountMin: Number(row.openAmountMin) || 0,
         openAmountMax: row.openAmountMax != null && row.openAmountMax !== '' ? Number(row.openAmountMax) : null,
+        openAmountRequiresPassword: !!(row.openAmountPassword && String(row.openAmountPassword).trim()),
         showStaffCode: !!row.showStaffCode,
         printOnPayment: row.printOnPayment !== false,
     };
+}
+
+/**
+ * Verifies the staff-entered code for unlocking the "open amount" payment
+ * option. Returns true when no password is configured for this workshop
+ * type (open amount stays freely accessible), otherwise compares against
+ * StudioUpsellSettings.openAmountPassword.
+ */
+export async function verifyOpenAmountPassword(workshopTypeId, code) {
+    if (!workshopTypeId) return false;
+    const result = await wixData.query('StudioUpsellSettings').eq('workshopType', workshopTypeId).find(SA);
+    const stored = result.items?.[0]?.openAmountPassword ? String(result.items[0].openAmountPassword).trim() : '';
+    if (!stored) return true;
+    return String(code || '').trim() === stored;
 }
 
 function mapAddOnRow(item) {

@@ -20,6 +20,16 @@ $w.onReady(function () {
         console.error(`[studio-upsell-admin][velo] ELEMENT_NOT_FOUND — ${ELEMENT_ID} missing on page`);
         return;
     }
+    if (typeof el.on !== 'function') {
+        // Happens when the ID on the page isn't bound to a real Custom Element
+        // (wrong element type, or the "Tag Name" / ID don't match what's
+        // documented at the top of custom-elements/studio-upsell-admin.js).
+        console.error(
+            `[studio-upsell-admin][velo] ELEMENT_NOT_CUSTOM_ELEMENT — ${ELEMENT_ID} was found but has no ` +
+            `".on" method. Verify it's a "Custom Element" component with Tag Name "studio-upsell-admin" and ID "studioUpsellAdmin1".`
+        );
+        return;
+    }
 
     el.on('studio-upsell-admin-action', (event) => {
         handleAction(el, event.detail).catch((err) => {

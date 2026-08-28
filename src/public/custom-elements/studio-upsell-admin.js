@@ -20,9 +20,10 @@
 const TAG_NAME = 'studio-upsell-admin';
 
 const STYLE = `
+    @import url('https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;600;700;800;900&display=swap');
     :host, .sa-root { all: initial; }
     .sa-root {
-        display: block; direction: rtl; font-family: 'Heebo', Arial, sans-serif;
+        display: block; direction: rtl; font-family: 'Rubik', Arial, sans-serif;
         color: #1f2933; box-sizing: border-box; padding: 16px;
     }
     .sa-root *, .sa-root *::before, .sa-root *::after { box-sizing: border-box; }
@@ -57,6 +58,12 @@ const STYLE = `
     .sa-badge-amber { background: #fffbeb; color: #b45309; }
     .sa-badge-red { background: #fef2f2; color: #b91c1c; }
     .sa-empty { text-align: center; padding: 32px; color: #9ca3af; font-size: 13px; }
+    .sa-loading { text-align: center; padding: 60px 0; color: #6b7280; font-size: 14px; }
+    .sa-spinner {
+        width: 34px; height: 34px; border-radius: 50%; margin: 0 auto 14px;
+        border: 3px solid #e0e7ff; border-top-color: #4f46e5; animation: sa-spin 0.8s linear infinite;
+    }
+    @keyframes sa-spin { to { transform: rotate(360deg); } }
     .sa-toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: #111827; color: #fff; padding: 10px 20px; border-radius: 10px; font-size: 13px; z-index: 999; }
     .sa-section-title { font-size: 15px; font-weight: 800; color: #111827; margin: 0 0 12px; }
     .sa-actions-cell { display: flex; gap: 6px; }
@@ -116,7 +123,7 @@ class StudioUpsellAdminElement extends HTMLElement {
     connectedCallback() {
         this.setAttribute('dir', 'rtl');
         this.setAttribute('lang', 'he');
-        this.innerHTML = `<style>${STYLE}</style><div class="sa-root" id="saRoot"><div class="sa-empty">טוען...</div></div>`;
+        this.innerHTML = `<style>${STYLE}</style><div class="sa-root" id="saRoot"><div class="sa-loading"><div class="sa-spinner"></div>טוען...</div></div>`;
         this._dispatch('load', {});
     }
 
@@ -193,7 +200,7 @@ class StudioUpsellAdminElement extends HTMLElement {
         }
 
         if (!s.loaded) {
-            root.innerHTML = `<div class="sa-empty">טוען...</div>`;
+            root.innerHTML = `<div class="sa-loading"><div class="sa-spinner"></div>טוען...</div>`;
             return;
         }
 
@@ -309,7 +316,7 @@ class StudioUpsellAdminElement extends HTMLElement {
 
     _renderTransactionsTab() {
         const s = this._state;
-        if (s.transactions === null) return `<div class="sa-card sa-empty">טוען עסקאות...</div>`;
+        if (s.transactions === null) return `<div class="sa-card sa-loading"><div class="sa-spinner"></div>טוען עסקאות...</div>`;
         if (!s.transactions.length) return `<div class="sa-card sa-empty">אין עסקאות עדיין.</div>`;
 
         const rows = s.transactions.map((t) => {
@@ -341,7 +348,7 @@ class StudioUpsellAdminElement extends HTMLElement {
 
     _renderPrintTab() {
         const s = this._state;
-        if (s.printQueue === null) return `<div class="sa-card sa-empty">טוען תור הדפסה...</div>`;
+        if (s.printQueue === null) return `<div class="sa-card sa-loading"><div class="sa-spinner"></div>טוען תור הדפסה...</div>`;
         if (!s.printQueue.length) return `<div class="sa-card sa-empty">תור ההדפסה ריק.</div>`;
 
         const rows = s.printQueue.map((p) => {

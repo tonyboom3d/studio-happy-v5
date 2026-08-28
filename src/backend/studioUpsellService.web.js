@@ -13,6 +13,7 @@ import { findTodayWorkshopsByPhone } from 'backend/studioUpsell/identify.js';
 import { getAddOnCatalog } from 'backend/studioUpsell/catalog.js';
 import { createAddOnCheckout } from 'backend/studioUpsell/checkout.js';
 import { confirmAddOnOrderByToken, getAddOnOrderByToken } from 'backend/studioUpsell/reconcile.js';
+import { uploadBase64ImageToWixMedia, wixMediaToPublicUrl } from 'backend/studioUpsell/mediaUpload.js';
 
 const SA = { suppressAuth: true };
 
@@ -101,7 +102,9 @@ export const getUpsellAdminData = webMethod(Permissions.SiteMember, async () => 
 
     return {
         workshopTypes: (workshopsResult.items || []).map((w) => ({ id: w._id, title: w.workshopName || 'סדנה' })),
-        addOns: addOnsResult.items || [],
+        // `image` stays the canonical wix:// value (round-trips correctly on save);
+        // `imagePreviewUrl` is a derived https URL for <img> thumbnails only.
+        addOns: (addOnsResult.items || []).map((a) => ({ ...a, imagePreviewUrl: wixMediaToPublicUrl(a.image) || a.image || null })),
         settings: settingsResult.items || [],
     };
 });
@@ -130,6 +133,12 @@ export const saveAddOn = webMethod(Permissions.SiteMember, async (addOn) => {
 export const deleteAddOn = webMethod(Permissions.SiteMember, async (addOnId) => {
     await assertEmployeeAccess('manageAddOnsSystem');
     return wixData.remove('StudioAddOns', addOnId, SA);
+});
+
+/** Uploads an add-on image to the Wix Media Manager — returns the canonical wix:// fileUrl + a public preview URL. */
+export const uploadAddOnImage = webMethod(Permissions.SiteMember, async (base64, filename) => {
+    await assertEmployeeAccess('manageAddOnsSystem');
+    return uploadBase64ImageToWixMedia(base64, filename);
 });
 
 export const saveUpsellSettings = webMethod(Permissions.SiteMember, async (settings) => {

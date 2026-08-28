@@ -10,6 +10,7 @@ import {
     listAddOnTransactions,
     listPrintQueue,
     markPrintJobStatus,
+    uploadAddOnImage,
 } from 'backend/studioUpsellService.web.js';
 
 const ELEMENT_ID = '#studioUpsellAdmin1';
@@ -98,6 +99,11 @@ async function handleAction(el, detail) {
         case 'markPrintJobStatus': {
             await markPrintJobStatus(payload?.printQueueId, payload?.status);
             pushData(el, type, requestId, { success: true });
+            return;
+        }
+        case 'uploadAddOnImage': {
+            const result = await uploadAddOnImage(payload?.base64, payload?.filename);
+            pushData(el, type, requestId, { success: true, ...result });
             return;
         }
         default:

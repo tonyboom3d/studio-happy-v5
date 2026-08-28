@@ -2,9 +2,16 @@
  * Wix Custom Element: studio-upsell-admin
  * ------------------------------------------
  * Admin management page for the in-person QR add-on upsell system.
- * Tabs: קטלוג (add-on CRUD per workshop type), הגדרות (open amount / staff
- * code / print toggle per workshop type), עסקאות (transaction history),
- * תור הדפסה (print queue).
+ *
+ * Top-level tabs: סדנאות (workshop cards grid → per-workshop detail with
+ * הגדרות + תוספים sub-tabs, plus a "תוספות כלליות" card for add-ons shown
+ * alongside every workshop), עסקאות (transaction history), תור הדפסה
+ * (print queue).
+ *
+ * Add-on images are uploaded to the Wix Media Manager (never a free-text
+ * "open" URL) — see backend/studioUpsell/mediaUpload.js. The canonical
+ * `wix:image://...` value round-trips through `image`; `imagePreviewUrl`
+ * is a derived https URL used only for <img> previews.
  *
  * הוראות התקנה בוויקס:
  * 1. בעורך וויקס בעמוד "ניהול מערכת תשלום בסטודיו": הוסף רכיב "Custom Element".
@@ -18,6 +25,11 @@
  */
 
 const TAG_NAME = 'studio-upsell-admin';
+
+// Sentinel `workshopType` value for add-ons shown alongside every workshop's
+// catalog — must match backend/studioUpsell/catalog.js GENERAL_WORKSHOP_TYPE.
+const GENERAL_WORKSHOP_TYPE = '__general__';
+const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
 
 const STYLE = `
     @import url('https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;600;700;800;900&display=swap');
@@ -42,8 +54,9 @@ const STYLE = `
     .sa-textarea { resize: vertical; min-height: 60px; }
     .sa-checkbox-row { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; color: #374151; }
     .sa-btn { padding: 10px 18px; border-radius: 10px; border: none; font-weight: 700; font-size: 13px; cursor: pointer; font-family: inherit; }
+    .sa-btn:disabled { opacity: .5; cursor: not-allowed; }
     .sa-btn-primary { background: #4f46e5; color: #fff; }
-    .sa-btn-primary:hover { background: #4338ca; }
+    .sa-btn-primary:hover:not(:disabled) { background: #4338ca; }
     .sa-btn-danger { background: #fef2f2; color: #b91c1c; }
     .sa-btn-danger:hover { background: #fee2e2; }
     .sa-btn-ghost { background: #f1f2f4; color: #374151; }
@@ -64,10 +77,28 @@ const STYLE = `
         border: 3px solid #e0e7ff; border-top-color: #4f46e5; animation: sa-spin 0.8s linear infinite;
     }
     @keyframes sa-spin { to { transform: rotate(360deg); } }
-    .sa-toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: #111827; color: #fff; padding: 10px 20px; border-radius: 10px; font-size: 13px; z-index: 999; }
+    .sa-toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: #111827; color: #fff; padding: 10px 20px; border-radius: 10px; font-size: 13px; z-index: 999; max-width: 90%; text-align: center; }
     .sa-section-title { font-size: 15px; font-weight: 800; color: #111827; margin: 0 0 12px; }
     .sa-actions-cell { display: flex; gap: 6px; }
     .sa-access-denied { text-align: center; padding: 60px 20px; color: #6b7280; }
+    .sa-workshops-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 14px; }
+    .sa-workshop-card {
+        background: #fff; border: 1.5px solid #eef0f2; border-radius: 16px; padding: 22px 16px;
+        cursor: pointer; transition: border-color .15s ease, box-shadow .15s ease, transform .15s ease; text-align: center;
+    }
+    .sa-workshop-card:hover { border-color: #6366f1; box-shadow: 0 4px 14px rgba(79,70,229,.12); transform: translateY(-2px); }
+    .sa-workshop-card-general { border-style: dashed; background: #f9fafb; }
+    .sa-workshop-card-icon { font-size: 30px; margin-bottom: 8px; }
+    .sa-workshop-card-title { font-weight: 800; font-size: 15px; color: #111827; margin-bottom: 6px; }
+    .sa-workshop-card-meta { font-size: 12px; color: #6b7280; display: flex; align-items: center; justify-content: center; gap: 6px; flex-wrap: wrap; }
+    .sa-detail-header { display: flex; align-items: center; gap: 14px; margin-bottom: 16px; flex-wrap: wrap; }
+    .sa-subtabs { display: flex; gap: 6px; margin-bottom: 16px; }
+    .sa-subtab { padding: 8px 16px; border-radius: 9px; border: 1.5px solid #e5e7eb; background: #fff; font-family: inherit; font-size: 13px; font-weight: 700; color: #6b7280; cursor: pointer; }
+    .sa-subtab.active { background: #eef2ff; color: #4338ca; border-color: #c7d2fe; }
+    .sa-image-picker { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+    .sa-image-preview { width: 64px; height: 64px; border-radius: 10px; object-fit: cover; background: #f1f2f4; flex-shrink: 0; }
+    .sa-image-preview-empty { display: flex; align-items: center; justify-content: center; font-size: 9px; color: #9ca3af; text-align: center; line-height: 1.2; }
+    .sa-image-picker-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 `;
 
 function escapeHtml(str) {
@@ -108,12 +139,14 @@ class StudioUpsellAdminElement extends HTMLElement {
         this._state = {
             loaded: false,
             accessDenied: false,
-            activeTab: 'catalog',
+            activeTab: 'workshops', // workshops | transactions | print
             workshopTypes: [],
             addOns: [],
             settings: [],
-            selectedWorkshopTypeId: null,
+            selectedWorkshopTypeId: null, // null = grid view; workshop id or GENERAL_WORKSHOP_TYPE = detail view
+            workshopSubTab: 'settings', // settings | addons (detail view only)
             editingAddOn: null,
+            uploadingImage: false,
             transactions: null,
             printQueue: null,
             toast: null,
@@ -145,6 +178,13 @@ class StudioUpsellAdminElement extends HTMLElement {
         return requestId;
     }
 
+    _toast(message) {
+        const s = this._state;
+        s.toast = message;
+        this.render();
+        setTimeout(() => { s.toast = null; this.render(); }, 3000);
+    }
+
     _handleData({ type, result }) {
         const s = this._state;
 
@@ -155,46 +195,74 @@ class StudioUpsellAdminElement extends HTMLElement {
             return;
         }
 
-        if (result && result.error) {
+        if (type === 'load') {
             s.loaded = true;
-            s.error = result.error;
+            if (result && result.error) {
+                s.error = result.error;
+            } else {
+                s.error = null;
+                s.workshopTypes = result?.workshopTypes || [];
+                s.addOns = result?.addOns || [];
+                s.settings = result?.settings || [];
+            }
             this.render();
             return;
         }
 
-        if (type === 'load') {
-            s.loaded = true;
-            s.error = null;
-            s.workshopTypes = result?.workshopTypes || [];
-            s.addOns = result?.addOns || [];
-            s.settings = result?.settings || [];
-            if (!s.selectedWorkshopTypeId && s.workshopTypes.length) {
-                s.selectedWorkshopTypeId = s.workshopTypes[0].id;
-            }
-        } else if (type === 'saveAddOn' || type === 'deleteAddOn') {
+        if (result && result.error) {
+            // Scoped action failure (save/upload/etc.) — surface as a toast, keep the page usable.
+            s.uploadingImage = false;
+            this._toast(result.error);
+            return;
+        }
+
+        if (type === 'saveAddOn' || type === 'deleteAddOn') {
             s.editingAddOn = null;
-            s.toast = type === 'deleteAddOn' ? 'התוסף נמחק' : 'התוסף נשמר';
             this._dispatch('load', {});
-            setTimeout(() => { s.toast = null; this.render(); }, 2500);
+            this._toast(type === 'deleteAddOn' ? 'התוסף נמחק' : 'התוסף נשמר');
+            return;
         } else if (type === 'saveSettings') {
-            s.toast = 'ההגדרות נשמרו';
             this._dispatch('load', {});
-            setTimeout(() => { s.toast = null; this.render(); }, 2500);
+            this._toast('ההגדרות נשמרו');
+            return;
         } else if (type === 'loadTransactions') {
             s.transactions = result || [];
         } else if (type === 'loadPrintQueue') {
             s.printQueue = result || [];
         } else if (type === 'markPrintJobStatus') {
             this._dispatch('loadPrintQueue', {});
+        } else if (type === 'uploadAddOnImage') {
+            s.uploadingImage = false;
+            if (result?.fileUrl && s.editingAddOn) {
+                s.editingAddOn.image = result.fileUrl;
+                s.editingAddOn.imagePreviewUrl = result.publicUrl || result.fileUrl;
+            }
         }
 
         this.render();
     }
 
     _switchTab(tab) {
-        this._state.activeTab = tab;
-        if (tab === 'transactions' && this._state.transactions === null) this._dispatch('loadTransactions', {});
-        if (tab === 'print' && this._state.printQueue === null) this._dispatch('loadPrintQueue', {});
+        const s = this._state;
+        if (tab === 'workshops' && s.activeTab !== 'workshops') s.selectedWorkshopTypeId = null;
+        s.activeTab = tab;
+        if (tab === 'transactions' && s.transactions === null) this._dispatch('loadTransactions', {});
+        if (tab === 'print' && s.printQueue === null) this._dispatch('loadPrintQueue', {});
+        this.render();
+    }
+
+    _selectWorkshop(id) {
+        const s = this._state;
+        s.selectedWorkshopTypeId = id;
+        s.workshopSubTab = 'settings';
+        s.editingAddOn = null;
+        this.render();
+    }
+
+    _backToWorkshops() {
+        const s = this._state;
+        s.selectedWorkshopTypeId = null;
+        s.editingAddOn = null;
         this.render();
     }
 
@@ -219,17 +287,19 @@ class StudioUpsellAdminElement extends HTMLElement {
         }
 
         const tabs = [
-            ['catalog', 'קטלוג'],
-            ['settings', 'הגדרות'],
+            ['workshops', 'סדנאות'],
             ['transactions', 'עסקאות'],
             ['print', 'תור הדפסה'],
         ].map(([id, label]) => `<button class="sa-tab ${s.activeTab === id ? 'active' : ''}" data-tab="${id}">${label}</button>`).join('');
 
         let body = '';
-        if (s.activeTab === 'catalog') body = this._renderCatalogTab();
-        else if (s.activeTab === 'settings') body = this._renderSettingsTab();
-        else if (s.activeTab === 'transactions') body = this._renderTransactionsTab();
-        else if (s.activeTab === 'print') body = this._renderPrintTab();
+        if (s.activeTab === 'workshops') {
+            body = s.selectedWorkshopTypeId ? this._renderWorkshopDetail() : this._renderWorkshopsGrid();
+        } else if (s.activeTab === 'transactions') {
+            body = this._renderTransactionsTab();
+        } else if (s.activeTab === 'print') {
+            body = this._renderPrintTab();
+        }
 
         root.innerHTML = `
             <div class="sa-header">
@@ -242,10 +312,55 @@ class StudioUpsellAdminElement extends HTMLElement {
         this._bindEvents(root);
     }
 
-    _workshopSelectHtml(selectedId, idAttr) {
+    _renderWorkshopsGrid() {
         const s = this._state;
-        const options = s.workshopTypes.map((w) => `<option value="${escapeHtml(w.id)}" ${w.id === selectedId ? 'selected' : ''}>${escapeHtml(w.title)}</option>`).join('');
-        return `<select class="sa-select" id="${idAttr}">${options}</select>`;
+        const cards = [
+            ...s.workshopTypes.map((w) => ({ id: w.id, title: w.title, isGeneral: false })),
+            { id: GENERAL_WORKSHOP_TYPE, title: 'תוספות כלליות', isGeneral: true },
+        ].map((w) => {
+            const count = s.addOns.filter((a) => a.workshopType === w.id).length;
+            const settingsRow = !w.isGeneral ? s.settings.find((row) => row.workshopType === w.id) : null;
+            const activeBadge = !w.isGeneral
+                ? `<span class="sa-badge ${settingsRow?.active !== false ? 'sa-badge-green' : 'sa-badge-gray'}">${settingsRow?.active !== false ? 'פעיל' : 'כבוי'}</span>`
+                : '';
+            return `
+                <div class="sa-workshop-card ${w.isGeneral ? 'sa-workshop-card-general' : ''}" data-select-workshop="${escapeHtml(w.id)}">
+                    <div class="sa-workshop-card-icon">${w.isGeneral ? '🧩' : '🎨'}</div>
+                    <div class="sa-workshop-card-title">${escapeHtml(w.title)}</div>
+                    <div class="sa-workshop-card-meta"><span>${count} תוספים</span>${activeBadge}</div>
+                </div>
+            `;
+        }).join('');
+
+        return `
+            <div class="sa-workshops-grid">${cards}</div>
+            ${!s.workshopTypes.length ? '<div class="sa-empty" style="margin-top:16px;">לא נמצאו סוגי סדנאות. יש להוסיף סדנאות במערכת התיאום כדי שיופיעו כאן.</div>' : ''}
+        `;
+    }
+
+    _renderWorkshopDetail() {
+        const s = this._state;
+        const isGeneral = s.selectedWorkshopTypeId === GENERAL_WORKSHOP_TYPE;
+        const workshop = isGeneral ? null : s.workshopTypes.find((w) => w.id === s.selectedWorkshopTypeId);
+        const title = isGeneral ? 'תוספות כלליות' : (workshop?.title || 'סדנה');
+
+        const subTabsHtml = !isGeneral ? `
+            <div class="sa-subtabs">
+                <button class="sa-subtab ${s.workshopSubTab === 'settings' ? 'active' : ''}" data-subtab="settings">הגדרות</button>
+                <button class="sa-subtab ${s.workshopSubTab === 'addons' ? 'active' : ''}" data-subtab="addons">תוספים</button>
+            </div>
+        ` : '';
+
+        const body = (isGeneral || s.workshopSubTab === 'addons') ? this._renderCatalogTab() : this._renderSettingsTab();
+
+        return `
+            <div class="sa-detail-header">
+                <button class="sa-btn sa-btn-ghost" id="saBackToWorkshopsBtn">→ חזרה לסדנאות</button>
+                <h2 class="sa-section-title" style="margin:0;">${escapeHtml(title)}</h2>
+            </div>
+            ${subTabsHtml}
+            ${body}
+        `;
     }
 
     _renderCatalogTab() {
@@ -253,9 +368,11 @@ class StudioUpsellAdminElement extends HTMLElement {
         const addOnsForType = s.addOns.filter((a) => a.workshopType === s.selectedWorkshopTypeId);
         const editing = s.editingAddOn;
 
-        const rows = addOnsForType.map((a) => `
+        const rows = addOnsForType.map((a) => {
+            const thumb = a.imagePreviewUrl || a.image;
+            return `
             <tr>
-                <td>${a.image ? `<img class="sa-thumb" src="${escapeHtml(a.image)}" />` : '<div class="sa-thumb"></div>'}</td>
+                <td>${thumb ? `<img class="sa-thumb" src="${escapeHtml(thumb)}" />` : '<div class="sa-thumb"></div>'}</td>
                 <td>${escapeHtml(a.title)}</td>
                 <td>${formatIls(a.price)}</td>
                 <td><span class="sa-badge ${a.active !== false ? 'sa-badge-green' : 'sa-badge-gray'}">${a.active !== false ? 'פעיל' : 'כבוי'}</span></td>
@@ -265,8 +382,10 @@ class StudioUpsellAdminElement extends HTMLElement {
                     <button class="sa-btn sa-btn-danger" data-delete-addon="${a._id}">מחיקה</button>
                 </td>
             </tr>
-        `).join('');
+        `;
+        }).join('');
 
+        const previewUrl = editing ? (editing.imagePreviewUrl || editing.image || '') : '';
         const formHtml = editing ? `
             <div class="sa-card">
                 <h3 class="sa-section-title">${editing._id ? 'עריכת תוסף' : 'תוסף חדש'}</h3>
@@ -277,7 +396,17 @@ class StudioUpsellAdminElement extends HTMLElement {
                     <div class="sa-field"><label class="sa-label">סדר תצוגה</label><input class="sa-input" type="number" id="saAddOnSortOrder" value="${escapeHtml(editing.sortOrder ?? 0)}" /></div>
                 </div>
                 <div class="sa-field" style="margin-top:10px;"><label class="sa-label">תיאור</label><textarea class="sa-textarea" id="saAddOnDescription">${escapeHtml(editing.description || '')}</textarea></div>
-                <div class="sa-field" style="margin-top:10px;"><label class="sa-label">קישור תמונה (URL)</label><input class="sa-input" id="saAddOnImage" value="${escapeHtml(editing.image || '')}" /></div>
+                <div class="sa-field" style="margin-top:10px;">
+                    <label class="sa-label">תמונה</label>
+                    <div class="sa-image-picker">
+                        ${previewUrl ? `<img class="sa-image-preview" src="${escapeHtml(previewUrl)}" />` : '<div class="sa-image-preview sa-image-preview-empty">אין<br/>תמונה</div>'}
+                        <div class="sa-image-picker-actions">
+                            <button type="button" class="sa-btn sa-btn-ghost" id="saAddOnImagePickBtn" ${s.uploadingImage ? 'disabled' : ''}>${s.uploadingImage ? 'מעלה תמונה...' : 'בחירת תמונה מהמדיה'}</button>
+                            ${previewUrl ? '<button type="button" class="sa-btn sa-btn-ghost" id="saAddOnImageRemoveBtn">הסרת תמונה</button>' : ''}
+                            <input type="file" accept="image/*" id="saAddOnImageFile" style="display:none;" />
+                        </div>
+                    </div>
+                </div>
                 <div class="sa-checkbox-row" style="margin-top:10px;"><input type="checkbox" id="saAddOnActive" ${editing.active !== false ? 'checked' : ''} /><label for="saAddOnActive">פעיל</label></div>
                 <div class="sa-row" style="margin-top:16px;">
                     <button class="sa-btn sa-btn-primary" id="saAddOnSaveBtn">שמירה</button>
@@ -288,8 +417,7 @@ class StudioUpsellAdminElement extends HTMLElement {
 
         return `
             <div class="sa-card">
-                <div class="sa-row" style="margin-bottom:16px;">
-                    <div class="sa-field"><label class="sa-label">סוג סדנה</label>${this._workshopSelectHtml(s.selectedWorkshopTypeId, 'saCatalogWorkshopSelect')}</div>
+                <div class="sa-row" style="margin-bottom:16px; justify-content:flex-end;">
                     <button class="sa-btn sa-btn-primary" id="saAddOnNewBtn">+ תוסף חדש</button>
                 </div>
                 ${addOnsForType.length ? `
@@ -297,7 +425,7 @@ class StudioUpsellAdminElement extends HTMLElement {
                         <thead><tr><th></th><th>שם</th><th>מחיר</th><th>סטטוס</th><th>סדר</th><th></th></tr></thead>
                         <tbody>${rows}</tbody>
                     </table>
-                ` : '<div class="sa-empty">אין תוספים לסוג סדנה זה עדיין.</div>'}
+                ` : '<div class="sa-empty">אין תוספים עדיין.</div>'}
             </div>
             ${formHtml}
         `;
@@ -309,8 +437,6 @@ class StudioUpsellAdminElement extends HTMLElement {
 
         return `
             <div class="sa-card">
-                <div class="sa-field" style="margin-bottom:16px; max-width:280px;"><label class="sa-label">סוג סדנה</label>${this._workshopSelectHtml(s.selectedWorkshopTypeId, 'saSettingsWorkshopSelect')}</div>
-
                 <div class="sa-checkbox-row" style="margin-bottom:12px;"><input type="checkbox" id="saSettingActive" ${current.active !== false ? 'checked' : ''} /><label for="saSettingActive">מערכת התוספים פעילה לסוג סדנה זה</label></div>
 
                 <div class="sa-checkbox-row" style="margin-bottom:12px;"><input type="checkbox" id="saSettingOpenAmount" ${current.allowOpenAmount ? 'checked' : ''} /><label for="saSettingOpenAmount">אפשר סכום פתוח (תשלום חופשי)</label></div>
@@ -400,11 +526,20 @@ class StudioUpsellAdminElement extends HTMLElement {
             btn.addEventListener('click', () => this._switchTab(btn.getAttribute('data-tab')));
         });
 
-        const catalogSelect = root.querySelector('#saCatalogWorkshopSelect');
-        if (catalogSelect) catalogSelect.addEventListener('change', (e) => { s.selectedWorkshopTypeId = e.target.value; s.editingAddOn = null; this.render(); });
+        root.querySelectorAll('[data-select-workshop]').forEach((card) => {
+            card.addEventListener('click', () => this._selectWorkshop(card.getAttribute('data-select-workshop')));
+        });
 
-        const settingsSelect = root.querySelector('#saSettingsWorkshopSelect');
-        if (settingsSelect) settingsSelect.addEventListener('change', (e) => { s.selectedWorkshopTypeId = e.target.value; this.render(); });
+        const backBtn = root.querySelector('#saBackToWorkshopsBtn');
+        if (backBtn) backBtn.addEventListener('click', () => this._backToWorkshops());
+
+        root.querySelectorAll('[data-subtab]').forEach((btn) => {
+            btn.addEventListener('click', () => {
+                s.workshopSubTab = btn.getAttribute('data-subtab');
+                s.editingAddOn = null;
+                this.render();
+            });
+        });
 
         const newAddOnBtn = root.querySelector('#saAddOnNewBtn');
         if (newAddOnBtn) newAddOnBtn.addEventListener('click', () => {
@@ -430,9 +565,38 @@ class StudioUpsellAdminElement extends HTMLElement {
         const cancelBtn = root.querySelector('#saAddOnCancelBtn');
         if (cancelBtn) cancelBtn.addEventListener('click', () => { s.editingAddOn = null; this.render(); });
 
+        const imagePickBtn = root.querySelector('#saAddOnImagePickBtn');
+        const imageFileInput = root.querySelector('#saAddOnImageFile');
+        if (imagePickBtn && imageFileInput) imagePickBtn.addEventListener('click', () => imageFileInput.click());
+        if (imageFileInput) imageFileInput.addEventListener('change', () => {
+            const file = imageFileInput.files?.[0];
+            imageFileInput.value = '';
+            if (!file) return;
+            if (!file.type.startsWith('image/')) { alert('יש לבחור קובץ תמונה.'); return; }
+            if (file.size > MAX_IMAGE_BYTES) { alert('התמונה גדולה מהמותר (מקסימום 8MB).'); return; }
+            const reader = new FileReader();
+            reader.onload = () => {
+                s.uploadingImage = true;
+                this.render();
+                this._dispatch('uploadAddOnImage', { base64: reader.result, filename: file.name });
+            };
+            reader.onerror = () => alert('קריאת קובץ התמונה נכשלה.');
+            reader.readAsDataURL(file);
+        });
+
+        const imageRemoveBtn = root.querySelector('#saAddOnImageRemoveBtn');
+        if (imageRemoveBtn) imageRemoveBtn.addEventListener('click', () => {
+            if (s.editingAddOn) {
+                s.editingAddOn.image = '';
+                s.editingAddOn.imagePreviewUrl = '';
+            }
+            this.render();
+        });
+
         const saveAddOnBtn = root.querySelector('#saAddOnSaveBtn');
         if (saveAddOnBtn) saveAddOnBtn.addEventListener('click', () => {
             const editing = s.editingAddOn || {};
+            if (s.uploadingImage) { alert('נא להמתין לסיום העלאת התמונה.'); return; }
             const payload = {
                 _id: editing._id,
                 title: root.querySelector('#saAddOnTitle')?.value || '',
@@ -440,7 +604,7 @@ class StudioUpsellAdminElement extends HTMLElement {
                 maxQuantity: Number(root.querySelector('#saAddOnMaxQty')?.value) || 10,
                 sortOrder: Number(root.querySelector('#saAddOnSortOrder')?.value) || 0,
                 description: root.querySelector('#saAddOnDescription')?.value || '',
-                image: root.querySelector('#saAddOnImage')?.value || '',
+                image: editing.image || '',
                 active: !!root.querySelector('#saAddOnActive')?.checked,
                 workshopType: s.selectedWorkshopTypeId,
             };

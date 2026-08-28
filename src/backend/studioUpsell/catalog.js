@@ -9,8 +9,12 @@
  *                         openAmountLabel, openAmountMin, openAmountMax, showStaffCode, printOnPayment
  */
 import wixData from 'wix-data';
+import { wixMediaToPublicUrl } from './mediaUpload.js';
 
 const SA = { suppressAuth: true };
+
+/** Sentinel `workshopType` value for add-ons shown alongside every workshop's catalog. */
+export const GENERAL_WORKSHOP_TYPE = '__general__';
 
 const DEFAULT_SETTINGS = {
     active: true,
@@ -35,12 +39,28 @@ function mapSettingsRow(row) {
     };
 }
 
+function mapAddOnRow(item) {
+    return {
+        id: item._id,
+        title: item.title || '',
+        description: item.description || '',
+        price: Number(item.price) || 0,
+        image: wixMediaToPublicUrl(item.image) || item.image || null,
+        maxQuantity: Number(item.maxQuantity) || 10,
+    };
+}
+
 export async function getAddOnCatalog(workshopTypeId) {
     if (!workshopTypeId) return { addOns: [], settings: { ...DEFAULT_SETTINGS } };
 
-    const [addOnsResult, settingsResult] = await Promise.all([
+    const [specificResult, generalResult, settingsResult] = await Promise.all([
         wixData.query('StudioAddOns')
             .eq('workshopType', workshopTypeId)
+            .eq('active', true)
+            .ascending('sortOrder')
+            .find(SA),
+        wixData.query('StudioAddOns')
+            .eq('workshopType', GENERAL_WORKSHOP_TYPE)
             .eq('active', true)
             .ascending('sortOrder')
             .find(SA),
@@ -49,14 +69,10 @@ export async function getAddOnCatalog(workshopTypeId) {
             .find(SA),
     ]);
 
-    const addOns = (addOnsResult.items || []).map((item) => ({
-        id: item._id,
-        title: item.title || '',
-        description: item.description || '',
-        price: Number(item.price) || 0,
-        image: item.image || null,
-        maxQuantity: Number(item.maxQuantity) || 10,
-    }));
+    const addOns = [
+        ...(specificResult.items || []).map(mapAddOnRow),
+        ...(generalResult.items || []).map(mapAddOnRow),
+    ];
 
     return { addOns, settings: mapSettingsRow(settingsResult.items?.[0]) };
 }

@@ -20,6 +20,7 @@ import { checkout } from '@wix/ecom';
 import { auth } from '@wix/essentials';
 import { randomBytes } from 'crypto';
 import { getPurchasedQuantityForCustomer } from './inventory.js';
+import { wixMediaToImageId } from './mediaUpload.js';
 
 const SA = { suppressAuth: true };
 const elevatedCreateCheckout = auth.elevate(checkout.createCheckout);
@@ -31,13 +32,17 @@ function generateToken() {
 /**
  * Re-validates stock + "per customer" caps server-side (source of truth) right
  * before checkout creation. The perCustomer cap counts only what this customer
- * already bought for THIS workshop session (see inventory.js).
+ * already bought for THIS workshop session (see inventory.js). Also returns a
+ * map of addOnId -> CMS row, reused to build each line item's `media` from the
+ * canonical `image` field rather than trusting the client-supplied value.
  */
 async function assertItemsAvailable(items, customerPhone, scope) {
     const withQty = (items || []).filter((i) => i?.id && Number(i.quantity) > 0);
+    const addOnsById = new Map();
     for (const item of withQty) {
         const addOn = await wixData.get('StudioAddOns', item.id, SA).catch(() => null);
         if (!addOn) continue;
+        addOnsById.set(item.id, addOn);
 
         if (addOn.inventoryManaged) {
             const stock = Number(addOn.stockQuantity) || 0;
@@ -58,6 +63,7 @@ async function assertItemsAvailable(items, customerPhone, scope) {
             }
         }
     }
+    return addOnsById;
 }
 
 function buildDescriptionLines(workshopTitle) {
@@ -102,21 +108,29 @@ export async function createAddOnCheckout(params) {
         resumeUrl = null,
     } = params || {};
 
-    await assertItemsAvailable(items, customerPhone, { sessionId, workshopOrderId, workshopTypeId, workshopStart });
+    const addOnsById = await assertItemsAvailable(items, customerPhone, { sessionId, workshopOrderId, workshopTypeId, workshopStart });
 
     const descriptionLines = buildDescriptionLines(workshopTitle);
 
     const customLineItems = (items || [])
         .filter((i) => Number(i.quantity) > 0 && Number(i.price) >= 0)
-        .map((i) => ({
-            quantity: Number(i.quantity),
-            price: Number(i.price).toFixed(2),
-            productName: { original: i.title },
-            itemType: { preset: 'PHYSICAL' },
-            shippable: false,
-            ...(i.image ? { media: i.image } : {}),
-            ...(descriptionLines.length ? { descriptionLines } : {}),
-        }));
+        .map((i) => {
+            // Media must come from the canonical CMS `image` field (a wix:image://
+            // identifier), never the client-supplied preview URL — @wix/ecom's
+            // customLineItems[].media requires { id: <WixMedia GUID> }, and passing
+            // a raw https string there fails order validation post-payment.
+            const addOn = addOnsById.get(i.id);
+            const imageId = wixMediaToImageId(addOn?.image || i.image);
+            return {
+                quantity: Number(i.quantity),
+                price: Number(i.price).toFixed(2),
+                productName: { original: i.title },
+                itemType: { preset: 'PHYSICAL' },
+                shippable: false,
+                ...(imageId ? { media: { id: imageId } } : {}),
+                ...(descriptionLines.length ? { descriptionLines } : {}),
+            };
+        });
 
     const cleanOpenAmount = Math.max(0, Number(openAmount) || 0);
     if (cleanOpenAmount > 0) {

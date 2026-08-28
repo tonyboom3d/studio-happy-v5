@@ -117,6 +117,7 @@ class StudioUpsellAdminElement extends HTMLElement {
             transactions: null,
             printQueue: null,
             toast: null,
+            error: null,
         };
     }
 
@@ -124,7 +125,6 @@ class StudioUpsellAdminElement extends HTMLElement {
         this.setAttribute('dir', 'rtl');
         this.setAttribute('lang', 'he');
         this.innerHTML = `<style>${STYLE}</style><div class="sa-root" id="saRoot"><div class="sa-loading"><div class="sa-spinner"></div>טוען...</div></div>`;
-        this._dispatch('load', {});
     }
 
     attributeChangedCallback(name, oldValue, newValue) {
@@ -150,12 +150,21 @@ class StudioUpsellAdminElement extends HTMLElement {
 
         if (result && result.error === 'ACCESS_DENIED') {
             s.accessDenied = true;
+            s.loaded = true;
+            this.render();
+            return;
+        }
+
+        if (result && result.error) {
+            s.loaded = true;
+            s.error = result.error;
             this.render();
             return;
         }
 
         if (type === 'load') {
             s.loaded = true;
+            s.error = null;
             s.workshopTypes = result?.workshopTypes || [];
             s.addOns = result?.addOns || [];
             s.settings = result?.settings || [];
@@ -201,6 +210,11 @@ class StudioUpsellAdminElement extends HTMLElement {
 
         if (!s.loaded) {
             root.innerHTML = `<div class="sa-loading"><div class="sa-spinner"></div>טוען...</div>`;
+            return;
+        }
+
+        if (s.error) {
+            root.innerHTML = `<div class="sa-card sa-access-denied"><h2>שגיאה בטעינה</h2><p>${escapeHtml(s.error)}</p></div>`;
             return;
         }
 

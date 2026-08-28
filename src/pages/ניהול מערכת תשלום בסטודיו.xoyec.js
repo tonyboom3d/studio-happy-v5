@@ -21,9 +21,6 @@ $w.onReady(function () {
         return;
     }
     if (typeof el.on !== 'function') {
-        // Happens when the ID on the page isn't bound to a real Custom Element
-        // (wrong element type, or the "Tag Name" / ID don't match what's
-        // documented at the top of custom-elements/studio-upsell-admin.js).
         console.error(
             `[studio-upsell-admin][velo] ELEMENT_NOT_CUSTOM_ELEMENT — ${ELEMENT_ID} was found but has no ` +
             `".on" method. Verify it's a "Custom Element" component with Tag Name "studio-upsell-admin" and ID "studioUpsellAdmin1".`
@@ -34,16 +31,33 @@ $w.onReady(function () {
     el.on('studio-upsell-admin-action', (event) => {
         handleAction(el, event.detail).catch((err) => {
             console.error('[studio-upsell-admin][velo] action error:', err?.message || err);
-            const message = err?.message || String(err);
-            if (message.startsWith('ACCESS_DENIED') || message.startsWith('PERMISSION_DENIED')) {
-                pushData(el, event.detail?.type, event.detail?.requestId, { error: 'ACCESS_DENIED' });
-            }
+            pushActionError(el, event.detail?.type, event.detail?.requestId, err);
         });
+    });
+
+    // The CE may mount before this listener is registered — kick off the initial load here.
+    loadInitialData(el).catch((err) => {
+        console.error('[studio-upsell-admin][velo] initial load error:', err?.message || err);
+        pushActionError(el, 'load', 'velo_init', err);
     });
 });
 
 function pushData(el, type, requestId, result) {
     el.setAttribute('admin-data', JSON.stringify({ type, requestId, result, __ts: Date.now() }));
+}
+
+function pushActionError(el, type, requestId, err) {
+    const message = err?.message || String(err);
+    if (message.startsWith('ACCESS_DENIED') || message.startsWith('PERMISSION_DENIED')) {
+        pushData(el, type, requestId, { error: 'ACCESS_DENIED' });
+        return;
+    }
+    pushData(el, type, requestId, { error: message || 'אירעה שגיאה. נסו שוב.' });
+}
+
+async function loadInitialData(el) {
+    const result = await getUpsellAdminData();
+    pushData(el, 'load', 'velo_init', result);
 }
 
 async function handleAction(el, detail) {

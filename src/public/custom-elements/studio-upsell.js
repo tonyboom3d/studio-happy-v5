@@ -388,11 +388,32 @@ class StudioUpsellElement extends HTMLElement {
             }
         }
 
+        if (this._state.createdVia === 'qr_staff') {
+            const name = (this._state.customerName || '').trim();
+            const phone = (this._state.customerPhone || '').trim();
+            if (!name) {
+                this._state.error = 'יש להזין שם לקוח.';
+                this.render();
+                return;
+            }
+            if (!phone || phone.length < 7) {
+                this._state.error = 'יש להזין מספר טלפון תקין של הלקוח.';
+                this.render();
+                return;
+            }
+        }
+
         this._state.error = null;
         this._state.submitting = true;
         this.render();
 
         const w = this._state.selectedWorkshop || {};
+        const customerName = this._state.createdVia === 'qr_staff'
+            ? (this._state.customerName || '').trim()
+            : (this._state.customerName || w.organizerName || '');
+        const customerPhone = this._state.createdVia === 'qr_staff'
+            ? (this._state.customerPhone || '').trim()
+            : (this._state.customerPhone || this._state.phone || w.organizerPhone || '');
         this._dispatch('checkout', {
             items,
             openAmount,
@@ -403,8 +424,8 @@ class StudioUpsellElement extends HTMLElement {
             workshopTypeId: w.workshopTypeId || null,
             workshopStart: w.start || null,
             workshopTitle: w.workshopTitle || '',
-            customerName: this._state.customerName || w.organizerName || '',
-            customerPhone: this._state.customerPhone || this._state.phone || w.organizerPhone || '',
+            customerName,
+            customerPhone,
             createdVia: this._state.createdVia,
             staffName: this._state.staffName || null,
         });
@@ -519,10 +540,10 @@ class StudioUpsellElement extends HTMLElement {
 
         const identityBlock = s.createdVia === 'qr_staff' ? h`
             <div style="margin-top:6px;">
-                <label class="su-label" for="suCustomerName">שם הלקוח (אופציונלי)</label>
-                <input class="su-input" id="suCustomerName" type="text" value="${escapeHtml(s.customerName)}" />
-                <label class="su-label" for="suCustomerPhone">טלפון הלקוח (אופציונלי)</label>
-                <input class="su-input" id="suCustomerPhone" type="tel" value="${escapeHtml(s.customerPhone)}" />
+                <label class="su-label" for="suCustomerName">שם הלקוח</label>
+                <input class="su-input" id="suCustomerName" type="text" required value="${escapeHtml(s.customerName)}" />
+                <label class="su-label" for="suCustomerPhone">טלפון הלקוח</label>
+                <input class="su-input" id="suCustomerPhone" type="tel" inputmode="tel" required value="${escapeHtml(s.customerPhone)}" />
             </div>
         ` : '';
 

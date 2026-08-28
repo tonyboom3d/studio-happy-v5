@@ -28,21 +28,6 @@ export function wixMediaToPublicUrl(wixUrl) {
     return match?.[1] ? `https://static.wixstatic.com/media/${match[1]}` : null;
 }
 
-/**
- * Extracts the bare WixMedia image GUID from either a canonical `wix:image://...`
- * identifier or a `https://static.wixstatic.com/media/...` CDN URL. This GUID is
- * what @wix/ecom's customLineItems[].media expects as `{ id }` — passing the raw
- * URL string (or an object without `id`/`url`) fails order validation with
- * "order.lineItem.image.id or order.lineItem.image.url must set".
- */
-export function wixMediaToImageId(wixUrlOrHttps) {
-    if (!wixUrlOrHttps || typeof wixUrlOrHttps !== 'string') return null;
-    const wixMatch = wixUrlOrHttps.match(/wix:image:\/\/v1\/([^/#]+)/);
-    if (wixMatch?.[1]) return wixMatch[1];
-    const httpsMatch = wixUrlOrHttps.match(/static\.wixstatic\.com\/media\/([^/?#]+)/);
-    return httpsMatch?.[1] || null;
-}
-
 export async function uploadBase64ImageToWixMedia(base64, filename) {
     if (!base64 || !base64.startsWith('data:')) {
         throw new Error('לא התקבל קובץ תמונה תקין.');

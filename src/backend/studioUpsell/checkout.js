@@ -20,7 +20,6 @@ import { checkout } from '@wix/ecom';
 import { auth } from '@wix/essentials';
 import { randomBytes } from 'crypto';
 import { getPurchasedQuantityForCustomer } from './inventory.js';
-import { wixMediaToImageId } from './mediaUpload.js';
 
 const SA = { suppressAuth: true };
 const elevatedCreateCheckout = auth.elevate(checkout.createCheckout);
@@ -115,19 +114,25 @@ export async function createAddOnCheckout(params) {
     const customLineItems = (items || [])
         .filter((i) => Number(i.quantity) > 0 && Number(i.price) >= 0)
         .map((i) => {
-            // Media must come from the canonical CMS `image` field (a wix:image://
-            // identifier), never the client-supplied preview URL — @wix/ecom's
-            // customLineItems[].media requires { id: <WixMedia GUID> }, and passing
-            // a raw https string there fails order validation post-payment.
+            // Media must be the canonical CMS `image` field (a `wix:image://...`
+            // string) passed AS-IS — @wix/ecom's SDK treats `media` as a URL-like
+            // string and calls something equivalent to `new URL(media)` on it
+            // internally. Passing an object (e.g. `{ id }`) stringifies to
+            // "[object Object]" and throws "Invalid URL" at checkout creation.
+            // A plain `https://...` preview URL doesn't crash, but Wix silently
+            // drops it, leaving the order's image unset (the original bug).
             const addOn = addOnsById.get(i.id);
-            const imageId = wixMediaToImageId(addOn?.image || i.image);
+            const canonicalImage = addOn?.image || i.image || null;
+            const media = typeof canonicalImage === 'string' && canonicalImage.startsWith('wix:image://')
+                ? canonicalImage
+                : null;
             return {
                 quantity: Number(i.quantity),
                 price: Number(i.price).toFixed(2),
                 productName: { original: i.title },
                 itemType: { preset: 'PHYSICAL' },
                 shippable: false,
-                ...(imageId ? { media: { id: imageId } } : {}),
+                ...(media ? { media } : {}),
                 ...(descriptionLines.length ? { descriptionLines } : {}),
             };
         });

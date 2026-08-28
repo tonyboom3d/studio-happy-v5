@@ -6,8 +6,8 @@
  *   - Workshop type has "showStaffCode" OFF -> the full order summary shows
  *     immediately.
  *   - Workshop type has "showStaffCode" ON -> the customer must show THIS
- *     screen to an employee, who types the staff PIN (1326) to approve the
- *     order. Only then does the summary reveal and the receipt ("בון") print.
+ *     screen to an employee, who types the staff PIN (1326) and picks their
+ *     name from the active staff list to approve the order.
  *     If the customer never shows the screen, a manager can approve the same
  *     order from the admin transactions table instead.
  *
@@ -49,6 +49,11 @@ const STYLE = `
         letter-spacing: 4px; font-weight: 700;
     }
     .st-input:focus { outline: none; border-color: #6366f1; background: #fff; }
+    .st-select {
+        width: 100%; padding: 12px 14px; border-radius: 12px; border: 1.5px solid #e5e7eb;
+        font-size: 16px; font-family: inherit; margin-bottom: 14px; background: #f9fafb; text-align: right;
+    }
+    .st-select:focus { outline: none; border-color: #6366f1; background: #fff; }
     .st-btn { width: 100%; padding: 14px; border-radius: 12px; border: none; font-size: 16px; font-weight: 800; cursor: pointer; font-family: inherit; }
     .st-btn:disabled { opacity: .5; cursor: not-allowed; }
     .st-btn-primary { background: #4f46e5; color: #fff; }
@@ -69,6 +74,7 @@ const STYLE = `
     .st-spinner { width: 32px; height: 32px; border-radius: 50%; margin: 0 auto 12px; border: 3px solid #e0e7ff; border-top-color: #4f46e5; animation: st-spin .8s linear infinite; }
     @keyframes st-spin { to { transform: rotate(360deg); } }
     .st-error { background: #fef2f2; border: 1px solid #fecaca; color: #b91c1c; border-radius: 10px; padding: 12px; font-size: 14px; margin-bottom: 14px; }
+    .st-staff-name { cursor: help; border-bottom: 1px dotted #9ca3af; }
 `;
 
 function escapeHtml(str) {
@@ -98,6 +104,19 @@ function minutesSince(dateInput) {
     return (Date.now() - d.getTime()) / 60000;
 }
 
+/** Renders a staff name with a native hover tooltip showing when the action occurred. */
+function staffNameCell(name, at) {
+    if (!name) return '—';
+    const when = formatDateTime(at);
+    const title = when ? ` title="${escapeHtml(when)}"` : '';
+    return `<span class="st-staff-name"${title}>${escapeHtml(name)}</span>`;
+}
+
+function staffDetailRow(label, name, at) {
+    if (!name) return '';
+    return `<div class="st-detail-row"><span class="st-detail-title">${escapeHtml(label)}</span><span class="st-detail-value">${staffNameCell(name, at)}</span></div>`;
+}
+
 // Shown to the customer for any hard failure (thrown backend error, missing
 // token, or exhausted polling) — deliberately generic; full details always
 // go to console.error for staff/devtools to diagnose.
@@ -119,6 +138,10 @@ class StudioUpsellConfirmationElement extends HTMLElement {
             order: null,
             error: null,
             approveCode: '',
+            approvePinConfirmed: false,
+            staffOptions: [],
+            staffOptionsLoading: false,
+            selectedStaffId: '',
             approving: false,
             approveError: null,
         };
@@ -145,6 +168,7 @@ class StudioUpsellConfirmationElement extends HTMLElement {
                 const { type, result } = JSON.parse(newValue);
                 if (type === 'confirm' || type === 'summary') this._handleOrder(result);
                 else if (type === 'approve') this._handleApproveResult(result);
+                else if (type === 'getStaffOptions') this._handleStaffOptions(result);
             } catch (err) {
                 console.error('[studio-upsell-confirmation] failed to parse thanks-data:', err);
             }
@@ -198,6 +222,10 @@ class StudioUpsellConfirmationElement extends HTMLElement {
             console.warn(`[studio-upsell-confirmation] no response within 3s of "${type}" dispatch — possible Velo listener registration race.`);
             if (type === 'approve') {
                 this._handleFatalError('approve', 'no response within 3s of approve dispatch');
+            } else if (type === 'getStaffOptions') {
+                this._state.staffOptionsLoading = false;
+                this._state.approveError = SYSTEM_ERROR_MESSAGE;
+                this.render();
             } else {
                 this._handleOrder(null);
             }
@@ -237,20 +265,37 @@ class StudioUpsellConfirmationElement extends HTMLElement {
         this.render();
     }
 
+    _handleStaffOptions(options) {
+        this._state.staffOptions = Array.isArray(options) ? options : [];
+        this._state.staffOptionsLoading = false;
+        if (this._state.staffOptions.length && !this._state.selectedStaffId) {
+            this._state.selectedStaffId = this._state.staffOptions[0].id;
+        }
+        this.render();
+    }
+
     _handleApproveResult(result) {
         this._state.approving = false;
         if (!result?.success) {
             const reasonMessages = {
                 wrong_pin: 'קוד שגוי — נסו שוב.',
+                missing_staff: 'יש לבחור שם מהרשימה.',
+                invalid_staff: 'העובד/ת שנבחר/ה אינו/ה פעיל/ה.',
                 not_found: SYSTEM_ERROR_MESSAGE,
                 not_paid: SYSTEM_ERROR_MESSAGE,
             };
             this._state.approveError = reasonMessages[result?.reason] || 'קוד שגוי — נסו שוב.';
+            if (result?.reason === 'wrong_pin') {
+                this._state.approvePinConfirmed = false;
+                this._state.approveCode = '';
+            }
             this.render();
             return;
         }
         this._state.approveError = null;
         this._state.approveCode = '';
+        this._state.approvePinConfirmed = false;
+        this._state.selectedStaffId = '';
         this._state.order = result.order || this._state.order;
         this.render();
     }
@@ -283,35 +328,97 @@ class StudioUpsellConfirmationElement extends HTMLElement {
 
     _renderApprovalGate() {
         const s = this._state;
+
+        if (!s.approvePinConfirmed) {
+            return `
+                <div class="st-card">
+                    <div class="st-icon st-icon-lock">🔒</div>
+                    <h1 class="st-title">התשלום התקבל בהצלחה!</h1>
+                    <p class="st-subtitle">יש להציג מסך זה לאחד מאנשי הצוות — העובד/ת יזין/תזין את סיסמת הצוות כדי להמשיך.</p>
+                    ${s.approveError ? `<div class="st-error">${escapeHtml(s.approveError)}</div>` : ''}
+                    <label class="st-label" for="stApproveCode">סיסמת צוות</label>
+                    <input class="st-input" id="stApproveCode" type="password" inputmode="numeric" maxlength="6" value="${escapeHtml(s.approveCode)}" />
+                    <button class="st-btn st-btn-primary" id="stApprovePinContinueBtn">המשך</button>
+                </div>
+            `;
+        }
+
+        const options = (s.staffOptions || []).map((o) => `
+            <option value="${escapeHtml(o.id)}" ${s.selectedStaffId === o.id ? 'selected' : ''}>${escapeHtml(o.firstName)}</option>
+        `).join('');
+
         return `
             <div class="st-card">
                 <div class="st-icon st-icon-lock">🔒</div>
-                <h1 class="st-title">התשלום התקבל בהצלחה!</h1>
-                <p class="st-subtitle">יש להציג מסך זה לאחד מאנשי הצוות — העובד/ת יזין/תזין את סיסמת הצוות כדי להשלים את ההזמנה.</p>
+                <h1 class="st-title">אישור עובד/ת</h1>
+                <p class="st-subtitle">בחרו את שמכם מהרשימה כדי להשלים את ההזמנה.</p>
                 ${s.approveError ? `<div class="st-error">${escapeHtml(s.approveError)}</div>` : ''}
-                <label class="st-label" for="stApproveCode">סיסמת צוות</label>
-                <input class="st-input" id="stApproveCode" type="password" inputmode="numeric" maxlength="6" value="${escapeHtml(s.approveCode)}" />
-                <button class="st-btn st-btn-primary" id="stApproveBtn" ${s.approving ? 'disabled' : ''}>${s.approving ? 'מאשר...' : 'אישור עובד/ת'}</button>
+                <label class="st-label" for="stApproveStaffSelect">שם</label>
+                ${s.staffOptionsLoading
+                    ? '<p class="st-subtitle">טוען רשימת עובדים...</p>'
+                    : `<select class="st-select" id="stApproveStaffSelect">${options}</select>`}
+                <button class="st-btn st-btn-primary" id="stApproveBtn" ${s.approving || s.staffOptionsLoading || !s.staffOptions.length ? 'disabled' : ''}>${s.approving ? 'מאשר...' : 'אישור והשלמת הזמנה'}</button>
+                <button class="st-btn" id="stApproveBackBtn" style="margin-top:10px;background:#f3f4f6;color:#374151;" ${s.approving ? 'disabled' : ''}>חזרה</button>
             </div>
         `;
     }
 
     _bindApprovalGateEvents(root) {
         const s = this._state;
-        const input = root.querySelector('#stApproveCode');
-        if (input) input.addEventListener('input', (e) => { s.approveCode = e.target.value; });
+
+        if (!s.approvePinConfirmed) {
+            const input = root.querySelector('#stApproveCode');
+            if (input) input.addEventListener('input', (e) => { s.approveCode = e.target.value; });
+
+            const continueBtn = root.querySelector('#stApprovePinContinueBtn');
+            if (continueBtn) continueBtn.addEventListener('click', () => {
+                if (!s.approveCode) {
+                    s.approveError = 'יש להזין קוד.';
+                    this.render();
+                    return;
+                }
+                s.approveError = null;
+                s.approvePinConfirmed = true;
+                if (!s.staffOptions.length) {
+                    s.staffOptionsLoading = true;
+                    this.render();
+                    this._dispatch('getStaffOptions', {});
+                } else {
+                    this.render();
+                }
+            });
+            return;
+        }
+
+        const select = root.querySelector('#stApproveStaffSelect');
+        if (select) select.addEventListener('change', (e) => { s.selectedStaffId = e.target.value; });
+
+        const backBtn = root.querySelector('#stApproveBackBtn');
+        if (backBtn) backBtn.addEventListener('click', () => {
+            s.approvePinConfirmed = false;
+            s.approveError = null;
+            this.render();
+        });
 
         const btn = root.querySelector('#stApproveBtn');
         if (btn) btn.addEventListener('click', () => {
+            const staffId = s.selectedStaffId || root.querySelector('#stApproveStaffSelect')?.value || '';
+            if (!staffId) {
+                s.approveError = 'יש לבחור שם מהרשימה.';
+                this.render();
+                return;
+            }
             if (!s.approveCode) {
                 s.approveError = 'יש להזין קוד.';
+                s.approvePinConfirmed = false;
                 this.render();
                 return;
             }
             s.approveError = null;
             s.approving = true;
+            s.selectedStaffId = staffId;
             this.render();
-            this._dispatch('approve', { code: s.approveCode.trim() });
+            this._dispatch('approve', { code: s.approveCode.trim(), staffId });
         });
     }
 
@@ -345,12 +452,16 @@ class StudioUpsellConfirmationElement extends HTMLElement {
         const isStalePayment = paidMinutesAgo != null && paidMinutesAgo > STALE_PAYMENT_MINUTES;
         const paidAtLabel = formatDateTime(order.paidAt) || '—';
 
+        const kioskStaffLabel = order.createdVia === 'qr_staff' ? 'עובד/ת (כניסת צוות)' : 'עובד/ת (סכום פתוח)';
+
         const detailsHtml = `
             <div class="st-details">
                 <div class="st-detail-row"><span class="st-detail-title">שם סדנה</span><span class="st-detail-value">${escapeHtml(order.workshopTitle || '—')}</span></div>
                 <div class="st-detail-row"><span class="st-detail-title">מבצע ההזמנה</span><span class="st-detail-value">${ordererLabel}</span></div>
                 <div class="st-detail-row"><span class="st-detail-title">מבצע התשלום</span><span class="st-detail-value">${payerLabel}</span></div>
                 <div class="st-detail-row"><span class="st-detail-title">תאריך ושעת תשלום</span><span class="st-detail-value ${isStalePayment ? 'st-detail-value-stale' : ''}">${escapeHtml(paidAtLabel)}</span></div>
+                ${staffDetailRow(kioskStaffLabel, order.staffName, order.staffActionAt)}
+                ${staffDetailRow('אושר ע"י', order.staffApprovedByName, order.staffApprovedAt)}
                 <div class="st-detail-row"><span class="st-detail-title">בון</span><span class="st-detail-value">${order.receiptQueued ? 'הופק' : 'לא הופק'}</span></div>
             </div>
         `;

@@ -80,6 +80,7 @@ function buildDescriptionLines(workshopTitle) {
  * @param {string} [params.customerPhone]
  * @param {'qr_customer'|'qr_staff'} [params.createdVia]
  * @param {string} [params.staffName]
+ * @param {string|Date} [params.staffActionAt] - when the staff member assisted (login / open-amount unlock)
  * @param {string} [params.resumeUrl] - QR landing page URL used for abandoned-checkout recovery
  */
 export async function createAddOnCheckout(params) {
@@ -97,6 +98,7 @@ export async function createAddOnCheckout(params) {
         customerPhone = '',
         createdVia = 'qr_customer',
         staffName = null,
+        staffActionAt = null,
         resumeUrl = null,
     } = params || {};
 
@@ -161,6 +163,7 @@ export async function createAddOnCheckout(params) {
         status: 'pending_payment',
         createdVia,
         staffName: staffName || null,
+        staffActionAt: staffName && staffActionAt ? new Date(staffActionAt) : null,
         customerName: customerName || '',
         customerPhone: customerPhone || '',
         workshopOrderId: workshopOrderId || null,

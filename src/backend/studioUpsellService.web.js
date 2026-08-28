@@ -67,9 +67,23 @@ export const getAddOnCatalogForWorkshop = webMethod(Permissions.Anyone, async (w
     return getAddOnCatalog(workshopTypeId, customerPhone, scope);
 });
 
-/** Staff-entered code to unlock the "open amount" payment option, when a workshop type has one configured. */
-export const verifyOpenAmountCode = webMethod(Permissions.Anyone, async (workshopTypeId, code) => {
-    return { valid: await verifyOpenAmountPassword(workshopTypeId, code) };
+/** Staff-entered code + staff picker to unlock the "open amount" payment option. */
+export const verifyOpenAmountCode = webMethod(Permissions.Anyone, async (workshopTypeId, code, staffId) => {
+    const pinOk = await verifyOpenAmountPassword(workshopTypeId, code);
+    if (!pinOk) return { valid: false, reason: 'wrong_pin' };
+
+    // When password gate is off, verifyOpenAmountPassword returns true without a code —
+    // no staff picker needed in that case (the modal never opens).
+    const settingsRow = await wixData.query('StudioUpsellSettings').eq('workshopType', workshopTypeId).find(SA);
+    if (!settingsRow.items?.[0]?.openAmountPasswordEnabled) {
+        return { valid: true, staffName: null };
+    }
+
+    if (!staffId) return { valid: false, reason: 'missing_staff' };
+    const role = await wixData.get('Dashboard_Roles', staffId, SA).catch(() => null);
+    if (!role?.active || !role?.displayName) return { valid: false, reason: 'invalid_staff' };
+    const staffName = String(role.displayName).trim().split(/\s+/)[0];
+    return { valid: true, staffName };
 });
 
 /** Creates the @wix/ecom checkout (digital-only line items) and logs the StudioAddOnOrders row. */
@@ -115,19 +129,29 @@ export const getAddOnOrderSummary = webMethod(Permissions.Anyone, async (token) 
 });
 
 /**
- * Thank You page: an employee looks at the customer's screen and types the
- * staff PIN to approve the order — this is what actually enqueues the print
- * job for workshop types with "showStaffCode" (staff-approval) turned on.
+ * Thank You page: an employee looks at the customer's screen, types the staff
+ * PIN and picks their name — this enqueues the print job for workshop types
+ * with "showStaffCode" (staff-approval) turned on.
  */
-export const approveAddOnOrder = webMethod(Permissions.Anyone, async (token, code) => {
+export const approveAddOnOrder = webMethod(Permissions.Anyone, async (token, code, staffId) => {
     if (String(code || '').trim() !== STAFF_PIN) {
         return { success: false, reason: 'wrong_pin' };
+    }
+    if (!staffId) {
+        return { success: false, reason: 'missing_staff' };
     }
     try {
         const addOnOrder = await getAddOnOrderByToken(token);
         if (!addOnOrder) return { success: false, reason: 'not_found' };
         if (addOnOrder.status !== 'paid') return { success: false, reason: 'not_paid' };
-        const updated = await approveStaffOnAddOnOrder(addOnOrder);
+
+        const role = await wixData.get('Dashboard_Roles', staffId, SA).catch(() => null);
+        if (!role?.active || !role?.displayName) {
+            return { success: false, reason: 'invalid_staff' };
+        }
+        const staffName = String(role.displayName).trim().split(/\s+/)[0];
+
+        const updated = await approveStaffOnAddOnOrder(addOnOrder, { staffId, staffName });
         return { success: true, order: await enrichOrderForClient(updated) };
     } catch (err) {
         console.error(`[studioUpsellService] approveAddOnOrder failed — token=${token}:`, err?.stack || err?.message || err);
@@ -171,6 +195,9 @@ export const saveAddOn = webMethod(Permissions.SiteMember, async (addOn) => {
             // Manager restocked above 0 -> allow a fresh out-of-stock alert next time it runs out.
             if (merged.stockQuantity > 0) merged.outOfStockNotifiedAt = null;
         }
+        if (addOn.generalCategoryId !== undefined) {
+            merged.generalCategoryId = addOn.generalCategoryId ? String(addOn.generalCategoryId) : null;
+        }
         return wixData.update('StudioAddOns', merged, SA);
     }
 
@@ -188,6 +215,7 @@ export const saveAddOn = webMethod(Permissions.SiteMember, async (addOn) => {
         stockQuantity: addOn?.inventoryManaged ? Math.max(0, Number(addOn?.stockQuantity) || 0) : null,
         notifyOutOfStock: !!addOn?.notifyOutOfStock,
         outOfStockNotifiedAt: null,
+        generalCategoryId: addOn?.generalCategoryId ? String(addOn.generalCategoryId) : null,
     }, SA);
 });
 
@@ -207,10 +235,17 @@ export const saveUpsellSettings = webMethod(Permissions.SiteMember, async (setti
     if (!settings?.workshopType) throw new Error('workshopType is required');
 
     const openAmountPassword = settings.openAmountPassword != null ? String(settings.openAmountPassword).trim() : '';
+    const generalCategories = settings.generalCategories != null
+        ? (typeof settings.generalCategories === 'string'
+            ? settings.generalCategories
+            : JSON.stringify(Array.isArray(settings.generalCategories) ? settings.generalCategories : []))
+        : undefined;
 
     const existing = await wixData.query('StudioUpsellSettings').eq('workshopType', settings.workshopType).find(SA);
     if (existing.items?.[0]) {
-        return wixData.update('StudioUpsellSettings', { ...existing.items[0], ...settings, openAmountPassword }, SA);
+        const patch = { ...existing.items[0], ...settings, openAmountPassword };
+        if (generalCategories !== undefined) patch.generalCategories = generalCategories;
+        return wixData.update('StudioUpsellSettings', patch, SA);
     }
 
     return wixData.insert('StudioUpsellSettings', {
@@ -224,6 +259,7 @@ export const saveUpsellSettings = webMethod(Permissions.SiteMember, async (setti
         openAmountPassword,
         showStaffCode: !!settings.showStaffCode,
         printOnPayment: settings.printOnPayment !== false,
+        generalCategories: generalCategories || '[]',
     }, SA);
 });
 

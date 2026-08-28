@@ -4,11 +4,11 @@
  *
  * Collections (create manually in the Wix editor — see plan doc):
  *   StudioAddOns:        title, description, price, image, workshopType (ref -> workshops),
- *                         active, sortOrder, maxQuantity
+ *                         active, sortOrder, maxQuantity, generalCategoryId (general add-ons only)
  *   StudioUpsellSettings: workshopType (ref -> workshops), active, allowOpenAmount,
  *                         openAmountLabel, openAmountMin, openAmountMax,
  *                         openAmountPasswordEnabled, openAmountPassword,
- *                         showStaffCode, printOnPayment
+ *                         showStaffCode, printOnPayment, generalCategories (JSON, __general__ row only)
  */
 import wixData from 'wix-data';
 import { wixMediaToPublicUrl } from './mediaUpload.js';
@@ -69,7 +69,7 @@ export async function verifyOpenAmountPassword(workshopTypeId, code) {
     return String(code || '').trim() === getEffectiveOpenAmountPassword(row);
 }
 
-function mapAddOnRow(item) {
+function mapAddOnRow(item, { isGeneral = false } = {}) {
     return {
         id: item._id,
         title: item.title || '',
@@ -80,7 +80,49 @@ function mapAddOnRow(item) {
         maxQuantityMode: item.maxQuantityMode === 'perCustomer' ? 'perCustomer' : 'perOrder',
         inventoryManaged: !!item.inventoryManaged,
         stockQuantity: item.inventoryManaged ? (Number(item.stockQuantity) || 0) : null,
+        generalCategoryId: item.generalCategoryId ? String(item.generalCategoryId) : null,
+        isGeneral,
     };
+}
+
+/** Parses the `generalCategories` JSON field from StudioUpsellSettings (__general__ row). */
+export function parseGeneralCategories(raw) {
+    if (!raw) return [];
+    let list = raw;
+    if (typeof raw === 'string') {
+        try { list = JSON.parse(raw); } catch { return []; }
+    }
+    if (!Array.isArray(list)) return [];
+    return list
+        .map((c) => ({
+            id: String(c?.id || '').trim(),
+            title: String(c?.title || '').trim(),
+            sortOrder: Number(c?.sortOrder) || 0,
+        }))
+        .filter((c) => c.id && c.title);
+}
+
+export function serializeGeneralCategories(categories) {
+    return JSON.stringify(parseGeneralCategories(categories));
+}
+
+/** Groups general add-ons under their category headings for the customer catalog. */
+export function buildGeneralSections(categories, generalAddOns) {
+    const sorted = [...categories].sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+    const catIds = new Set(sorted.map((c) => c.id));
+    const sections = sorted
+        .map((cat) => ({
+            id: cat.id,
+            title: cat.title,
+            addOns: generalAddOns.filter((a) => a.generalCategoryId === cat.id),
+        }))
+        .filter((sec) => sec.addOns.length > 0);
+
+    const uncategorized = generalAddOns.filter((a) => !a.generalCategoryId || !catIds.has(a.generalCategoryId));
+    if (uncategorized.length) {
+        sections.push({ id: '__other__', title: 'אחר', addOns: uncategorized });
+    }
+    return sections;
 }
 
 /**
@@ -120,9 +162,11 @@ async function applyAvailabilityCaps(addOns, customerPhone, scope) {
  *   The workshop session the 'perCustomer' cap is counted within.
  */
 export async function getAddOnCatalog(workshopTypeId, customerPhone, scope) {
-    if (!workshopTypeId) return { addOns: [], settings: { ...DEFAULT_SETTINGS } };
+    if (!workshopTypeId) {
+        return { workshopAddOns: [], generalSections: [], addOns: [], settings: { ...DEFAULT_SETTINGS } };
+    }
 
-    const [specificResult, generalResult, settingsResult] = await Promise.all([
+    const [specificResult, generalResult, settingsResult, generalSettingsResult] = await Promise.all([
         wixData.query('StudioAddOns')
             .eq('workshopType', workshopTypeId)
             .eq('active', true)
@@ -136,16 +180,26 @@ export async function getAddOnCatalog(workshopTypeId, customerPhone, scope) {
         wixData.query('StudioUpsellSettings')
             .eq('workshopType', workshopTypeId)
             .find(SA),
+        wixData.query('StudioUpsellSettings')
+            .eq('workshopType', GENERAL_WORKSHOP_TYPE)
+            .find(SA),
     ]);
 
-    const addOns = [
-        ...(specificResult.items || []).map(mapAddOnRow),
-        ...(generalResult.items || []).map(mapAddOnRow),
-    ];
+    const workshopAddOns = (specificResult.items || []).map((item) => mapAddOnRow(item, { isGeneral: false }));
+    const generalAddOns = (generalResult.items || []).map((item) => mapAddOnRow(item, { isGeneral: true }));
+    const addOns = [...workshopAddOns, ...generalAddOns];
 
     await applyAvailabilityCaps(addOns, customerPhone, scope || { workshopTypeId });
 
-    return { addOns, settings: mapSettingsRow(settingsResult.items?.[0]) };
+    const generalCategories = parseGeneralCategories(generalSettingsResult.items?.[0]?.generalCategories);
+    const generalSections = buildGeneralSections(generalCategories, generalAddOns);
+
+    return {
+        workshopAddOns,
+        generalSections,
+        addOns,
+        settings: mapSettingsRow(settingsResult.items?.[0]),
+    };
 }
 
 export async function getSettingsForWorkshopType(workshopTypeId) {

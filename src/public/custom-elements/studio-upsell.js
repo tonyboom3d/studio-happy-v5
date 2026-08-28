@@ -143,6 +143,12 @@ const STYLE = `
     .su-addon-price { font-size: 13px; color: #6b7280; margin-top: 2px; }
     .su-addon-row-disabled .su-addon-title, .su-addon-row-disabled .su-addon-price { color: #9ca3af; }
     .su-addon-row-disabled .su-addon-img { opacity: .55; }
+    .su-catalog-section { margin-top: 22px; }
+    .su-catalog-section:first-of-type { margin-top: 0; }
+    .su-catalog-section-title {
+        font-size: 15px; font-weight: 800; color: #4338ca; margin: 0 0 12px;
+        padding-bottom: 8px; border-bottom: 2px solid #e0e7ff;
+    }
     .su-addon-note { font-size: 11px; font-weight: 700; color: #9ca3af; margin-top: 3px; }
     .su-addon-unavailable {
         font-size: 12px; font-weight: 700; color: #6b7280; background: #f1f2f4;
@@ -247,17 +253,22 @@ class StudioUpsellElement extends HTMLElement {
             staffPin: '',
             staffPinConfirmed: false,
             staffName: null,
+            staffActionAt: null,
             createdVia: 'qr_customer',
             phone: '',
             workshops: [],
             selectedWorkshop: null,
-            catalog: { addOns: [], settings: null },
+            catalog: { addOns: [], workshopAddOns: [], generalSections: [], settings: null },
             quantities: {},
             openAmount: '',
             paymentMode: null, // null | 'catalog' | 'openAmount' — which payment option the customer picked
             openAmountUnlocked: false, // true once no password is required, or the staff code was verified
             openAmountPasswordModalOpen: false,
             openAmountPasswordInput: '',
+            openAmountPwPinConfirmed: false,
+            openAmountStaffId: '',
+            openAmountApprovedByStaffName: null,
+            openAmountApprovedAt: null,
             openAmountVerifying: false,
             customerName: '',
             customerPhone: '',
@@ -306,6 +317,10 @@ class StudioUpsellElement extends HTMLElement {
         if (type === 'getStaffOptions') {
             this._state.staffOptions = result || [];
             this._state.staffOptionsLoading = false;
+            if (this._state.openAmountPasswordModalOpen && this._state.openAmountPwPinConfirmed
+                && !this._state.openAmountStaffId && this._state.staffOptions.length) {
+                this._state.openAmountStaffId = this._state.staffOptions[0].id;
+            }
         } else if (type === 'lookupByPhone') {
             const matches = result?.matches || [];
             if (!matches.length) {
@@ -323,6 +338,7 @@ class StudioUpsellElement extends HTMLElement {
                 this._state.staffPinConfirmed = false;
             } else {
                 this._state.staffName = result.staffName || null;
+                this._state.staffActionAt = new Date().toISOString();
                 this._state.createdVia = 'qr_staff';
                 this._state.staffModalOpen = false;
                 this._state.staffPinConfirmed = false;
@@ -346,13 +362,13 @@ class StudioUpsellElement extends HTMLElement {
                 }
             }
         } else if (type === 'getAddOnCatalogForWorkshop') {
-            this._state.catalog = result || { addOns: [], settings: null };
+            this._state.catalog = result || { addOns: [], workshopAddOns: [], generalSections: [], settings: null };
             // Re-fetches mid-order (staff flow, customer phone just entered) keep
             // existing picks re-clamped to the fresh caps, and stay on whichever
             // screen (catalog / openAmount) the customer was already on.
             if (this._state.keepQuantitiesOnLoad) {
                 const next = {};
-                for (const addOn of (this._state.catalog.addOns || [])) {
+                for (const addOn of this._allCatalogAddOns()) {
                     const qty = Math.min(this._state.quantities[addOn.id] || 0, addOn.maxQuantity || 0);
                     if (qty > 0) next[addOn.id] = qty;
                 }
@@ -376,11 +392,25 @@ class StudioUpsellElement extends HTMLElement {
                 this._state.openAmountUnlocked = true;
                 this._state.openAmountPasswordModalOpen = false;
                 this._state.openAmountPasswordInput = '';
+                this._state.openAmountPwPinConfirmed = false;
+                this._state.openAmountStaffId = '';
+                this._state.openAmountApprovedByStaffName = result.staffName || null;
+                this._state.openAmountApprovedAt = new Date().toISOString();
                 this._state.quantities = {};
                 this._state.paymentMode = 'openAmount';
                 this._state.screen = 'openAmount';
+                this._state.error = null;
             } else {
-                this._state.error = 'קוד שגוי — נסו שוב.';
+                const reasonMessages = {
+                    wrong_pin: 'קוד שגוי — נסו שוב.',
+                    missing_staff: 'יש לבחור שם מהרשימה.',
+                    invalid_staff: 'העובד/ת שנבחר/ה אינו/ה פעיל/ה.',
+                };
+                this._state.error = reasonMessages[result?.reason] || 'קוד שגוי — נסו שוב.';
+                if (result?.reason === 'wrong_pin') {
+                    this._state.openAmountPwPinConfirmed = false;
+                    this._state.openAmountPasswordInput = '';
+                }
             }
         } else if (type === 'checkout') {
             // Navigation away happens on the Velo side on success; only surface errors here.
@@ -432,6 +462,36 @@ class StudioUpsellElement extends HTMLElement {
         return this._state.quantities[addOnId] || 0;
     }
 
+    /** Flat list of every purchasable add-on in the current catalog (workshop + general). */
+    _allCatalogAddOns() {
+        const c = this._state.catalog || {};
+        if (Array.isArray(c.addOns) && c.addOns.length) return c.addOns;
+        const general = (c.generalSections || []).flatMap((sec) => sec.addOns || []);
+        return [...(c.workshopAddOns || []), ...general];
+    }
+
+    _renderAddonRow(a) {
+        return `
+            <div class="su-addon-row ${a.soldOut ? 'su-addon-row-disabled' : ''}">
+                ${a.image
+                    ? `<button type="button" class="su-addon-img-btn" data-preview-image="${escapeHtml(a.image)}" aria-label="הגדלת תמונה"><img class="su-addon-img" src="${escapeHtml(a.image)}" alt="" /></button>`
+                    : '<div class="su-addon-img"></div>'}
+                <div class="su-addon-info">
+                    <div class="su-addon-title">${escapeHtml(a.title)}</div>
+                    <div class="su-addon-price">${formatIls(a.price)}</div>
+                    ${a.soldOut ? `<div class="su-addon-note">${a.soldOutReason === 'perCustomer' ? 'כבר נרכש עבור סדנה זו' : 'אזל מהמלאי'}</div>` : ''}
+                </div>
+                ${a.soldOut
+                    ? `<span class="su-addon-unavailable">${a.soldOutReason === 'perCustomer' ? 'נרכש' : 'אין במלאי'}</span>`
+                    : `<div class="su-stepper">
+                        <button data-addon="${a.id}" data-delta="-1" ${this._qty(a.id) <= 0 ? 'disabled' : ''}>−</button>
+                        <span>${this._qty(a.id)}</span>
+                        <button data-addon="${a.id}" data-max="${a.maxQuantity}" data-delta="1" ${this._qty(a.id) >= a.maxQuantity ? 'disabled' : ''}>+</button>
+                    </div>`}
+            </div>
+        `;
+    }
+
     _setQty(addOnId, max, delta) {
         const current = this._qty(addOnId);
         const next = Math.max(0, Math.min(max, current + delta));
@@ -446,7 +506,7 @@ class StudioUpsellElement extends HTMLElement {
         }
         const { addOns } = this._state.catalog;
         let total = 0;
-        for (const addOn of (addOns || [])) {
+        for (const addOn of this._allCatalogAddOns()) {
             total += (this._qty(addOn.id) || 0) * (Number(addOn.price) || 0);
         }
         return total;
@@ -457,8 +517,7 @@ class StudioUpsellElement extends HTMLElement {
         if (this._state.paymentMode === 'openAmount') {
             return (Number(this._state.openAmount) || 0) > 0;
         }
-        const { addOns } = this._state.catalog;
-        return (addOns || []).some((a) => this._qty(a.id) > 0);
+        return this._allCatalogAddOns().some((a) => this._qty(a.id) > 0);
     }
 
     /** Re-paints just the total + checkout button — avoids a full re-render (and losing input focus) on every keystroke. */
@@ -480,7 +539,7 @@ class StudioUpsellElement extends HTMLElement {
         const isOpenAmountMode = this._state.paymentMode === 'openAmount';
 
         // Only one of the two payment modes is ever sent to checkout — never both.
-        const items = isOpenAmountMode ? [] : (addOns || [])
+        const items = isOpenAmountMode ? [] : this._allCatalogAddOns()
             .filter((a) => this._qty(a.id) > 0)
             .map((a) => ({ id: a.id, title: a.title, price: a.price, quantity: this._qty(a.id), image: a.image }));
 
@@ -542,7 +601,8 @@ class StudioUpsellElement extends HTMLElement {
             customerName,
             customerPhone,
             createdVia: this._state.createdVia,
-            staffName: this._state.staffName || null,
+            staffName: this._state.staffName || this._state.openAmountApprovedByStaffName || null,
+            staffActionAt: this._state.staffActionAt || this._state.openAmountApprovedAt || null,
         });
     }
 
@@ -635,30 +695,26 @@ class StudioUpsellElement extends HTMLElement {
 
     _renderCatalog() {
         const s = this._state;
-        const { addOns, settings } = s.catalog;
+        const { workshopAddOns, generalSections, settings } = s.catalog;
         const w = s.selectedWorkshop || {};
-
-        // Unavailable add-ons stay visible (dimmed, no stepper) so customers still
-        // see what exists — either already bought for this workshop, or out of stock.
-        const rows = addOns.map((a) => h`
-            <div class="su-addon-row ${a.soldOut ? 'su-addon-row-disabled' : ''}">
-                ${a.image
-                    ? `<button type="button" class="su-addon-img-btn" data-preview-image="${escapeHtml(a.image)}" aria-label="הגדלת תמונה"><img class="su-addon-img" src="${escapeHtml(a.image)}" alt="" /></button>`
-                    : '<div class="su-addon-img"></div>'}
-                <div class="su-addon-info">
-                    <div class="su-addon-title">${escapeHtml(a.title)}</div>
-                    <div class="su-addon-price">${formatIls(a.price)}</div>
-                    ${a.soldOut ? `<div class="su-addon-note">${a.soldOutReason === 'perCustomer' ? 'כבר נרכש עבור סדנה זו' : 'אזל מהמלאי'}</div>` : ''}
+        const workshopItems = workshopAddOns || [];
+        const generalBlocks = (generalSections || [])
+            .filter((sec) => (sec.addOns || []).length)
+            .map((sec) => `
+                <div class="su-catalog-section">
+                    <h2 class="su-catalog-section-title">${escapeHtml(sec.title)}</h2>
+                    ${(sec.addOns || []).map((a) => this._renderAddonRow(a)).join('')}
                 </div>
-                ${a.soldOut
-                    ? `<span class="su-addon-unavailable">${a.soldOutReason === 'perCustomer' ? 'נרכש' : 'אין במלאי'}</span>`
-                    : h`<div class="su-stepper">
-                        <button data-addon="${a.id}" data-delta="-1" ${this._qty(a.id) <= 0 ? 'disabled' : ''}>−</button>
-                        <span>${this._qty(a.id)}</span>
-                        <button data-addon="${a.id}" data-max="${a.maxQuantity}" data-delta="1" ${this._qty(a.id) >= a.maxQuantity ? 'disabled' : ''}>+</button>
-                    </div>`}
+            `).join('');
+
+        const workshopBlock = workshopItems.length ? `
+            <div class="su-catalog-section">
+                <h2 class="su-catalog-section-title">תוספות לסדנה</h2>
+                ${workshopItems.map((a) => this._renderAddonRow(a)).join('')}
             </div>
-        `).join('');
+        ` : '';
+
+        const hasAny = workshopItems.length || generalBlocks;
 
         const identityBlock = s.createdVia === 'qr_staff' ? h`
             <div style="margin-top:6px;">
@@ -678,7 +734,7 @@ class StudioUpsellElement extends HTMLElement {
                 <h1 class="su-title">${escapeHtml(w.workshopTitle || 'תוספות לסדנה')}</h1>
                 <p class="su-subtitle">${escapeHtml(w.startLabel ? `סדנה בשעה ${w.startLabel}` : 'בחרו תוספות לתשלום')}</p>
                 ${s.error ? `<div class="su-error">${escapeHtml(s.error)}</div>` : ''}
-                ${addOns.length ? `<div>${rows}</div>` : '<p class="su-subtitle">אין תוספות זמינות לסדנה זו כרגע.</p>'}
+                ${hasAny ? `${workshopBlock}${generalBlocks}` : '<p class="su-subtitle">אין תוספות זמינות לסדנה זו כרגע.</p>'}
                 ${identityBlock}
                 <div class="su-summary"><span>סה"כ לתשלום</span><span>${formatIls(total)}</span></div>
                 <button class="su-btn su-btn-primary" id="suCheckoutBtn" ${s.submitting || !canCheckout ? 'disabled' : ''}>
@@ -744,16 +800,39 @@ class StudioUpsellElement extends HTMLElement {
 
     _renderOpenAmountPasswordModal() {
         const s = this._state;
+
+        if (!s.openAmountPwPinConfirmed) {
+            return h`
+                <div class="su-modal-backdrop" id="suOpenAmountPwBackdrop">
+                    <div class="su-modal">
+                        <h2 class="su-title">אישור עובד/ת</h2>
+                        <p class="su-subtitle">תשלום בסכום פתוח דורש אישור צוות — הזינו את קוד הצוות.</p>
+                        ${s.error ? `<div class="su-error">${escapeHtml(s.error)}</div>` : ''}
+                        <label class="su-label" for="suOpenAmountPw">קוד אישור</label>
+                        <input class="su-input" id="suOpenAmountPw" type="password" inputmode="numeric" maxlength="6" value="${escapeHtml(s.openAmountPasswordInput)}" />
+                        <button class="su-btn su-btn-primary" id="suOpenAmountPwContinueBtn">המשך</button>
+                        <div class="su-link-row"><button class="su-btn su-btn-ghost" id="suOpenAmountPwCancelBtn">ביטול</button></div>
+                    </div>
+                </div>
+            `;
+        }
+
+        const options = (s.staffOptions || []).map((o) => `
+            <option value="${escapeHtml(o.id)}" ${s.openAmountStaffId === o.id ? 'selected' : ''}>${escapeHtml(o.firstName)}</option>
+        `).join('');
+
         return h`
             <div class="su-modal-backdrop" id="suOpenAmountPwBackdrop">
                 <div class="su-modal">
                     <h2 class="su-title">אישור עובד/ת</h2>
-                    <p class="su-subtitle">תשלום בסכום פתוח דורש אישור צוות — אנא פנו לעובד/ת להזנת הקוד.</p>
+                    <p class="su-subtitle">בחרו את שמכם מהרשימה כדי לאשר סכום פתוח.</p>
                     ${s.error ? `<div class="su-error">${escapeHtml(s.error)}</div>` : ''}
-                    <label class="su-label" for="suOpenAmountPw">קוד אישור</label>
-                    <input class="su-input" id="suOpenAmountPw" type="password" inputmode="numeric" value="${escapeHtml(s.openAmountPasswordInput)}" />
-                    <button class="su-btn su-btn-primary" id="suOpenAmountPwSubmitBtn" ${s.openAmountVerifying ? 'disabled' : ''}>${s.openAmountVerifying ? 'בודק...' : 'אישור'}</button>
-                    <div class="su-link-row"><button class="su-btn su-btn-ghost" id="suOpenAmountPwCancelBtn">ביטול</button></div>
+                    <label class="su-label" for="suOpenAmountStaffSelect">שם</label>
+                    ${s.staffOptionsLoading
+                        ? '<p class="su-subtitle">טוען רשימת עובדים...</p>'
+                        : `<select class="su-select" id="suOpenAmountStaffSelect">${options}</select>`}
+                    <button class="su-btn su-btn-primary" id="suOpenAmountPwSubmitBtn" ${s.openAmountVerifying || s.staffOptionsLoading || !s.staffOptions.length ? 'disabled' : ''}>${s.openAmountVerifying ? 'בודק...' : 'אישור'}</button>
+                    <div class="su-link-row"><button class="su-btn su-btn-ghost" id="suOpenAmountPwBackBtn">חזרה</button></div>
                 </div>
             </div>
         `;
@@ -933,6 +1012,8 @@ class StudioUpsellElement extends HTMLElement {
             } else {
                 s.openAmountPasswordModalOpen = true;
                 s.openAmountPasswordInput = '';
+                s.openAmountPwPinConfirmed = false;
+                s.openAmountStaffId = '';
             }
             this.render();
         });
@@ -949,6 +1030,8 @@ class StudioUpsellElement extends HTMLElement {
         if (pwCancelBtn) pwCancelBtn.addEventListener('click', () => {
             s.openAmountPasswordModalOpen = false;
             s.openAmountPasswordInput = '';
+            s.openAmountPwPinConfirmed = false;
+            s.openAmountStaffId = '';
             s.error = null;
             this.render();
         });
@@ -956,19 +1039,59 @@ class StudioUpsellElement extends HTMLElement {
         const openAmountPwInput = root.querySelector('#suOpenAmountPw');
         if (openAmountPwInput) openAmountPwInput.addEventListener('input', (e) => { s.openAmountPasswordInput = e.target.value; });
 
-        const pwSubmitBtn = root.querySelector('#suOpenAmountPwSubmitBtn');
-        if (pwSubmitBtn) pwSubmitBtn.addEventListener('click', () => {
+        const pwContinueBtn = root.querySelector('#suOpenAmountPwContinueBtn');
+        if (pwContinueBtn) pwContinueBtn.addEventListener('click', () => {
             if (!s.openAmountPasswordInput) {
                 s.error = 'אנא הזינו קוד.';
                 this.render();
                 return;
             }
             s.error = null;
+            s.openAmountPwPinConfirmed = true;
+            if (!s.staffOptions.length) {
+                s.staffOptionsLoading = true;
+                this.render();
+                this._dispatch('getStaffOptions', {});
+            } else {
+                if (!s.openAmountStaffId) s.openAmountStaffId = s.staffOptions[0].id;
+                this.render();
+            }
+        });
+
+        const pwBackBtn = root.querySelector('#suOpenAmountPwBackBtn');
+        if (pwBackBtn) pwBackBtn.addEventListener('click', () => {
+            s.openAmountPwPinConfirmed = false;
+            s.error = null;
+            this.render();
+        });
+
+        const openAmountStaffSelect = root.querySelector('#suOpenAmountStaffSelect');
+        if (openAmountStaffSelect) openAmountStaffSelect.addEventListener('change', (e) => {
+            s.openAmountStaffId = e.target.value;
+        });
+
+        const pwSubmitBtn = root.querySelector('#suOpenAmountPwSubmitBtn');
+        if (pwSubmitBtn) pwSubmitBtn.addEventListener('click', () => {
+            const staffId = s.openAmountStaffId || root.querySelector('#suOpenAmountStaffSelect')?.value || '';
+            if (!s.openAmountPasswordInput) {
+                s.error = 'אנא הזינו קוד.';
+                s.openAmountPwPinConfirmed = false;
+                this.render();
+                return;
+            }
+            if (!staffId) {
+                s.error = 'יש לבחור שם מהרשימה.';
+                this.render();
+                return;
+            }
+            s.error = null;
             s.openAmountVerifying = true;
+            s.openAmountStaffId = staffId;
             this.render();
             this._dispatch('verifyOpenAmountCode', {
                 workshopTypeId: (s.selectedWorkshop || {}).workshopTypeId,
                 code: s.openAmountPasswordInput.trim(),
+                staffId,
             });
         });
 

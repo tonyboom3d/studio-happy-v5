@@ -194,6 +194,31 @@ function formatDate(d) {
     return new Intl.DateTimeFormat('he-IL', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }).format(date);
 }
 
+function staffNameTooltip(name, at) {
+    if (!name) return '';
+    const when = formatDate(at);
+    return when
+        ? `<span style="cursor:help;border-bottom:1px dotted #9ca3af;" title="${escapeHtml(when)}">${escapeHtml(name)}</span>`
+        : escapeHtml(name);
+}
+
+/** Parses generalCategories from CMS (JSON string or array). */
+function parseGeneralCategoriesRaw(raw) {
+    if (!raw) return [];
+    let list = raw;
+    if (typeof raw === 'string') {
+        try { list = JSON.parse(raw); } catch { return []; }
+    }
+    if (!Array.isArray(list)) return [];
+    return list
+        .map((c) => ({
+            id: String(c?.id || '').trim(),
+            title: String(c?.title || '').trim(),
+            sortOrder: Number(c?.sortOrder) || 0,
+        }))
+        .filter((c) => c.id);
+}
+
 /** Small "ⓘ" hover-tooltip next to a setting's label — explains what it does in plain Hebrew. */
 function tip(text) {
     return `<span class="sa-info-icon" tabindex="0">i<span class="sa-tooltip">${escapeHtml(text)}</span></span>`;
@@ -236,6 +261,7 @@ class StudioUpsellAdminElement extends HTMLElement {
             error: null,
             togglingWorkshopTypeId: null,
             quietSettingsSave: false,
+            generalCategoryDrafts: [],
         };
     }
 
@@ -330,6 +356,9 @@ class StudioUpsellAdminElement extends HTMLElement {
                 s.workshopTypes = result?.workshopTypes || [];
                 s.addOns = result?.addOns || [];
                 s.settings = result?.settings || [];
+                s.generalCategoryDrafts = parseGeneralCategoriesRaw(
+                    s.settings.find((row) => row.workshopType === GENERAL_WORKSHOP_TYPE)?.generalCategories
+                );
             }
             this.render();
             return;
@@ -403,9 +432,38 @@ class StudioUpsellAdminElement extends HTMLElement {
     _selectWorkshop(id) {
         const s = this._state;
         s.selectedWorkshopTypeId = id;
-        s.workshopSubTab = 'settings';
+        s.workshopSubTab = id === GENERAL_WORKSHOP_TYPE ? 'addons' : 'settings';
         s.editingAddOn = null;
+        if (id === GENERAL_WORKSHOP_TYPE) {
+            s.generalCategoryDrafts = parseGeneralCategoriesRaw(
+                s.settings.find((row) => row.workshopType === GENERAL_WORKSHOP_TYPE)?.generalCategories
+            );
+        }
         this.render();
+    }
+
+    _getGeneralCategories() {
+        return parseGeneralCategoriesRaw(
+            this._state.settings.find((row) => row.workshopType === GENERAL_WORKSHOP_TYPE)?.generalCategories
+        );
+    }
+
+    _getGeneralCategoryTitle(categoryId) {
+        if (!categoryId) return '—';
+        return this._getGeneralCategories().find((c) => c.id === categoryId)?.title || '—';
+    }
+
+    _syncGeneralCategoryDraftsFromDom(root) {
+        const s = this._state;
+        s.generalCategoryDrafts = (s.generalCategoryDrafts || []).map((cat) => {
+            const titleInput = root.querySelector(`#saCatTitle_${cat.id}`);
+            const sortInput = root.querySelector(`#saCatSort_${cat.id}`);
+            return {
+                ...cat,
+                title: titleInput ? titleInput.value.trim() : cat.title,
+                sortOrder: sortInput ? Number(sortInput.value) || 0 : cat.sortOrder,
+            };
+        });
     }
 
     _backToWorkshops() {
@@ -537,14 +595,21 @@ class StudioUpsellAdminElement extends HTMLElement {
         const workshop = isGeneral ? null : s.workshopTypes.find((w) => w.id === s.selectedWorkshopTypeId);
         const title = isGeneral ? 'תוספות כלליות' : (workshop?.title || 'סדנה');
 
-        const subTabsHtml = !isGeneral ? `
+        const subTabsHtml = isGeneral ? `
+            <div class="sa-subtabs">
+                <button class="sa-subtab ${s.workshopSubTab === 'categories' ? 'active' : ''}" data-subtab="categories">קטגוריות</button>
+                <button class="sa-subtab ${s.workshopSubTab === 'addons' ? 'active' : ''}" data-subtab="addons">תוספים</button>
+            </div>
+        ` : !isGeneral ? `
             <div class="sa-subtabs">
                 <button class="sa-subtab ${s.workshopSubTab === 'settings' ? 'active' : ''}" data-subtab="settings">הגדרות</button>
                 <button class="sa-subtab ${s.workshopSubTab === 'addons' ? 'active' : ''}" data-subtab="addons">תוספים</button>
             </div>
         ` : '';
 
-        const body = (isGeneral || s.workshopSubTab === 'addons') ? this._renderCatalogTab() : this._renderSettingsTab();
+        const body = isGeneral
+            ? (s.workshopSubTab === 'categories' ? this._renderGeneralCategoriesTab() : this._renderCatalogTab())
+            : (s.workshopSubTab === 'addons' ? this._renderCatalogTab() : this._renderSettingsTab());
 
         return `
             <div class="sa-detail-header">
@@ -556,10 +621,43 @@ class StudioUpsellAdminElement extends HTMLElement {
         `;
     }
 
+    _renderGeneralCategoriesTab() {
+        const s = this._state;
+        const drafts = s.generalCategoryDrafts || [];
+
+        const rows = drafts.map((cat) => `
+            <tr>
+                <td><input class="sa-input" id="saCatTitle_${escapeHtml(cat.id)}" value="${escapeHtml(cat.title)}" placeholder="לדוגמה: אוכל" /></td>
+                <td><input class="sa-input" type="number" id="saCatSort_${escapeHtml(cat.id)}" value="${escapeHtml(cat.sortOrder ?? 0)}" style="width:90px;" /></td>
+                <td><button class="sa-btn sa-btn-danger" type="button" data-cat-delete="${escapeHtml(cat.id)}">מחיקה</button></td>
+            </tr>
+        `).join('');
+
+        return `
+            <div class="sa-card">
+                <p style="font-size:12px;color:#6b7280;margin:0 0 14px;">הגדירו קטגוריות (לדוגמה: אוכל, שתייה) — הכותרות יוצגו ללקוח בקטלוג, וכל תוסף כללי ישויך לקטגוריה.</p>
+                <div class="sa-row" style="margin-bottom:16px; justify-content:flex-end; gap:8px;">
+                    <button class="sa-btn sa-btn-ghost" type="button" id="saAddCategoryBtn">+ קטגוריה חדשה</button>
+                    <button class="sa-btn sa-btn-primary" type="button" id="saSaveCategoriesBtn">שמירת קטגוריות</button>
+                </div>
+                ${drafts.length ? `
+                    <div class="sa-table-wrap">
+                    <table class="sa-table">
+                        <thead><tr><th>שם קטגוריה</th><th>סדר תצוגה</th><th></th></tr></thead>
+                        <tbody>${rows}</tbody>
+                    </table>
+                    </div>
+                ` : '<div class="sa-empty">אין קטגוריות עדיין — הוסיפו קטגוריה ראשונה.</div>'}
+            </div>
+        `;
+    }
+
     _renderCatalogTab() {
         const s = this._state;
+        const isGeneral = s.selectedWorkshopTypeId === GENERAL_WORKSHOP_TYPE;
         const addOnsForType = s.addOns.filter((a) => a.workshopType === s.selectedWorkshopTypeId);
         const editing = s.editingAddOn;
+        const categories = this._getGeneralCategories();
 
         const rows = addOnsForType.map((a) => {
             const thumb = a.imagePreviewUrl || a.image;
@@ -567,10 +665,14 @@ class StudioUpsellAdminElement extends HTMLElement {
             const stockLabel = a.inventoryManaged
                 ? `<span class="sa-badge ${Number(a.stockQuantity) > 0 ? 'sa-badge-green' : 'sa-badge-red'}">${Number(a.stockQuantity) || 0} במלאי</span>`
                 : '<span class="sa-badge sa-badge-gray">ללא הגבלה</span>';
+            const categoryCell = isGeneral
+                ? `<td>${escapeHtml(this._getGeneralCategoryTitle(a.generalCategoryId))}</td>`
+                : '';
             return `
             <tr>
                 <td>${thumb ? `<img class="sa-thumb" src="${escapeHtml(thumb)}" />` : '<div class="sa-thumb"></div>'}</td>
                 <td>${escapeHtml(a.title)}</td>
+                ${categoryCell}
                 <td>${formatIls(a.price)}</td>
                 <td>${stockLabel}</td>
                 <td><button class="sa-badge ${isActive ? 'sa-badge-green' : 'sa-badge-gray'}" style="border:none;cursor:pointer;" data-toggle-active="${a._id}" data-active-value="${isActive ? 'false' : 'true'}" title="לחצו להחלפת מצב">${isActive ? 'פעיל' : 'כבוי'}</button></td>
@@ -585,6 +687,18 @@ class StudioUpsellAdminElement extends HTMLElement {
 
         const previewUrl = editing ? (editing.imagePreviewUrl || editing.image || '') : '';
         const maxQtyMode = editing?.maxQuantityMode === 'perCustomer' ? 'perCustomer' : 'perOrder';
+        const categoryOptions = categories.map((cat) => `
+            <option value="${escapeHtml(cat.id)}" ${editing?.generalCategoryId === cat.id ? 'selected' : ''}>${escapeHtml(cat.title)}</option>
+        `).join('');
+        const categoryFieldHtml = isGeneral ? `
+            <div class="sa-field" style="margin-top:10px;">
+                <label class="sa-label">קטגוריה</label>
+                <select class="sa-select" id="saAddOnGeneralCategory">
+                    <option value="">ללא קטגוריה</option>
+                    ${categoryOptions}
+                </select>
+            </div>
+        ` : '';
         const formHtml = editing ? `
             <div class="sa-card">
                 <h3 class="sa-section-title">${editing._id ? 'עריכת תוסף' : 'תוסף חדש'}</h3>
@@ -604,6 +718,7 @@ class StudioUpsellAdminElement extends HTMLElement {
                     <div class="sa-field"><label class="sa-label">כמות מקסימלית (${maxQtyMode === 'perCustomer' ? 'פר מזמין' : 'פר הזמנה'})</label><input class="sa-input" type="number" min="1" id="saAddOnMaxQty" value="${escapeHtml(editing.maxQuantity ?? 10)}" /></div>
                 </div>
                 <div class="sa-field" style="margin-top:10px;"><label class="sa-label">תיאור</label><textarea class="sa-textarea" id="saAddOnDescription">${escapeHtml(editing.description || '')}</textarea></div>
+                ${categoryFieldHtml}
                 <div class="sa-field" style="margin-top:10px;">
                     <label class="sa-label">תמונה</label>
                     <div class="sa-image-picker">
@@ -631,7 +746,7 @@ class StudioUpsellAdminElement extends HTMLElement {
                 ${addOnsForType.length ? `
                     <div class="sa-table-wrap">
                     <table class="sa-table">
-                        <thead><tr><th></th><th>שם</th><th>מחיר</th><th>מלאי</th><th>סטטוס</th><th>סדר</th><th></th></tr></thead>
+                        <thead><tr><th></th><th>שם</th>${isGeneral ? '<th>קטגוריה</th>' : ''}<th>מחיר</th><th>מלאי</th><th>סטטוס</th><th>סדר</th><th></th></tr></thead>
                         <tbody>${rows}</tbody>
                     </table>
                     </div>
@@ -780,7 +895,9 @@ class StudioUpsellAdminElement extends HTMLElement {
         const rows = s.transactions.map((t) => {
             const status = STATUS_LABELS[t.status] || { label: t.status, cls: 'sa-badge-gray' };
             const itemsLabel = Array.isArray(t.items) ? t.items.map((i) => `${i.title} ×${i.quantity}`).join(', ') : '';
-            const viaLabel = t.createdVia === 'qr_staff' ? `צוות${t.staffName ? ` (${t.staffName})` : ''}` : 'לקוח';
+            const viaLabel = t.createdVia === 'qr_staff'
+                ? `צוות${t.staffName ? ` (${staffNameTooltip(t.staffName, t.staffActionAt)})` : ''}`
+                : (t.staffName ? `לקוח · ${staffNameTooltip(t.staffName, t.staffActionAt)}` : 'לקוח');
             // checkoutName is filled from the paid eCom order (reconcile.js) — it's who
             // actually paid, which can differ from the name the order is placed under.
             const checkoutCell = t.checkoutName || t.checkoutPhone
@@ -793,7 +910,7 @@ class StudioUpsellAdminElement extends HTMLElement {
             let approvalCell = '<span style="color:#9ca3af;">—</span>';
             if (t.status === 'paid' && t.staffApprovalRequired) {
                 approvalCell = t.staffApprovedAt
-                    ? `<span class="sa-badge sa-badge-green">אושר · ${formatDate(t.staffApprovedAt)}</span>`
+                    ? `<span class="sa-badge sa-badge-green" title="${escapeHtml(formatDate(t.staffApprovedAt))}">${staffNameTooltip(t.staffApprovedByName || 'אושר', t.staffApprovedAt)}</span>`
                     : `<button class="sa-btn sa-btn-primary" data-approve-order="${t._id}" style="padding:6px 12px;font-size:12px;">אישור ידני</button>`;
             }
 
@@ -886,8 +1003,39 @@ class StudioUpsellAdminElement extends HTMLElement {
 
         root.querySelectorAll('[data-subtab]').forEach((btn) => {
             btn.addEventListener('click', () => {
+                if (s.workshopSubTab === 'categories') this._syncGeneralCategoryDraftsFromDom(root);
                 s.workshopSubTab = btn.getAttribute('data-subtab');
                 s.editingAddOn = null;
+                this.render();
+            });
+        });
+
+        const addCategoryBtn = root.querySelector('#saAddCategoryBtn');
+        if (addCategoryBtn) addCategoryBtn.addEventListener('click', () => {
+            this._syncGeneralCategoryDraftsFromDom(root);
+            s.generalCategoryDrafts = [...(s.generalCategoryDrafts || []), {
+                id: `cat_${Date.now()}`,
+                title: '',
+                sortOrder: s.generalCategoryDrafts?.length || 0,
+            }];
+            this.render();
+        });
+
+        const saveCategoriesBtn = root.querySelector('#saSaveCategoriesBtn');
+        if (saveCategoriesBtn) saveCategoriesBtn.addEventListener('click', () => {
+            this._syncGeneralCategoryDraftsFromDom(root);
+            const categories = (s.generalCategoryDrafts || []).filter((c) => c.title);
+            this._dispatch('saveSettings', {
+                workshopType: GENERAL_WORKSHOP_TYPE,
+                generalCategories: JSON.stringify(categories),
+            });
+        });
+
+        root.querySelectorAll('[data-cat-delete]').forEach((btn) => {
+            btn.addEventListener('click', () => {
+                this._syncGeneralCategoryDraftsFromDom(root);
+                const id = btn.getAttribute('data-cat-delete');
+                s.generalCategoryDrafts = (s.generalCategoryDrafts || []).filter((c) => c.id !== id);
                 this.render();
             });
         });
@@ -978,6 +1126,10 @@ class StudioUpsellAdminElement extends HTMLElement {
                 active: !!root.querySelector('#saAddOnActive')?.checked,
                 workshopType: s.selectedWorkshopTypeId,
             };
+            if (s.selectedWorkshopTypeId === GENERAL_WORKSHOP_TYPE) {
+                const catId = root.querySelector('#saAddOnGeneralCategory')?.value || '';
+                payload.generalCategoryId = catId || null;
+            }
             if (!payload.title) { alert('יש להזין שם תוסף'); return; }
             this._dispatch('saveAddOn', payload);
         });

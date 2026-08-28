@@ -68,7 +68,7 @@ async function handleAction(el, detail) {
             return;
         }
         case 'verifyOpenAmountCode': {
-            const result = await verifyOpenAmountCode(payload?.workshopTypeId, payload?.code);
+            const result = await verifyOpenAmountCode(payload?.workshopTypeId, payload?.code, payload?.staffId);
             pushData(el, type, requestId, result);
             return;
         }

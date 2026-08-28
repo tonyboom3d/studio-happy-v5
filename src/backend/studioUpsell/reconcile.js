@@ -90,13 +90,16 @@ export async function confirmAddOnOrderFromEcom(addOnOrder, ecomOrder) {
 
 /**
  * Marks an order as staff-approved — triggered either from the Thank You page
- * (customer shows the screen, employee enters the code) or from the admin
- * "approve manually" fallback for orders where the customer never showed the
- * screen. Idempotent: re-approving an already-approved order is a no-op.
- * Printing is deferred until this point specifically for staffApprovalRequired
- * orders, so the receipt only comes out once a human has actually looked.
+ * (customer shows the screen, employee enters the code + picks their name) or
+ * from the admin "approve manually" fallback for orders where the customer
+ * never showed the screen. Idempotent: re-approving an already-approved order
+ * is a no-op. Printing is deferred until this point specifically for
+ * staffApprovalRequired orders, so the receipt only comes out once a human
+ * has actually looked.
+ *
+ * @param {object} [meta] - { staffId, staffName } from the Thank You page picker
  */
-export async function approveStaffOnAddOnOrder(addOnOrder) {
+export async function approveStaffOnAddOnOrder(addOnOrder, meta = {}) {
     if (!addOnOrder) return null;
     if (addOnOrder.staffApprovedAt) return addOnOrder;
     if (addOnOrder.status !== 'paid') return addOnOrder;
@@ -106,6 +109,8 @@ export async function approveStaffOnAddOnOrder(addOnOrder) {
     const updated = await wixData.update('StudioAddOnOrders', {
         ...addOnOrder,
         staffApprovedAt: new Date(),
+        staffApprovedById: meta.staffId || addOnOrder.staffApprovedById || null,
+        staffApprovedByName: meta.staffName || addOnOrder.staffApprovedByName || null,
     }, SA);
 
     if (!settings || settings.printOnPayment !== false) {

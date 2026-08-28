@@ -42,6 +42,8 @@ const STYLE = `
     .st-icon-lock { background: #eef2ff; color: #4338ca; }
     .st-title { font-size: 21px; font-weight: 800; margin: 0 0 6px; color: #111827; }
     .st-subtitle { font-size: 14px; color: #6b7280; margin: 0 0 20px; line-height: 1.5; }
+    .st-orderer-top { font-size: 14px; color: #374151; margin: -12px 0 18px; background: #f3f4ff; border-radius: 10px; padding: 8px 12px; }
+    .st-orderer-top strong { color: #4338ca; }
     .st-label { display: block; font-size: 13px; font-weight: 700; color: #374151; margin-bottom: 6px; text-align: right; }
     .st-input {
         width: 100%; padding: 12px 14px; border-radius: 12px; border: 1.5px solid #e5e7eb;
@@ -452,6 +454,11 @@ class StudioUpsellConfirmationElement extends HTMLElement {
         const isStalePayment = paidMinutesAgo != null && paidMinutesAgo > STALE_PAYMENT_MINUTES;
         const paidAtLabel = formatDateTime(order.paidAt) || '—';
 
+        const ordererName = order.customerName || order.checkoutName || '';
+        const topOrdererHtml = ordererName ? `
+            <p class="st-orderer-top">הזמנה בוצע ע"י <strong>${escapeHtml(ordererName)}</strong></p>
+        ` : '';
+
         const kioskStaffLabel = order.createdVia === 'qr_staff' ? 'עובד/ת (כניסת צוות)' : 'עובד/ת (סכום פתוח)';
 
         const detailsHtml = `
@@ -471,6 +478,7 @@ class StudioUpsellConfirmationElement extends HTMLElement {
                 <div class="st-icon">✓</div>
                 <h1 class="st-title">התשלום התקבל בהצלחה!</h1>
                 <p class="st-subtitle">${escapeHtml(order.workshopTitle ? `תודה על הרכישה — ${order.workshopTitle}` : 'תודה על הרכישה')}</p>
+                ${topOrdererHtml}
                 ${detailsHtml}
                 <div class="st-summary">
                     ${itemsHtml || (openAmountHtml ? '' : '<div class="st-row"><span class="st-row-title">אין פריטים</span></div>')}

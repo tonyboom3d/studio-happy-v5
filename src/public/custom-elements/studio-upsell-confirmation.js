@@ -54,9 +54,14 @@ function formatIls(n) {
     return `₪${(Number(n) || 0).toLocaleString('he-IL', { maximumFractionDigits: 2 })}`;
 }
 
+// Shown to the customer for any hard failure (thrown backend error, missing
+// token, or exhausted polling) — deliberately generic; full details always
+// go to console.error for staff/devtools to diagnose.
+const SYSTEM_ERROR_MESSAGE = 'שגיאת מערכת, יש לפנות לאחד מהעובדים.';
+
 class StudioUpsellConfirmationElement extends HTMLElement {
     static get observedAttributes() {
-        return ['thanks-data'];
+        return ['thanks-data', 'thanks-error'];
     }
 
     constructor() {
@@ -80,13 +85,30 @@ class StudioUpsellConfirmationElement extends HTMLElement {
     }
 
     attributeChangedCallback(name, oldValue, newValue) {
-        if (name !== 'thanks-data' || !newValue || newValue === oldValue) return;
-        try {
-            const { type, result } = JSON.parse(newValue);
-            if (type === 'confirm' || type === 'summary') this._handleOrder(result);
-        } catch (err) {
-            console.error('[studio-upsell-confirmation] failed to parse thanks-data:', err);
+        if (!newValue || newValue === oldValue) return;
+        if (name === 'thanks-data') {
+            try {
+                const { type, result } = JSON.parse(newValue);
+                if (type === 'confirm' || type === 'summary') this._handleOrder(result);
+            } catch (err) {
+                console.error('[studio-upsell-confirmation] failed to parse thanks-data:', err);
+            }
+        } else if (name === 'thanks-error') {
+            try {
+                const { type, message } = JSON.parse(newValue);
+                this._handleFatalError(type, message);
+            } catch (err) {
+                console.error('[studio-upsell-confirmation] failed to parse thanks-error:', err);
+            }
         }
+    }
+
+    /** A genuine backend/network failure (as opposed to "not paid yet") — stop polling and show the fixed customer-facing message. */
+    _handleFatalError(type, message) {
+        if (this._pollTimer) clearTimeout(this._pollTimer);
+        console.error(`[studio-upsell-confirmation] fatal error (type=${type}):`, message);
+        this._state = { status: 'error', order: null, error: SYSTEM_ERROR_MESSAGE };
+        this.render();
     }
 
     _dispatch(type, payload) {
@@ -99,26 +121,34 @@ class StudioUpsellConfirmationElement extends HTMLElement {
 
     _handleOrder(order) {
         if (!order) {
-            // Not paid yet (webhook may still be in flight) — poll a few times before giving up.
+            // Not found yet — the checkout row is written BEFORE payment, so this
+            // normally means eventual-consistency lag right after redirect, not a
+            // real failure. Poll a few times before giving up.
             this._pollAttempts++;
             if (this._pollAttempts <= 5) {
                 this._pollTimer = setTimeout(() => this._dispatch('summary', {}), 1500);
                 return;
             }
-            this._state = { status: 'error', order: null, error: 'לא הצלחנו לאתר את פרטי ההזמנה. אם בוצע תשלום, פנו לצוות הסטודיו.' };
+            console.error(`[studio-upsell-confirmation] order not found after ${this._pollAttempts} polling attempts.`);
+            this._state = { status: 'error', order: null, error: SYSTEM_ERROR_MESSAGE };
             this.render();
             return;
         }
 
         if (order.status !== 'paid') {
+            // Webhook may still be in flight — poll a while longer before giving up.
             this._pollAttempts++;
             if (this._pollAttempts <= 8) {
                 this._pollTimer = setTimeout(() => this._dispatch('summary', {}), 1500);
                 return;
             }
+            console.error(`[studio-upsell-confirmation] order ${order._id} still not paid (status=${order.status}) after ${this._pollAttempts} polling attempts.`);
+            this._state = { status: 'error', order: null, error: SYSTEM_ERROR_MESSAGE };
+            this.render();
+            return;
         }
 
-        this._state = { status: order.status === 'paid' ? 'paid' : 'pending', order, error: null };
+        this._state = { status: 'paid', order, error: null };
         this.render();
     }
 

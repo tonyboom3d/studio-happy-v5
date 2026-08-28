@@ -23,8 +23,11 @@ $w.onReady(function () {
 
     el.on('studio-upsell-thanks-action', (event) => {
         handleAction(el, event.detail, token, orderId).catch((err) => {
-            console.error('[studio-upsell-thanks][velo] action error:', err?.message || err);
-            pushData(el, event.detail?.type, event.detail?.requestId, null);
+            console.error(
+                `[studio-upsell-thanks][velo] action error — type=${event.detail?.type}, token=${token}, orderId=${orderId}:`,
+                err?.stack || err?.message || err,
+            );
+            pushError(el, event.detail?.type, event.detail?.requestId, err?.message || String(err));
         });
     });
 });
@@ -33,10 +36,14 @@ function pushData(el, type, requestId, result) {
     el.setAttribute('thanks-data', JSON.stringify({ type, requestId, result, __ts: Date.now() }));
 }
 
+function pushError(el, type, requestId, message) {
+    el.setAttribute('thanks-error', JSON.stringify({ type, requestId, message, __ts: Date.now() }));
+}
+
 async function handleAction(el, detail, token, orderId) {
     const { type, requestId } = detail || {};
     if (!token) {
-        pushData(el, type, requestId, null);
+        pushError(el, type, requestId, 'חסר מזהה הזמנה בכתובת הדף (t) — לא ניתן לאתר את פרטי ההזמנה.');
         return;
     }
 

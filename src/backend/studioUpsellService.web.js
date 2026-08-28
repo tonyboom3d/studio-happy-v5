@@ -81,19 +81,30 @@ export const createAddOnCheckoutRequest = webMethod(Permissions.Anyone, async (p
     }
 });
 
-/** Thank You page: best-effort acceleration of the paid status (authoritative path is the eCom webhook — see events.js). */
+/**
+ * Thank You page: best-effort acceleration of the paid status (authoritative
+ * path is the eCom webhook — see events.js). Errors are logged with full
+ * detail here AND rethrown (rather than swallowed to `null`) so the Velo
+ * page / CE can tell a genuine failure apart from "not paid yet" and show
+ * the customer an actual error instead of spinning forever.
+ */
 export const confirmAddOnOrder = webMethod(Permissions.Anyone, async (token, ecomOrderIdHint) => {
     try {
         return await confirmAddOnOrderByToken(token, ecomOrderIdHint);
     } catch (err) {
-        console.error('[studioUpsellService] confirmAddOnOrder failed:', err?.message || err);
-        return null;
+        console.error(`[studioUpsellService] confirmAddOnOrder failed — token=${token}, ecomOrderIdHint=${ecomOrderIdHint}:`, err?.stack || err?.message || err);
+        throw new Error(err?.message || 'confirmAddOnOrder failed');
     }
 });
 
 /** Thank You page: read the current state of an add-on order (for polling while the webhook catches up). */
 export const getAddOnOrderSummary = webMethod(Permissions.Anyone, async (token) => {
-    return getAddOnOrderByToken(token);
+    try {
+        return await getAddOnOrderByToken(token);
+    } catch (err) {
+        console.error(`[studioUpsellService] getAddOnOrderSummary failed — token=${token}:`, err?.stack || err?.message || err);
+        throw new Error(err?.message || 'getAddOnOrderSummary failed');
+    }
 });
 
 // ---------------------------------------------------------------------------

@@ -40,7 +40,10 @@ export async function getAddOnOrderByEcomOrderId(ecomOrderId) {
 
 export async function getAddOnOrderByToken(token) {
     if (!token) return null;
-    const result = await wixData.query('StudioAddOnOrders').eq('confirmationToken', token).find(SA);
+    // consistentRead: true — the Thank You page reads this right after the eCom
+    // webhook (or the best-effort accelerator below) just wrote 'paid', so a
+    // stale/cached read here would show the customer an endless spinner.
+    const result = await wixData.query('StudioAddOnOrders').eq('confirmationToken', token).find(SA_CONSISTENT);
     return result.items?.[0] || null;
 }
 

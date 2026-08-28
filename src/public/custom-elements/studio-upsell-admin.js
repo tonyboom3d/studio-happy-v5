@@ -314,6 +314,9 @@ class StudioUpsellAdminElement extends HTMLElement {
             s.printQueue = result || [];
         } else if (type === 'markPrintJobStatus') {
             this._dispatch('loadPrintQueue', {});
+        } else if (type === 'approveOrder') {
+            this._toast('ההזמנה אושרה — הבון נשלח להדפסה.');
+            this._dispatch('loadTransactions', this._buildTransactionFilterPayload());
         } else if (type === 'uploadAddOnImage') {
             s.uploadingImage = false;
             if (result?.fileUrl && s.editingAddOn) {
@@ -606,7 +609,8 @@ class StudioUpsellAdminElement extends HTMLElement {
                     <div class="sa-field"><label class="sa-label">סכום מקסימלי</label><input class="sa-input" type="number" min="0" id="saSettingOpenMax" value="${escapeHtml(current.openAmountMax ?? '')}" /></div>
                 </div>
 
-                <div class="sa-checkbox-row" style="margin-bottom:12px;"><input type="checkbox" id="saSettingStaffCode" ${current.showStaffCode ? 'checked' : ''} /><label for="saSettingStaffCode">הצג קוד אימות לצוות בדף התודה <span style="color:#9ca3af; font-size:11px; font-weight:500;">(סיסמה: 1326)</span></label></div>
+                <div class="sa-checkbox-row" style="margin-bottom:4px;"><input type="checkbox" id="saSettingStaffCode" ${current.showStaffCode ? 'checked' : ''} /><label for="saSettingStaffCode">הצג קוד אימות לצוות בדף התודה</label></div>
+                <div class="sa-hint" style="margin-bottom:12px;">כשמופעל, הלקוח יתבקש להציג את דף התודה לעובד/ת, שיזין את סיסמת הצוות (1326) לפני שההזמנה תושלם ויודפס הבון. אם הלקוח לא הציג את המסך — ניתן לאשר את ההזמנה ידנית מטבלת העסקאות.</div>
                 <div class="sa-checkbox-row" style="margin-bottom:20px;"><input type="checkbox" id="saSettingPrint" ${current.printOnPayment !== false ? 'checked' : ''} /><label for="saSettingPrint">הוסף לתור הדפסה עם קבלת תשלום</label></div>
 
                 <button class="sa-btn sa-btn-primary" id="saSettingsSaveBtn">שמירת הגדרות</button>
@@ -663,6 +667,17 @@ class StudioUpsellAdminElement extends HTMLElement {
             const checkoutCell = t.checkoutName || t.checkoutPhone
                 ? `${escapeHtml(t.checkoutName || '')}${t.checkoutPhone ? `<br/><span style="color:#9ca3af;font-size:11px;">${escapeHtml(t.checkoutPhone)}</span>` : ''}`
                 : '<span style="color:#9ca3af;">—</span>';
+
+            // Staff approval column: only relevant for paid orders on a workshop type
+            // with "showStaffCode" on. Covers the case where the customer never showed
+            // the Thank You page to an employee — a manager can approve it here instead.
+            let approvalCell = '<span style="color:#9ca3af;">—</span>';
+            if (t.status === 'paid' && t.staffApprovalRequired) {
+                approvalCell = t.staffApprovedAt
+                    ? `<span class="sa-badge sa-badge-green">אושר · ${formatDate(t.staffApprovedAt)}</span>`
+                    : `<button class="sa-btn sa-btn-primary" data-approve-order="${t._id}" style="padding:6px 12px;font-size:12px;">אישור ידני</button>`;
+            }
+
             return `
                 <tr>
                     <td>${formatDate(t._createdDate)}</td>
@@ -673,6 +688,7 @@ class StudioUpsellAdminElement extends HTMLElement {
                     <td>${formatIls(t.total)}</td>
                     <td><span class="sa-badge ${status.cls}">${status.label}</span></td>
                     <td>${escapeHtml(viaLabel)}</td>
+                    <td>${approvalCell}</td>
                 </tr>
             `;
         }).join('');
@@ -682,7 +698,7 @@ class StudioUpsellAdminElement extends HTMLElement {
             <div class="sa-card">
                 <div class="sa-table-wrap">
                 <table class="sa-table">
-                    <thead><tr><th>תאריך</th><th>סדנה</th><th>הזמנה על שם</th><th>שולם ע"י (צ'קאאוט)</th><th>פריטים</th><th>סכום</th><th>סטטוס</th><th>מקור</th></tr></thead>
+                    <thead><tr><th>תאריך</th><th>סדנה</th><th>הזמנה על שם</th><th>שולם ע"י (צ'קאאוט)</th><th>פריטים</th><th>סכום</th><th>סטטוס</th><th>מקור</th><th>אישור עובד</th></tr></thead>
                     <tbody>${rows}</tbody>
                 </table>
                 </div>
@@ -905,6 +921,13 @@ class StudioUpsellAdminElement extends HTMLElement {
                     printQueueId: btn.getAttribute('data-print-id'),
                     status: btn.getAttribute('data-print-status'),
                 });
+            });
+        });
+
+        root.querySelectorAll('[data-approve-order]').forEach((btn) => {
+            btn.addEventListener('click', () => {
+                if (!confirm('לאשר את ההזמנה הזו ולשלוח את הבון להדפסה?')) return;
+                this._dispatch('approveOrder', { addOnOrderId: btn.getAttribute('data-approve-order') });
             });
         });
     }

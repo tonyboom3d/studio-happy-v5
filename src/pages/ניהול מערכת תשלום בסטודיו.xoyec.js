@@ -11,6 +11,7 @@ import {
     listPrintQueue,
     markPrintJobStatus,
     uploadAddOnImage,
+    approveAddOnOrderAdmin,
 } from 'backend/studioUpsellService.web.js';
 
 const ELEMENT_ID = '#studioUpsellAdmin1';
@@ -104,6 +105,11 @@ async function handleAction(el, detail) {
         case 'uploadAddOnImage': {
             const result = await uploadAddOnImage(payload?.base64, payload?.filename);
             pushData(el, type, requestId, { success: true, ...result });
+            return;
+        }
+        case 'approveOrder': {
+            await approveAddOnOrderAdmin(payload?.addOnOrderId);
+            pushData(el, type, requestId, { success: true });
             return;
         }
         default:

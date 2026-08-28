@@ -1,7 +1,8 @@
 /**
  * studioUpsell/reconcile.js — marks a StudioAddOnOrders row paid once its
- * @wix/ecom checkout completes, generates the staff confirmation code (when
- * enabled per workshop type), and enqueues a print job.
+ * @wix/ecom checkout completes, and enqueues a print job — either right away,
+ * or (when the workshop type has "showStaffCode" on) only once an employee
+ * approves the order (see approveStaffOnAddOnOrder below).
  *
  * Mirrors orderReconciliation.js's pattern of a single idempotent writer
  * called from two independent triggers:
@@ -12,7 +13,6 @@ import wixData from 'wix-data';
 import { orders as ecomOrders } from '@wix/ecom';
 import { auth } from '@wix/essentials';
 import { extractBuyerContact } from 'backend/orderUtils.js';
-import { generateStaffCode } from './staffCode.js';
 import { enqueuePrintJob } from './printQueue.js';
 import { getSettingsForWorkshopType } from './catalog.js';
 import { applyInventoryForPaidOrder } from './inventory.js';
@@ -49,6 +49,10 @@ export async function getAddOnOrderByToken(token) {
 
 /**
  * Idempotent writer: safe to call repeatedly / concurrently for the same order.
+ * When the workshop type has "showStaffCode" on, the order is marked paid but
+ * printing is DEFERRED until an employee approves it (see
+ * approveStaffOnAddOnOrder) — either from the Thank You page (customer shows
+ * the screen, employee types the code) or from the admin fallback.
  */
 export async function confirmAddOnOrderFromEcom(addOnOrder, ecomOrder) {
     if (!addOnOrder) return null;
@@ -56,7 +60,7 @@ export async function confirmAddOnOrderFromEcom(addOnOrder, ecomOrder) {
     if (!isPaid(ecomOrder)) return addOnOrder;
 
     const settings = addOnOrder.workshopTypeId ? await getSettingsForWorkshopType(addOnOrder.workshopTypeId) : null;
-    const staffCode = settings?.showStaffCode ? generateStaffCode(addOnOrder._id) : null;
+    const staffApprovalRequired = !!settings?.showStaffCode;
 
     // Who actually paid at the Wix checkout — may differ from customerName/Phone
     // (the name the order is placed under), e.g. staff-created orders.
@@ -70,15 +74,43 @@ export async function confirmAddOnOrderFromEcom(addOnOrder, ecomOrder) {
         checkoutName: buyer.fullName || null,
         checkoutPhone: buyer.phone || null,
         checkoutEmail: buyer.email || null,
-        staffCode,
+        staffApprovalRequired,
+        staffApprovedAt: null,
         paidAt: new Date(),
+    }, SA);
+
+    if (!staffApprovalRequired && (!settings || settings.printOnPayment !== false)) {
+        await enqueuePrintJob(updated);
+    }
+
+    await applyInventoryForPaidOrder(updated);
+
+    return updated;
+}
+
+/**
+ * Marks an order as staff-approved — triggered either from the Thank You page
+ * (customer shows the screen, employee enters the code) or from the admin
+ * "approve manually" fallback for orders where the customer never showed the
+ * screen. Idempotent: re-approving an already-approved order is a no-op.
+ * Printing is deferred until this point specifically for staffApprovalRequired
+ * orders, so the receipt only comes out once a human has actually looked.
+ */
+export async function approveStaffOnAddOnOrder(addOnOrder) {
+    if (!addOnOrder) return null;
+    if (addOnOrder.staffApprovedAt) return addOnOrder;
+    if (addOnOrder.status !== 'paid') return addOnOrder;
+
+    const settings = addOnOrder.workshopTypeId ? await getSettingsForWorkshopType(addOnOrder.workshopTypeId) : null;
+
+    const updated = await wixData.update('StudioAddOnOrders', {
+        ...addOnOrder,
+        staffApprovedAt: new Date(),
     }, SA);
 
     if (!settings || settings.printOnPayment !== false) {
         await enqueuePrintJob(updated);
     }
-
-    await applyInventoryForPaidOrder(updated);
 
     return updated;
 }

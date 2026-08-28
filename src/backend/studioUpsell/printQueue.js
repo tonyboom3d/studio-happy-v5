@@ -11,6 +11,13 @@ import wixData from 'wix-data';
 
 const SA = { suppressAuth: true };
 
+/** Whether a receipt ("בון") was ever queued for this order — for the Thank You page / admin display. */
+export async function hasPrintJob(addOnOrderId) {
+    if (!addOnOrderId) return false;
+    const result = await wixData.query('PrintQueue').eq('addOnOrderId', addOnOrderId).limit(1).find(SA);
+    return (result.items?.length || 0) > 0;
+}
+
 export async function enqueuePrintJob(addOnOrder) {
     if (!addOnOrder?._id) return null;
 

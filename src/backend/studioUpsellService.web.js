@@ -12,8 +12,9 @@ import { getTodaySessions } from 'backend/studioUpsell/sessions.js';
 import { findTodayWorkshopsByPhone } from 'backend/studioUpsell/identify.js';
 import { getAddOnCatalog, verifyOpenAmountPassword } from 'backend/studioUpsell/catalog.js';
 import { createAddOnCheckout } from 'backend/studioUpsell/checkout.js';
-import { confirmAddOnOrderByToken, getAddOnOrderByToken } from 'backend/studioUpsell/reconcile.js';
+import { confirmAddOnOrderByToken, getAddOnOrderByToken, approveStaffOnAddOnOrder } from 'backend/studioUpsell/reconcile.js';
 import { uploadBase64ImageToWixMedia, wixMediaToPublicUrl } from 'backend/studioUpsell/mediaUpload.js';
+import { hasPrintJob } from 'backend/studioUpsell/printQueue.js';
 
 const SA = { suppressAuth: true };
 
@@ -81,6 +82,12 @@ export const createAddOnCheckoutRequest = webMethod(Permissions.Anyone, async (p
     }
 });
 
+/** Adds client-only derived fields — never persisted, just for display. */
+async function enrichOrderForClient(order) {
+    if (!order) return order;
+    return { ...order, receiptQueued: await hasPrintJob(order._id) };
+}
+
 /**
  * Thank You page: best-effort acceleration of the paid status (authoritative
  * path is the eCom webhook — see events.js). Errors are logged with full
@@ -90,7 +97,7 @@ export const createAddOnCheckoutRequest = webMethod(Permissions.Anyone, async (p
  */
 export const confirmAddOnOrder = webMethod(Permissions.Anyone, async (token, ecomOrderIdHint) => {
     try {
-        return await confirmAddOnOrderByToken(token, ecomOrderIdHint);
+        return await enrichOrderForClient(await confirmAddOnOrderByToken(token, ecomOrderIdHint));
     } catch (err) {
         console.error(`[studioUpsellService] confirmAddOnOrder failed — token=${token}, ecomOrderIdHint=${ecomOrderIdHint}:`, err?.stack || err?.message || err);
         throw new Error(err?.message || 'confirmAddOnOrder failed');
@@ -100,10 +107,31 @@ export const confirmAddOnOrder = webMethod(Permissions.Anyone, async (token, eco
 /** Thank You page: read the current state of an add-on order (for polling while the webhook catches up). */
 export const getAddOnOrderSummary = webMethod(Permissions.Anyone, async (token) => {
     try {
-        return await getAddOnOrderByToken(token);
+        return await enrichOrderForClient(await getAddOnOrderByToken(token));
     } catch (err) {
         console.error(`[studioUpsellService] getAddOnOrderSummary failed — token=${token}:`, err?.stack || err?.message || err);
         throw new Error(err?.message || 'getAddOnOrderSummary failed');
+    }
+});
+
+/**
+ * Thank You page: an employee looks at the customer's screen and types the
+ * staff PIN to approve the order — this is what actually enqueues the print
+ * job for workshop types with "showStaffCode" (staff-approval) turned on.
+ */
+export const approveAddOnOrder = webMethod(Permissions.Anyone, async (token, code) => {
+    if (String(code || '').trim() !== STAFF_PIN) {
+        return { success: false, reason: 'wrong_pin' };
+    }
+    try {
+        const addOnOrder = await getAddOnOrderByToken(token);
+        if (!addOnOrder) return { success: false, reason: 'not_found' };
+        if (addOnOrder.status !== 'paid') return { success: false, reason: 'not_paid' };
+        const updated = await approveStaffOnAddOnOrder(addOnOrder);
+        return { success: true, order: await enrichOrderForClient(updated) };
+    } catch (err) {
+        console.error(`[studioUpsellService] approveAddOnOrder failed — token=${token}:`, err?.stack || err?.message || err);
+        throw new Error(err?.message || 'approveAddOnOrder failed');
     }
 });
 
@@ -216,6 +244,19 @@ export const listPrintQueue = webMethod(Permissions.SiteMember, async () => {
     await assertEmployeeAccess('manageAddOnsSystem');
     const result = await wixData.query('PrintQueue').descending('_createdDate').limit(100).find(SA);
     return result.items || [];
+});
+
+/**
+ * Admin fallback for orders that were paid but the customer never showed the
+ * Thank You page to an employee (so the code was never entered there). No
+ * code needed here — the caller is already an authenticated, permission-gated
+ * manager. Also enqueues the print job, same as the Thank You page path.
+ */
+export const approveAddOnOrderAdmin = webMethod(Permissions.SiteMember, async (addOnOrderId) => {
+    await assertEmployeeAccess('manageAddOnsSystem');
+    const addOnOrder = await wixData.get('StudioAddOnOrders', addOnOrderId, SA);
+    if (!addOnOrder) throw new Error('Order not found');
+    return approveStaffOnAddOnOrder(addOnOrder);
 });
 
 export const markPrintJobStatus = webMethod(Permissions.SiteMember, async (printQueueId, status) => {

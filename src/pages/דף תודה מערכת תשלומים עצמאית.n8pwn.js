@@ -3,7 +3,7 @@
 // checkout). Bridges the `studio-upsell-confirmation` custom element to
 // backend/studioUpsellService.web.js.
 import wixLocation from 'wix-location';
-import { confirmAddOnOrder, getAddOnOrderSummary } from 'backend/studioUpsellService.web.js';
+import { confirmAddOnOrder, getAddOnOrderSummary, approveAddOnOrder } from 'backend/studioUpsellService.web.js';
 
 const ELEMENT_ID = '#studioUpsellThanks1';
 
@@ -58,6 +58,13 @@ async function handleAction(el, detail, token, orderId) {
 
     if (type === 'summary') {
         const result = await getAddOnOrderSummary(token);
+        pushData(el, type, requestId, result);
+        return;
+    }
+
+    if (type === 'approve') {
+        // Employee looked at the customer's screen and typed the staff PIN.
+        const result = await approveAddOnOrder(token, detail?.payload?.code);
         pushData(el, type, requestId, result);
         return;
     }

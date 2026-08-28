@@ -172,7 +172,8 @@ export async function createAddOnCheckout(params) {
         items: (items || []).filter((i) => Number(i.quantity) > 0),
         openAmount: cleanOpenAmount,
         total,
-        staffCode: null,
+        staffApprovalRequired: false,
+        staffApprovedAt: null,
         paidAt: null,
     }, SA);
 

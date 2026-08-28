@@ -1,16 +1,13 @@
 /**
- * manychatService.jsw — ManyChat integration for the "אישור הזמנה" flow.
+ * manychatService.jsw — ManyChat integration for order confirmations and
+ * employee/manager notifications.
  *
- * LIVE FOR ALL ORDERS: ManyChat approved the import permission, so every
- * paid order now goes through this module (see data.js) — no more
- * test-phone gate / Green API fallback for order confirmations.
+ * Orders: every paid order goes through the "אישור הזמנה" flow (see data.js).
+ * Staff: all employees/managers with a phone receive notifications via the
+ * shared staff flow (action_key routing) — see sendStaffManyChat.
  *
- * EMPLOYEE_MANYCHAT_ALLOWED_PHONES below is unrelated to orders — it's
- * reserved for the future employee/manager notifications ManyChat flow
- * (not built yet), restricted to the owner's own number for testing.
- *
- * Never throws out of sendOrderConfirmationManyChat — a ManyChat failure
- * must never block order creation/payment. All errors are caught and logged.
+ * Never throws out of sendOrderConfirmationManyChat / sendStaffManyChat — a
+ * ManyChat failure must never block order creation/payment or backend actions.
  */
 import wixSecretsBackend from 'wix-secrets-backend';
 import { fetch } from 'wix-fetch';
@@ -52,21 +49,6 @@ const STAFF_NOTIFICATION_FLOW_NS = 'content20260826132939_659401';
 // Custom fields used by the staff/manager flow's routing conditions.
 const STAFF_ACTION_KEY_FIELD = 'action_key';
 const STAFF_AUDIENCE_FIELD = 'staff_audience';
-
-// TEST MODE allowlist for the future employee/manager ManyChat system
-// (schedulingEngine / shiftConfirmations / shiftSwaps notifications).
-// NOT used for order confirmations anymore — those are now open to all
-// customers. Only the owner's own number is allowed while that system is
-// being built and tested.
-const EMPLOYEE_MANYCHAT_ALLOWED_PHONES = new Set([
-    normalizeIsraeliPhone('0523813929'),
-]);
-
-/** Gate for the (not-yet-built) employee/manager ManyChat flow — owner-only for now. */
-export function isEmployeeManyChatAllowedPhone(phone) {
-    const normalized = normalizeIsraeliPhone(phone);
-    return !!normalized && EMPLOYEE_MANYCHAT_ALLOWED_PHONES.has(normalized);
-}
 
 async function getManyChatApiKey() {
     const apiKey = await wixSecretsBackend.getSecret('manychat_apiKey');
@@ -430,11 +412,7 @@ function buildStaffCustomFields(actionKey, audience, vars) {
  * runOrderConfirmationManyChat: find-or-create subscriber by phone, set
  * action_key + staff_audience + every var as a custom field, then send the
  * shared staff-notification flow (branches internally by action_key).
- *
- * TEST MODE: only isEmployeeManyChatAllowedPhone() numbers actually send —
- * every other recipient is skipped (logged, not an error) until the
- * employee/manager rollout opens up. Never throws — same contract as
- * sendOrderConfirmationManyChat.
+ * Never throws — same contract as sendOrderConfirmationManyChat.
  *
  * @param {string} actionKey - matches EMPLOYEE_ACTION_KEYS in employeeTemplates.js.
  * @param {string} phone
@@ -442,11 +420,6 @@ function buildStaffCustomFields(actionKey, audience, vars) {
  * @param {object} [vars] - camelCase placeholder vars (e.g. { displayName, date, portalLink }).
  */
 export async function sendStaffManyChat(actionKey, phone, audience, vars = {}) {
-    if (!isEmployeeManyChatAllowedPhone(phone)) {
-        console.log(`[ManyChat staff] TEST MODE — skipping actionKey=${actionKey} phone=${phone} (not allowlisted)`);
-        return { sent: false, reason: 'not-allowlisted' };
-    }
-
     try {
         const normalizedPhone = normalizeIsraeliPhone(phone);
         if (!normalizedPhone) {

@@ -122,8 +122,7 @@ export function renderTemplate(body, vars = {}) {
 /**
  * Sends one employee notification via ManyChat (action_key + vars →
  * ManyChat custom fields, shared staff flow). Returns true if actually sent
- * (false while in TEST MODE for non-allowlisted phones, or on failure —
- * sendStaffManyChat never throws).
+ * (false on missing phone or ManyChat failure — sendStaffManyChat never throws).
  */
 export async function sendEmployeeTemplateMessage(actionKey, phone, vars = {}, audience = 'employee') {
     if (!phone) {

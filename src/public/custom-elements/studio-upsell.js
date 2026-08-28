@@ -10,6 +10,8 @@
  * 3. תן לרכיב את ה-ID: studioUpsell1 (או עדכן את DEFAULT_ELEMENT_ID בקובץ
  *    ה-Velo של העמוד אם משתמשים ב-ID אחר).
  * 4. העלה קובץ זה תחת "Source: Upload a file".
+ * 5. כדי שהחלונית תתמרכז אמצע המסך: הגדירו את גובה רכיב ה-Custom Element
+ *    להתמלא לגובה העמוד המלא (Full Page Height / Stretch) בעורך וויקס.
  *
  * תקשורת עם Velo (backend/studioUpsellService.web.js):
  *  - CE -> Velo: dispatchEvent('studio-upsell-action', { detail: { type, requestId, payload } })
@@ -20,15 +22,20 @@
 const TAG_NAME = 'studio-upsell';
 
 const STYLE = `
+    @import url('https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;600;700;800;900&display=swap');
     :host, .su-root { all: initial; }
+    :host { display: block; }
     .su-root {
-        display: block;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        min-height: 100vh;
+        width: 100%;
         direction: rtl;
-        font-family: 'Heebo', Arial, sans-serif;
+        font-family: 'Rubik', Arial, sans-serif;
         color: #1f2933;
         box-sizing: border-box;
-        max-width: 480px;
-        margin: 0 auto;
         padding: 20px 16px 60px;
     }
     .su-root *, .su-root *::before, .su-root *::after { box-sizing: border-box; }
@@ -38,7 +45,22 @@ const STYLE = `
         padding: 24px 20px;
         box-shadow: 0 6px 24px rgba(31, 41, 51, 0.08);
         border: 1px solid #eef0f2;
+        max-width: 480px;
+        width: 100%;
     }
+    .su-steps { display: flex; align-items: flex-start; gap: 4px; margin-bottom: 20px; }
+    .su-step { display: flex; flex-direction: column; align-items: center; text-align: center; flex: 1; min-width: 0; gap: 5px; }
+    .su-step-num {
+        width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+        font-weight: 800; font-size: 12px; background: #e5e7eb; color: #6b7280; flex-shrink: 0;
+    }
+    .su-step-active .su-step-num { background: #4f46e5; color: #fff; }
+    .su-step-done .su-step-num { background: #c7d2fe; color: #4338ca; }
+    .su-step-title { font-size: 11px; font-weight: 700; color: #9ca3af; line-height: 1.3; }
+    .su-step-active .su-step-title { color: #111827; }
+    .su-step-done .su-step-title { color: #4338ca; }
+    .su-step-desc { font-size: 10px; color: #9ca3af; line-height: 1.3; }
+    .su-step-sep { flex: 0 0 16px; height: 1.5px; background: #e5e7eb; margin-top: 13px; }
     .su-title {
         font-size: 20px;
         font-weight: 800;
@@ -163,6 +185,27 @@ function formatIls(n) {
     return `₪${(Number(n) || 0).toLocaleString('he-IL', { maximumFractionDigits: 2 })}`;
 }
 
+const STEPS = [
+    { title: 'הזדהות מהירה', desc: 'טלפון או קוד צוות' },
+    { title: 'בחירת מוצר', desc: 'תוספים או סכום פתוח' },
+    { title: 'סיום ההזמנה', desc: 'קבלת אישור עם כל הפרטים' },
+];
+
+function renderSteps(activeStep) {
+    const items = STEPS.map((step, i) => {
+        const num = i + 1;
+        const cls = num < activeStep ? 'su-step-done' : (num === activeStep ? 'su-step-active' : '');
+        return h`
+            <div class="su-step ${cls}">
+                <div class="su-step-num">${num}</div>
+                <div class="su-step-title">${escapeHtml(step.title)}</div>
+                <div class="su-step-desc">${escapeHtml(step.desc)}</div>
+            </div>
+        `;
+    }).join('<div class="su-step-sep"></div>');
+    return h`<div class="su-steps">${items}</div>`;
+}
+
 class StudioUpsellElement extends HTMLElement {
     static get observedAttributes() {
         return ['upsell-data', 'upsell-error'];
@@ -175,7 +218,10 @@ class StudioUpsellElement extends HTMLElement {
         this._state = {
             screen: 'identify', // identify | pickWorkshop | catalog | notFound | loading | staffModal:false
             staffOptions: [],
+            staffOptionsLoading: false,
             staffModalOpen: false,
+            staffPin: '',
+            staffPinConfirmed: false,
             staffName: null,
             createdVia: 'qr_customer',
             phone: '',
@@ -196,7 +242,6 @@ class StudioUpsellElement extends HTMLElement {
         this.setAttribute('lang', 'he');
         this.innerHTML = `<style>${STYLE}</style><div class="su-root" id="suRoot"></div>`;
         this.render();
-        this._dispatch('getStaffOptions', {});
     }
 
     attributeChangedCallback(name, oldValue, newValue) {
@@ -228,6 +273,7 @@ class StudioUpsellElement extends HTMLElement {
 
         if (type === 'getStaffOptions') {
             this._state.staffOptions = result || [];
+            this._state.staffOptionsLoading = false;
         } else if (type === 'lookupByPhone') {
             const matches = result?.matches || [];
             if (!matches.length) {
@@ -242,10 +288,13 @@ class StudioUpsellElement extends HTMLElement {
         } else if (type === 'staffLogin') {
             if (!result?.valid) {
                 this._state.error = 'קוד שגוי — נסו שוב או פנו לצוות.';
+                this._state.staffPinConfirmed = false;
             } else {
                 this._state.staffName = result.staffName || null;
                 this._state.createdVia = 'qr_staff';
                 this._state.staffModalOpen = false;
+                this._state.staffPinConfirmed = false;
+                this._state.staffPin = '';
                 const sessions = (result.sessions || []).map((s) => ({
                     sessionId: s.id,
                     serviceId: s.serviceId,
@@ -387,6 +436,7 @@ class StudioUpsellElement extends HTMLElement {
         const s = this._state;
         return h`
             <div class="su-card">
+                ${renderSteps(1)}
                 <h1 class="su-title">רכישת תוספות לסדנה</h1>
                 <p class="su-subtitle">הזינו את מספר הטלפון ששימש להזמנת הסדנה שלכם היום, כדי לצפות בתוספות הזמינות.</p>
                 ${s.error ? `<div class="su-error">${escapeHtml(s.error)}</div>` : ''}
@@ -396,6 +446,9 @@ class StudioUpsellElement extends HTMLElement {
                 <div class="su-link-row">
                     <button class="su-btn su-btn-ghost" id="suStaffOpenBtn">כניסת צוות</button>
                 </div>
+                <div class="su-link-row">
+                    <button class="su-btn su-btn-ghost" id="suHelpBtn">לא מצליח/ה להזדהות?</button>
+                </div>
             </div>
         `;
     }
@@ -403,10 +456,14 @@ class StudioUpsellElement extends HTMLElement {
     _renderNotFound() {
         return h`
             <div class="su-card su-center">
+                ${renderSteps(1)}
                 <div class="su-icon-badge">🔍</div>
                 <h1 class="su-title">לא הצלחנו לאתר הזמנה</h1>
                 <p class="su-subtitle">לא מצאנו הזמנה פעילה עם מספר הטלפון הזה להיום. אנא פנו לאחד מאנשי הצוות בסטודיו לעזרה.</p>
                 <button class="su-btn su-btn-secondary" id="suBackBtn">נסו מספר אחר</button>
+                <div class="su-link-row">
+                    <button class="su-btn su-btn-ghost" id="suHelpBtn">לא מצליח/ה להזדהות?</button>
+                </div>
             </div>
         `;
     }
@@ -424,6 +481,7 @@ class StudioUpsellElement extends HTMLElement {
         `).join('');
         return h`
             <div class="su-card">
+                ${renderSteps(1)}
                 <h1 class="su-title">בחרו את הסדנה שלכם</h1>
                 <p class="su-subtitle">נמצאו כמה סדנאות פעילות היום — בחרו את הסדנה הנכונה.</p>
                 ${s.error ? `<div class="su-error">${escapeHtml(s.error)}</div>` : ''}
@@ -472,6 +530,7 @@ class StudioUpsellElement extends HTMLElement {
 
         return h`
             <div class="su-card">
+                ${renderSteps(2)}
                 <h1 class="su-title">${escapeHtml(w.workshopTitle || 'תוספות לסדנה')}</h1>
                 <p class="su-subtitle">${escapeHtml(w.startLabel ? `סדנה בשעה ${w.startLabel}` : 'בחרו תוספות לתשלום')}</p>
                 ${s.error ? `<div class="su-error">${escapeHtml(s.error)}</div>` : ''}
@@ -488,19 +547,38 @@ class StudioUpsellElement extends HTMLElement {
 
     _renderStaffModal() {
         const s = this._state;
+
+        // Phase 1: PIN only — staff names are not shown until the PIN is entered.
+        if (!s.staffPinConfirmed) {
+            return h`
+                <div class="su-modal-backdrop" id="suStaffBackdrop">
+                    <div class="su-modal">
+                        <h2 class="su-title">כניסת צוות</h2>
+                        <p class="su-subtitle">הזינו את קוד הצוות כדי להמשיך.</p>
+                        ${s.error ? `<div class="su-error">${escapeHtml(s.error)}</div>` : ''}
+                        <label class="su-label" for="suStaffPin">קוד צוות</label>
+                        <input class="su-input" id="suStaffPin" type="password" inputmode="numeric" maxlength="6" value="${escapeHtml(s.staffPin)}" />
+                        <button class="su-btn su-btn-primary" id="suStaffPinContinueBtn">המשך</button>
+                        <div class="su-link-row"><button class="su-btn su-btn-ghost" id="suStaffCancelBtn">ביטול</button></div>
+                    </div>
+                </div>
+            `;
+        }
+
+        // Phase 2: pick your name from the staff list (revealed only after the PIN step).
         const options = s.staffOptions.map((o) => `<option value="${escapeHtml(o.id)}">${escapeHtml(o.firstName)}</option>`).join('');
         return h`
             <div class="su-modal-backdrop" id="suStaffBackdrop">
                 <div class="su-modal">
                     <h2 class="su-title">כניסת צוות</h2>
-                    <p class="su-subtitle">בחרו את שמכם והזינו את קוד הצוות.</p>
+                    <p class="su-subtitle">בחרו את שמכם מהרשימה.</p>
                     ${s.error ? `<div class="su-error">${escapeHtml(s.error)}</div>` : ''}
                     <label class="su-label" for="suStaffSelect">שם</label>
-                    <select class="su-select" id="suStaffSelect">${options}</select>
-                    <label class="su-label" for="suStaffPin">קוד צוות</label>
-                    <input class="su-input" id="suStaffPin" type="password" inputmode="numeric" maxlength="6" />
-                    <button class="su-btn su-btn-primary" id="suStaffSubmitBtn">כניסה</button>
-                    <div class="su-link-row"><button class="su-btn su-btn-ghost" id="suStaffCancelBtn">ביטול</button></div>
+                    ${s.staffOptionsLoading
+                        ? '<p class="su-subtitle">טוען רשימת עובדים...</p>'
+                        : `<select class="su-select" id="suStaffSelect">${options}</select>`}
+                    <button class="su-btn su-btn-primary" id="suStaffSubmitBtn" ${s.staffOptionsLoading || !s.staffOptions.length ? 'disabled' : ''}>כניסה</button>
+                    <div class="su-link-row"><button class="su-btn su-btn-ghost" id="suStaffBackToPinBtn">חזרה</button></div>
                 </div>
             </div>
         `;
@@ -528,8 +606,15 @@ class StudioUpsellElement extends HTMLElement {
         const staffOpenBtn = root.querySelector('#suStaffOpenBtn');
         if (staffOpenBtn) staffOpenBtn.addEventListener('click', () => {
             s.staffModalOpen = true;
+            s.staffPinConfirmed = false;
+            s.staffPin = '';
             s.error = null;
             this.render();
+        });
+
+        const helpBtn = root.querySelector('#suHelpBtn');
+        if (helpBtn) helpBtn.addEventListener('click', () => {
+            alert('לא הצלחתם להזדהות? אנא פנו לאחד מאנשי הצוות בסטודיו לעזרה.');
         });
 
         const backBtn = root.querySelector('#suBackBtn');
@@ -571,6 +656,32 @@ class StudioUpsellElement extends HTMLElement {
         const staffCancelBtn = root.querySelector('#suStaffCancelBtn');
         if (staffCancelBtn) staffCancelBtn.addEventListener('click', () => {
             s.staffModalOpen = false;
+            s.staffPinConfirmed = false;
+            s.staffPin = '';
+            s.error = null;
+            this.render();
+        });
+
+        const staffPinInput = root.querySelector('#suStaffPin');
+        if (staffPinInput) staffPinInput.addEventListener('input', (e) => { s.staffPin = e.target.value; });
+
+        const staffPinContinueBtn = root.querySelector('#suStaffPinContinueBtn');
+        if (staffPinContinueBtn) staffPinContinueBtn.addEventListener('click', () => {
+            if (!s.staffPin) {
+                s.error = 'אנא הזינו קוד.';
+                this.render();
+                return;
+            }
+            s.error = null;
+            s.staffPinConfirmed = true;
+            if (!s.staffOptions.length) s.staffOptionsLoading = true;
+            this.render();
+            if (!s.staffOptions.length) this._dispatch('getStaffOptions', {});
+        });
+
+        const staffBackToPinBtn = root.querySelector('#suStaffBackToPinBtn');
+        if (staffBackToPinBtn) staffBackToPinBtn.addEventListener('click', () => {
+            s.staffPinConfirmed = false;
             s.error = null;
             this.render();
         });
@@ -578,14 +689,14 @@ class StudioUpsellElement extends HTMLElement {
         const staffSubmitBtn = root.querySelector('#suStaffSubmitBtn');
         if (staffSubmitBtn) staffSubmitBtn.addEventListener('click', () => {
             const staffId = root.querySelector('#suStaffSelect')?.value || null;
-            const pin = root.querySelector('#suStaffPin')?.value || '';
-            if (!pin) {
+            if (!s.staffPin) {
                 s.error = 'אנא הזינו קוד.';
+                s.staffPinConfirmed = false;
                 this.render();
                 return;
             }
             s.error = null;
-            this._dispatch('staffLogin', { pin, staffId });
+            this._dispatch('staffLogin', { pin: s.staffPin, staffId });
         });
     }
 }

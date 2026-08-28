@@ -1,7 +1,7 @@
 // Admin Management Page for the in-person QR add-on upsell system.
 // Bridges the `studio-upsell-admin` custom element to
 // backend/studioUpsellService.web.js (all calls gated by the
-// manageOrdersSystem permission — see backend/staffRoles.js).
+// manageAddOnsSystem permission — see backend/staffRoles.js).
 import {
     getUpsellAdminData,
     saveAddOn,

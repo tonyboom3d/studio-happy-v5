@@ -44,6 +44,7 @@ export const PERMISSION_KEYS = [
     'sketchSewingSkill',
     // Placeholder — behavior to be defined later.
     'manageOrdersSystem',
+    'manageAddOnsSystem',
 ];
 
 export const PERMISSION_DEFAULTS = {
@@ -68,6 +69,7 @@ export const PERMISSION_DEFAULTS = {
     manageRules: false,
     sketchSewingSkill: false,
     manageOrdersSystem: false,
+    manageAddOnsSystem: false,
 };
 
 /** Per-roleType permission presets used when seeding/normalizing role rows. */
@@ -114,11 +116,12 @@ export const PERMISSION_LABELS = {
     manageRules: 'ניהול הגדרות, כללים ומועדים',
     sketchSewingSkill: 'תפירת סקיצות',
     manageOrdersSystem: 'מנהל מערכת הזמנות',
+    manageAddOnsSystem: 'ניהול מערכת תוספים בסטודיו',
 };
 
 /** Grouping of permission keys for the admin permissions editor UI. */
 export const PERMISSION_GROUPS = [
-    { id: 'dashboard', label: 'דשבורד הזמנות', keys: ['viewDashboard', 'editSketchStatus', 'rejectSketchStatus', 'deleteSketchImage', 'editOrderNotes', 'sendWhatsApp', 'manageOrdersSystem'] },
+    { id: 'dashboard', label: 'דשבורד הזמנות', keys: ['viewDashboard', 'editSketchStatus', 'rejectSketchStatus', 'deleteSketchImage', 'editOrderNotes', 'sendWhatsApp', 'manageOrdersSystem', 'manageAddOnsSystem'] },
     { id: 'portal', label: 'פורטל עובדים ושיבוץ', keys: ['submitAvailability', 'manageEmployeeSystem', 'viewTeamSchedule', 'manageScheduling', 'manageEmployees'] },
     { id: 'hours', label: 'ניהול שעות ותחנות', keys: ['editTimeEntries'] },
     { id: 'sensitive', label: 'הרשאות והגדרות רגישות', keys: ['manageRates', 'manageRules', 'manageTemplates', 'manageRoles'] },

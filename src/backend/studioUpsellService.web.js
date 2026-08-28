@@ -2,7 +2,7 @@
  * studioUpsellService.web.js — public facade for the QR in-person add-on
  * upsell system. Thin webMethod wrappers over backend/studioUpsell/* helpers,
  * following the same Permissions.Anyone (kiosk) + Permissions.SiteMember
- * (admin dashboard, gated by manageOrdersSystem) split used by
+ * (admin dashboard, gated by manageAddOnsSystem) split used by
  * bookingService.web.js / dashboardService.web.js.
  */
 import { Permissions, webMethod } from 'wix-web-module';
@@ -87,11 +87,11 @@ export const getAddOnOrderSummary = webMethod(Permissions.Anyone, async (token) 
 });
 
 // ---------------------------------------------------------------------------
-// Admin management page — Permissions.SiteMember, gated by manageOrdersSystem
+// Admin management page — Permissions.SiteMember, gated by manageAddOnsSystem
 // ---------------------------------------------------------------------------
 
 export const getUpsellAdminData = webMethod(Permissions.SiteMember, async () => {
-    await assertEmployeeAccess('manageOrdersSystem');
+    await assertEmployeeAccess('manageAddOnsSystem');
 
     const [workshopsResult, addOnsResult, settingsResult] = await Promise.all([
         wixData.query('workshops').find(SA),
@@ -107,7 +107,7 @@ export const getUpsellAdminData = webMethod(Permissions.SiteMember, async () => 
 });
 
 export const saveAddOn = webMethod(Permissions.SiteMember, async (addOn) => {
-    await assertEmployeeAccess('manageOrdersSystem');
+    await assertEmployeeAccess('manageAddOnsSystem');
 
     if (addOn?._id) {
         const existing = await wixData.get('StudioAddOns', addOn._id, SA);
@@ -128,12 +128,12 @@ export const saveAddOn = webMethod(Permissions.SiteMember, async (addOn) => {
 });
 
 export const deleteAddOn = webMethod(Permissions.SiteMember, async (addOnId) => {
-    await assertEmployeeAccess('manageOrdersSystem');
+    await assertEmployeeAccess('manageAddOnsSystem');
     return wixData.remove('StudioAddOns', addOnId, SA);
 });
 
 export const saveUpsellSettings = webMethod(Permissions.SiteMember, async (settings) => {
-    await assertEmployeeAccess('manageOrdersSystem');
+    await assertEmployeeAccess('manageAddOnsSystem');
     if (!settings?.workshopType) throw new Error('workshopType is required');
 
     const existing = await wixData.query('StudioUpsellSettings').eq('workshopType', settings.workshopType).find(SA);
@@ -154,7 +154,7 @@ export const saveUpsellSettings = webMethod(Permissions.SiteMember, async (setti
 });
 
 export const listAddOnTransactions = webMethod(Permissions.SiteMember, async (filters) => {
-    await assertEmployeeAccess('manageOrdersSystem');
+    await assertEmployeeAccess('manageAddOnsSystem');
     let query = wixData.query('StudioAddOnOrders').descending('_createdDate').limit(100);
     if (filters?.status) query = query.eq('status', filters.status);
     const result = await query.find(SA);
@@ -162,13 +162,13 @@ export const listAddOnTransactions = webMethod(Permissions.SiteMember, async (fi
 });
 
 export const listPrintQueue = webMethod(Permissions.SiteMember, async () => {
-    await assertEmployeeAccess('manageOrdersSystem');
+    await assertEmployeeAccess('manageAddOnsSystem');
     const result = await wixData.query('PrintQueue').descending('_createdDate').limit(100).find(SA);
     return result.items || [];
 });
 
 export const markPrintJobStatus = webMethod(Permissions.SiteMember, async (printQueueId, status) => {
-    await assertEmployeeAccess('manageOrdersSystem');
+    await assertEmployeeAccess('manageAddOnsSystem');
     const existing = await wixData.get('PrintQueue', printQueueId, SA);
     if (!existing) return null;
     return wixData.update('PrintQueue', {

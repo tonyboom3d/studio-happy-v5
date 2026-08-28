@@ -188,7 +188,7 @@ class StudioUpsellAdminElement extends HTMLElement {
         const s = this._state;
 
         if (s.accessDenied) {
-            root.innerHTML = `<div class="sa-access-denied"><h2>אין הרשאה</h2><p>נדרשת הרשאת "מנהל מערכת הזמנות" (manageOrdersSystem) כדי לצפות בעמוד זה.</p></div>`;
+            root.innerHTML = `<div class="sa-access-denied"><h2>אין הרשאה</h2><p>נדרשת הרשאת "ניהול מערכת תוספים בסטודיו" (manageAddOnsSystem) כדי לצפות בעמוד זה.</p></div>`;
             return;
         }
 

@@ -68,6 +68,7 @@ class StudioUpsellConfirmationElement extends HTMLElement {
         super();
         this._requestSeq = 0;
         this._pollTimer = null;
+        this._watchdogTimer = null;
         this._pollAttempts = 0;
         this._state = { status: 'loading', order: null, error: null };
     }
@@ -82,10 +83,12 @@ class StudioUpsellConfirmationElement extends HTMLElement {
 
     disconnectedCallback() {
         if (this._pollTimer) clearTimeout(this._pollTimer);
+        if (this._watchdogTimer) clearTimeout(this._watchdogTimer);
     }
 
     attributeChangedCallback(name, oldValue, newValue) {
         if (!newValue || newValue === oldValue) return;
+        if (this._watchdogTimer) { clearTimeout(this._watchdogTimer); this._watchdogTimer = null; }
         if (name === 'thanks-data') {
             try {
                 const { type, result } = JSON.parse(newValue);
@@ -117,6 +120,26 @@ class StudioUpsellConfirmationElement extends HTMLElement {
             detail: { type, requestId, payload },
             bubbles: true,
         }));
+        this._armWatchdog();
+    }
+
+    /**
+     * Safety net for the case where the very first 'confirm' dispatch fires
+     * before Velo's `el.on('studio-upsell-thanks-action', ...)` listener has
+     * finished registering (a DOM-connection-order race) — the CustomEvent
+     * then has no listener and silently vanishes, so no thanks-data/thanks-error
+     * attribute ever comes back and the customer is stuck on the spinner
+     * forever. If nothing comes back within 3s of ANY dispatch, treat it the
+     * same as "order not found yet" and let the existing retry/backoff in
+     * _handleOrder take over (which eventually surfaces SYSTEM_ERROR_MESSAGE).
+     */
+    _armWatchdog() {
+        if (this._watchdogTimer) clearTimeout(this._watchdogTimer);
+        this._watchdogTimer = setTimeout(() => {
+            this._watchdogTimer = null;
+            console.warn('[studio-upsell-confirmation] no response within 3s of dispatch — retrying (possible Velo listener registration race).');
+            this._handleOrder(null);
+        }, 3000);
     }
 
     _handleOrder(order) {

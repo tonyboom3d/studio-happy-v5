@@ -2131,17 +2131,58 @@ function __wdInjectGlobalAssets() {
             if (order.isLegacyOrder || !hasDashboardPermission('manageOrdersSystem')) return '';
             const total = Number(order.paidTotal) || 0;
             const discount = Number(order.paidDiscount) || 0;
+            const addOnsTotal = Number(order.addOnsTotal) || 0;
             const hasCoupon = discount > 0 || order.couponCode;
             const subtotal = total + discount;
-            if (!total && !discount) return '';
+            if (!total && !discount && !addOnsTotal) return '';
             let html = '<div class="flex flex-wrap items-center gap-1.5 mt-1.5">';
             if (hasCoupon) {
                 html += `<span class="bg-gray-50 text-gray-600 border border-gray-200 px-1.5 py-0.5 rounded text-[10px] font-medium" title="מחיר לפני הנחה">לפני הנחה: ${formatIls(subtotal)}</span>`;
                 html += `<span class="bg-rose-50 text-rose-700 border border-rose-200 px-1.5 py-0.5 rounded text-[10px] font-bold" title="הנחת קופון">הנחה: -${formatIls(discount)}${order.couponCode ? ` (${order.couponCode})` : ''}</span>`;
             }
-            html += `<span class="bg-emerald-50 text-emerald-700 border border-emerald-200 px-1.5 py-0.5 rounded text-[10px] font-bold" title="סכום ששולם"><i class="ph ph-currency-circle-shekel"></i> שולם: ${formatIls(total)}</span>`;
+            if (total) {
+                html += `<span class="bg-emerald-50 text-emerald-700 border border-emerald-200 px-1.5 py-0.5 rounded text-[10px] font-bold" title="סכום ששולם"><i class="ph ph-currency-circle-shekel"></i> שולם: ${formatIls(total)}</span>`;
+            }
+            if (addOnsTotal > 0) {
+                html += `<span class="bg-indigo-50 text-indigo-700 border border-indigo-200 px-1.5 py-0.5 rounded text-[10px] font-bold" title="תוספות שנרכשו בסטודיו (QR)"><i class="ph ph-qr-code"></i> תוספות בסטודיו: ${formatIls(addOnsTotal)}</span>`;
+            }
             html += '</div>';
             return html;
+        }
+
+        /** In-person QR add-on purchases linked to this order (backend/studioUpsellService.web.js). */
+        function buildAddOnsHtml(order) {
+            const addOns = Array.isArray(order.addOns) ? order.addOns : [];
+            if (!addOns.length || !hasDashboardPermission('manageOrdersSystem')) return '';
+
+            let rowsHtml = '';
+            addOns.forEach((addOnOrder) => {
+                const itemsLabel = (addOnOrder.items || [])
+                    .map((i) => `${i.title || ''}${i.quantity > 1 ? ` ×${i.quantity}` : ''}`)
+                    .filter(Boolean)
+                    .join(', ');
+                const openAmountLabel = Number(addOnOrder.openAmount) > 0 ? `סכום פתוח: ${formatIls(addOnOrder.openAmount)}` : '';
+                const combinedLabel = [itemsLabel, openAmountLabel].filter(Boolean).join(' + ') || 'רכישה';
+                const viaLabel = addOnOrder.createdVia === 'qr_staff'
+                    ? `נמכר ע"י צוות${addOnOrder.staffName ? ` (${addOnOrder.staffName})` : ''}`
+                    : 'נרכש ע"י הלקוח';
+                rowsHtml += `
+                    <div class="flex items-center justify-between gap-2 py-1.5 border-b border-indigo-100 last:border-b-0">
+                        <div class="flex flex-col">
+                            <span class="text-sm text-gray-800">${combinedLabel}</span>
+                            <span class="text-[10px] text-gray-500">${viaLabel}</span>
+                        </div>
+                        <span class="text-sm font-bold text-indigo-700 shrink-0">${formatIls(addOnOrder.total)}</span>
+                    </div>`;
+            });
+
+            return `
+                <div class="px-8 pb-2 pt-0 w-full">
+                    <div class="bg-indigo-50 border border-indigo-100 rounded-lg p-3 text-sm">
+                        <strong class="flex items-center gap-1.5 mb-1 text-xs text-indigo-700"><i class="ph ph-qr-code"></i> נרכש בסטודיו (QR)</strong>
+                        ${rowsHtml}
+                    </div>
+                </div>`;
         }
 
         const ECOM_ORDER_DASHBOARD_BASE = 'https://manage.wix.com/dashboard/f0548b42-7f52-447c-9076-45112f85765b/ecom-platform/order-details';
@@ -2986,6 +3027,9 @@ function __wdInjectGlobalAssets() {
                     sketchesHtml = `<div class="p-8 pb-4 text-sm text-gray-500 flex items-center gap-2"><i class="ph ph-info text-xl text-gray-400"></i> אין עדיין סקיצות שנבחרו.</div>`;
                 }
                 innerContent += sketchesHtml;
+
+                // 1b. In-person QR add-on purchases linked to this order
+                innerContent += buildAddOnsHtml(o);
 
                 // 2. Customer notes (from checkout, read-only)
                 if (o.customerNotes) {

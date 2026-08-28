@@ -865,6 +865,54 @@ async function loadPaidWorkshopOrdersInRange(startDate, endDate) {
     return { items, queryReturned: items.length };
 }
 
+/**
+ * Paid in-person QR add-on purchases (backend/studioUpsellService.web.js) in
+ * the same date range, grouped by matching WorkshopOrders._id when the
+ * customer was identified by phone, and by sessionId when it was a staff-PIN
+ * purchase with no linked WorkshopOrders record (unlinkedAddOns).
+ */
+async function loadAddOnOrdersInRange(startDate, endDate) {
+    const items = [];
+    let result = await wixData.query('StudioAddOnOrders')
+        .eq('status', 'paid')
+        .ge('workshopStart', startDate)
+        .le('workshopStart', endDate)
+        .limit(100)
+        .find(SA);
+    items.push(...(result.items || []));
+    while (typeof result.hasNext === 'function' && result.hasNext()) {
+        result = await result.next();
+        items.push(...(result.items || []));
+    }
+
+    const byWorkshopOrderId = {};
+    const bySessionId = {};
+    for (const row of items) {
+        if (row.workshopOrderId) {
+            if (!byWorkshopOrderId[row.workshopOrderId]) byWorkshopOrderId[row.workshopOrderId] = [];
+            byWorkshopOrderId[row.workshopOrderId].push(row);
+        } else if (row.sessionId) {
+            if (!bySessionId[row.sessionId]) bySessionId[row.sessionId] = [];
+            bySessionId[row.sessionId].push(row);
+        }
+    }
+    return { byWorkshopOrderId, bySessionId };
+}
+
+function mapAddOnOrderForDashboard(row) {
+    return {
+        id: row._id,
+        items: Array.isArray(row.items) ? row.items.map((i) => ({ title: i.title, quantity: i.quantity, price: i.price })) : [],
+        openAmount: Number(row.openAmount) || 0,
+        total: Number(row.total) || 0,
+        createdVia: row.createdVia || 'qr_customer',
+        staffName: row.staffName || null,
+        customerName: row.customerName || '',
+        customerPhone: row.customerPhone || '',
+        paidAt: row.paidAt || null,
+    };
+}
+
 /** Authoritative workshop bucket key — CMS sessionId groups all ticket variants. */
 function cmsWorkshopKey(order) {
     if (order.sessionId) return `sid:${order.sessionId}`;
@@ -921,11 +969,14 @@ export const getInitialDashboardData = webMethod(Permissions.SiteMember, async (
     console.log(`[dashboardService] Loaded ${Object.keys(typesMap).length} workshop type(s), serviceIds:`, allServiceIds);
     console.log(`[dashboardService] Loaded ${Object.keys(staffNamesById).length} staff member(s):`, staffNamesById);
 
-    const [{ sessions, idLookup }, ordersLoad] = await Promise.all([
+    const [{ sessions, idLookup }, ordersLoad, addOnOrdersLoad] = await Promise.all([
         loadSessions(allServiceIds, startDate, endDate),
         loadPaidWorkshopOrdersInRange(startDate, endDate),
+        loadAddOnOrdersInRange(startDate, endDate),
     ]);
     const orders = ordersLoad.items || [];
+    const addOnsByWorkshopOrderId = addOnOrdersLoad.byWorkshopOrderId;
+    const addOnsBySessionId = addOnOrdersLoad.bySessionId;
     const ordersQueryTotal = ordersLoad.queryReturned;
     const queryLimitHit = false;
     console.log(`[dashboardService] Loaded ${sessions.length} Bookings session(s) and ${orders.length} paid WorkshopOrders record(s) in range.`);
@@ -1103,6 +1154,8 @@ export const getInitialDashboardData = webMethod(Permissions.SiteMember, async (
                 paidDiscount: order.paidDiscount || 0,
                 couponCode: order.couponCode || null,
                 couponName: order.couponName || null,
+                addOns: (addOnsByWorkshopOrderId[order._id] || []).map(mapAddOnOrderForDashboard),
+                addOnsTotal: (addOnsByWorkshopOrderId[order._id] || []).reduce((sum, r) => sum + (Number(r.total) || 0), 0),
             });
         }
 
@@ -1145,6 +1198,9 @@ export const getInitialDashboardData = webMethod(Permissions.SiteMember, async (
             hasAlert,
             hasNotReadyAlert,
             isUrgent,
+            // In-person QR add-on purchases with no matching WorkshopOrders record
+            // (typically staff-PIN sales for walk-ins) — see backend/studioUpsellService.web.js.
+            unlinkedAddOns: (addOnsBySessionId[sessionId] || []).map(mapAddOnOrderForDashboard),
         });
     }
 
@@ -1223,7 +1279,8 @@ export const getInitialDashboardData = webMethod(Permissions.SiteMember, async (
         ? dashboardOrders
         : dashboardOrders.filter(o => scopedWorkshopIds.has(o.workshopId));
     if (!canManageOrdersSystem) {
-        scopedOrders = scopedOrders.map(({ paidTotal, paidDiscount, couponCode, couponName, ecomOrderId, ...rest }) => rest);
+        scopedOrders = scopedOrders.map(({ paidTotal, paidDiscount, couponCode, couponName, ecomOrderId, addOns, addOnsTotal, ...rest }) => rest);
+        for (const w of scopedWorkshopRows) delete w.unlinkedAddOns;
     }
 
     const templates = templatesResult

@@ -2,6 +2,7 @@ import wixData from 'wix-data';
 import { staffMembers } from '@wix/bookings';
 import { computeSketchEditingDeadline } from 'backend/sketchEditingPolicy.js';
 import { reconcileEcomOrder } from 'backend/orderReconciliation.js';
+import { reconcileAddOnEcomOrder } from 'backend/studioUpsell/reconcile.js';
 
 const SA = { suppressAuth: true, suppressHooks: true };
 
@@ -360,6 +361,12 @@ export function wixBookings_onBookingRescheduled(event) {
  * This fires for EVERY completed eCom order on the site, not just workshop
  * orders — reconcileEcomOrder() simply finds no match and no-ops for
  * anything else, which is expected and not logged as an error.
+ *
+ * Also runs reconcileAddOnEcomOrder() for the QR in-person add-on upsell
+ * system (see backend/studioUpsell/reconcile.js) — this is the authoritative
+ * trigger that marks a StudioAddOnOrders row paid, generates the staff
+ * confirmation code, and enqueues the print job. Both reconcilers are
+ * independent and safe to run for every order (each no-ops on no match).
  */
 export function wixEcom_onOrderPaymentStatusUpdated(event) {
     const order = event?.data?.order;
@@ -368,7 +375,7 @@ export function wixEcom_onOrderPaymentStatusUpdated(event) {
         return;
     }
 
-    return reconcileEcomOrder(order)
+    const workshopOrderReconcile = reconcileEcomOrder(order)
         .then((result) => {
             if (result.reconciled) {
                 console.log(`[events] wixEcom_onOrderPaymentStatusUpdated: reconciled WorkshopOrder ${result.workshopOrder?._id} from ecomOrder ${order._id} (matchedBy=${result.matchedBy}).`);
@@ -379,4 +386,16 @@ export function wixEcom_onOrderPaymentStatusUpdated(event) {
         .catch((err) => {
             console.error('[events] wixEcom_onOrderPaymentStatusUpdated error:', err?.message || err);
         });
+
+    const addOnOrderReconcile = reconcileAddOnEcomOrder(order)
+        .then((result) => {
+            if (result.reconciled) {
+                console.log(`[events] wixEcom_onOrderPaymentStatusUpdated: reconciled StudioAddOnOrder ${result.addOnOrder?._id} from ecomOrder ${order._id}.`);
+            }
+        })
+        .catch((err) => {
+            console.error('[events] wixEcom_onOrderPaymentStatusUpdated (studioUpsell) error:', err?.message || err);
+        });
+
+    return Promise.all([workshopOrderReconcile, addOnOrderReconcile]);
 }

@@ -39,11 +39,15 @@ const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
 const STYLE = `
     @import url('https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;600;700;800;900&display=swap');
     :host, .sa-root { all: initial; }
+    :host { display: block; max-width: 100%; overflow-x: hidden; }
     .sa-root {
         display: block; direction: rtl; font-family: 'Rubik', Arial, sans-serif;
         color: #1f2933; box-sizing: border-box; padding: 16px;
+        max-width: 100%; overflow-x: hidden;
     }
     .sa-root *, .sa-root *::before, .sa-root *::after { box-sizing: border-box; }
+    .sa-table-wrap { width: 100%; max-width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    .sa-table-wrap .sa-table { min-width: 640px; }
     .sa-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; flex-wrap: wrap; gap: 12px; }
     .sa-title { font-size: 20px; font-weight: 800; color: #111827; margin: 0; }
     .sa-tabs { display: flex; gap: 6px; background: #f1f2f4; padding: 4px; border-radius: 12px; flex-wrap: wrap; }
@@ -114,6 +118,26 @@ const STYLE = `
     .sa-seg-btn { padding: 9px 14px; border: none; background: transparent; font-family: inherit; font-size: 12px; font-weight: 700; color: #6b7280; cursor: pointer; }
     .sa-seg-btn.active { background: #4f46e5; color: #fff; }
     .sa-seg-btn:disabled { opacity: .5; cursor: not-allowed; }
+
+    @media (max-width: 640px) {
+        .sa-root { padding: 10px; }
+        .sa-header { flex-direction: column; align-items: stretch; }
+        .sa-title { font-size: 17px; }
+        .sa-tabs { width: 100%; overflow-x: auto; flex-wrap: nowrap; -webkit-overflow-scrolling: touch; }
+        .sa-tab { flex: 0 0 auto; padding: 8px 12px; font-size: 12px; white-space: nowrap; }
+        .sa-card { padding: 14px; border-radius: 12px; }
+        .sa-row { gap: 10px; }
+        .sa-field { min-width: 0; flex: 1 1 100%; }
+        .sa-workshops-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
+        .sa-workshop-card { padding: 22px 12px; min-height: 110px; }
+        .sa-workshop-card-title { font-size: 16px; }
+        .sa-detail-header { gap: 8px; }
+        .sa-subtabs { width: 100%; overflow-x: auto; flex-wrap: nowrap; -webkit-overflow-scrolling: touch; }
+        .sa-subtab { flex: 0 0 auto; white-space: nowrap; }
+        .sa-image-picker { flex-direction: column; align-items: flex-start; }
+        .sa-image-picker-actions { width: 100%; }
+        .sa-actions-cell { flex-wrap: wrap; }
+    }
 `;
 
 function escapeHtml(str) {
@@ -511,10 +535,12 @@ class StudioUpsellAdminElement extends HTMLElement {
                     <button class="sa-btn sa-btn-primary" id="saAddOnNewBtn">+ תוסף חדש</button>
                 </div>
                 ${addOnsForType.length ? `
+                    <div class="sa-table-wrap">
                     <table class="sa-table">
                         <thead><tr><th></th><th>שם</th><th>מחיר</th><th>מלאי</th><th>סטטוס</th><th>סדר</th><th></th></tr></thead>
                         <tbody>${rows}</tbody>
                     </table>
+                    </div>
                 ` : '<div class="sa-empty">אין תוספים עדיין.</div>'}
             </div>
             ${formHtml}
@@ -555,10 +581,12 @@ class StudioUpsellAdminElement extends HTMLElement {
         return `
             <div class="sa-card">
                 <p style="font-size:12px;color:#6b7280;margin:0 0 14px;">כל תוסף חדש נוצר עם מלאי "לא מנוהל" (ללא הגבלה). ניתן להעביר תוסף למלאי מנוהל ולהזין כמות — כל רכישה תפחית מהמלאי אוטומטית, וניתן לבחור לקבל התראת וואטסאפ כשהמלאי מסתיים.</p>
+                <div class="sa-table-wrap">
                 <table class="sa-table">
                     <thead><tr><th></th><th>שם</th><th>סדנה</th><th>ניהול מלאי</th><th>כמות במלאי</th><th>התראה בסיום מלאי</th><th></th></tr></thead>
                     <tbody>${rows}</tbody>
                 </table>
+                </div>
             </div>
         `;
     }
@@ -652,10 +680,12 @@ class StudioUpsellAdminElement extends HTMLElement {
         return `
             ${filtersBar}
             <div class="sa-card">
+                <div class="sa-table-wrap">
                 <table class="sa-table">
                     <thead><tr><th>תאריך</th><th>סדנה</th><th>הזמנה על שם</th><th>שולם ע"י (צ'קאאוט)</th><th>פריטים</th><th>סכום</th><th>סטטוס</th><th>מקור</th></tr></thead>
                     <tbody>${rows}</tbody>
                 </table>
+                </div>
             </div>
         `;
     }
@@ -685,10 +715,12 @@ class StudioUpsellAdminElement extends HTMLElement {
 
         return `
             <div class="sa-card">
+                <div class="sa-table-wrap">
                 <table class="sa-table">
                     <thead><tr><th>תאריך</th><th>לקוח</th><th>סדנה</th><th>סכום</th><th>סטטוס</th><th></th></tr></thead>
                     <tbody>${rows}</tbody>
                 </table>
+                </div>
             </div>
         `;
     }

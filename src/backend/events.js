@@ -2,7 +2,7 @@ import wixData from 'wix-data';
 import { staffMembers } from '@wix/bookings';
 import { computeSketchEditingDeadline } from 'backend/sketchEditingPolicy.js';
 import { reconcileEcomOrder } from 'backend/orderReconciliation.js';
-import { reconcileAddOnEcomOrder } from 'backend/studioUpsell/reconcile.js';
+import { reconcileAddOnEcomOrder, getAddOnOrderByCheckoutId, getAddOnOrderByEcomOrderId } from 'backend/studioUpsell/reconcile.js';
 
 const SA = { suppressAuth: true, suppressHooks: true };
 
@@ -365,27 +365,51 @@ export function wixBookings_onBookingRescheduled(event) {
  * Also runs reconcileAddOnEcomOrder() for the QR in-person add-on upsell
  * system (see backend/studioUpsell/reconcile.js) — this is the authoritative
  * trigger that marks a StudioAddOnOrders row paid, generates the staff
- * confirmation code, and enqueues the print job. Both reconcilers are
- * independent and safe to run for every order (each no-ops on no match).
+ * confirmation code, and enqueues the print job.
+ *
+ * IMPORTANT — isolation from the studio add-on system: reconcileEcomOrder()
+ * has a last-resort "buyerInfo" fallback (matches by organizerPhone on a
+ * WorkshopOrder that has no ecomOrderId yet — see orderReconciliation.js).
+ * A studio add-on checkout (QR kiosk) creates its OWN, unrelated @wix/ecom
+ * order tagged with the same customer phone. Without the guard below, that
+ * add-on order paying could wrongly match a customer's unrelated *pending*
+ * WorkshopOrder by phone and mark it "paid" using the add-on's (much
+ * smaller) total — corrupting a real workshop booking. So: detect studio
+ * add-on orders FIRST via their own checkoutId/ecomOrderId, and skip the
+ * workshop reconciler entirely for those — the two systems never compete
+ * over the same ecom order.
  */
-export function wixEcom_onOrderPaymentStatusUpdated(event) {
+export async function wixEcom_onOrderPaymentStatusUpdated(event) {
     const order = event?.data?.order;
     if (!order?._id) {
         console.warn('[events] wixEcom_onOrderPaymentStatusUpdated: no order on event, skipping.');
         return;
     }
 
-    const workshopOrderReconcile = reconcileEcomOrder(order)
-        .then((result) => {
-            if (result.reconciled) {
-                console.log(`[events] wixEcom_onOrderPaymentStatusUpdated: reconciled WorkshopOrder ${result.workshopOrder?._id} from ecomOrder ${order._id} (matchedBy=${result.matchedBy}).`);
-            } else if (result.reason && result.reason !== 'not_paid' && result.reason !== 'no_match') {
-                console.log(`[events] wixEcom_onOrderPaymentStatusUpdated: ecomOrder ${order._id} — ${result.reason}.`);
-            }
-        })
-        .catch((err) => {
-            console.error('[events] wixEcom_onOrderPaymentStatusUpdated error:', err?.message || err);
-        });
+    let isStudioAddOnOrder = false;
+    try {
+        const [byCheckoutId, byEcomOrderId] = await Promise.all([
+            order.checkoutId ? getAddOnOrderByCheckoutId(order.checkoutId) : null,
+            getAddOnOrderByEcomOrderId(order._id),
+        ]);
+        isStudioAddOnOrder = !!(byCheckoutId || byEcomOrderId);
+    } catch (err) {
+        console.error('[events] wixEcom_onOrderPaymentStatusUpdated: studio add-on lookup error:', err?.message || err);
+    }
+
+    const workshopOrderReconcile = isStudioAddOnOrder
+        ? Promise.resolve()
+        : reconcileEcomOrder(order)
+            .then((result) => {
+                if (result.reconciled) {
+                    console.log(`[events] wixEcom_onOrderPaymentStatusUpdated: reconciled WorkshopOrder ${result.workshopOrder?._id} from ecomOrder ${order._id} (matchedBy=${result.matchedBy}).`);
+                } else if (result.reason && result.reason !== 'not_paid' && result.reason !== 'no_match') {
+                    console.log(`[events] wixEcom_onOrderPaymentStatusUpdated: ecomOrder ${order._id} — ${result.reason}.`);
+                }
+            })
+            .catch((err) => {
+                console.error('[events] wixEcom_onOrderPaymentStatusUpdated error:', err?.message || err);
+            });
 
     const addOnOrderReconcile = reconcileAddOnEcomOrder(order)
         .then((result) => {

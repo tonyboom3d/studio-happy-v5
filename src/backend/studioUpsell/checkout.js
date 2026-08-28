@@ -2,8 +2,12 @@
  * studioUpsell/checkout.js — builds and creates the @wix/ecom checkout for
  * an in-person add-on purchase, and logs a StudioAddOnOrders CMS row.
  *
- * All line items use itemType.preset = 'DIGITAL' so Wix never asks for a
- * shipping address / applies shipping costs during this checkout, per spec.
+ * Line items use itemType.preset = 'PHYSICAL' + shippable: false (matches the
+ * proven pattern in bookingService.web.js's cup line items) instead of
+ * 'DIGITAL' — DIGITAL requires a real digitalFile.fileId on order creation
+ * (MISSING_DIGITAL_FILE), which we don't have since these aren't downloadable
+ * files. shippable: false is what actually skips the shipping step/cost, not
+ * the DIGITAL preset.
  *
  * NOTE on redirection: `overrideCheckoutUrl` here only controls where an
  * ABANDONED checkout sends the customer back to (the QR landing page) — it
@@ -24,8 +28,12 @@ function generateToken() {
     return randomBytes(16).toString('hex');
 }
 
-/** Re-validates stock + "per customer" caps server-side (source of truth) right before checkout creation. */
-async function assertItemsAvailable(items, customerPhone) {
+/**
+ * Re-validates stock + "per customer" caps server-side (source of truth) right
+ * before checkout creation. The perCustomer cap counts only what this customer
+ * already bought for THIS workshop session (see inventory.js).
+ */
+async function assertItemsAvailable(items, customerPhone, scope) {
     const withQty = (items || []).filter((i) => i?.id && Number(i.quantity) > 0);
     for (const item of withQty) {
         const addOn = await wixData.get('StudioAddOns', item.id, SA).catch(() => null);
@@ -40,10 +48,13 @@ async function assertItemsAvailable(items, customerPhone) {
 
         if (addOn.maxQuantityMode === 'perCustomer') {
             const max = Number(addOn.maxQuantity) || 0;
-            const purchased = await getPurchasedQuantityForCustomer(addOn._id, customerPhone);
+            const purchased = await getPurchasedQuantityForCustomer(addOn._id, customerPhone, scope);
             if (purchased + Number(item.quantity) > max) {
+                if (purchased >= max) {
+                    throw new Error(`"${addOn.title || item.title}" נרכש כבר עבור סדנה זו ואינו זמין לרכישה נוספת.`);
+                }
                 const remaining = Math.max(0, max - purchased);
-                throw new Error(`ניתן לרכוש עד ${max} יחידות של "${addOn.title || item.title}" לכל מזמין (נותרו ${remaining}).`);
+                throw new Error(`ניתן לרכוש עד ${max} יחידות של "${addOn.title || item.title}" לכל מזמין בסדנה זו (נותרו ${remaining}).`);
             }
         }
     }
@@ -89,7 +100,7 @@ export async function createAddOnCheckout(params) {
         resumeUrl = null,
     } = params || {};
 
-    await assertItemsAvailable(items, customerPhone);
+    await assertItemsAvailable(items, customerPhone, { sessionId, workshopOrderId, workshopTypeId, workshopStart });
 
     const descriptionLines = buildDescriptionLines(workshopTitle);
 
@@ -99,7 +110,8 @@ export async function createAddOnCheckout(params) {
             quantity: Number(i.quantity),
             price: Number(i.price).toFixed(2),
             productName: { original: i.title },
-            itemType: { preset: 'DIGITAL' },
+            itemType: { preset: 'PHYSICAL' },
+            shippable: false,
             ...(i.image ? { media: i.image } : {}),
             ...(descriptionLines.length ? { descriptionLines } : {}),
         }));
@@ -110,7 +122,8 @@ export async function createAddOnCheckout(params) {
             quantity: 1,
             price: cleanOpenAmount.toFixed(2),
             productName: { original: openAmountLabel || 'סכום פתוח' },
-            itemType: { preset: 'DIGITAL' },
+            itemType: { preset: 'PHYSICAL' },
+            shippable: false,
             ...(descriptionLines.length ? { descriptionLines } : {}),
         });
     }

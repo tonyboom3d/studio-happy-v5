@@ -11,6 +11,7 @@
 import wixData from 'wix-data';
 import { orders as ecomOrders } from '@wix/ecom';
 import { auth } from '@wix/essentials';
+import { extractBuyerContact } from 'backend/orderUtils.js';
 import { generateStaffCode } from './staffCode.js';
 import { enqueuePrintJob } from './printQueue.js';
 import { getSettingsForWorkshopType } from './catalog.js';
@@ -54,11 +55,18 @@ export async function confirmAddOnOrderFromEcom(addOnOrder, ecomOrder) {
     const settings = addOnOrder.workshopTypeId ? await getSettingsForWorkshopType(addOnOrder.workshopTypeId) : null;
     const staffCode = settings?.showStaffCode ? generateStaffCode(addOnOrder._id) : null;
 
+    // Who actually paid at the Wix checkout — may differ from customerName/Phone
+    // (the name the order is placed under), e.g. staff-created orders.
+    const buyer = extractBuyerContact(ecomOrder);
+
     const updated = await wixData.update('StudioAddOnOrders', {
         ...addOnOrder,
         status: 'paid',
         ecomOrderId: ecomOrder._id,
         ecomOrderNumber: ecomOrder.number || null,
+        checkoutName: buyer.fullName || null,
+        checkoutPhone: buyer.phone || null,
+        checkoutEmail: buyer.email || null,
         staffCode,
         paidAt: new Date(),
     }, SA);

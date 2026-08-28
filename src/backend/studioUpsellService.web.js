@@ -57,9 +57,13 @@ export const lookupByPhone = webMethod(Permissions.Anyone, async (phone) => {
     return { matches };
 });
 
-/** Add-on catalog + upsell settings (open amount, staff code, print toggle) for a workshop type. */
-export const getAddOnCatalogForWorkshop = webMethod(Permissions.Anyone, async (workshopTypeId, customerPhone) => {
-    return getAddOnCatalog(workshopTypeId, customerPhone);
+/**
+ * Add-on catalog + upsell settings (open amount, staff code, print toggle) for a
+ * workshop type. `scope` identifies the workshop session, so a 'perCustomer'
+ * add-on already bought for that session comes back flagged as unavailable.
+ */
+export const getAddOnCatalogForWorkshop = webMethod(Permissions.Anyone, async (workshopTypeId, customerPhone, scope) => {
+    return getAddOnCatalog(workshopTypeId, customerPhone, scope);
 });
 
 /** Creates the @wix/ecom checkout (digital-only line items) and logs the StudioAddOnOrders row. */

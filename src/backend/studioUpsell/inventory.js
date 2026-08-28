@@ -6,15 +6,48 @@
  * managed stock (see the admin "מלאי" tab) — every paid purchase then
  * decrements stockQuantity, and an out-of-stock WhatsApp alert can be sent
  * to managers (ManyChat) once it hits 0.
+ *
+ * The 'perCustomer' quantity cap is scoped to ONE workshop session, not to
+ * the customer's lifetime: a customer who used up their allowance at today's
+ * workshop is capped there, but starts fresh at their next workshop.
  */
 import wixData from 'wix-data';
 import { getPhoneLookupVariants } from 'backend/orderUtils.js';
 import { sendEmployeeTemplateToManagers } from 'backend/employeeTemplates.js';
 
 const SA = { suppressAuth: true };
+const SESSION_START_TOLERANCE_MS = 5 * 60 * 1000;
 
-/** Sums paid quantities of one add-on across a customer's past orders — used for maxQuantityMode 'perCustomer'. */
-export async function getPurchasedQuantityForCustomer(addOnId, customerPhone) {
+/**
+ * True when a past add-on order belongs to the same workshop session as
+ * `scope`. Matched by sessionId or workshopOrderId when available, else by
+ * workshop type + (near-)identical start time — mirroring identify.js.
+ */
+function matchesWorkshopScope(order, scope) {
+    if (!scope) return true;
+    const { sessionId, workshopOrderId, workshopTypeId, workshopStart } = scope;
+
+    if (sessionId && order.sessionId && order.sessionId === sessionId) return true;
+    if (workshopOrderId && order.workshopOrderId && order.workshopOrderId === workshopOrderId) return true;
+
+    if (workshopTypeId && workshopStart && order.workshopTypeId === workshopTypeId && order.workshopStart) {
+        const diff = Math.abs(new Date(order.workshopStart).getTime() - new Date(workshopStart).getTime());
+        if (Number.isFinite(diff) && diff < SESSION_START_TOLERANCE_MS) return true;
+    }
+
+    return false;
+}
+
+/**
+ * Sums paid quantities of one add-on already bought by this customer for the
+ * given workshop session — used for maxQuantityMode 'perCustomer'.
+ *
+ * @param {string} addOnId
+ * @param {string} customerPhone
+ * @param {{sessionId?:string, workshopOrderId?:string, workshopTypeId?:string, workshopStart?:string|Date}} [scope]
+ *   Omit to count across every session (unscoped).
+ */
+export async function getPurchasedQuantityForCustomer(addOnId, customerPhone, scope) {
     if (!addOnId || !customerPhone) return 0;
     const variants = getPhoneLookupVariants(customerPhone);
     if (!variants.length) return 0;
@@ -30,6 +63,7 @@ export async function getPurchasedQuantityForCustomer(addOnId, customerPhone) {
         for (const order of (result.items || [])) {
             if (seenOrderIds.has(order._id)) continue;
             seenOrderIds.add(order._id);
+            if (!matchesWorkshopScope(order, scope)) continue;
             for (const item of (order.items || [])) {
                 if (item.id === addOnId) total += Number(item.quantity) || 0;
             }

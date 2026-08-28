@@ -86,16 +86,21 @@ const STYLE = `
     .sa-section-title { font-size: 15px; font-weight: 800; color: #111827; margin: 0 0 12px; }
     .sa-actions-cell { display: flex; gap: 6px; }
     .sa-access-denied { text-align: center; padding: 60px 20px; color: #6b7280; }
-    .sa-workshops-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 14px; }
+    .sa-workshops-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 18px; }
     .sa-workshop-card {
-        background: #fff; border: 1.5px solid #eef0f2; border-radius: 16px; padding: 22px 16px;
-        cursor: pointer; transition: border-color .15s ease, box-shadow .15s ease, transform .15s ease; text-align: center;
+        background: linear-gradient(135deg, #7c3aed 0%, #5b21b6 100%);
+        border: 1.5px solid #6d28d9; border-radius: 20px; padding: 40px 24px; min-height: 150px;
+        display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px;
+        cursor: pointer; transition: box-shadow .15s ease, transform .15s ease; text-align: center;
     }
-    .sa-workshop-card:hover { border-color: #6366f1; box-shadow: 0 4px 14px rgba(79,70,229,.12); transform: translateY(-2px); }
-    .sa-workshop-card-general { border-style: dashed; background: #f9fafb; }
-    .sa-workshop-card-icon { font-size: 30px; margin-bottom: 8px; }
-    .sa-workshop-card-title { font-weight: 800; font-size: 15px; color: #111827; margin-bottom: 6px; }
-    .sa-workshop-card-meta { font-size: 12px; color: #6b7280; display: flex; align-items: center; justify-content: center; gap: 6px; flex-wrap: wrap; }
+    .sa-workshop-card:hover { box-shadow: 0 10px 26px rgba(91,33,182,.32); transform: translateY(-3px); }
+    .sa-workshop-card-general { background: linear-gradient(135deg, #a78bfa 0%, #7c3aed 100%); border-style: dashed; border-color: #ede9fe; }
+    .sa-workshop-card-title { font-weight: 800; font-size: 20px; color: #fff; line-height: 1.3; }
+    .sa-workshop-card-meta { font-size: 13px; color: rgba(255,255,255,.85); display: flex; align-items: center; justify-content: center; gap: 8px; flex-wrap: wrap; }
+    .sa-workshop-card-chip {
+        font-size: 12px; font-weight: 700; padding: 4px 11px; border-radius: 999px;
+        background: rgba(255,255,255,.22); color: #fff;
+    }
     .sa-detail-header { display: flex; align-items: center; gap: 14px; margin-bottom: 16px; flex-wrap: wrap; }
     .sa-subtabs { display: flex; gap: 6px; margin-bottom: 16px; }
     .sa-subtab { padding: 8px 16px; border-radius: 9px; border: 1.5px solid #e5e7eb; background: #fff; font-family: inherit; font-size: 13px; font-weight: 700; color: #6b7280; cursor: pointer; }
@@ -390,14 +395,13 @@ class StudioUpsellAdminElement extends HTMLElement {
         ].map((w) => {
             const count = s.addOns.filter((a) => a.workshopType === w.id).length;
             const settingsRow = !w.isGeneral ? s.settings.find((row) => row.workshopType === w.id) : null;
-            const activeBadge = !w.isGeneral
-                ? `<span class="sa-badge ${settingsRow?.active !== false ? 'sa-badge-green' : 'sa-badge-gray'}">${settingsRow?.active !== false ? 'פעיל' : 'כבוי'}</span>`
+            const activeChip = !w.isGeneral
+                ? `<span class="sa-workshop-card-chip">${settingsRow?.active !== false ? 'פעיל' : 'כבוי'}</span>`
                 : '';
             return `
                 <div class="sa-workshop-card ${w.isGeneral ? 'sa-workshop-card-general' : ''}" data-select-workshop="${escapeHtml(w.id)}">
-                    <div class="sa-workshop-card-icon">${w.isGeneral ? '🧩' : '🎨'}</div>
                     <div class="sa-workshop-card-title">${escapeHtml(w.title)}</div>
-                    <div class="sa-workshop-card-meta"><span>${count} תוספים</span>${activeBadge}</div>
+                    <div class="sa-workshop-card-meta"><span>${count} תוספים</span>${activeChip}</div>
                 </div>
             `;
         }).join('');
@@ -625,11 +629,17 @@ class StudioUpsellAdminElement extends HTMLElement {
             const status = STATUS_LABELS[t.status] || { label: t.status, cls: 'sa-badge-gray' };
             const itemsLabel = Array.isArray(t.items) ? t.items.map((i) => `${i.title} ×${i.quantity}`).join(', ') : '';
             const viaLabel = t.createdVia === 'qr_staff' ? `צוות${t.staffName ? ` (${t.staffName})` : ''}` : 'לקוח';
+            // checkoutName is filled from the paid eCom order (reconcile.js) — it's who
+            // actually paid, which can differ from the name the order is placed under.
+            const checkoutCell = t.checkoutName || t.checkoutPhone
+                ? `${escapeHtml(t.checkoutName || '')}${t.checkoutPhone ? `<br/><span style="color:#9ca3af;font-size:11px;">${escapeHtml(t.checkoutPhone)}</span>` : ''}`
+                : '<span style="color:#9ca3af;">—</span>';
             return `
                 <tr>
                     <td>${formatDate(t._createdDate)}</td>
                     <td>${escapeHtml(t.workshopTitle || '')}</td>
                     <td>${escapeHtml(t.customerName || '')}<br/><span style="color:#9ca3af;font-size:11px;">${escapeHtml(t.customerPhone || '')}</span></td>
+                    <td>${checkoutCell}</td>
                     <td>${escapeHtml(itemsLabel)}${Number(t.openAmount) > 0 ? ` + ${formatIls(t.openAmount)} פתוח` : ''}</td>
                     <td>${formatIls(t.total)}</td>
                     <td><span class="sa-badge ${status.cls}">${status.label}</span></td>
@@ -642,7 +652,7 @@ class StudioUpsellAdminElement extends HTMLElement {
             ${filtersBar}
             <div class="sa-card">
                 <table class="sa-table">
-                    <thead><tr><th>תאריך</th><th>סדנה</th><th>לקוח</th><th>פריטים</th><th>סכום</th><th>סטטוס</th><th>מקור</th></tr></thead>
+                    <thead><tr><th>תאריך</th><th>סדנה</th><th>הזמנה על שם</th><th>שולם ע"י (צ'קאאוט)</th><th>פריטים</th><th>סכום</th><th>סטטוס</th><th>מקור</th></tr></thead>
                     <tbody>${rows}</tbody>
                 </table>
             </div>

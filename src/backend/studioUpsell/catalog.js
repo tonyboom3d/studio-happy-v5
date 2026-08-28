@@ -56,29 +56,41 @@ function mapAddOnRow(item) {
 
 /**
  * Caps each add-on's `maxQuantity` per the current customer/inventory state
- * and flags `soldOut` — so the kiosk stepper never lets a customer request
- * more than what's actually still purchasable.
+ * and flags `soldOut` (+ `soldOutReason`) — so the kiosk stepper never lets a
+ * customer request more than what's actually still purchasable. Unavailable
+ * add-ons stay in the catalog: they're rendered, just not selectable.
  */
-async function applyAvailabilityCaps(addOns, customerPhone) {
+async function applyAvailabilityCaps(addOns, customerPhone, scope) {
     for (const addOn of addOns) {
         let cap = addOn.maxQuantity;
+        let reason = null;
 
         if (addOn.maxQuantityMode === 'perCustomer' && customerPhone) {
-            const purchased = await getPurchasedQuantityForCustomer(addOn.id, customerPhone);
+            const purchased = await getPurchasedQuantityForCustomer(addOn.id, customerPhone, scope);
             cap = Math.max(0, addOn.maxQuantity - purchased);
+            addOn.alreadyPurchased = purchased;
+            if (cap <= 0) reason = 'perCustomer';
         }
 
         if (addOn.inventoryManaged) {
             cap = Math.max(0, Math.min(cap, addOn.stockQuantity));
+            if (cap <= 0 && !reason) reason = 'stock';
         }
 
         addOn.maxQuantity = cap;
         addOn.soldOut = cap <= 0;
+        addOn.soldOutReason = addOn.soldOut ? reason : null;
     }
     return addOns;
 }
 
-export async function getAddOnCatalog(workshopTypeId, customerPhone) {
+/**
+ * @param {string} workshopTypeId
+ * @param {string} [customerPhone] - enables the 'perCustomer' cap for this customer
+ * @param {{sessionId?:string, workshopOrderId?:string, workshopTypeId?:string, workshopStart?:string|Date}} [scope]
+ *   The workshop session the 'perCustomer' cap is counted within.
+ */
+export async function getAddOnCatalog(workshopTypeId, customerPhone, scope) {
     if (!workshopTypeId) return { addOns: [], settings: { ...DEFAULT_SETTINGS } };
 
     const [specificResult, generalResult, settingsResult] = await Promise.all([
@@ -102,7 +114,7 @@ export async function getAddOnCatalog(workshopTypeId, customerPhone) {
         ...(generalResult.items || []).map(mapAddOnRow),
     ];
 
-    await applyAvailabilityCaps(addOns, customerPhone);
+    await applyAvailabilityCaps(addOns, customerPhone, scope || { workshopTypeId });
 
     return { addOns, settings: mapSettingsRow(settingsResult.items?.[0]) };
 }

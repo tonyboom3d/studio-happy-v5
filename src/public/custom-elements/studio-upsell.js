@@ -141,6 +141,13 @@ const STYLE = `
     .su-addon-info { flex: 1; min-width: 0; }
     .su-addon-title { font-weight: 700; font-size: 14px; color: #111827; }
     .su-addon-price { font-size: 13px; color: #6b7280; margin-top: 2px; }
+    .su-addon-row-disabled .su-addon-title, .su-addon-row-disabled .su-addon-price { color: #9ca3af; }
+    .su-addon-row-disabled .su-addon-img { opacity: .55; }
+    .su-addon-note { font-size: 11px; font-weight: 700; color: #9ca3af; margin-top: 3px; }
+    .su-addon-unavailable {
+        font-size: 12px; font-weight: 700; color: #6b7280; background: #f1f2f4;
+        padding: 6px 10px; border-radius: 8px; white-space: nowrap;
+    }
     .su-stepper { display: flex; align-items: center; gap: 8px; }
     .su-stepper button {
         width: 30px; height: 30px; border-radius: 8px; border: 1.5px solid #e5e7eb;
@@ -252,6 +259,8 @@ class StudioUpsellElement extends HTMLElement {
             error: null,
             submitting: false,
             imagePreviewUrl: null,
+            catalogPhone: null, // phone the current catalog's perCustomer caps were computed for
+            keepQuantitiesOnLoad: false,
         };
     }
 
@@ -333,7 +342,18 @@ class StudioUpsellElement extends HTMLElement {
             }
         } else if (type === 'getAddOnCatalogForWorkshop') {
             this._state.catalog = result || { addOns: [], settings: null };
-            this._state.quantities = {};
+            // Re-fetches mid-order keep existing picks, re-clamped to the fresh caps.
+            if (this._state.keepQuantitiesOnLoad) {
+                const next = {};
+                for (const addOn of (this._state.catalog.addOns || [])) {
+                    const qty = Math.min(this._state.quantities[addOn.id] || 0, addOn.maxQuantity || 0);
+                    if (qty > 0) next[addOn.id] = qty;
+                }
+                this._state.quantities = next;
+                this._state.keepQuantitiesOnLoad = false;
+            } else {
+                this._state.quantities = {};
+            }
             this._state.screen = 'catalog';
         } else if (type === 'checkout') {
             // Navigation away happens on the Velo side on success; only surface errors here.
@@ -356,7 +376,29 @@ class StudioUpsellElement extends HTMLElement {
         this._state.selectedWorkshop = workshop;
         this._state.screen = 'loading';
         this.render();
-        this._dispatch('getAddOnCatalogForWorkshop', { workshopTypeId: workshop.workshopTypeId, customerPhone: this._state.phone || null });
+        this._fetchCatalog(this._state.phone || null);
+    }
+
+    /**
+     * Loads the catalog for the selected workshop. `customerPhone` + scope let the
+     * backend flag 'perCustomer' add-ons already bought for THIS session as
+     * not-selectable. `keepQuantities` is used when re-fetching mid-order (staff
+     * flow, once the customer's phone is known) so current picks aren't lost.
+     */
+    _fetchCatalog(customerPhone, { keepQuantities = false } = {}) {
+        const workshop = this._state.selectedWorkshop || {};
+        this._state.catalogPhone = customerPhone || null;
+        this._state.keepQuantitiesOnLoad = keepQuantities;
+        this._dispatch('getAddOnCatalogForWorkshop', {
+            workshopTypeId: workshop.workshopTypeId,
+            customerPhone: customerPhone || null,
+            scope: {
+                sessionId: workshop.sessionId || null,
+                workshopOrderId: workshop.workshopOrderId || null,
+                workshopTypeId: workshop.workshopTypeId || null,
+                workshopStart: workshop.start || null,
+            },
+        });
     }
 
     _qty(addOnId) {
@@ -544,17 +586,20 @@ class StudioUpsellElement extends HTMLElement {
         const { addOns, settings } = s.catalog;
         const w = s.selectedWorkshop || {};
 
+        // Unavailable add-ons stay visible (dimmed, no stepper) so customers still
+        // see what exists — either already bought for this workshop, or out of stock.
         const rows = addOns.map((a) => h`
-            <div class="su-addon-row">
+            <div class="su-addon-row ${a.soldOut ? 'su-addon-row-disabled' : ''}">
                 ${a.image
                     ? `<button type="button" class="su-addon-img-btn" data-preview-image="${escapeHtml(a.image)}" aria-label="הגדלת תמונה"><img class="su-addon-img" src="${escapeHtml(a.image)}" alt="" /></button>`
                     : '<div class="su-addon-img"></div>'}
                 <div class="su-addon-info">
                     <div class="su-addon-title">${escapeHtml(a.title)}</div>
                     <div class="su-addon-price">${formatIls(a.price)}</div>
+                    ${a.soldOut ? `<div class="su-addon-note">${a.soldOutReason === 'perCustomer' ? 'כבר נרכש עבור סדנה זו' : 'אזל מהמלאי'}</div>` : ''}
                 </div>
                 ${a.soldOut
-                    ? '<span style="font-size:12px;font-weight:700;color:#9ca3af;background:#f1f2f4;padding:6px 10px;border-radius:8px;">אין במלאי</span>'
+                    ? `<span class="su-addon-unavailable">${a.soldOutReason === 'perCustomer' ? 'נרכש' : 'אין במלאי'}</span>`
                     : h`<div class="su-stepper">
                         <button data-addon="${a.id}" data-delta="-1" ${this._qty(a.id) <= 0 ? 'disabled' : ''}>−</button>
                         <span>${this._qty(a.id)}</span>
@@ -737,7 +782,16 @@ class StudioUpsellElement extends HTMLElement {
         if (customerNameInput) customerNameInput.addEventListener('input', (e) => { s.customerName = e.target.value; });
 
         const customerPhoneInput = root.querySelector('#suCustomerPhone');
-        if (customerPhoneInput) customerPhoneInput.addEventListener('input', (e) => { s.customerPhone = e.target.value; });
+        if (customerPhoneInput) {
+            customerPhoneInput.addEventListener('input', (e) => { s.customerPhone = e.target.value; });
+            // Staff enter the customer's phone only here, after the catalog loaded —
+            // re-check the perCustomer caps for that customer once the number is set.
+            customerPhoneInput.addEventListener('change', () => {
+                const phone = (s.customerPhone || '').trim();
+                if (phone.replace(/\D/g, '').length < 7 || phone === s.catalogPhone) return;
+                this._fetchCatalog(phone, { keepQuantities: true });
+            });
+        }
 
         const checkoutBtn = root.querySelector('#suCheckoutBtn');
         if (checkoutBtn) checkoutBtn.addEventListener('click', () => this._submitCheckout());

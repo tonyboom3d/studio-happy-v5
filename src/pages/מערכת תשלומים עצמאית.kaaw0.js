@@ -62,7 +62,7 @@ async function handleAction(el, detail) {
             return;
         }
         case 'getAddOnCatalogForWorkshop': {
-            const result = await getAddOnCatalogForWorkshop(payload?.workshopTypeId, payload?.customerPhone);
+            const result = await getAddOnCatalogForWorkshop(payload?.workshopTypeId, payload?.customerPhone, payload?.scope);
             pushData(el, type, requestId, result);
             return;
         }

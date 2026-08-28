@@ -149,6 +149,13 @@ const STYLE = `
         font-size: 15px; font-weight: 800; color: #4338ca; margin: 0 0 12px;
         padding-bottom: 8px; border-bottom: 2px solid #e0e7ff;
     }
+    .su-catalog-section-title-clickable {
+        cursor: pointer; display: flex; align-items: center; justify-content: space-between;
+        user-select: none;
+    }
+    .su-catalog-section-count { color: #7c86e8; font-weight: 700; }
+    .su-catalog-section-arrow { font-size: 11px; color: #a5b4fc; margin-inline-start: 8px; }
+    .su-show-more-btn { display: block; width: 100%; margin-top: 8px; }
     .su-addon-note { font-size: 11px; font-weight: 700; color: #9ca3af; margin-top: 3px; }
     .su-addon-unavailable {
         font-size: 12px; font-weight: 700; color: #6b7280; background: #f1f2f4;
@@ -277,6 +284,7 @@ class StudioUpsellElement extends HTMLElement {
             imagePreviewUrl: null,
             catalogPhone: null, // phone the current catalog's perCustomer caps were computed for
             keepQuantitiesOnLoad: false,
+            sectionUI: {}, // sectionId -> { expanded, showAll } — collapsible catalog sections
         };
     }
 
@@ -693,26 +701,60 @@ class StudioUpsellElement extends HTMLElement {
         `;
     }
 
+    _getSectionState(id, collapsedByDefault) {
+        if (!this._state.sectionUI[id]) {
+            this._state.sectionUI[id] = { expanded: !collapsedByDefault, showAll: false };
+        }
+        return this._state.sectionUI[id];
+    }
+
+    _renderCollapsibleSection(id, title, addOns, opts) {
+        const { collapsibleHeader = false, defaultVisibleCount = 0 } = opts || {};
+        const state = this._getSectionState(id, collapsibleHeader);
+        const count = addOns.length;
+
+        const header = collapsibleHeader
+            ? `<h2 class="su-catalog-section-title su-catalog-section-title-clickable" data-toggle-section="${id}">
+                    <span>${escapeHtml(title)} <span class="su-catalog-section-count">(${count})</span></span>
+                    <span class="su-catalog-section-arrow">${state.expanded ? '▲' : '▼'}</span>
+                </h2>`
+            : `<h2 class="su-catalog-section-title">${escapeHtml(title)}</h2>`;
+
+        if (collapsibleHeader && !state.expanded) {
+            return `<div class="su-catalog-section">${header}</div>`;
+        }
+
+        let itemsToShow = addOns;
+        let showMoreBtn = '';
+        if (defaultVisibleCount > 0 && !state.showAll && addOns.length > defaultVisibleCount) {
+            itemsToShow = addOns.slice(0, defaultVisibleCount);
+            showMoreBtn = `<button type="button" class="su-btn su-btn-ghost su-show-more-btn" data-show-more-section="${id}">הצג עוד ${addOns.length - defaultVisibleCount} תוספות</button>`;
+        }
+
+        return `<div class="su-catalog-section">${header}${itemsToShow.map((a) => this._renderAddonRow(a)).join('')}${showMoreBtn}</div>`;
+    }
+
     _renderCatalog() {
         const s = this._state;
         const { workshopAddOns, generalSections, settings } = s.catalog;
         const w = s.selectedWorkshop || {};
         const workshopItems = workshopAddOns || [];
+        const visibleCount = Number(settings?.catalogDefaultVisibleCount) || 0;
+
         const generalBlocks = (generalSections || [])
             .filter((sec) => (sec.addOns || []).length)
-            .map((sec) => `
-                <div class="su-catalog-section">
-                    <h2 class="su-catalog-section-title">${escapeHtml(sec.title)}</h2>
-                    ${(sec.addOns || []).map((a) => this._renderAddonRow(a)).join('')}
-                </div>
-            `).join('');
+            .map((sec) => this._renderCollapsibleSection(`general_${sec.id}`, `${sec.title}`, sec.addOns, {
+                collapsibleHeader: true,
+                defaultVisibleCount: visibleCount,
+            }))
+            .join('');
 
-        const workshopBlock = workshopItems.length ? `
-            <div class="su-catalog-section">
-                <h2 class="su-catalog-section-title">תוספות לסדנה</h2>
-                ${workshopItems.map((a) => this._renderAddonRow(a)).join('')}
-            </div>
-        ` : '';
+        const workshopBlock = workshopItems.length
+            ? this._renderCollapsibleSection('workshop', 'תוספות לסדנה', workshopItems, {
+                collapsibleHeader: !!settings?.catalogCollapsedByDefault,
+                defaultVisibleCount: visibleCount,
+            })
+            : '';
 
         const hasAny = workshopItems.length || generalBlocks;
 
@@ -933,6 +975,24 @@ class StudioUpsellElement extends HTMLElement {
             el.addEventListener('click', () => {
                 const idx = Number(el.getAttribute('data-idx'));
                 this._selectWorkshop(s.workshops[idx]);
+            });
+        });
+
+        root.querySelectorAll('[data-toggle-section]').forEach((el) => {
+            el.addEventListener('click', () => {
+                const id = el.getAttribute('data-toggle-section');
+                const state = this._getSectionState(id, true);
+                state.expanded = !state.expanded;
+                this.render();
+            });
+        });
+
+        root.querySelectorAll('[data-show-more-section]').forEach((el) => {
+            el.addEventListener('click', () => {
+                const id = el.getAttribute('data-show-more-section');
+                const state = this._getSectionState(id, false);
+                state.showAll = true;
+                this.render();
             });
         });
 

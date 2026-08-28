@@ -260,6 +260,8 @@ export const saveUpsellSettings = webMethod(Permissions.SiteMember, async (setti
         showStaffCode: !!settings.showStaffCode,
         printOnPayment: settings.printOnPayment !== false,
         generalCategories: generalCategories || '[]',
+        catalogDefaultVisibleCount: Number(settings.catalogDefaultVisibleCount) || 0,
+        catalogCollapsedByDefault: !!settings.catalogCollapsedByDefault,
     }, SA);
 });
 

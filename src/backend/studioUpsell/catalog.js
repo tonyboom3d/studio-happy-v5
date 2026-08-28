@@ -8,7 +8,8 @@
  *   StudioUpsellSettings: workshopType (ref -> workshops), active, allowOpenAmount,
  *                         openAmountLabel, openAmountMin, openAmountMax,
  *                         openAmountPasswordEnabled, openAmountPassword,
- *                         showStaffCode, printOnPayment, generalCategories (JSON, __general__ row only)
+ *                         showStaffCode, printOnPayment, generalCategories (JSON, __general__ row only),
+ *                         catalogDefaultVisibleCount, catalogCollapsedByDefault
  */
 import wixData from 'wix-data';
 import { wixMediaToPublicUrl } from './mediaUpload.js';
@@ -31,6 +32,8 @@ const DEFAULT_SETTINGS = {
     openAmountRequiresPassword: false,
     showStaffCode: false,
     printOnPayment: true,
+    catalogDefaultVisibleCount: 0, // 0 = show all; otherwise show N + "show more" button
+    catalogCollapsedByDefault: false, // workshop-specific add-ons section starts collapsed (accordion)
 };
 
 function getEffectiveOpenAmountPassword(row) {
@@ -52,6 +55,8 @@ function mapSettingsRow(row) {
         openAmountRequiresPassword: !!row.openAmountPasswordEnabled,
         showStaffCode: !!row.showStaffCode,
         printOnPayment: row.printOnPayment !== false,
+        catalogDefaultVisibleCount: Number(row.catalogDefaultVisibleCount) || 0,
+        catalogCollapsedByDefault: !!row.catalogCollapsedByDefault,
     };
 }
 

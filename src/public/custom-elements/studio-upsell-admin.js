@@ -620,12 +620,15 @@ class StudioUpsellAdminElement extends HTMLElement {
             <div class="sa-subtabs">
                 <button class="sa-subtab ${s.workshopSubTab === 'settings' ? 'active' : ''}" data-subtab="settings">הגדרות</button>
                 <button class="sa-subtab ${s.workshopSubTab === 'addons' ? 'active' : ''}" data-subtab="addons">תוספים</button>
+                <button class="sa-subtab ${s.workshopSubTab === 'display' ? 'active' : ''}" data-subtab="display">תצוגה</button>
             </div>
         ` : '';
 
         const body = isGeneral
             ? (s.workshopSubTab === 'categories' ? this._renderGeneralCategoriesTab() : this._renderCatalogTab())
-            : (s.workshopSubTab === 'addons' ? this._renderCatalogTab() : this._renderSettingsTab());
+            : (s.workshopSubTab === 'addons' ? this._renderCatalogTab()
+                : s.workshopSubTab === 'display' ? this._renderDisplayTab()
+                : this._renderSettingsTab());
 
         return `
             <div class="sa-detail-header">
@@ -864,6 +867,34 @@ class StudioUpsellAdminElement extends HTMLElement {
                 </div>
 
                 <button class="sa-btn sa-btn-primary" id="saSettingsSaveBtn">שמירת הגדרות</button>
+            </div>
+        `;
+    }
+
+    _renderDisplayTab() {
+        const s = this._state;
+        const current = s.settings.find((row) => row.workshopType === s.selectedWorkshopTypeId) || {};
+        const collapsed = !!current.catalogCollapsedByDefault;
+
+        return `
+            <div class="sa-card">
+                <div class="sa-checkbox-row" style="margin-bottom:4px;">
+                    <input type="checkbox" id="saSettingCollapsed" ${collapsed ? 'checked' : ''} />
+                    <label for="saSettingCollapsed" class="sa-setting-label-row">
+                        סגירת תוספות הסדנה לתצוגה ממוזערת כברירת מחדל
+                        ${tip('כשמופעל, קטע "תוספות לסדנה" יופיע ללקוח סגור (עם מספר הפריטים בסוגריים) — לחיצה על הכותרת תפתח אותו. שימושי לסדנאות עם קטלוג ארוך.')}
+                    </label>
+                </div>
+                <div class="sa-hint" style="margin-bottom:16px;">כאשר מופעל, ההגדרה "כמות מוצרים להצגה כברירת מחדל" למטה לא רלוונטית עד לפתיחת הקטע.</div>
+
+                <div class="sa-field" style="max-width:320px;">
+                    <label class="sa-label sa-setting-label-row">כמות מוצרים להצגה כברירת מחדל ${tip('מספר התוספים שיוצגו ללקוח מיד בקטע "תוספות לסדנה" (ובכל קטגוריה כללית שנפתחה). אם יש יותר, יופיע כפתור "הצג עוד". 0 = הצג את כל הפריטים.')}</label>
+                    <input class="sa-input" type="number" min="0" id="saSettingVisibleCount" value="${escapeHtml(current.catalogDefaultVisibleCount ?? 0)}" placeholder="0 = הצג הכל" />
+                </div>
+
+                <p class="sa-hint" style="margin-top:16px;">תוספות כלליות (קטגוריות כמו אוכל/שתייה) תמיד מוצגות ללקוח בקטע ממוזער עם מספר הפריטים בסוגריים, ונפתחות בלחיצה.</p>
+
+                <button class="sa-btn sa-btn-primary" id="saDisplaySaveBtn" style="margin-top:12px;">שמירת הגדרות תצוגה</button>
             </div>
         `;
     }
@@ -1182,6 +1213,15 @@ class StudioUpsellAdminElement extends HTMLElement {
                 openAmountPassword: (root.querySelector('#saSettingOpenPassword')?.value || '').trim(),
                 showStaffCode: !!root.querySelector('#saSettingStaffCode')?.checked,
                 printOnPayment: !!root.querySelector('#saSettingPrint')?.checked,
+            });
+        });
+
+        const saveDisplayBtn = root.querySelector('#saDisplaySaveBtn');
+        if (saveDisplayBtn) saveDisplayBtn.addEventListener('click', () => {
+            this._dispatch('saveSettings', {
+                workshopType: s.selectedWorkshopTypeId,
+                catalogCollapsedByDefault: !!root.querySelector('#saSettingCollapsed')?.checked,
+                catalogDefaultVisibleCount: Number(root.querySelector('#saSettingVisibleCount')?.value) || 0,
             });
         });
 

@@ -1704,7 +1704,10 @@ export const sendDashboardWhatsApp = webMethod(Permissions.SiteMember, async (or
     if (!order) throw new Error('Order not found');
 
     const result = await sendOrderDashboardMessageManyChat(order, targetPhone);
-    if (!result.sent) throw new Error(`שליחת ההודעה נכשלה (${result.reason || 'unknown'})`);
+    if (!result.sent) {
+        await logOrderAction(orderId, `❌ הודעת WhatsApp (סטטוס הזמנה) לא נשלחה ל-${targetPhone} (${result.reason || 'unknown'}${result.error ? `: ${result.error}` : ''})`, options?.user);
+        throw new Error(`שליחת ההודעה נכשלה (${result.reason || 'unknown'})`);
+    }
 
     await logOrderAction(orderId, `הודעת WhatsApp (סטטוס הזמנה) נשלחה ל-${targetPhone}`, options?.user);
     return { success: true };

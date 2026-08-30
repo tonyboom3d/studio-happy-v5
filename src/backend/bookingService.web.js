@@ -2306,6 +2306,19 @@ export const getServicePricing = webMethod(Permissions.Anyone, async (serviceIds
 const SA = { suppressAuth: true };
 const SA_CONSISTENT = { suppressAuth: true, consistentRead: true };
 
+/** Appends one entry to WorkshopOrders.actionLog — best-effort, never throws. */
+async function appendOrderActionLog(orderId, action) {
+    try {
+        const order = await wixData.get('WorkshopOrders', orderId, SA);
+        if (!order) return;
+        const entry = { timestamp: new Date().toISOString(), user: 'מערכת (ManyChat)', action };
+        const actionLog = [entry, ...(order.actionLog || [])].slice(0, 200);
+        await wixData.update('WorkshopOrders', { ...order, actionLog }, SA);
+    } catch (err) {
+        console.warn('[bookingService] appendOrderActionLog failed. orderId:', orderId, 'error:', err?.message || err);
+    }
+}
+
 /**
  * Fetches a WorkshopOrder by id via getItemWithRetry (see wixDataRetry.js):
  * normalizes missing items to null (instead of the raw Wix Data "Item [...]
@@ -3264,9 +3277,13 @@ export const saveSketchSelection = webMethod(Permissions.Anyone, async (selectio
 
     if (participantId && order?.notifyOnSelection) {
         try {
-            await sendSketchSelectedManyChat(order, participantName);
+            const notifResult = await sendSketchSelectedManyChat(order, participantName);
+            if (!notifResult?.sent) {
+                await appendOrderActionLog(orderId, `❌ הודעת WhatsApp על בחירת סקיצה לא נשלחה (${notifResult?.reason || 'error'})`);
+            }
         } catch (notifErr) {
             console.warn(`[saveSketchSelection] Could not send selection notification for order ${orderId}:`, notifErr?.message);
+            await appendOrderActionLog(orderId, `❌ הודעת WhatsApp על בחירת סקיצה לא נשלחה (שגיאה: ${notifErr?.message || notifErr})`);
         }
     }
 
@@ -3795,9 +3812,13 @@ export const initiateAdminOtp = webMethod(Permissions.Anyone, async (orderId, ph
     otpStore.set(key, { code, expiresAt: Date.now() + OTP_TTL_MS, attempts: 0 });
 
     try {
-        await sendAdminOtpManyChat(order, code);
+        const otpResult = await sendAdminOtpManyChat(order, code);
+        if (!otpResult?.sent) {
+            await appendOrderActionLog(orderId, `❌ קוד אימות (OTP) לא נשלח בוואטסאפ (${otpResult?.reason || 'error'})`);
+        }
     } catch (err) {
         console.error('[initiateAdminOtp] WhatsApp send failed:', err?.message);
+        await appendOrderActionLog(orderId, `❌ קוד אימות (OTP) לא נשלח בוואטסאפ (שגיאה: ${err?.message || err})`);
     }
 
     // if (order.organizerEmail) {

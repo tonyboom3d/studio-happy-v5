@@ -130,11 +130,64 @@ async function findSubscriberByField(field, value) {
     return data.id ? data : null;
 }
 
+// ManyChat's findBySystemField only searches the SMS "phone" system field —
+// WhatsApp-only subscribers have no "phone" set, only "whatsapp_phone" (which
+// ManyChat provides no way to search by directly). The documented workaround
+// is a mirror custom field kept in sync with the phone on every find/create,
+// searched via findByCustomField. See:
+// https://community.manychat.com/general-q-a-43/manychat-api-inconsistency-contact-exists-but-not-found-3503
+const WA_PHONE_LOOKUP_FIELD = 'wa_phone_lookup';
+
+let customFieldIdCache = null; // { [fieldName]: fieldId } — cached per warm instance.
+
+async function getCustomFieldsMap() {
+    if (customFieldIdCache) return customFieldIdCache;
+    const json = await manychatRequest('/fb/page/getCustomFields', { method: 'GET' });
+    customFieldIdCache = {};
+    for (const f of json?.data || []) {
+        if (f?.name) customFieldIdCache[f.name] = f.id;
+    }
+    return customFieldIdCache;
+}
+
+/** Resolves a custom field's numeric id by name, creating it (Text type) if missing. */
+async function getOrCreateCustomFieldId(fieldName) {
+    const map = await getCustomFieldsMap();
+    if (map[fieldName]) return map[fieldName];
+
+    console.log(`[ManyChat] Custom field "${fieldName}" not found — creating it.`);
+    const created = await manychatRequest('/fb/page/createCustomField', {
+        method: 'POST',
+        body: {
+            caption: fieldName,
+            type: 'text',
+            description: 'Auto-created by manychatService.jsw — mirrors the WhatsApp phone so WA-only subscribers can be found via findByCustomField.',
+        },
+    });
+    const id = created?.data?.id;
+    if (id) map[fieldName] = id;
+    return id || null;
+}
+
+/** GET /fb/subscriber/findByCustomField */
+async function findSubscriberByCustomField(fieldName, value) {
+    if (!value) return null;
+    const fieldId = await getOrCreateCustomFieldId(fieldName);
+    if (!fieldId) return null;
+    const json = await manychatRequest('/fb/subscriber/findByCustomField', {
+        method: 'GET',
+        query: { field_id: fieldId, field_value: value },
+    });
+    const data = json?.data;
+    if (!Array.isArray(data) || data.length === 0) return null;
+    return data[0];
+}
+
 /**
  * Looks up an existing subscriber by email first (most reliable), then by
- * phone using multiple format variants (972..., +972..., 05...).
- * WhatsApp-only subscribers may still not be found via phone — email is
- * tried first for that reason.
+ * phone using multiple format variants (972..., +972..., 05...) against the
+ * system "phone" field, then finally via the wa_phone_lookup mirror custom
+ * field — needed for WhatsApp-only subscribers the system field can't find.
  */
 async function findSubscriber({ email, phone }) {
     if (email) {
@@ -151,8 +204,67 @@ async function findSubscriber({ email, phone }) {
                 return byPhone;
             }
         }
+        const digits = variants.find(v => /^\d+$/.test(v)) || variants[0];
+        try {
+            const byCustomField = await findSubscriberByCustomField(WA_PHONE_LOOKUP_FIELD, digits);
+            if (byCustomField) {
+                console.log('[ManyChat] Subscriber found via wa_phone_lookup custom field:', digits);
+                return byCustomField;
+            }
+        } catch (err) {
+            console.warn('[ManyChat] findByCustomField(wa_phone_lookup) failed:', err?.message || err);
+        }
     }
     return null;
+}
+
+/** Best-effort — keeps wa_phone_lookup in sync so this subscriber is always findable next time. */
+async function ensureWaPhoneLookupField(subscriberId, phone) {
+    const digits = formatPhoneForManyChat(phone);
+    if (!subscriberId || !digits) return;
+    try {
+        await setCustomFieldByName(subscriberId, WA_PHONE_LOOKUP_FIELD, digits);
+    } catch (err) {
+        console.warn('[ManyChat] ensureWaPhoneLookupField failed. subscriberId:', subscriberId, 'error:', err?.message || err);
+    }
+}
+
+/**
+ * Finds-or-creates a subscriber by email/phone, self-healing the
+ * wa_phone_lookup mirror field so future lookups succeed even for
+ * WhatsApp-only contacts. Throws a clear, actionable error if ManyChat
+ * reports the contact already exists but it still can't be located (a
+ * known ManyChat API limitation — see WA_PHONE_LOOKUP_FIELD comment above).
+ */
+async function findOrCreateSubscriber({ email, phone, firstName, lastName }) {
+    let subscriber = await findSubscriber({ email, phone });
+    if (subscriber?.id) {
+        await ensureWaPhoneLookupField(subscriber.id, phone);
+        return subscriber;
+    }
+
+    try {
+        subscriber = await createSubscriber({ firstName, lastName, phone, email });
+    } catch (err) {
+        const message = err?.message || String(err);
+        if (!/already exists/i.test(message)) throw err;
+
+        console.warn('[ManyChat] createSubscriber said contact already exists but findSubscriber missed it — retrying via wa_phone_lookup:', message);
+        subscriber = await findSubscriber({ email, phone });
+        if (!subscriber?.id) {
+            throw new Error(
+                `[ManyChat] Contact with phone ${phone} already exists in ManyChat but cannot be located via the API ` +
+                `(known ManyChat limitation for WhatsApp-only contacts with no wa_phone_lookup field set yet). ` +
+                `Fix: open the contact in ManyChat and manually add their phone to the "phone" system field, or send ` +
+                `them any message once so the flow can set wa_phone_lookup — future sends will then self-heal. Original error: ${message}`
+            );
+        }
+    }
+
+    if (subscriber?.id) {
+        await ensureWaPhoneLookupField(subscriber.id, phone);
+    }
+    return subscriber;
 }
 
 function splitName(fullName) {
@@ -396,7 +508,7 @@ async function runOrderConfirmationManyChat(order, { allowCreate = true } = {}) 
     if (!subscriber && allowCreate) {
         const { firstName, lastName } = splitName(order?.organizerName);
         console.log('[ManyChat] Subscriber not found, creating. orderId:', order?._id, 'phone:', phone);
-        subscriber = await createSubscriber({ firstName, lastName, phone, email });
+        subscriber = await findOrCreateSubscriber({ email, phone, firstName, lastName });
     } else if (!subscriber) {
         // allowCreate=false (sandbox test with ManyChat import permission not
         // yet approved) — don't hit createSubscriber, fail with a clear hint.
@@ -404,6 +516,7 @@ async function runOrderConfirmationManyChat(order, { allowCreate = true } = {}) 
         throw new Error(`[ManyChat] No subscriber found for phone variants tried: [${tried}] email=${email || '(none)'}. Create the contact manually in ManyChat first (createSubscriber is skipped), then re-run.`);
     } else {
         console.log('[ManyChat] Subscriber found. orderId:', order?._id, 'subscriberId:', subscriber.id);
+        await ensureWaPhoneLookupField(subscriber.id, phone);
     }
 
     if (!subscriber?.id) {
@@ -489,11 +602,10 @@ export async function sendOrderDashboardMessageManyChat(order, phone) {
             return { sent: false, reason: 'no-phone' };
         }
 
-        let subscriber = await findSubscriber({ phone: targetPhone });
-        if (!subscriber) {
-            const { firstName, lastName } = splitName(order?.organizerName);
-            subscriber = await createSubscriber({ firstName, lastName, phone: targetPhone, email: order?.organizerEmail });
-        }
+        const { firstName, lastName } = splitName(order?.organizerName);
+        const subscriber = await findOrCreateSubscriber({
+            phone: targetPhone, email: order?.organizerEmail, firstName, lastName,
+        });
         if (!subscriber?.id) {
             throw new Error('No subscriber id after find/create');
         }
@@ -530,11 +642,8 @@ export async function sendAdminOtpManyChat(order, code) {
             return { sent: false, reason: 'no-phone' };
         }
 
-        let subscriber = await findSubscriber({ email, phone });
-        if (!subscriber) {
-            const { firstName, lastName } = splitName(order?.organizerName);
-            subscriber = await createSubscriber({ firstName, lastName, phone, email });
-        }
+        const { firstName, lastName } = splitName(order?.organizerName);
+        const subscriber = await findOrCreateSubscriber({ email, phone, firstName, lastName });
         if (!subscriber?.id) {
             throw new Error('No subscriber id after find/create');
         }
@@ -594,10 +703,7 @@ export async function sendStaffManyChat(actionKey, phone, audience, vars = {}) {
             return { sent: false, reason: 'no-phone' };
         }
 
-        let subscriber = await findSubscriber({ phone: normalizedPhone });
-        if (!subscriber) {
-            subscriber = await createSubscriber({ phone: normalizedPhone });
-        }
+        const subscriber = await findOrCreateSubscriber({ phone: normalizedPhone });
         if (!subscriber?.id) {
             throw new Error('No subscriber id after find/create');
         }

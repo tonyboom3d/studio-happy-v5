@@ -5,17 +5,13 @@
  * initiateAdminOtp/verifyAdminOtp in bookingService.web.js). All other
  * customer/staff notifications continue to go through manychatService.jsw.
  *
- * Auth token is fetched from Sendmsg (valid 12h) and cached in the
- * SendMsgSettings CMS collection (single row), using the row's built-in
- * _updatedAt system field to know when to refresh — never stored as a
- * static secret since it expires.
+ * Auth token is fetched from Sendmsg (valid 12h) and cached in memory for
+ * this warm instance only — never stored as a static secret since it
+ * expires; re-fetched automatically once stale or on a fresh cold start.
  */
 import wixSecretsBackend from 'wix-secrets-backend';
-import wixData from 'wix-data';
 import { fetch } from 'wix-fetch';
 import { normalizeIsraeliPhone } from 'backend/orderUtils.js';
-
-const SA = { suppressAuth: true };
 
 const SENDMSG_BASE_URL = 'https://gconvertrest.sendmsg.co.il/api/Sendmsg';
 const SENDMSG_SITE_ID = 52075;
@@ -50,22 +46,18 @@ async function fetchNewToken() {
     return json.Token;
 }
 
-/** Reads/refreshes the single cached token row in the SendMsgSettings CMS collection. */
-async function getValidToken() {
-    const existing = await wixData.query('SendMsgSettings').limit(1).find(SA);
-    const row = existing.items[0] || null;
+// In-memory cache — per warm instance only. A cold start or an expired
+// token just triggers a fresh POST /token call; no persistence needed.
+let cachedToken = null; // { token, fetchedAt }
 
-    const ageMs = row?._updatedAt ? Date.now() - new Date(row._updatedAt).getTime() : Infinity;
-    if (row?.token && ageMs < TOKEN_TTL_MS - TOKEN_REFRESH_MARGIN_MS) {
-        return row.token;
+async function getValidToken() {
+    const ageMs = cachedToken ? Date.now() - cachedToken.fetchedAt : Infinity;
+    if (cachedToken?.token && ageMs < TOKEN_TTL_MS - TOKEN_REFRESH_MARGIN_MS) {
+        return cachedToken.token;
     }
 
     const token = await fetchNewToken();
-    if (row) {
-        await wixData.update('SendMsgSettings', { ...row, token }, SA);
-    } else {
-        await wixData.insert('SendMsgSettings', { token }, SA);
-    }
+    cachedToken = { token, fetchedAt: Date.now() };
     return token;
 }
 

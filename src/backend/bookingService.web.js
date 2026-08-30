@@ -9,7 +9,8 @@ import wixSecretsBackend from 'wix-secrets-backend';
 import { fetch } from 'wix-fetch';
 import { createHmac, randomBytes } from 'crypto';
 import { mediaManager } from 'wix-media-backend';
-import { sendSketchSelectedManyChat, sendAdminOtpManyChat } from 'backend/manychatService.jsw';
+import { sendSketchSelectedManyChat } from 'backend/manychatService.jsw';
+import { sendAdminOtpSms } from 'backend/sendMsgService.jsw';
 import { SKETCH_STATUS, normalizeSketchStatus, isLockedStatus, wouldViolateLockedMinimum } from 'backend/sketchStatus.js';
 import { getItemWithRetry } from 'backend/wixDataRetry.js';
 import {
@@ -3795,7 +3796,15 @@ export const queueSelectionReminders = webMethod(Permissions.Anyone, async (orde
 
 const MASTER_OTP = '1326';
 const OTP_TTL_MS = 10 * 60 * 1000; // 10 minutes
-const otpStore = new Map();
+
+/** Removes any existing AdminOtpCodes row(s) for this orderId+phone. */
+async function clearAdminOtpRows(orderId, phoneNorm) {
+    const existing = await wixData.query('AdminOtpCodes')
+        .eq('orderId', orderId)
+        .eq('phone', phoneNorm)
+        .find(SA);
+    await Promise.all(existing.items.map((row) => wixData.remove('AdminOtpCodes', row._id, SA)));
+}
 
 export const initiateAdminOtp = webMethod(Permissions.Anyone, async (orderId, phone) => {
     const order = await getWorkshopOrderSafe(orderId, 'initiateAdminOtp');
@@ -3808,17 +3817,23 @@ export const initiateAdminOtp = webMethod(Permissions.Anyone, async (orderId, ph
     }
 
     const code = String(Math.floor(100000 + Math.random() * 900000));
-    const key = `${orderId}_${inputNorm}`;
-    otpStore.set(key, { code, expiresAt: Date.now() + OTP_TTL_MS, attempts: 0 });
+    await clearAdminOtpRows(orderId, inputNorm);
+    await wixData.insert('AdminOtpCodes', {
+        orderId,
+        phone: inputNorm,
+        code,
+        expiresAt: new Date(Date.now() + OTP_TTL_MS),
+        attempts: 0,
+    }, SA);
 
     try {
-        const otpResult = await sendAdminOtpManyChat(order, code);
+        const otpResult = await sendAdminOtpSms(phone, code);
         if (!otpResult?.sent) {
-            await appendOrderActionLog(orderId, `❌ קוד אימות (OTP) לא נשלח בוואטסאפ (${otpResult?.reason || 'error'})`);
+            await appendOrderActionLog(orderId, `❌ קוד אימות (OTP) לא נשלח ב-SMS (${otpResult?.reason || 'error'})`);
         }
     } catch (err) {
-        console.error('[initiateAdminOtp] WhatsApp send failed:', err?.message);
-        await appendOrderActionLog(orderId, `❌ קוד אימות (OTP) לא נשלח בוואטסאפ (שגיאה: ${err?.message || err})`);
+        console.error('[initiateAdminOtp] SMS send failed:', err?.message);
+        await appendOrderActionLog(orderId, `❌ קוד אימות (OTP) לא נשלח ב-SMS (שגיאה: ${err?.message || err})`);
     }
 
     // if (order.organizerEmail) {
@@ -3847,26 +3862,30 @@ export const verifyAdminOtp = webMethod(Permissions.Anyone, async (orderId, phon
     }
 
     const inputNorm = normalizeIsraeliPhone(phone);
-    const key = `${orderId}_${inputNorm}`;
-    const entry = otpStore.get(key);
+    const result = await wixData.query('AdminOtpCodes')
+        .eq('orderId', orderId)
+        .eq('phone', inputNorm)
+        .find(SA);
+    const entry = result.items[0];
 
     if (!entry) return { valid: false, reason: 'no_otp_requested' };
-    if (Date.now() > entry.expiresAt) {
-        otpStore.delete(key);
+    if (Date.now() > new Date(entry.expiresAt).getTime()) {
+        await wixData.remove('AdminOtpCodes', entry._id, SA);
         return { valid: false, reason: 'expired' };
     }
 
-    entry.attempts++;
-    if (entry.attempts > 10) {
-        otpStore.delete(key);
+    const attempts = (entry.attempts || 0) + 1;
+    if (attempts > 10) {
+        await wixData.remove('AdminOtpCodes', entry._id, SA);
         return { valid: false, reason: 'too_many_attempts' };
     }
 
     if (entry.code !== code) {
+        await wixData.update('AdminOtpCodes', { ...entry, attempts }, SA);
         return { valid: false, reason: 'wrong_code' };
     }
 
-    otpStore.delete(key);
+    await wixData.remove('AdminOtpCodes', entry._id, SA);
     const order = await getWorkshopOrderSafe(orderId, 'verifyAdminOtp');
     return { valid: true, orderToken: order?.orderToken || null };
 });

@@ -1,0 +1,128 @@
+/**
+ * sendMsgService.jsw — Sendmsg.co.il SMS integration (account 52075).
+ *
+ * Used exclusively for the admin order-management OTP code (see
+ * initiateAdminOtp/verifyAdminOtp in bookingService.web.js). All other
+ * customer/staff notifications continue to go through manychatService.jsw.
+ *
+ * Auth token is fetched from Sendmsg (valid 12h) and cached in the
+ * SendMsgSettings CMS collection (single row), using the row's built-in
+ * _updatedAt system field to know when to refresh — never stored as a
+ * static secret since it expires.
+ */
+import wixSecretsBackend from 'wix-secrets-backend';
+import wixData from 'wix-data';
+import { fetch } from 'wix-fetch';
+import { normalizeIsraeliPhone } from 'backend/orderUtils.js';
+
+const SA = { suppressAuth: true };
+
+const SENDMSG_BASE_URL = 'https://gconvertrest.sendmsg.co.il/api/Sendmsg';
+const SENDMSG_SITE_ID = 52075;
+
+// Personal mobile number verified in the Sendmsg panel (VerificationOfSenderNumberBySMS
+// / AuthenticateOfSenderNumberBySMS — a one-time account-setup step, not part of this
+// runtime flow) — used as the SMS "From" number. Swap here once 0522272270 is verified.
+const SENDMSG_SENDER_PHONE = '0546611643';
+
+const TOKEN_TTL_MS = 12 * 60 * 60 * 1000; // Sendmsg tokens are valid for 12h
+const TOKEN_REFRESH_MARGIN_MS = 30 * 60 * 1000; // refresh a bit before actual expiry
+
+async function getSendMsgPassword() {
+    const password = await wixSecretsBackend.getSecret('sendMsg_apiKey');
+    if (!password) {
+        throw new Error('[SendMsg] Missing "sendMsg_apiKey" in Wix Secrets Manager');
+    }
+    return password;
+}
+
+async function fetchNewToken() {
+    const password = await getSendMsgPassword();
+    const response = await fetch(`${SENDMSG_BASE_URL}/token`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ siteID: SENDMSG_SITE_ID, password }),
+    });
+    const json = await response.json().catch(() => null);
+    if (!response.ok || !json?.Token) {
+        throw new Error(`[SendMsg] token fetch failed (${response.status}): ${JSON.stringify(json)}`);
+    }
+    return json.Token;
+}
+
+/** Reads/refreshes the single cached token row in the SendMsgSettings CMS collection. */
+async function getValidToken() {
+    const existing = await wixData.query('SendMsgSettings').limit(1).find(SA);
+    const row = existing.items[0] || null;
+
+    const ageMs = row?._updatedAt ? Date.now() - new Date(row._updatedAt).getTime() : Infinity;
+    if (row?.token && ageMs < TOKEN_TTL_MS - TOKEN_REFRESH_MARGIN_MS) {
+        return row.token;
+    }
+
+    const token = await fetchNewToken();
+    if (row) {
+        await wixData.update('SendMsgSettings', { ...row, token }, SA);
+    } else {
+        await wixData.insert('SendMsgSettings', { token }, SA);
+    }
+    return token;
+}
+
+async function sendMsgRequest(path, body) {
+    const token = await getValidToken();
+    const response = await fetch(`${SENDMSG_BASE_URL}${path}`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            Authorization: token,
+        },
+        body: JSON.stringify(body),
+    });
+    const json = await response.json().catch(() => null);
+    if (!response.ok || json?.success === false) {
+        const detail = json ? JSON.stringify(json) : await response.text().catch(() => '');
+        throw new Error(`[SendMsg] POST ${path} failed (${response.status}): ${detail}`);
+    }
+    return json;
+}
+
+/** Sendmsg expects local 05XXXXXXXX numbers (Cellphone/SenderPhone), not E.164. */
+function toSendMsgLocalPhone(phone) {
+    const e164 = normalizeIsraeliPhone(phone); // +972XXXXXXXXX
+    if (!e164) return '';
+    const digits = e164.replace(/\D/g, ''); // 972XXXXXXXXX
+    return digits.startsWith('972') ? '0' + digits.slice(3) : digits;
+}
+
+/**
+ * Sends the admin-order-management OTP code via SMS (Sendmsg) — the only
+ * channel used for this code (WhatsApp/ManyChat is no longer used for it).
+ * Never throws — same contract as the ManyChat senders.
+ */
+export async function sendAdminOtpSms(phone, code) {
+    const cellphone = toSendMsgLocalPhone(phone);
+    if (!cellphone) {
+        console.error('[SendMsg] sendAdminOtpSms: no valid phone', phone);
+        return { sent: false, reason: 'no-phone' };
+    }
+
+    try {
+        await sendMsgRequest('/AddUsersAndSendSMS', {
+            Users: [{ Cellphone: cellphone }],
+            Message: {
+                MessageContent: `קוד האימות שלך לניהול ההזמנה: ${code}`,
+                SenderPhone: SENDMSG_SENDER_PHONE,
+                MessageInnerName: 'admin_otp',
+                MessageSubject: '',
+                MessageType: 1,
+                TypeSms: 1,
+            },
+        });
+        console.log(`[SendMsg] ✅ sendAdminOtpSms — sent to ${cellphone}`);
+        return { sent: true };
+    } catch (err) {
+        console.error('[SendMsg] ❌ sendAdminOtpSms failed:', err?.message || err);
+        return { sent: false, reason: 'error', error: err?.message || String(err) };
+    }
+}

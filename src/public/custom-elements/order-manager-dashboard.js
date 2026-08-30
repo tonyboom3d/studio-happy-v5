@@ -346,7 +346,11 @@ var __wdTemplateHtml = `
             </div>
             <div class="p-5 flex flex-col gap-4">
                 <p class="text-sm text-gray-600">שליחה ללקוח: <strong id="waCustomerName"></strong></p>
-                <p class="text-xs text-gray-500">תישלח הודעת מערכת קבועה על סטטוס ההזמנה (בהתאם למגבלות התבניות המאושרות ב-WhatsApp).</p>
+                <div>
+                    <p class="text-xs font-medium text-gray-700 mb-1">תבניות מאושרות ב-WhatsApp (Meta) הזמינות במערכת:</p>
+                    <div id="waTemplatesList" class="flex flex-col gap-2 max-h-48 overflow-y-auto"></div>
+                </div>
+                <p class="text-xs text-gray-500">הכפתור למטה שולח את תבנית "הודעת סטטוס הזמנה" — Meta לא מאפשרת שליחת טקסט חופשי מהדשבורד, רק תבניות מאושרות.</p>
                 <button onclick="sendWhatsApp()" class="w-full bg-green-500 hover:bg-green-600 text-white font-medium py-2 rounded-lg transition-colors flex items-center justify-center gap-2">
                     <i class="ph ph-paper-plane-right"></i> שלח עכשיו
                 </button>
@@ -3561,8 +3565,26 @@ function __wdInjectGlobalAssets() {
         }
 
         // Meta doesn't allow sending admin-typed free text or a choice of
-        // template outside an approved WhatsApp template, so this modal
-        // just confirms sending the one fixed system status message.
+        // template outside an approved WhatsApp template. The button always
+        // sends the fixed "order_dashboard_message" template — the list
+        // below is just a read-only preview of every approved template the
+        // system can send this customer (most are sent automatically).
+        function renderWaTemplatesList() {
+            const list = document.getElementById('waTemplatesList');
+            if (!list) return;
+            const ordersTemplates = waTemplates.filter(t => !t.use || t.use === 'orders');
+            if (!ordersTemplates.length) {
+                list.innerHTML = '<p class="text-xs text-gray-400">לא נמצאו תבניות מוגדרות.</p>';
+                return;
+            }
+            list.innerHTML = ordersTemplates.map(t => `
+                <div class="border border-gray-200 rounded-lg p-2 bg-gray-50">
+                    <p class="text-xs font-semibold text-gray-700">${t.title}${t.actionKeyLabel ? ` <span class="text-gray-400">(${t.actionKeyLabel})</span>` : ''}</p>
+                    <p class="text-xs text-gray-500 whitespace-pre-wrap" style="direction: rtl;">${t.body || '(אין תצוגה מקדימה)'}</p>
+                </div>
+            `).join('');
+        }
+
         function openWaModal(orderId) {
             if (!hasDashboardPermission('sendWhatsApp')) {
                 alert('אין לך הרשאה לשלוח הודעות WhatsApp.');
@@ -3571,6 +3593,7 @@ function __wdInjectGlobalAssets() {
             currentOrderId = orderId;
             const order = mockOrders.find(o => o.id === orderId);
             document.getElementById('waCustomerName').innerText = order.organizerName || 'ללא שם';
+            renderWaTemplatesList();
             openModal('waModal');
         }
 

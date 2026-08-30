@@ -21,6 +21,16 @@ import {
 const SA = { suppressAuth: true };
 const ORDER_DEBUG_USER_ID = 'e5af95ac-27b1-45e9-9de4-bd89adffc953';
 
+// Labels for order-template rows whose `actionKey` holds a ManyChat
+// notification_type value (see manychatService.jsw) — shown in the dashboard's
+// "send WhatsApp" preview list instead of the raw machine key.
+const ORDER_NOTIFICATION_TYPE_LABELS = {
+    order_confirmed: 'אישור הזמנה (אוטומטי בתשלום)',
+    sketch_selected: 'בחירת סקיצה (אוטומטי)',
+    admin_otp: 'קוד אימות ניהול הזמנה (אוטומטי)',
+    order_dashboard_message: 'הודעת סטטוס הזמנה (נשלחת מכפתור זה)',
+};
+
 function isOrderDebugUser(member) {
     return !!member?._id && member._id === ORDER_DEBUG_USER_ID;
 }
@@ -383,13 +393,17 @@ async function loadAllServiceBookings(serviceIds, startDate, endDate) {
     try {
         do {
             const response = await elevatedQueryExtendedBookings({
-                filter: {
-                    'bookedEntity.item.slot.serviceId': { $in: serviceIds },
-                    $and: [
-                        { startDate: { $gte: startDate.toISOString() } },
-                        { startDate: { $lte: endDate.toISOString() } },
-                    ],
-                },
+                ...(cursor
+                    ? {}
+                    : {
+                        filter: {
+                            'bookedEntity.item.slot.serviceId': { $in: serviceIds },
+                            $and: [
+                                { startDate: { $gte: startDate.toISOString() } },
+                                { startDate: { $lte: endDate.toISOString() } },
+                            ],
+                        },
+                    }),
                 cursorPaging: { limit: 100, cursor },
             });
             allBookings.push(...(response.extendedBookings || []));
@@ -1285,7 +1299,7 @@ export const getInitialDashboardData = webMethod(Permissions.SiteMember, async (
 
     const templates = templatesResult
         ? (templatesResult.items || [])
-            .map(mapTemplateRow)
+            .map(t => mapTemplateRow(t, ORDER_NOTIFICATION_TYPE_LABELS))
             .filter(t => t.use === TEMPLATE_USE.ORDERS)
         : undefined;
     if (!refreshOnly) console.log(`[dashboardService] Loaded ${(templates || []).length} WhatsApp template(s).`);
@@ -1701,7 +1715,7 @@ export const getTemplates = webMethod(Permissions.SiteMember, async () => {
 
     const result = await wixData.query('WhatsApp_Templates').find(SA);
     return (result.items || [])
-        .map(mapTemplateRow)
+        .map(t => mapTemplateRow(t, ORDER_NOTIFICATION_TYPE_LABELS))
         .filter(t => t.use === TEMPLATE_USE.ORDERS);
 });
 

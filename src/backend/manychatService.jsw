@@ -32,12 +32,20 @@ export const MC_FIELDS = {
     amount: 'amount',
     orderUrl: 'order_url',
     orderNumber: 'order_number',
+    participantName: 'participant_name',
+    otpCode: 'otp_code',
 };
 
 // Custom field created manually in ManyChat (Settings > Custom Fields, type "Text")
 // used by the flow's conditions to branch per workshop. Values mirror the
 // existing `workshopType` values already used across the codebase.
 export const WORKSHOP_CUSTOM_FIELD_NAME = MC_FIELDS.workshopType;
+
+// Routing field for the order-confirmation flow — distinguishes the 3
+// workshop-type order-confirmation branches ('order_confirmed', the default)
+// from the other customer templates that share the same flow/subscriber
+// (sketch_selected, admin_otp). Create manually in ManyChat like action_key.
+const NOTIFICATION_TYPE_FIELD = 'notification_type';
 
 // content20260826091942_789880 — shared "אישור הזמנה" flow, branches
 // internally per WORKSHOP_CUSTOM_FIELD_NAME condition.
@@ -273,7 +281,7 @@ function buildParticipantsLine(order, workshopType) {
     return `${adults} מבוגרים${children > 0 ? ` + ${children} ילדים` : ''}`;
 }
 
-function buildOrderCustomFields(order) {
+function buildOrderCustomFields(order, notificationType = 'order_confirmed') {
     const workshopType = order?.workshopType || 'tufting';
     const total = order?.paidTotal || order?.basePrice || 0;
     const cupsCount = Array.isArray(order?.selectedProducts)
@@ -282,6 +290,7 @@ function buildOrderCustomFields(order) {
     const extraItems = order?.extraCandleCount || 0;
 
     const fields = [
+        { name: NOTIFICATION_TYPE_FIELD, value: notificationType },
         { name: MC_FIELDS.workshopType, value: workshopType },
         { name: MC_FIELDS.organizerName, value: order?.organizerName },
         { name: MC_FIELDS.organizerPhone, value: order?.organizerPhone },
@@ -316,11 +325,42 @@ function buildOrderCustomFields(order) {
     return fields;
 }
 
-async function setOrderCustomFields(subscriberId, order) {
-    const fields = buildOrderCustomFields(order);
+async function setOrderCustomFields(subscriberId, order, notificationType = 'order_confirmed') {
+    const fields = buildOrderCustomFields(order, notificationType);
     const sending = fields.filter(f => hasManyChatFieldValue(f.value));
     console.log('[ManyChat] setCustomFields:', sending.map(f => `${f.name}=${f.value}`).join(', '));
     await setCustomFieldsByName(subscriberId, fields);
+    return sending;
+}
+
+// --- Unified send-result logging ---
+// Used by every sendXManyChat function so successes/failures are always
+// easy to find in the logs and always show what was actually sent.
+
+function formatFieldsForLog(fields) {
+    return (fields || [])
+        .filter(f => hasManyChatFieldValue(f.value))
+        .map(f => `${f.name}=${f.value}`)
+        .join(', ') || '(none)';
+}
+
+/** Logs a clear success line including every field/value that went into the message. */
+function logManyChatSendSuccess(label, { order, phone, subscriberId, notificationType, fields } = {}) {
+    console.log(
+        `[ManyChat] ✅ ${label} — ההודעה נשלחה בהצלחה | ` +
+        `orderId=${order?._id || '(none)'} phone=${phone || order?.organizerPhone || '(none)'} ` +
+        `subscriberId=${subscriberId || '(none)'} notificationType=${notificationType || '(none)'} | ` +
+        `פרטי ההודעה: ${formatFieldsForLog(fields)}`
+    );
+}
+
+/** Logs a clear, greppable error line when a message failed to send. */
+function logManyChatSendError(label, { order, phone, reason, error } = {}) {
+    console.error(
+        `[ManyChat] ❌ ${label} — שליחת ההודעה נכשלה! | ` +
+        `orderId=${order?._id || '(none)'} phone=${phone || order?.organizerPhone || '(none)'} ` +
+        `reason=${reason || 'error'} error=${error || '(none)'}`
+    );
 }
 
 /** POST /fb/sending/sendFlow */
@@ -370,10 +410,12 @@ async function runOrderConfirmationManyChat(order, { allowCreate = true } = {}) 
         throw new Error('[ManyChat] No subscriber id after find/create');
     }
 
-    await setOrderCustomFields(subscriber.id, order);
+    const sentFields = await setOrderCustomFields(subscriber.id, order);
     await sendFlow(subscriber.id, ORDER_CONFIRMATION_FLOW_NS);
 
-    console.log('[ManyChat] Flow sent. orderId:', order?._id, 'subscriberId:', subscriber.id, 'workshopType:', workshopType);
+    logManyChatSendSuccess('sendOrderConfirmationManyChat', {
+        order, phone, subscriberId: subscriber.id, notificationType: 'order_confirmed', fields: sentFields,
+    });
     return { subscriberId: subscriber.id, workshopType };
 }
 
@@ -385,7 +427,132 @@ export async function sendOrderConfirmationManyChat(order) {
     try {
         await runOrderConfirmationManyChat(order, { allowCreate: true });
     } catch (err) {
-        console.error('[ManyChat] sendOrderConfirmationManyChat failed. orderId:', order?._id, 'error:', err?.message || err);
+        logManyChatSendError('sendOrderConfirmationManyChat', { order, error: err?.message || String(err) });
+    }
+}
+
+// --- Sketch-selected notification (replaces Green API sendSelectionNotification) ---
+
+/**
+ * Notifies the order's organizer that a participant just picked a sketch.
+ * Reuses the order-confirmation subscriber/flow with notification_type
+ * 'sketch_selected' — requires a matching branch + the `sketch_selected`
+ * template in the ManyChat flow (content20260826091942_789880).
+ * Never throws — same contract as sendOrderConfirmationManyChat.
+ */
+export async function sendSketchSelectedManyChat(order, participantName) {
+    try {
+        const phone = normalizeIsraeliPhone(order?.organizerPhone);
+        const email = order?.organizerEmail || '';
+        if (!phone) {
+            logManyChatSendError('sendSketchSelectedManyChat', { order, reason: 'no-phone' });
+            return { sent: false, reason: 'no-phone' };
+        }
+
+        const subscriber = await findSubscriber({ email, phone });
+        if (!subscriber?.id) {
+            logManyChatSendError('sendSketchSelectedManyChat', { order, phone, reason: 'subscriber-not-found' });
+            return { sent: false, reason: 'subscriber-not-found' };
+        }
+
+        const sentFields = await setOrderCustomFields(subscriber.id, order, 'sketch_selected');
+        const participantField = { name: MC_FIELDS.participantName, value: participantName || 'משתתף' };
+        await setCustomFieldsByName(subscriber.id, [participantField]);
+        await sendFlow(subscriber.id, ORDER_CONFIRMATION_FLOW_NS);
+
+        logManyChatSendSuccess('sendSketchSelectedManyChat', {
+            order, phone, subscriberId: subscriber.id, notificationType: 'sketch_selected',
+            fields: [...sentFields, participantField],
+        });
+        return { sent: true, subscriberId: subscriber.id };
+    } catch (err) {
+        logManyChatSendError('sendSketchSelectedManyChat', { order, error: err?.message || String(err) });
+        return { sent: false, reason: 'error', error: err?.message || String(err) };
+    }
+}
+
+// --- Dashboard order-status message (replaces Green API custom-message send) ---
+
+/**
+ * Sends the fixed "order_dashboard_message" ManyChat template to an
+ * arbitrary phone (staff picks the recipient in the dashboard). Meta
+ * doesn't allow sending admin-typed free text outside an approved WhatsApp
+ * template, so only this one fixed system message is supported — the old
+ * CMS-template + free-text compose flow (Green API) is gone.
+ * Never throws — same contract as the other ManyChat senders.
+ */
+export async function sendOrderDashboardMessageManyChat(order, phone) {
+    try {
+        const targetPhone = normalizeIsraeliPhone(phone || order?.organizerPhone);
+        if (!targetPhone) {
+            logManyChatSendError('sendOrderDashboardMessageManyChat', { order, phone, reason: 'no-phone' });
+            return { sent: false, reason: 'no-phone' };
+        }
+
+        let subscriber = await findSubscriber({ phone: targetPhone });
+        if (!subscriber) {
+            const { firstName, lastName } = splitName(order?.organizerName);
+            subscriber = await createSubscriber({ firstName, lastName, phone: targetPhone, email: order?.organizerEmail });
+        }
+        if (!subscriber?.id) {
+            throw new Error('No subscriber id after find/create');
+        }
+
+        const sentFields = await setOrderCustomFields(subscriber.id, order, 'order_dashboard_message');
+        await sendFlow(subscriber.id, ORDER_CONFIRMATION_FLOW_NS);
+
+        logManyChatSendSuccess('sendOrderDashboardMessageManyChat', {
+            order, phone: targetPhone, subscriberId: subscriber.id, notificationType: 'order_dashboard_message', fields: sentFields,
+        });
+        return { sent: true, subscriberId: subscriber.id };
+    } catch (err) {
+        logManyChatSendError('sendOrderDashboardMessageManyChat', { order, phone, error: err?.message || String(err) });
+        return { sent: false, reason: 'error', error: err?.message || String(err) };
+    }
+}
+
+// --- Admin OTP notification (replaces Green API OTP send) ---
+
+/**
+ * Sends the admin-order-management OTP code to the organizer via ManyChat.
+ * Reuses the order-confirmation subscriber/flow with notification_type
+ * 'admin_otp' — requires a matching branch + the `admin_otp` AUTHENTICATION
+ * template in the ManyChat flow (content20260826091942_789880).
+ * Never throws — the OTP request itself must not fail if ManyChat is down
+ * (the MASTER_OTP fallback in bookingService.web.js still works).
+ */
+export async function sendAdminOtpManyChat(order, code) {
+    try {
+        const phone = normalizeIsraeliPhone(order?.organizerPhone);
+        const email = order?.organizerEmail || '';
+        if (!phone) {
+            logManyChatSendError('sendAdminOtpManyChat', { order, reason: 'no-phone' });
+            return { sent: false, reason: 'no-phone' };
+        }
+
+        let subscriber = await findSubscriber({ email, phone });
+        if (!subscriber) {
+            const { firstName, lastName } = splitName(order?.organizerName);
+            subscriber = await createSubscriber({ firstName, lastName, phone, email });
+        }
+        if (!subscriber?.id) {
+            throw new Error('No subscriber id after find/create');
+        }
+
+        const otpFields = [
+            { name: NOTIFICATION_TYPE_FIELD, value: 'admin_otp' },
+            { name: MC_FIELDS.otpCode, value: code },
+        ];
+        await setCustomFieldsByName(subscriber.id, otpFields);
+        await sendFlow(subscriber.id, ORDER_CONFIRMATION_FLOW_NS);
+
+        logManyChatSendSuccess('sendAdminOtpManyChat', {
+            order, phone, subscriberId: subscriber.id, notificationType: 'admin_otp', fields: otpFields,
+        });
+        return { sent: true, subscriberId: subscriber.id };
+    } catch (err) {
+        logManyChatSendError('sendAdminOtpManyChat', { order, error: err?.message || String(err) });
+        return { sent: false, reason: 'error', error: err?.message || String(err) };
     }
 }
 
@@ -423,7 +590,7 @@ export async function sendStaffManyChat(actionKey, phone, audience, vars = {}) {
     try {
         const normalizedPhone = normalizeIsraeliPhone(phone);
         if (!normalizedPhone) {
-            console.warn(`[ManyChat staff] no valid phone for actionKey=${actionKey}`);
+            logManyChatSendError(`sendStaffManyChat(${actionKey})`, { phone, reason: 'no-phone' });
             return { sent: false, reason: 'no-phone' };
         }
 
@@ -436,14 +603,15 @@ export async function sendStaffManyChat(actionKey, phone, audience, vars = {}) {
         }
 
         const fields = buildStaffCustomFields(actionKey, audience, vars);
-        console.log('[ManyChat staff] setCustomFields:', fields.filter(f => hasManyChatFieldValue(f.value)).map(f => `${f.name}=${f.value}`).join(', '));
         await setCustomFieldsByName(subscriber.id, fields);
         await sendFlow(subscriber.id, STAFF_NOTIFICATION_FLOW_NS);
 
-        console.log(`[ManyChat staff] Flow sent. actionKey=${actionKey} subscriberId=${subscriber.id}`);
+        logManyChatSendSuccess(`sendStaffManyChat(${actionKey})`, {
+            phone: normalizedPhone, subscriberId: subscriber.id, notificationType: actionKey, fields,
+        });
         return { sent: true, subscriberId: subscriber.id };
     } catch (err) {
-        console.error(`[ManyChat staff] sendStaffManyChat failed. actionKey=${actionKey}:`, err?.message || err);
+        logManyChatSendError(`sendStaffManyChat(${actionKey})`, { phone, error: err?.message || String(err) });
         return { sent: false, reason: 'error', error: err?.message || String(err) };
     }
 }

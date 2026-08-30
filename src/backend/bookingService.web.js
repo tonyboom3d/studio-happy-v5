@@ -9,7 +9,7 @@ import wixSecretsBackend from 'wix-secrets-backend';
 import { fetch } from 'wix-fetch';
 import { createHmac, randomBytes } from 'crypto';
 import { mediaManager } from 'wix-media-backend';
-import { sendGreenApiWhatsApp, sendSelectionNotification } from 'backend/whatsappService.jsw';
+import { sendSketchSelectedManyChat, sendAdminOtpManyChat } from 'backend/manychatService.jsw';
 import { SKETCH_STATUS, normalizeSketchStatus, isLockedStatus, wouldViolateLockedMinimum } from 'backend/sketchStatus.js';
 import { getItemWithRetry } from 'backend/wixDataRetry.js';
 import {
@@ -3262,9 +3262,9 @@ export const saveSketchSelection = webMethod(Permissions.Anyone, async (selectio
         }
     }
 
-    if (participantId) {
+    if (participantId && order?.notifyOnSelection) {
         try {
-            await sendSelectionNotification(order, participantName);
+            await sendSketchSelectedManyChat(order, participantName);
         } catch (notifErr) {
             console.warn(`[saveSketchSelection] Could not send selection notification for order ${orderId}:`, notifErr?.message);
         }
@@ -3794,10 +3794,8 @@ export const initiateAdminOtp = webMethod(Permissions.Anyone, async (orderId, ph
     const key = `${orderId}_${inputNorm}`;
     otpStore.set(key, { code, expiresAt: Date.now() + OTP_TTL_MS, attempts: 0 });
 
-    const msg = `🔐 *קוד אימות - סטודיו האפי*\n\nהקוד שלך: ${code} \n\nתוקף הקוד: 10 דקות.\nאל תשתפו קוד זה עם אף אחד.`;
-
     try {
-        await sendGreenApiWhatsApp(order.organizerPhone, msg);
+        await sendAdminOtpManyChat(order, code);
     } catch (err) {
         console.error('[initiateAdminOtp] WhatsApp send failed:', err?.message);
     }

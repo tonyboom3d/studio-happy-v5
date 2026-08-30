@@ -315,10 +315,6 @@ async function handleDashboardAction(dashboardEl, detail) {
 
             await updateSketchState(payload.orderId, payload.sketchId, payload.newStatus, {
 
-                sendWhatsApp: !!payload.sendWhatsApp,
-
-                customMessage: payload.customMessage || null,
-
                 expectedUpdatedDate: payload.expectedUpdatedDate || null,
 
             });
@@ -367,7 +363,7 @@ async function handleDashboardAction(dashboardEl, detail) {
 
     case 'sendWhatsApp':
 
-        await sendDashboardWhatsApp(payload.orderId, payload.phone, payload.templateId, payload.customMessage);
+        await sendDashboardWhatsApp(payload.orderId, payload.phone);
 
         break;
 

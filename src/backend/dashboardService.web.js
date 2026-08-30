@@ -6,7 +6,7 @@ import wixData from 'wix-data';
 import { Permissions, webMethod } from 'wix-web-module';
 import { mediaManager } from 'wix-media-backend';
 import { currentMember } from 'wix-members-backend';
-import { sendGreenApiWhatsApp } from 'backend/whatsappService.jsw';
+import { sendOrderDashboardMessageManyChat } from 'backend/manychatService.jsw';
 import { SKETCH_STATUS, SKETCH_STATUSES, normalizeSketchStatus, isLockedStatus } from 'backend/sketchStatus.js';
 import { PERMISSION_KEYS, PERMISSION_DEFAULTS, refId } from 'backend/staffRoles.js';
 import { getItemWithRetry } from 'backend/wixDataRetry.js';
@@ -1615,18 +1615,10 @@ export const updateSketchState = webMethod(Permissions.SiteMember, async (orderI
 
         await logSketchOrderAction(orderId, sel, 'לא מאושרת לביצוע — הסקיצה נמחקה', options?.user);
 
-        if (options?.sendWhatsApp && options?.customMessage) {
-            try {
-                const order = await getItemWithRetry('WorkshopOrders', orderId, { callerLabel: 'updateSketchState(whatsapp)' });
-                const targetPhone = normalizePhone(order?.organizerPhone);
-                if (targetPhone) {
-                    await sendGreenApiWhatsApp(targetPhone, options.customMessage);
-                    await logSketchOrderAction(orderId, sel, 'נשלחה הודעת WhatsApp — סקיצה לא מאושרת', options?.user);
-                }
-            } catch (err) {
-                console.error('[dashboardService] updateSketchState WhatsApp alert failed:', err?.message || err);
-            }
-        }
+        // NOTE: the old "send a custom WhatsApp message on reject" option was
+        // removed — Meta doesn't allow sending admin-typed free text outside
+        // an approved WhatsApp template, and no approved template exists for
+        // this rejection notice. Rejecting a sketch no longer sends WhatsApp.
 
         return { sketch: mapSketch(updated, (await loadParticipantsForOrders([orderId]))[orderId], await getItemWithRetry('WorkshopOrders', orderId, { callerLabel: 'updateSketchState(rejected)' }), await loadProductWixImagesById([updated.productId])) };
     }
@@ -1682,22 +1674,25 @@ export const updateOrderInternalNotes = webMethod(Permissions.SiteMember, async 
     return { success: true };
 });
 
-export const sendDashboardWhatsApp = webMethod(Permissions.SiteMember, async (orderId, phone, templateId, customMessage, options) => {
+/**
+ * Sends the fixed "order_dashboard_message" ManyChat template. Meta doesn't
+ * allow sending admin-typed free text outside an approved WhatsApp
+ * template, so only this one system message is supported.
+ */
+export const sendDashboardWhatsApp = webMethod(Permissions.SiteMember, async (orderId, phone, options) => {
     await assertPermission('sendWhatsApp');
-    console.log(`[dashboardService] sendDashboardWhatsApp: order=${orderId} phone=${phone} templateId=${templateId || '(custom message)'}`);
+    console.log(`[dashboardService] sendDashboardWhatsApp: order=${orderId} phone=${phone}`);
 
     const targetPhone = normalizePhone(phone);
     if (!targetPhone) throw new Error('Invalid phone number');
 
-    let message = customMessage;
-    if (!message && templateId) {
-        const template = await wixData.get('WhatsApp_Templates', templateId, SA);
-        message = template?.messageBody || '';
-    }
-    if (!message) throw new Error('No message content to send');
+    const order = await getItemWithRetry('WorkshopOrders', orderId, { callerLabel: 'sendDashboardWhatsApp' });
+    if (!order) throw new Error('Order not found');
 
-    await sendGreenApiWhatsApp(targetPhone, message);
-    await logOrderAction(orderId, `הודעת WhatsApp נשלחה ל-${targetPhone}`, options?.user);
+    const result = await sendOrderDashboardMessageManyChat(order, targetPhone);
+    if (!result.sent) throw new Error(`שליחת ההודעה נכשלה (${result.reason || 'unknown'})`);
+
+    await logOrderAction(orderId, `הודעת WhatsApp (סטטוס הזמנה) נשלחה ל-${targetPhone}`, options?.user);
     return { success: true };
 });
 

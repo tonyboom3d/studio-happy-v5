@@ -22,8 +22,7 @@ import {
     SUBMISSION_STATUS, toDateKey, normalizeSettings, DEFAULT_WORK_TYPE,
     shiftHours as computeShiftHours, validateShiftWithinShortDay, SHIFT_MIN_TIME, SHIFT_MAX_TIME,
 } from 'backend/availabilityRules.js';
-import { refIds, getRolePermissionValue, attachSkillsToRoles } from 'backend/staffRoles.js';
-import { sendGreenApiWhatsApp } from 'backend/whatsappService.jsw';
+import { refIds, attachSkillsToRoles } from 'backend/staffRoles.js';
 import { enqueueNotification, enqueueManagerNotification, flushOutbox, PRIORITY } from 'backend/notificationOutbox.js';
 import { maybeSuppressForPendingBacklog } from 'backend/pendingItemsQuery.js';
 import { maybeSuppressManagerNotification } from 'backend/managerPendingQuery.js';
@@ -626,20 +625,6 @@ export function resolvePlacement(day, skillTypeIds) {
     if (state === DAY_STATE.FREE || state === DAY_STATE.OPEN) return SUBMISSION_STATUS.SUBMITTED;
     if (state === DAY_STATE.WAITLIST) return SUBMISSION_STATUS.STANDBY;
     return null;
-}
-
-// ---------------------------------------------------------------------------
-// WhatsApp helpers
-// ---------------------------------------------------------------------------
-
-export async function notifyManagers(message, rolesById = null) {
-    const roles = rolesById ? Object.values(rolesById) : await loadActiveRoles();
-    const managers = roles.filter(r => getRolePermissionValue(r, 'manageScheduling') && r.phone);
-    for (const m of managers) {
-        await sendGreenApiWhatsApp(m.phone, message).catch(err =>
-            console.error('[schedulingEngine] manager WhatsApp failed:', err?.message || err));
-    }
-    return managers.length;
 }
 
 function formatDateHe(dateKey) {

@@ -1,7 +1,7 @@
 /**
  * Notification outbox (throttling layer) — sits between every trigger that
  * wants to message an employee/manager and the actual WhatsApp send
- * (employeeTemplates.js → whatsappService.jsw). Solves mass-notification
+ * (employeeTemplates.js → manychatService.jsw). Solves mass-notification
  * floods (bulk assignments, manager requirements, arrival reminders) via:
  *   1. Dedup — same action+entity+recipient within 24h is not re-queued.
  *   2. Rate limiting — caps non-urgent messages per recipient per hour/day.

@@ -346,14 +346,7 @@ var __wdTemplateHtml = `
             </div>
             <div class="p-5 flex flex-col gap-4">
                 <p class="text-sm text-gray-600">שליחה ללקוח: <strong id="waCustomerName"></strong></p>
-                <div>
-                    <label class="block text-xs font-medium text-gray-700 mb-1">בחר תבנית:</label>
-                    <select id="waTemplateSelect" onchange="updateWaPreview()" class="compact-input w-full bg-gray-50"></select>
-                </div>
-                <div>
-                    <label class="block text-xs font-medium text-gray-700 mb-1">תצוגה מקדימה (ניתן לערוך):</label>
-                    <textarea id="waPreviewText" rows="4" class="compact-input w-full resize-none bg-gray-50" style="direction: rtl;"></textarea>
-                </div>
+                <p class="text-xs text-gray-500">תישלח הודעת מערכת קבועה על סטטוס ההזמנה (בהתאם למגבלות התבניות המאושרות ב-WhatsApp).</p>
                 <button onclick="sendWhatsApp()" class="w-full bg-green-500 hover:bg-green-600 text-white font-medium py-2 rounded-lg transition-colors flex items-center justify-center gap-2">
                     <i class="ph ph-paper-plane-right"></i> שלח עכשיו
                 </button>
@@ -403,36 +396,6 @@ var __wdTemplateHtml = `
             <div class="flex gap-3 mt-6">
                 <button onclick="closeUnapprovedModal()" class="flex-1 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-lg transition-colors">ביטול</button>
                 <button onclick="confirmUnapprovedDeleteWarning()" class="flex-1 py-2 bg-red-500 hover:bg-red-600 text-white font-medium rounded-lg transition-colors">המשך</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Unapproved Sketch Modal — step 2: WhatsApp choice -->
-    <div id="unapprovedWaModal" class="modal fixed inset-0 z-[70] items-center justify-center p-4 bg-gray-900/60 backdrop-blur-sm">
-        <div class="bg-white rounded-xl shadow-2xl w-full max-w-md modal-content p-6">
-            <div class="flex justify-between items-center mb-4">
-                <h3 class="text-xl font-bold text-gray-800">הודעת וואטסאפ</h3>
-                <button onclick="closeUnapprovedWaModal()" class="text-gray-400 hover:text-gray-700"><i class="ph ph-x"></i></button>
-            </div>
-            <div class="bg-green-50 border border-green-100 rounded-lg p-4 text-sm text-green-800 mb-4 flex gap-2 items-start">
-                <i class="ph-fill ph-whatsapp-logo text-green-500 text-lg mt-0.5"></i>
-                <p>האם לשלוח הודעת וואטסאפ למנהל הקבוצה על כך שהסקיצה לא אושרה?</p>
-            </div>
-            <div class="flex flex-col gap-3 mb-2">
-                <div>
-                    <label class="block text-xs font-medium text-gray-700 mb-1">בחר תבנית:</label>
-                    <select id="unapprovedWaTemplateSelect" onchange="updateUnapprovedWaPreview()" class="compact-input w-full bg-gray-50"></select>
-                </div>
-                <div>
-                    <label class="block text-xs font-medium text-gray-700 mb-1">תצוגה מקדימה (ניתן לערוך):</label>
-                    <textarea id="unapprovedWaPreviewText" rows="4" class="compact-input w-full resize-none bg-gray-50" style="direction: rtl;" placeholder="בחר/י תבנית כדי לראות את ההודעה..."></textarea>
-                </div>
-            </div>
-            <div class="flex gap-3 mt-4">
-                <button onclick="confirmRejectSketch(false)" class="flex-1 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-lg transition-colors">לא, רק מחק</button>
-                <button onclick="confirmRejectSketch(true)" class="flex-1 py-2 bg-green-500 hover:bg-green-600 text-white font-medium rounded-lg transition-colors flex items-center justify-center gap-2">
-                    <i class="ph ph-paper-plane-right"></i> מחק ושלח הודעה
-                </button>
             </div>
         </div>
     </div>
@@ -3484,7 +3447,6 @@ function __wdInjectGlobalAssets() {
         
         function closeUnapprovedModal() {
             closeModal('unapprovedModal');
-            closeModal('unapprovedWaModal');
             // Re-render to revert the select UI if cancelled
             const w = mockWorkshops.find(x => x.id === currentWorkshopId);
             renderOrdersTable(currentWorkshopId, workshopTypes[w.type].requiresSketch);
@@ -3496,81 +3458,15 @@ function __wdInjectGlobalAssets() {
             }
         }
 
-        function closeUnapprovedWaModal() {
-            closeModal('unapprovedWaModal');
-            closeUnapprovedModal();
-        }
-
+        // WhatsApp is no longer sent on sketch rejection — Meta doesn't allow
+        // admin-typed free text outside an approved template, and no
+        // approved template exists for this notice. Delete happens directly.
         function confirmUnapprovedDeleteWarning() {
             closeModal('unapprovedModal');
-            populateUnapprovedWaModal();
-            openModal('unapprovedWaModal');
+            executeRejectSketch(unapprovedOrderId, unapprovedSketchId);
         }
 
-        function populateUnapprovedWaModal() {
-            const select = document.getElementById('unapprovedWaTemplateSelect');
-            const preview = document.getElementById('unapprovedWaPreviewText');
-            if (!select || !preview) return;
-
-            select.innerHTML = '<option value="">בחר/י תבנית...</option>';
-            waTemplates.forEach((t) => {
-                const systemMark = t.isSystem ? ' (מערכת)' : '';
-                select.innerHTML += `<option value="${t.id}">${t.title}${systemMark}</option>`;
-            });
-
-            const defaultId = findRejectTemplateId();
-            select.value = defaultId || '';
-            updateUnapprovedWaPreview();
-        }
-
-        function updateUnapprovedWaPreview() {
-            const tId = document.getElementById('unapprovedWaTemplateSelect')?.value;
-            const preview = document.getElementById('unapprovedWaPreviewText');
-            if (!preview) return;
-            if (!tId) {
-                preview.value = '';
-                return;
-            }
-            preview.value = buildWhatsAppMessageForOrder(unapprovedOrderId, tId) || '';
-        }
-
-        function findRejectTemplateId() {
-            const byTitle = waTemplates.find((t) => {
-                const title = (t.title || '').toLowerCase();
-                return title.includes('לא מאושר') || title.includes('סקיצה לא');
-            });
-            return byTitle?.id || waTemplates.find((t) => t.isSystem)?.id || null;
-        }
-
-        function buildWhatsAppMessageForOrder(orderId, templateId) {
-            const template = waTemplates.find((t) => t.id === templateId);
-            if (!template?.body) return null;
-
-            const order = mockOrders.find((o) => o.id === orderId);
-            const w = mockWorkshops.find((x) => x.id === order?.workshopId);
-            const orderUrl = `https://www.studiohappy.art/user-selections?admin=${orderId}`;
-
-            return template.body
-                .replace(/{{Name}}/g, (order?.organizerName || '').split(' ')[0])
-                .replace(/{{Date}}/g, w?.date || '')
-                .replace(/{{Time}}/g, w?.time || '')
-                .replace(/{{OrderUrl}}/g, orderUrl);
-        }
-
-        function confirmRejectSketch(sendWhatsApp) {
-            let customMessage = null;
-            if (sendWhatsApp) {
-                customMessage = document.getElementById('unapprovedWaPreviewText')?.value?.trim() || '';
-                if (!customMessage) {
-                    alert('יש לבחור תבנית או להזין הודעה לפני השליחה.');
-                    return;
-                }
-            }
-            closeModal('unapprovedWaModal');
-            executeRejectSketch(unapprovedOrderId, unapprovedSketchId, sendWhatsApp, customMessage);
-        }
-
-        function executeRejectSketch(orderId, sketchId, sendWhatsApp, customMessage) {
+        function executeRejectSketch(orderId, sketchId) {
             const order = mockOrders.find(o => o.id === orderId);
             const sketch = order?.sketches?.find(s => s.id === sketchId);
             if (!order || !sketch) return;
@@ -3578,18 +3474,12 @@ function __wdInjectGlobalAssets() {
             sketch.img = null;
             sketch.status = 'פתוח לשינויים';
 
-            const logContext = formatSketchLogContext(order, sketch);
-            const logAction = sendWhatsApp
-                ? `${logContext} — לא אושרה, נמחקה ונשלחה הודעת וואטסאפ`
-                : `${logContext} — לא אושרה, הסקיצה נמחקה`;
-            addLog(orderId, logAction);
+            addLog(orderId, `${formatSketchLogContext(order, sketch)} — לא אושרה, הסקיצה נמחקה`);
 
             dispatchDashboardAction('updateSketchState', {
                 orderId,
                 sketchId,
                 newStatus: 'לא מאושרת לביצוע',
-                sendWhatsApp: !!(sendWhatsApp && customMessage),
-                customMessage: sendWhatsApp ? customMessage : null,
                 expectedUpdatedDate: sketch.updatedDate || null,
             });
 
@@ -3670,7 +3560,10 @@ function __wdInjectGlobalAssets() {
             }
         }
 
-        function openWaModal(orderId, preselectTemplateId = null) {
+        // Meta doesn't allow sending admin-typed free text or a choice of
+        // template outside an approved WhatsApp template, so this modal
+        // just confirms sending the one fixed system status message.
+        function openWaModal(orderId) {
             if (!hasDashboardPermission('sendWhatsApp')) {
                 alert('אין לך הרשאה לשלוח הודעות WhatsApp.');
                 return;
@@ -3678,38 +3571,7 @@ function __wdInjectGlobalAssets() {
             currentOrderId = orderId;
             const order = mockOrders.find(o => o.id === orderId);
             document.getElementById('waCustomerName').innerText = order.organizerName || 'ללא שם';
-            
-            const select = document.getElementById('waTemplateSelect');
-            select.innerHTML = '<option value="">בחר/י תבנית...</option>';
-            waTemplates.forEach(t => { 
-                const systemMark = t.isSystem ? ' (מערכת)' : '';
-                select.innerHTML += `<option value="${t.id}">${t.title}${systemMark}</option>`; 
-            });
-            
-            if (preselectTemplateId) {
-                select.value = preselectTemplateId;
-            } else {
-                select.value = '';
-            }
-            updateWaPreview();
-            
             openModal('waModal');
-        }
-
-        function updateWaPreview() {
-            const tId = document.getElementById('waTemplateSelect').value;
-            if(!tId) { document.getElementById('waPreviewText').value = ''; return; }
-            
-            const template = waTemplates.find(t => t.id === tId).body;
-            const order = mockOrders.find(o => o.id === currentOrderId);
-            const w = mockWorkshops.find(x => x.id === order.workshopId);
-            const mockOrderUrl = `https://studio.co.il/order/${order.id}`;
-
-            document.getElementById('waPreviewText').value = template
-                .replace(/{{Name}}/g, (order.organizerName || '').split(' ')[0])
-                .replace(/{{Date}}/g, w.date)
-                .replace(/{{Time}}/g, w.time)
-                .replace(/{{OrderUrl}}/g, mockOrderUrl);
         }
 
         function sendWhatsApp() {
@@ -3718,20 +3580,12 @@ function __wdInjectGlobalAssets() {
                 closeModal('waModal');
                 return;
             }
-            const msg = document.getElementById('waPreviewText').value;
-            if(!msg) return;
             const order = mockOrders.find(o => o.id === currentOrderId);
-            
-            const tId = document.getElementById('waTemplateSelect').value;
-            const template = waTemplates.find(t => t.id === tId);
-            const templateName = template ? template.title : "הודעה מותאמת אישית";
-            
-            addLog(currentOrderId, 'נשלחה הודעת וואטסאפ - ' + templateName);
+
+            addLog(currentOrderId, 'נשלחה הודעת וואטסאפ - סטטוס הזמנה');
             dispatchDashboardAction('sendWhatsApp', {
                 orderId: currentOrderId,
                 phone: order.organizerPhone,
-                templateId: tId || null,
-                customMessage: msg,
             });
             closeModal('waModal');
             
@@ -4165,10 +4019,7 @@ window.closeModal = closeModal;
 window.closeSidePanel = closeSidePanel;
 window.closeTemplateEditor = closeTemplateEditor;
 window.closeUnapprovedModal = closeUnapprovedModal;
-window.closeUnapprovedWaModal = closeUnapprovedWaModal;
 window.confirmUnapprovedDeleteWarning = confirmUnapprovedDeleteWarning;
-window.confirmRejectSketch = confirmRejectSketch;
-window.updateUnapprovedWaPreview = updateUnapprovedWaPreview;
 window.deleteTemplate = deleteTemplate;
 window.downloadSketchImage = downloadSketchImage;
 window.openFullscreenImg = openFullscreenImg;
@@ -4190,7 +4041,6 @@ window.onDateRangeFilterChange = onDateRangeFilterChange;
 window.toggleAlertFilter = toggleAlertFilter;
 window.toggleInlineLogs = toggleInlineLogs;
 window.updateSketchStatus = updateSketchStatus;
-window.updateWaPreview = updateWaPreview;
 
 
 // ============================================================

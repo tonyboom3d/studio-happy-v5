@@ -347,14 +347,10 @@ var __wdTemplateHtml = `
             <div class="p-5 flex flex-col gap-4">
                 <p class="text-sm text-gray-600">שליחה ללקוח: <strong id="waCustomerName"></strong></p>
                 <div>
-                    <p class="text-xs font-medium text-gray-700 mb-1">בחר תבנית לשליחה:</p>
-                    <div id="waTemplateChoices" class="flex flex-col gap-2"></div>
-                </div>
-                <div>
-                    <p class="text-xs font-medium text-gray-700 mb-1">תבניות מאושרות ב-WhatsApp (Meta) הזמינות במערכת:</p>
+                    <p class="text-xs font-medium text-gray-700 mb-1">תצוגה מקדימה — הודעת "אישור הזמנה":</p>
                     <div id="waTemplatesList" class="flex flex-col gap-2 max-h-48 overflow-y-auto"></div>
                 </div>
-                <p class="text-xs text-gray-500">Meta לא מאפשרת שליחת טקסט חופשי מהדשבורד, רק תבניות מאושרות.</p>
+                <p class="text-xs text-gray-500">Meta לא מאפשרת שליחת טקסט חופשי מהדשבורד — הכפתור למטה שולח את תבנית "אישור הזמנה" המאושרת בלבד.</p>
                 <button onclick="sendWhatsApp()" class="w-full bg-green-500 hover:bg-green-600 text-white font-medium py-2 rounded-lg transition-colors flex items-center justify-center gap-2">
                     <i class="ph ph-paper-plane-right"></i> שלח עכשיו
                 </button>
@@ -1353,7 +1349,6 @@ function __wdInjectGlobalAssets() {
 
         let currentWorkshopId = null;
         let currentOrderId = null;
-        let currentWaTemplate = 'order_confirmed';
         let currentSketchId = null;
         let isAlertFilterActive = false;
 
@@ -3570,44 +3565,43 @@ function __wdInjectGlobalAssets() {
         }
 
         // Meta doesn't allow sending admin-typed free text — only approved
-        // WhatsApp templates. Staff picks one of these two to (re)send
-        // manually; the list below is a read-only preview of every
-        // approved template the system can send this customer (most are
-        // sent automatically and shown here just for reference).
-        const WA_SENDABLE_TEMPLATES = [
-            { value: 'order_confirmed', label: 'אישור הזמנה' },
-            { value: 'admin_otp_new1', label: 'קוד אימות ניהול הזמנה' },
-        ];
+        // WhatsApp templates. The dashboard's "send WhatsApp" button only
+        // (re)sends the one customer-facing approved template — "אישור
+        // הזמנה" — so staff can't accidentally trigger the wrong flow.
+        const WA_FIXED_TEMPLATE = 'order_confirmed';
 
-        function renderWaTemplateChoices() {
-            const wrap = document.getElementById('waTemplateChoices');
-            if (!wrap) return;
-            wrap.innerHTML = WA_SENDABLE_TEMPLATES.map(opt => `
-                <label class="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
-                    <input type="radio" name="waTemplateChoice" value="${opt.value}" onchange="setWaTemplate('${opt.value}')" ${currentWaTemplate === opt.value ? 'checked' : ''}>
-                    ${opt.label}
-                </label>
-            `).join('');
-        }
-
-        function setWaTemplate(value) {
-            currentWaTemplate = value;
+        // Fills the CMS template's generic {{Name}}/{{Date}}/{{Time}}/{{OrderUrl}}
+        // placeholders with this specific order's real data, so the preview
+        // shows exactly what the customer will receive (not raw placeholders).
+        function resolveWaTemplateBody(bodyTemplate, order) {
+            const workshop = mockWorkshops.find(w => w.id === order.workshopId);
+            const values = {
+                Name: order.organizerName || 'לקוח/ה',
+                Date: workshop?.date || '',
+                Time: workshop?.time || '',
+                OrderUrl: order.workshopType === 'tufting'
+                    ? `https://www.studiohappy.art/user-selections?admin=${order.id}`
+                    : '',
+            };
+            return (bodyTemplate || '').replace(/\{\{(Name|Date|Time|OrderUrl)\}\}/g, (_, key) => values[key] || '');
         }
 
         function renderWaTemplatesList() {
             const list = document.getElementById('waTemplatesList');
             if (!list) return;
-            const ordersTemplates = waTemplates.filter(t => !t.use || t.use === 'orders');
-            if (!ordersTemplates.length) {
-                list.innerHTML = '<p class="text-xs text-gray-400">לא נמצאו תבניות מוגדרות.</p>';
+            const order = mockOrders.find(o => o.id === currentOrderId);
+            const template = waTemplates.find(t => t.actionKey === WA_FIXED_TEMPLATE);
+            if (!template) {
+                list.innerHTML = '<p class="text-xs text-gray-400">לא נמצאה תבנית "אישור הזמנה".</p>';
                 return;
             }
-            list.innerHTML = ordersTemplates.map(t => `
+            const resolvedBody = order ? resolveWaTemplateBody(template.body, order) : template.body;
+            list.innerHTML = `
                 <div class="border border-gray-200 rounded-lg p-2 bg-gray-50">
-                    <p class="text-xs font-semibold text-gray-700">${t.title}${t.actionKeyLabel ? ` <span class="text-gray-400">(${t.actionKeyLabel})</span>` : ''}</p>
-                    <p class="text-xs text-gray-500 whitespace-pre-wrap" style="direction: rtl;">${t.body || '(אין תצוגה מקדימה)'}</p>
+                    <p class="text-xs font-semibold text-gray-700">${template.title}</p>
+                    <p class="text-xs text-gray-500 whitespace-pre-wrap" style="direction: rtl;">${escapeHtml(resolvedBody) || '(אין תצוגה מקדימה)'}</p>
                 </div>
-            `).join('');
+            `;
         }
 
         function openWaModal(orderId) {
@@ -3616,10 +3610,8 @@ function __wdInjectGlobalAssets() {
                 return;
             }
             currentOrderId = orderId;
-            currentWaTemplate = 'order_confirmed';
             const order = mockOrders.find(o => o.id === orderId);
             document.getElementById('waCustomerName').innerText = order.organizerName || 'ללא שם';
-            renderWaTemplateChoices();
             renderWaTemplatesList();
             openModal('waModal');
         }
@@ -3631,13 +3623,12 @@ function __wdInjectGlobalAssets() {
                 return;
             }
             const order = mockOrders.find(o => o.id === currentOrderId);
-            const chosen = WA_SENDABLE_TEMPLATES.find(o => o.value === currentWaTemplate) || WA_SENDABLE_TEMPLATES[0];
 
-            addLog(currentOrderId, `נשלחה הודעת וואטסאפ - ${chosen.label}`);
+            addLog(currentOrderId, 'נשלחה הודעת וואטסאפ - אישור הזמנה');
             dispatchDashboardAction('sendWhatsApp', {
                 orderId: currentOrderId,
                 phone: order.organizerPhone,
-                template: chosen.value,
+                template: WA_FIXED_TEMPLATE,
             });
             closeModal('waModal');
             
@@ -4084,7 +4075,6 @@ window.saveNote = saveNote;
 window.saveTemplate = saveTemplate;
 window.scrollCarousel = scrollCarousel;
 window.sendWhatsApp = sendWhatsApp;
-window.setWaTemplate = setWaTemplate;
 window.openOrderDebug = openOrderDebug;
 window.lookupOrderDebugFromInput = lookupOrderDebugFromInput;
 window.lookupOrderDebugFromModal = lookupOrderDebugFromModal;

@@ -44,7 +44,7 @@ export const WORKSHOP_CUSTOM_FIELD_NAME = MC_FIELDS.workshopType;
 // Routing field for the order-confirmation flow — distinguishes the 3
 // workshop-type order-confirmation branches ('order_confirmed', the default)
 // from the other customer templates that share the same flow/subscriber
-// (sketch_selected, admin_otp). Create manually in ManyChat like action_key.
+// (sketch_selected, admin_otp_new1). Create manually in ManyChat like action_key.
 const NOTIFICATION_TYPE_FIELD = 'notification_type';
 
 // content20260826091942_789880 — shared "אישור הזמנה" flow, branches
@@ -625,11 +625,16 @@ export async function sendOrderDashboardMessageManyChat(order, phone) {
 
 // --- Admin OTP notification (replaces Green API OTP send) ---
 
+// Meta template name (resubmitted under a new name after the first
+// "admin_otp" submission couldn't be configured) — keep this in sync with
+// the AUTHENTICATION template name in Meta Business Manager / ManyChat.
+const ADMIN_OTP_NOTIFICATION_TYPE = 'admin_otp_new1';
+
 /**
  * Sends the admin-order-management OTP code to the organizer via ManyChat.
  * Reuses the order-confirmation subscriber/flow with notification_type
- * 'admin_otp' — requires a matching branch + the `admin_otp` AUTHENTICATION
- * template in the ManyChat flow (content20260826091942_789880).
+ * ADMIN_OTP_NOTIFICATION_TYPE — requires a matching branch + that
+ * AUTHENTICATION template in the ManyChat flow (content20260826091942_789880).
  * Never throws — the OTP request itself must not fail if ManyChat is down
  * (the MASTER_OTP fallback in bookingService.web.js still works).
  */
@@ -649,14 +654,14 @@ export async function sendAdminOtpManyChat(order, code) {
         }
 
         const otpFields = [
-            { name: NOTIFICATION_TYPE_FIELD, value: 'admin_otp' },
+            { name: NOTIFICATION_TYPE_FIELD, value: ADMIN_OTP_NOTIFICATION_TYPE },
             { name: MC_FIELDS.otpCode, value: code },
         ];
         await setCustomFieldsByName(subscriber.id, otpFields);
         await sendFlow(subscriber.id, ORDER_CONFIRMATION_FLOW_NS);
 
         logManyChatSendSuccess('sendAdminOtpManyChat', {
-            order, phone, subscriberId: subscriber.id, notificationType: 'admin_otp', fields: otpFields,
+            order, phone, subscriberId: subscriber.id, notificationType: ADMIN_OTP_NOTIFICATION_TYPE, fields: otpFields,
         });
         return { sent: true, subscriberId: subscriber.id };
     } catch (err) {

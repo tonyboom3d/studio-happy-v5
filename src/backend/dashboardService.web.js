@@ -27,7 +27,7 @@ const ORDER_DEBUG_USER_ID = 'e5af95ac-27b1-45e9-9de4-bd89adffc953';
 const ORDER_NOTIFICATION_TYPE_LABELS = {
     order_confirmed: 'אישור הזמנה (אוטומטי בתשלום)',
     sketch_selected: 'בחירת סקיצה (אוטומטי)',
-    admin_otp: 'קוד אימות ניהול הזמנה (אוטומטי)',
+    admin_otp_new1: 'קוד אימות ניהול הזמנה (אוטומטי)',
     order_dashboard_message: 'הודעת סטטוס הזמנה (נשלחת מכפתור זה)',
 };
 

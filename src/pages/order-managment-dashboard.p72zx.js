@@ -17,6 +17,8 @@ import {
     sendAvailabilityNudge,
 } from 'backend/staffAdminService.web.js';
 
+import { initiateAdminOtp } from 'backend/bookingService.web.js';
+
 const DASHBOARD_ELEMENT_ID = '#workshopsDashboard1';
 
 const VELO_DEBUG_BUILD = '2026-07-28-staff-tab-v2';
@@ -363,7 +365,15 @@ async function handleDashboardAction(dashboardEl, detail) {
 
     case 'sendWhatsApp':
 
-        await sendDashboardWhatsApp(payload.orderId, payload.phone);
+        if (payload.template === 'admin_otp_new1') {
+
+            await initiateAdminOtp(payload.orderId, payload.phone);
+
+        } else {
+
+            await sendDashboardWhatsApp(payload.orderId, payload.phone, { template: payload.template });
+
+        }
 
         break;
 

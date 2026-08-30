@@ -533,14 +533,17 @@ async function runOrderConfirmationManyChat(order, { allowCreate = true } = {}) 
 }
 
 /**
- * Production entry point — called from data.js on every paid order.
- * Never throws — a ManyChat failure must never block the order.
+ * Production entry point — called from data.js on every paid order, and
+ * reused by the dashboard's manual "resend" action. Never throws — a
+ * ManyChat failure must never block the order.
  */
 export async function sendOrderConfirmationManyChat(order) {
     try {
-        await runOrderConfirmationManyChat(order, { allowCreate: true });
+        const { subscriberId } = await runOrderConfirmationManyChat(order, { allowCreate: true });
+        return { sent: true, subscriberId };
     } catch (err) {
         logManyChatSendError('sendOrderConfirmationManyChat', { order, error: err?.message || String(err) });
+        return { sent: false, reason: 'error', error: err?.message || String(err) };
     }
 }
 

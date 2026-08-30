@@ -347,10 +347,14 @@ var __wdTemplateHtml = `
             <div class="p-5 flex flex-col gap-4">
                 <p class="text-sm text-gray-600">שליחה ללקוח: <strong id="waCustomerName"></strong></p>
                 <div>
+                    <p class="text-xs font-medium text-gray-700 mb-1">בחר תבנית לשליחה:</p>
+                    <div id="waTemplateChoices" class="flex flex-col gap-2"></div>
+                </div>
+                <div>
                     <p class="text-xs font-medium text-gray-700 mb-1">תבניות מאושרות ב-WhatsApp (Meta) הזמינות במערכת:</p>
                     <div id="waTemplatesList" class="flex flex-col gap-2 max-h-48 overflow-y-auto"></div>
                 </div>
-                <p class="text-xs text-gray-500">הכפתור למטה שולח את תבנית "הודעת סטטוס הזמנה" — Meta לא מאפשרת שליחת טקסט חופשי מהדשבורד, רק תבניות מאושרות.</p>
+                <p class="text-xs text-gray-500">Meta לא מאפשרת שליחת טקסט חופשי מהדשבורד, רק תבניות מאושרות.</p>
                 <button onclick="sendWhatsApp()" class="w-full bg-green-500 hover:bg-green-600 text-white font-medium py-2 rounded-lg transition-colors flex items-center justify-center gap-2">
                     <i class="ph ph-paper-plane-right"></i> שלח עכשיו
                 </button>
@@ -1349,6 +1353,7 @@ function __wdInjectGlobalAssets() {
 
         let currentWorkshopId = null;
         let currentOrderId = null;
+        let currentWaTemplate = 'order_confirmed';
         let currentSketchId = null;
         let isAlertFilterActive = false;
 
@@ -3564,11 +3569,31 @@ function __wdInjectGlobalAssets() {
             }
         }
 
-        // Meta doesn't allow sending admin-typed free text or a choice of
-        // template outside an approved WhatsApp template. The button always
-        // sends the fixed "order_dashboard_message" template — the list
-        // below is just a read-only preview of every approved template the
-        // system can send this customer (most are sent automatically).
+        // Meta doesn't allow sending admin-typed free text — only approved
+        // WhatsApp templates. Staff picks one of these two to (re)send
+        // manually; the list below is a read-only preview of every
+        // approved template the system can send this customer (most are
+        // sent automatically and shown here just for reference).
+        const WA_SENDABLE_TEMPLATES = [
+            { value: 'order_confirmed', label: 'אישור הזמנה' },
+            { value: 'admin_otp_new1', label: 'קוד אימות ניהול הזמנה' },
+        ];
+
+        function renderWaTemplateChoices() {
+            const wrap = document.getElementById('waTemplateChoices');
+            if (!wrap) return;
+            wrap.innerHTML = WA_SENDABLE_TEMPLATES.map(opt => `
+                <label class="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                    <input type="radio" name="waTemplateChoice" value="${opt.value}" onchange="setWaTemplate('${opt.value}')" ${currentWaTemplate === opt.value ? 'checked' : ''}>
+                    ${opt.label}
+                </label>
+            `).join('');
+        }
+
+        function setWaTemplate(value) {
+            currentWaTemplate = value;
+        }
+
         function renderWaTemplatesList() {
             const list = document.getElementById('waTemplatesList');
             if (!list) return;
@@ -3591,8 +3616,10 @@ function __wdInjectGlobalAssets() {
                 return;
             }
             currentOrderId = orderId;
+            currentWaTemplate = 'order_confirmed';
             const order = mockOrders.find(o => o.id === orderId);
             document.getElementById('waCustomerName').innerText = order.organizerName || 'ללא שם';
+            renderWaTemplateChoices();
             renderWaTemplatesList();
             openModal('waModal');
         }
@@ -3604,11 +3631,13 @@ function __wdInjectGlobalAssets() {
                 return;
             }
             const order = mockOrders.find(o => o.id === currentOrderId);
+            const chosen = WA_SENDABLE_TEMPLATES.find(o => o.value === currentWaTemplate) || WA_SENDABLE_TEMPLATES[0];
 
-            addLog(currentOrderId, 'נשלחה הודעת וואטסאפ - סטטוס הזמנה');
+            addLog(currentOrderId, `נשלחה הודעת וואטסאפ - ${chosen.label}`);
             dispatchDashboardAction('sendWhatsApp', {
                 orderId: currentOrderId,
                 phone: order.organizerPhone,
+                template: chosen.value,
             });
             closeModal('waModal');
             
@@ -4055,6 +4084,7 @@ window.saveNote = saveNote;
 window.saveTemplate = saveTemplate;
 window.scrollCarousel = scrollCarousel;
 window.sendWhatsApp = sendWhatsApp;
+window.setWaTemplate = setWaTemplate;
 window.openOrderDebug = openOrderDebug;
 window.lookupOrderDebugFromInput = lookupOrderDebugFromInput;
 window.lookupOrderDebugFromModal = lookupOrderDebugFromModal;

@@ -6,7 +6,7 @@ import wixData from 'wix-data';
 import { Permissions, webMethod } from 'wix-web-module';
 import { mediaManager } from 'wix-media-backend';
 import { currentMember } from 'wix-members-backend';
-import { sendOrderDashboardMessageManyChat } from 'backend/manychatService.jsw';
+import { sendOrderDashboardMessageManyChat, sendOrderConfirmationManyChat } from 'backend/manychatService.jsw';
 import { SKETCH_STATUS, SKETCH_STATUSES, normalizeSketchStatus, isLockedStatus } from 'backend/sketchStatus.js';
 import { PERMISSION_KEYS, PERMISSION_DEFAULTS, refId } from 'backend/staffRoles.js';
 import { getItemWithRetry } from 'backend/wixDataRetry.js';
@@ -1688,14 +1688,23 @@ export const updateOrderInternalNotes = webMethod(Permissions.SiteMember, async 
     return { success: true };
 });
 
+// Templates the dashboard's "send WhatsApp" modal lets staff pick between.
+// Meta doesn't allow sending admin-typed free text outside an approved
+// WhatsApp template, so only these fixed system templates are supported.
+const DASHBOARD_SENDABLE_TEMPLATES = {
+    order_dashboard_message: 'הודעת סטטוס הזמנה',
+    order_confirmed: 'אישור הזמנה',
+};
+
 /**
- * Sends the fixed "order_dashboard_message" ManyChat template. Meta doesn't
- * allow sending admin-typed free text outside an approved WhatsApp
- * template, so only this one system message is supported.
+ * Sends one of the fixed ManyChat templates the dashboard supports
+ * (see DASHBOARD_SENDABLE_TEMPLATES) — defaults to "order_dashboard_message".
  */
 export const sendDashboardWhatsApp = webMethod(Permissions.SiteMember, async (orderId, phone, options) => {
     await assertPermission('sendWhatsApp');
-    console.log(`[dashboardService] sendDashboardWhatsApp: order=${orderId} phone=${phone}`);
+    const template = DASHBOARD_SENDABLE_TEMPLATES[options?.template] ? options.template : 'order_dashboard_message';
+    const label = DASHBOARD_SENDABLE_TEMPLATES[template];
+    console.log(`[dashboardService] sendDashboardWhatsApp: order=${orderId} phone=${phone} template=${template}`);
 
     const targetPhone = normalizePhone(phone);
     if (!targetPhone) throw new Error('Invalid phone number');
@@ -1703,13 +1712,16 @@ export const sendDashboardWhatsApp = webMethod(Permissions.SiteMember, async (or
     const order = await getItemWithRetry('WorkshopOrders', orderId, { callerLabel: 'sendDashboardWhatsApp' });
     if (!order) throw new Error('Order not found');
 
-    const result = await sendOrderDashboardMessageManyChat(order, targetPhone);
-    if (!result.sent) {
-        await logOrderAction(orderId, `❌ הודעת WhatsApp (סטטוס הזמנה) לא נשלחה ל-${targetPhone} (${result.reason || 'unknown'}${result.error ? `: ${result.error}` : ''})`, options?.user);
-        throw new Error(`שליחת ההודעה נכשלה (${result.reason || 'unknown'})`);
+    const result = template === 'order_confirmed'
+        ? await sendOrderConfirmationManyChat(order)
+        : await sendOrderDashboardMessageManyChat(order, targetPhone);
+
+    if (!result?.sent) {
+        await logOrderAction(orderId, `❌ הודעת WhatsApp (${label}) לא נשלחה ל-${targetPhone} (${result?.reason || 'unknown'}${result?.error ? `: ${result.error}` : ''})`, options?.user);
+        throw new Error(`שליחת ההודעה נכשלה (${result?.reason || 'unknown'})`);
     }
 
-    await logOrderAction(orderId, `הודעת WhatsApp (סטטוס הזמנה) נשלחה ל-${targetPhone}`, options?.user);
+    await logOrderAction(orderId, `הודעת WhatsApp (${label}) נשלחה ל-${targetPhone}`, options?.user);
     return { success: true };
 });
 

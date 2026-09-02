@@ -8,6 +8,38 @@ import { getTodaySessions, israelDateKey } from './sessions.js';
 
 const SA = { suppressAuth: true };
 
+// Admin QA bypass — this phone skips WorkshopOrders lookup and opens
+// סדנת נרות so the full upsell flow can be tested without a real booking.
+const CANDLES_WORKSHOP_TYPE_ID = '4572e26f-37ae-45c6-a767-5b49ee144bb4';
+const ADMIN_TEST_PHONE = '0523813929';
+const ADMIN_TEST_PHONE_VARIANTS = new Set(getPhoneLookupVariants(ADMIN_TEST_PHONE));
+
+function isAdminTestPhone(phone) {
+    return getPhoneLookupVariants(phone).some((v) => ADMIN_TEST_PHONE_VARIANTS.has(v));
+}
+
+function toIdentifyMatch(session, extras = {}) {
+    return {
+        workshopOrderId: null,
+        organizerName: 'בדיקת אדמין',
+        organizerPhone: ADMIN_TEST_PHONE,
+        sessionId: session?.id || session?.sessionId || null,
+        serviceId: session?.serviceId || null,
+        workshopTypeId: session?.workshopTypeId || CANDLES_WORKSHOP_TYPE_ID,
+        workshopTitle: session?.workshopTitle || 'סדנת נרות',
+        startLabel: session?.startLabel || extras.startLabel || '',
+        start: session?.start || extras.start || new Date().toISOString(),
+    };
+}
+
+/** Today's candle sessions if any; otherwise a synthetic candles workshop. */
+async function findAdminTestCandlesMatches() {
+    const sessions = await getTodaySessions().catch(() => []);
+    const candles = (sessions || []).filter((s) => s.workshopTypeId === CANDLES_WORKSHOP_TYPE_ID);
+    if (candles.length) return candles.map((s) => toIdentifyMatch(s));
+    return [toIdentifyMatch(null, { startLabel: 'בדיקת אדמין' })];
+}
+
 function findMatchingSession(order, sessions) {
     if (order.sessionId) {
         const bySessionId = sessions.find((s) =>
@@ -26,6 +58,8 @@ function findMatchingSession(order, sessions) {
  * maps each to its resolved today's session for display/selection.
  */
 export async function findTodayWorkshopsByPhone(phone) {
+    if (isAdminTestPhone(phone)) return findAdminTestCandlesMatches();
+
     const variants = getPhoneLookupVariants(phone);
     if (!variants.length) return [];
 

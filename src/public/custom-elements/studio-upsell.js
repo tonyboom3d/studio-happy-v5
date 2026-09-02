@@ -21,6 +21,31 @@
 
 const TAG_NAME = 'studio-upsell';
 
+// Admin QA: this phone skips order lookup and opens סדנת נרות (must stay in
+// sync with backend/studioUpsell/identify.js).
+const ADMIN_TEST_PHONE = '0523813929';
+const ADMIN_TEST_PHONE_DIGITS = new Set(['0523813929', '523813929', '972523813929']);
+const CANDLES_WORKSHOP_TYPE_ID = '4572e26f-37ae-45c6-a767-5b49ee144bb4';
+
+function isAdminTestPhone(phone) {
+    const digits = String(phone || '').replace(/\D/g, '');
+    return digits === ADMIN_TEST_PHONE || ADMIN_TEST_PHONE_DIGITS.has(digits);
+}
+
+function adminCandlesWorkshop() {
+    return {
+        workshopOrderId: null,
+        organizerName: 'בדיקת אדמין',
+        organizerPhone: ADMIN_TEST_PHONE,
+        sessionId: null,
+        serviceId: null,
+        workshopTypeId: CANDLES_WORKSHOP_TYPE_ID,
+        workshopTitle: 'סדנת נרות',
+        startLabel: 'בדיקת אדמין',
+        start: new Date().toISOString(),
+    };
+}
+
 const STYLE = `
     @import url('https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;600;700;800;900&display=swap');
     :host, .su-root { all: initial; }
@@ -337,6 +362,10 @@ class StudioUpsellElement extends HTMLElement {
         } else if (type === 'lookupByPhone') {
             const matches = result?.matches || [];
             if (!matches.length) {
+                if (isAdminTestPhone(this._state.phone)) {
+                    this._selectWorkshop(adminCandlesWorkshop());
+                    return;
+                }
                 this._state.screen = 'notFound';
             } else if (matches.length === 1) {
                 this._selectWorkshop(matches[0]);

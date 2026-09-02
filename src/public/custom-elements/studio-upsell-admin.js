@@ -256,6 +256,7 @@ const STATUS_LABELS = {
     pending: { label: 'ממתין', cls: 'sa-badge-amber' },
     printing: { label: 'מדפיס', cls: 'sa-badge-amber' },
     printed: { label: 'הודפס', cls: 'sa-badge-green' },
+    unconfirmed: { label: 'נשלח - לא מאושר', cls: 'sa-badge-amber' },
     failed: { label: 'נכשל', cls: 'sa-badge-red' },
 };
 
@@ -1015,6 +1016,7 @@ class StudioUpsellAdminElement extends HTMLElement {
         const statusOptions = [
             ['', 'כל הסטטוסים'],
             ['pending', 'ממתין'],
+            ['unconfirmed', 'נשלח - לא מאושר'],
             ['printing', 'מדפיס'],
             ['printed', 'הודפס'],
             ['failed', 'נכשל'],
@@ -1122,7 +1124,7 @@ class StudioUpsellAdminElement extends HTMLElement {
                     <td>${escapeHtml(payload.buyerName || '')}</td>
                     <td>${escapeHtml(payload.workshopTitle || '')}</td>
                     <td>${formatIls(payload.amountPaid ?? payload.total)}</td>
-                    <td><span class="sa-badge ${status.cls}">${status.label}</span></td>
+                    <td><span class="sa-badge ${status.cls}" ${p.status === 'unconfirmed' ? `title="הבקשה נשלחה למדפסת אך לא התקבל אישור הדפסה בפועל - יתכן שכן הודפס. המערכת תנסה שוב אוטומטית."` : ''}>${status.label}</span></td>
                     <td>${p.attempts || 0}</td>
                     <td>${p.errorMessage ? `<span style="cursor:help;color:#b91c1c;font-size:12px;" title="${escapeHtml(p.errorMessage)}">${escapeHtml(p.errorMessage.slice(0, 24))}${p.errorMessage.length > 24 ? '…' : ''}</span>` : ''}</td>
                     <td class="sa-actions-cell">

@@ -10,6 +10,20 @@
  * Idempotency: ticketId is derived from the PrintQueue row's stable _id, so
  * a retry after a false-negative timeout (Worker/broker round trip can take
  * 10-15s+) never causes a double physical print.
+ *
+ * Status model — 4 outcomes, not 2:
+ *   - 'printed'      the Worker got a `PrintSucces` ack from the printer
+ *                     itself (see mqtt-bridge/src/mqttClient.js) — the only
+ *                     status that actually confirms paper came out.
+ *   - 'unconfirmed'   the Worker's MQTT PUBLISH was accepted by the broker
+ *                     (QoS 2 handshake completed) but no printer ack arrived
+ *                     in time. This does NOT mean it failed — the broker
+ *                     accepting a publish only proves broker delivery, never
+ *                     physical output — it means "we genuinely don't know".
+ *                     Retried automatically (safe: same ticketId every time).
+ *   - 'failed'        a real error: render/network/broker/auth failure, or
+ *                     'unconfirmed' that exhausted MAX_ATTEMPTS.
+ *   - 'printing'      transient — set synchronously before the network call.
  */
 import wixData from 'wix-data';
 import wixSecretsBackend from 'wix-secrets-backend';
@@ -77,10 +91,31 @@ async function markFailed(row, message) {
         ...row,
         status: 'failed',
         attempts,
+        confirmed: false,
         errorMessage: String(message).slice(0, 500),
         lastAttemptAt: new Date(),
     }, SA).catch((err) => {
         console.error('[studioUpsell/printDispatch] failed to persist failure state:', err?.message || err);
+        return null;
+    });
+}
+
+/** Broker accepted the publish, but no printer ack — see status model above. */
+async function markUnconfirmed(row) {
+    const attempts = (Number(row.attempts) || 0) + 1;
+    const status = attempts >= MAX_ATTEMPTS ? 'failed' : 'unconfirmed';
+    console.warn(`[studioUpsell/printDispatch] print job ${row._id}: sent but no printer ack (attempt ${attempts}/${MAX_ATTEMPTS}) -> ${status}`);
+    return wixData.update('PrintQueue', {
+        ...row,
+        status,
+        attempts,
+        confirmed: false,
+        errorMessage: status === 'failed'
+            ? 'לא התקבל אישור הדפסה מהמדפסת - יתכן שהודפס בפועל, יש לבדוק מול הדפסה פיזית'
+            : null,
+        lastAttemptAt: new Date(),
+    }, SA).catch((err) => {
+        console.error('[studioUpsell/printDispatch] failed to persist unconfirmed state:', err?.message || err);
         return null;
     });
 }
@@ -119,9 +154,14 @@ export async function dispatchPrintJob(row) {
             return markFailed(row, data?.error || `HTTP ${res.status}`);
         }
 
+        if (data.confirmed === false) {
+            return markUnconfirmed(row);
+        }
+
         return await wixData.update('PrintQueue', {
             ...row,
             status: 'printed',
+            confirmed: true,
             printedAt: new Date(),
             errorMessage: null,
         }, SA);
@@ -141,7 +181,7 @@ export async function dispatchPrintJob(row) {
  */
 export async function retryPendingPrintJobs() {
     const result = await wixData.query('PrintQueue')
-        .hasSome('status', ['pending', 'printing', 'failed'])
+        .hasSome('status', ['pending', 'printing', 'failed', 'unconfirmed'])
         .lt('attempts', MAX_ATTEMPTS)
         .limit(100)
         .find(SA)

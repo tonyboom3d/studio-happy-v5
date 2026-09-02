@@ -10,6 +10,8 @@ import {
     listAddOnTransactions,
     listPrintQueue,
     markPrintJobStatus,
+    reprintPrintJob,
+    setPrintJobPaymentMethod,
     uploadAddOnImage,
     approveAddOnOrderAdmin,
 } from 'backend/studioUpsellService.web.js';
@@ -99,6 +101,16 @@ async function handleAction(el, detail) {
         }
         case 'markPrintJobStatus': {
             await markPrintJobStatus(payload?.printQueueId, payload?.status);
+            pushData(el, type, requestId, { success: true });
+            return;
+        }
+        case 'reprintPrintJob': {
+            const result = await reprintPrintJob(payload?.printQueueId);
+            pushData(el, type, requestId, result);
+            return;
+        }
+        case 'setPrintJobPaymentMethod': {
+            await setPrintJobPaymentMethod(payload?.printQueueId, payload?.paymentMethod);
             pushData(el, type, requestId, { success: true });
             return;
         }

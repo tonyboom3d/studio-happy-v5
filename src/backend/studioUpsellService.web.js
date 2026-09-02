@@ -15,6 +15,7 @@ import { createAddOnCheckout } from 'backend/studioUpsell/checkout.js';
 import { confirmAddOnOrderByToken, getAddOnOrderByToken, approveStaffOnAddOnOrder } from 'backend/studioUpsell/reconcile.js';
 import { uploadBase64ImageToWixMedia, wixMediaToPublicUrl } from 'backend/studioUpsell/mediaUpload.js';
 import { hasPrintJob } from 'backend/studioUpsell/printQueue.js';
+import { dispatchPrintJob } from 'backend/studioUpsell/printDispatch.js';
 
 const SA = { suppressAuth: true };
 
@@ -309,5 +310,32 @@ export const markPrintJobStatus = webMethod(Permissions.SiteMember, async (print
         ...existing,
         status,
         printedAt: status === 'printed' ? new Date() : existing.printedAt,
+    }, SA);
+});
+
+/** Admin "הדפס מחדש" — resets the attempt counter and re-sends the same row (same stable ticketId, so the physical receipt is identical) to the mqtt-bridge Worker. */
+export const reprintPrintJob = webMethod(Permissions.SiteMember, async (printQueueId) => {
+    await assertEmployeeAccess('manageAddOnsSystem');
+    const existing = await wixData.get('PrintQueue', printQueueId, SA);
+    if (!existing) throw new Error('Print job not found');
+
+    const reset = await wixData.update('PrintQueue', {
+        ...existing,
+        attempts: 0,
+        errorMessage: null,
+    }, SA);
+
+    const result = await dispatchPrintJob(reset);
+    return { success: result?.status !== 'failed', printQueue: result };
+});
+
+/** Admin detail modal — lets staff set the payment method by hand since Wix's eCom Orders API doesn't reliably expose it for these in-person/custom-line-item checkouts. */
+export const setPrintJobPaymentMethod = webMethod(Permissions.SiteMember, async (printQueueId, paymentMethod) => {
+    await assertEmployeeAccess('manageAddOnsSystem');
+    const existing = await wixData.get('PrintQueue', printQueueId, SA);
+    if (!existing) throw new Error('Print job not found');
+    return wixData.update('PrintQueue', {
+        ...existing,
+        payload: { ...(existing.payload || {}), paymentMethod: paymentMethod || null },
     }, SA);
 });

@@ -161,6 +161,15 @@ const STYLE = `
     .sa-seg-btn { padding: 9px 14px; border: none; background: transparent; font-family: inherit; font-size: 12px; font-weight: 700; color: #6b7280; cursor: pointer; }
     .sa-seg-btn.active { background: #4f46e5; color: #fff; }
     .sa-seg-btn:disabled { opacity: .5; cursor: not-allowed; }
+    .sa-modal-backdrop {
+        position: fixed; inset: 0; background: rgba(17,24,39,.55); z-index: 500;
+        display: flex; align-items: center; justify-content: center; padding: 20px;
+    }
+    .sa-modal-card {
+        background: #fff; border-radius: 16px; padding: 22px; max-width: 560px; width: 100%;
+        max-height: 90vh; overflow-y: auto; box-shadow: 0 20px 50px rgba(0,0,0,.25);
+    }
+    .sa-modal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; gap: 10px; }
 
     @media (max-width: 640px) {
         .sa-root { padding: 10px; }
@@ -273,6 +282,9 @@ class StudioUpsellAdminElement extends HTMLElement {
             transactionFilters: { status: '', workshopTypeId: '', addOnId: '', date: '' },
             transactions: null,
             printQueue: null,
+            printFilters: { status: '' },
+            printDetailId: null, // PrintQueue._id currently shown in the detail modal, or null
+            reprintingId: null, // PrintQueue._id currently mid-reprint (disables its button)
             toast: null,
             error: null,
             togglingWorkshopTypeId: null,
@@ -385,6 +397,7 @@ class StudioUpsellAdminElement extends HTMLElement {
             s.uploadingImage = false;
             s.togglingWorkshopTypeId = null;
             s.quietSettingsSave = false;
+            s.reprintingId = null;
             this._toast(result.error);
             this.render();
             return;
@@ -407,6 +420,12 @@ class StudioUpsellAdminElement extends HTMLElement {
         } else if (type === 'loadPrintQueue') {
             s.printQueue = result || [];
         } else if (type === 'markPrintJobStatus') {
+            this._dispatch('loadPrintQueue', {});
+        } else if (type === 'reprintPrintJob') {
+            s.reprintingId = null;
+            this._toast(result?.success ? 'נשלח להדפסה מחדש בהצלחה' : `ההדפסה מחדש נכשלה: ${result?.printQueue?.errorMessage || 'שגיאה לא ידועה'}`);
+            this._dispatch('loadPrintQueue', {});
+        } else if (type === 'setPrintJobPaymentMethod') {
             this._dispatch('loadPrintQueue', {});
         } else if (type === 'approveOrder') {
             this._toast('ההזמנה אושרה — הבון נשלח להדפסה.');
@@ -990,38 +1009,142 @@ class StudioUpsellAdminElement extends HTMLElement {
         `;
     }
 
+    _renderPrintFiltersBar() {
+        const s = this._state;
+        const f = s.printFilters;
+        const statusOptions = [
+            ['', 'כל הסטטוסים'],
+            ['pending', 'ממתין'],
+            ['printing', 'מדפיס'],
+            ['printed', 'הודפס'],
+            ['failed', 'נכשל'],
+        ].map(([v, label]) => `<option value="${v}" ${f.status === v ? 'selected' : ''}>${label}</option>`).join('');
+
+        return `
+            <div class="sa-card" style="margin-bottom:16px;">
+                <div class="sa-row">
+                    <div class="sa-field"><label class="sa-label">סטטוס</label><select class="sa-select" id="saPrintFilterStatus">${statusOptions}</select></div>
+                    <div class="sa-field" style="flex:0;"><button class="sa-btn sa-btn-ghost" id="saPrintFilterClearBtn">איפוס סינון</button></div>
+                </div>
+            </div>
+        `;
+    }
+
+    /** Full read-only receipt mirror of what the Worker prints, plus print-status history — opened via the "פרטים" button. */
+    _renderPrintDetailModal() {
+        const s = this._state;
+        const job = (s.printQueue || []).find((p) => p._id === s.printDetailId);
+        if (!job) return '';
+        const p = job.payload || {};
+        const status = STATUS_LABELS[job.status] || { label: job.status, cls: 'sa-badge-gray' };
+
+        const itemRows = (p.items || []).map((i) => `
+            <tr>
+                <td>${escapeHtml(i.name || '')}</td>
+                <td>${i.qty ?? ''}</td>
+                <td>${i.price != null ? formatIls(i.price) : ''}</td>
+            </tr>
+        `).join('') || `<tr><td colspan="3" style="color:#9ca3af;">אין פריטים</td></tr>`;
+
+        const paymentOptions = [
+            ['', 'לא ידוע'],
+            ['cash', 'מזומן'],
+            ['credit', 'אשראי'],
+            ['bit', 'ביט'],
+            ['other', 'אחר'],
+        ].map(([v, label]) => `<option value="${v}" ${(p.paymentMethod || '') === v ? 'selected' : ''}>${label}</option>`).join('');
+
+        return `
+            <div class="sa-modal-backdrop" data-print-detail-close="1">
+                <div class="sa-modal-card" dir="rtl">
+                    <div class="sa-modal-header">
+                        <h2 class="sa-section-title" style="margin:0;">פרטי בון — ${escapeHtml(p.orderNumber || '(ללא מספר)')}</h2>
+                        <button class="sa-icon-btn" data-print-detail-close="1" title="סגירה">✕</button>
+                    </div>
+
+                    <div class="sa-row" style="margin-bottom:14px;">
+                        <span class="sa-badge ${status.cls}">${status.label}</span>
+                        <span class="sa-hint" style="margin:0;">נסיונות: ${job.attempts || 0}</span>
+                        ${job.printedAt ? `<span class="sa-hint" style="margin:0;">הודפס: ${escapeHtml(formatDate(job.printedAt))}</span>` : ''}
+                    </div>
+
+                    ${job.errorMessage ? `<div class="sa-card" style="background:#fef2f2;border-color:#fecaca;padding:12px 14px;margin-bottom:14px;"><strong style="color:#b91c1c;">שגיאת הדפסה:</strong> <span style="color:#7f1d1d;">${escapeHtml(job.errorMessage)}</span></div>` : ''}
+
+                    <div class="sa-row" style="margin-bottom:10px;">
+                        <div class="sa-field"><span class="sa-label">שם מבצע ההזמנה</span><div>${escapeHtml(p.buyerName || '—')}</div></div>
+                        ${p.payerName ? `<div class="sa-field"><span class="sa-label">שם מבצע התשלום</span><div>${escapeHtml(p.payerName)}</div></div>` : ''}
+                        <div class="sa-field"><span class="sa-label">סדנה</span><div>${escapeHtml(p.workshopTitle || '—')}</div></div>
+                        <div class="sa-field"><span class="sa-label">תאריך תשלום</span><div>${escapeHtml(formatDate(p.paidAt))}</div></div>
+                    </div>
+                    ${p.staffApprovedByName ? `<div class="sa-field" style="margin-bottom:10px;"><span class="sa-label">אישור עובד</span><div>${escapeHtml(p.staffApprovedByName)}</div></div>` : ''}
+
+                    <table class="sa-table" style="margin-bottom:10px;">
+                        <thead><tr><th>פריט</th><th>כמות</th><th>מחיר</th></tr></thead>
+                        <tbody>${itemRows}</tbody>
+                    </table>
+
+                    <div class="sa-row" style="margin-bottom:14px;">
+                        <div class="sa-field"><span class="sa-label">סה"כ שולם</span><div style="font-weight:800;">${formatIls(p.amountPaid ?? p.total)}</div></div>
+                        <div class="sa-field">
+                            <label class="sa-label">אמצעי תשלום</label>
+                            <select class="sa-select" id="saPrintPaymentMethod" data-print-payment-id="${job._id}">${paymentOptions}</select>
+                        </div>
+                    </div>
+
+                    <div class="sa-row">
+                        <button class="sa-btn sa-btn-primary" data-reprint-id="${job._id}" ${s.reprintingId === job._id ? 'disabled' : ''}>${s.reprintingId === job._id ? 'שולח...' : 'הדפס מחדש'}</button>
+                        <button class="sa-btn sa-btn-ghost" data-print-detail-close="1">סגירה</button>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
     _renderPrintTab() {
         const s = this._state;
-        if (s.printQueue === null) return `<div class="sa-card sa-loading"><div class="sa-spinner"></div>טוען תור הדפסה...</div>`;
-        if (!s.printQueue.length) return `<div class="sa-card sa-empty">תור ההדפסה ריק.</div>`;
+        const filtersBar = this._renderPrintFiltersBar();
+        if (s.printQueue === null) return `${filtersBar}<div class="sa-card sa-loading"><div class="sa-spinner"></div>טוען תור הדפסה...</div>`;
 
-        const rows = s.printQueue.map((p) => {
+        const filtered = s.printFilters.status
+            ? s.printQueue.filter((p) => p.status === s.printFilters.status)
+            : s.printQueue;
+
+        if (!filtered.length) return `${filtersBar}<div class="sa-card sa-empty">${s.printQueue.length ? 'אין בונים התואמים לסינון.' : 'תור ההדפסה ריק.'}</div>`;
+
+        const rows = filtered.map((p) => {
             const status = STATUS_LABELS[p.status] || { label: p.status, cls: 'sa-badge-gray' };
             const payload = p.payload || {};
+            const isReprinting = s.reprintingId === p._id;
             return `
                 <tr>
                     <td>${formatDate(p._createdDate)}</td>
-                    <td>${escapeHtml(payload.customerName || '')}</td>
+                    <td>${escapeHtml(payload.orderNumber || '—')}</td>
+                    <td>${escapeHtml(payload.buyerName || '')}</td>
                     <td>${escapeHtml(payload.workshopTitle || '')}</td>
-                    <td>${formatIls(payload.total)}</td>
+                    <td>${formatIls(payload.amountPaid ?? payload.total)}</td>
                     <td><span class="sa-badge ${status.cls}">${status.label}</span></td>
+                    <td>${p.attempts || 0}</td>
+                    <td>${p.errorMessage ? `<span style="cursor:help;color:#b91c1c;font-size:12px;" title="${escapeHtml(p.errorMessage)}">${escapeHtml(p.errorMessage.slice(0, 24))}${p.errorMessage.length > 24 ? '…' : ''}</span>` : ''}</td>
                     <td class="sa-actions-cell">
-                        ${p.status !== 'printed' ? `<button class="sa-btn sa-btn-primary" data-print-id="${p._id}" data-print-status="printed">סמן כהודפס</button>` : ''}
-                        ${p.status !== 'failed' ? `<button class="sa-btn sa-btn-danger" data-print-id="${p._id}" data-print-status="failed">סמן ככשל</button>` : ''}
+                        <button class="sa-btn sa-btn-ghost" data-print-detail="${p._id}">פרטים</button>
+                        <button class="sa-btn sa-btn-primary" data-reprint-id="${p._id}" ${isReprinting ? 'disabled' : ''}>${isReprinting ? 'שולח...' : 'הדפס מחדש'}</button>
+                        ${p.status !== 'printed' ? `<button class="sa-btn sa-btn-ghost" data-print-id="${p._id}" data-print-status="printed" title="סמן כהודפס ידנית">✓</button>` : ''}
                     </td>
                 </tr>
             `;
         }).join('');
 
         return `
+            ${filtersBar}
             <div class="sa-card">
                 <div class="sa-table-wrap">
                 <table class="sa-table">
-                    <thead><tr><th>תאריך</th><th>לקוח</th><th>סדנה</th><th>סכום</th><th>סטטוס</th><th></th></tr></thead>
+                    <thead><tr><th>תאריך</th><th>הזמנה</th><th>לקוח</th><th>סדנה</th><th>סכום</th><th>סטטוס</th><th>נסיונות</th><th>שגיאה</th><th></th></tr></thead>
                     <tbody>${rows}</tbody>
                 </table>
                 </div>
             </div>
+            ${this._renderPrintDetailModal()}
         `;
     }
 
@@ -1278,6 +1401,40 @@ class StudioUpsellAdminElement extends HTMLElement {
                     printQueueId: btn.getAttribute('data-print-id'),
                     status: btn.getAttribute('data-print-status'),
                 });
+            });
+        });
+
+        const applyPrintFilters = () => this.render();
+        const printFilterStatus = root.querySelector('#saPrintFilterStatus');
+        if (printFilterStatus) printFilterStatus.addEventListener('change', () => { s.printFilters.status = printFilterStatus.value; applyPrintFilters(); });
+        const printFilterClearBtn = root.querySelector('#saPrintFilterClearBtn');
+        if (printFilterClearBtn) printFilterClearBtn.addEventListener('click', () => { s.printFilters = { status: '' }; applyPrintFilters(); });
+
+        root.querySelectorAll('[data-print-detail]').forEach((btn) => {
+            btn.addEventListener('click', () => { s.printDetailId = btn.getAttribute('data-print-detail'); this.render(); });
+        });
+        root.querySelectorAll('[data-print-detail-close]').forEach((el) => {
+            el.addEventListener('click', (e) => {
+                if (e.target !== el) return; // ignore clicks bubbling up from inside the modal card
+                s.printDetailId = null;
+                this.render();
+            });
+        });
+
+        root.querySelectorAll('[data-reprint-id]').forEach((btn) => {
+            btn.addEventListener('click', () => {
+                const printQueueId = btn.getAttribute('data-reprint-id');
+                s.reprintingId = printQueueId;
+                this.render();
+                this._dispatch('reprintPrintJob', { printQueueId });
+            });
+        });
+
+        const paymentMethodSelect = root.querySelector('#saPrintPaymentMethod');
+        if (paymentMethodSelect) paymentMethodSelect.addEventListener('change', () => {
+            this._dispatch('setPrintJobPaymentMethod', {
+                printQueueId: paymentMethodSelect.getAttribute('data-print-payment-id'),
+                paymentMethod: paymentMethodSelect.value || null,
             });
         });
 

@@ -5,6 +5,7 @@ import { processDeadlineReminders, processConfirmations } from 'backend/shiftCon
 import { fetchEcomOrderByCheckoutId, reconcileEcomOrder } from 'backend/orderReconciliation.js';
 import { ensureHolidaysSynced } from 'backend/holidayService.js';
 import { flushOutbox } from 'backend/notificationOutbox.js';
+import { retryPendingPrintJobs } from 'backend/studioUpsell/printDispatch.js';
 
 const SA = { suppressAuth: true, suppressHooks: true };
 
@@ -221,4 +222,15 @@ export async function reconcileStuckWorkshopOrders() {
         console.log(`[jobs] reconcileStuckWorkshopOrders: reconciled=${reconciled} abandoned=${abandoned} stillPending=${stillPending}`);
     }
     return { reconciled, abandoned, stillPending };
+}
+
+/**
+ * Scheduled job (hourly via jobs.config — Wix jobs minimum interval is 1h)
+ * — safety net for PrintQueue rows whose immediate dispatch (see
+ * studioUpsell/printQueue.js enqueuePrintJob) didn't succeed, e.g. the
+ * HSPOS broker or printer was temporarily unreachable. See
+ * studioUpsell/printDispatch.js for the retry/backoff/give-up logic.
+ */
+export async function retryPrintQueueHourly() {
+    return retryPendingPrintJobs();
 }

@@ -7,9 +7,10 @@
  *      (safety net — Wix scheduled jobs have a 1h minimum interval, see
  *      jobs.config, so this is a coarse backstop, not a fast retry loop)
  *
- * Idempotency: ticketId is derived from the PrintQueue row's stable _id, so
- * a retry after a false-negative timeout (Worker/broker round trip can take
- * 10-15s+) never causes a double physical print.
+ * Idempotency: automatic retries reuse ticketId `PQ_{rowId}` so a false
+ * negative (timeout / unconfirmed) never causes a double physical print —
+ * the HSPOS printer ignores duplicate ticket IDs. Manual "הדפס מחדש" from
+ * the admin dashboard passes forceNewTicket to append a unique suffix instead.
  *
  * Status model — 4 outcomes, not 2:
  *   - 'printed'      the Worker got a `PrintSucces` ack from the printer
@@ -52,8 +53,11 @@ function resolvePrinterConfig(_row) {
     return undefined;
 }
 
-function buildReceiptBody(row) {
+function buildReceiptBody(row, { forceNewTicket = false } = {}) {
     const p = row.payload || {};
+    const ticketId = forceNewTicket
+        ? `PQ_${row._id}_R${Date.now()}`
+        : `PQ_${row._id}`;
     return {
         buyerName: p.buyerName || '',
         payerName: p.payerName || undefined,
@@ -66,7 +70,7 @@ function buildReceiptBody(row) {
         amountPaid: p.amountPaid ?? p.total,
         paymentMethod: p.paymentMethod || undefined,
         qrUrl: p.qrUrl || undefined,
-        ticketId: `PQ_${row._id}`,
+        ticketId,
         printer: resolvePrinterConfig(row),
     };
 }
@@ -125,7 +129,7 @@ async function markUnconfirmed(row) {
  * synchronously before the network call — a concurrency guard so the hourly
  * retry job and an admin's manual "reprint" can't race on the same row.
  */
-export async function dispatchPrintJob(row) {
+export async function dispatchPrintJob(row, { forceNewTicket = false } = {}) {
     if (!row?._id) return { success: false, error: 'missing_row' };
 
     await wixData.update('PrintQueue', { ...row, status: 'printing', lastAttemptAt: new Date() }, SA).catch((err) => {
@@ -146,7 +150,7 @@ export async function dispatchPrintJob(row) {
         const res = await fetchWithTimeout(`${WORKER_URL}?token=${encodeURIComponent(secret)}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(buildReceiptBody(row)),
+            body: JSON.stringify(buildReceiptBody(row, { forceNewTicket })),
         }, FETCH_TIMEOUT_MS);
 
         const data = await res.json().catch(() => ({}));

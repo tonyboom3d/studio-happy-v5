@@ -313,7 +313,7 @@ export const markPrintJobStatus = webMethod(Permissions.SiteMember, async (print
     }, SA);
 });
 
-/** Admin "הדפס מחדש" — resets the attempt counter and re-sends the same row (same stable ticketId, so the physical receipt is identical) to the mqtt-bridge Worker. */
+/** Admin "הדפס מחדש" — fresh ticketId so the printer accepts another physical copy (HSPOS ignores duplicate ticket IDs). */
 export const reprintPrintJob = webMethod(Permissions.SiteMember, async (printQueueId) => {
     await assertEmployeeAccess('manageAddOnsSystem');
     const existing = await wixData.get('PrintQueue', printQueueId, SA);
@@ -325,7 +325,7 @@ export const reprintPrintJob = webMethod(Permissions.SiteMember, async (printQue
         errorMessage: null,
     }, SA);
 
-    const result = await dispatchPrintJob(reset);
+    const result = await dispatchPrintJob(reset, { forceNewTicket: true });
     return { success: result?.status !== 'failed', printQueue: result };
 });
 

@@ -53,6 +53,48 @@ function mediaAlt(entry, fallback) {
     return fallback || '';
 }
 
+/** Formats workshop description into readable paragraphs + duration badge. */
+function renderDescription(text) {
+    if (!text) return '<p class="bl-desc-empty">פרטי הסדנה יתעדכנו בקרוב.</p>';
+
+    const raw = String(text).trim();
+    const lines = raw.split(/\n+/).map((s) => s.trim()).filter(Boolean);
+    let bodyLines = lines;
+    let durationLine = '';
+
+    const durationIdx = lines.findIndex((line) => /משך\s*(ה)?סדנ[אה]/i.test(line));
+    if (durationIdx >= 0) {
+        durationLine = lines[durationIdx].replace(/^\*+\s*/, '');
+        bodyLines = lines.filter((_, i) => i !== durationIdx);
+    }
+
+    let paragraphs = bodyLines;
+    if (paragraphs.length === 1 && paragraphs[0].length > 140) {
+        paragraphs = paragraphs[0]
+            .split(/(?<=[!.…])\s+/u)
+            .map((s) => s.trim())
+            .filter(Boolean);
+        if (paragraphs.length > 3) {
+            const mid = Math.ceil(paragraphs.length / 2);
+            paragraphs = [
+                paragraphs.slice(0, mid).join(' '),
+                paragraphs.slice(mid).join(' '),
+            ];
+        }
+    }
+
+    const bodyHtml = paragraphs.map((part, i) => {
+        const cls = i === 0 ? 'bl-desc-lead' : 'bl-desc-p';
+        return `<p class="${cls}">${escapeHtml(part)}</p>`;
+    }).join('');
+
+    const durationHtml = durationLine
+        ? `<div class="bl-desc-duration"><span class="bl-desc-duration-icon">⏱</span>${escapeHtml(durationLine)}</div>`
+        : '';
+
+    return `<div class="bl-desc-body">${bodyHtml}${durationHtml}</div>`;
+}
+
 /** Minimal Ricos (Rich Content) renderer: paragraphs, headings, lists, dividers, text decorations. */
 function renderRicos(content) {
     if (!content) return '<p class="bl-price-placeholder">פרטי התמחור יתעדכנו בקרוב.</p>';
@@ -353,7 +395,7 @@ const STYLE = `
     .bl-desc-card {
         background: #fff;
         border-radius: 28px;
-        padding: 28px 30px;
+        padding: 32px 36px 28px;
         margin: 36px auto 0;
         max-width: 1140px;
         box-shadow: 0 10px 30px rgba(37, 38, 38, 0.06);
@@ -361,8 +403,65 @@ const STYLE = `
         position: relative;
         z-index: 1;
     }
-    .bl-desc-card h2 { font-size: 24px; margin-bottom: 10px; color: #4097C3; }
-    .bl-desc-card p { font-size: 16px; line-height: 1.7; color: #525252; font-weight: 600; }
+    .bl-desc-card h2 {
+        font-size: 26px;
+        margin: 0 0 8px;
+        color: #4097C3;
+        text-align: center;
+    }
+    .bl-desc-subtitle {
+        text-align: center;
+        font-size: 17px;
+        font-weight: 700;
+        color: #FF5FC0;
+        margin: 0 0 18px;
+    }
+    .bl-desc-body {
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+        max-width: 860px;
+        margin: 0 auto;
+        text-align: center;
+    }
+    .bl-desc-lead {
+        font-size: 18px;
+        line-height: 1.8;
+        color: #262626;
+        font-weight: 700;
+        margin: 0;
+    }
+    .bl-desc-p {
+        font-size: 16px;
+        line-height: 1.85;
+        color: #525252;
+        font-weight: 600;
+        margin: 0;
+    }
+    .bl-desc-empty {
+        text-align: center;
+        font-size: 16px;
+        color: #525252;
+        font-weight: 600;
+        margin: 0;
+    }
+    .bl-desc-duration {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        margin-top: 6px;
+        padding: 10px 20px;
+        border-radius: 999px;
+        background: linear-gradient(135deg, #fff8ed 0%, #fff 100%);
+        border: 2px solid #F2AF49;
+        color: #262626;
+        font-weight: 800;
+        font-size: 15px;
+        align-self: center;
+        box-shadow: 0 4px 14px rgba(242, 175, 73, 0.15);
+    }
+    .bl-desc-duration-icon { font-size: 16px; line-height: 1; }
     /* ---------- Marquee strip ---------- */
     .bl-marquee-wrap {
         margin: 40px 0;
@@ -705,7 +804,6 @@ const STYLE = `
         margin-top: 22px;
         width: 100%;
         max-width: 780px;
-        display: block;
         margin-inline: auto;
         border: none;
         border-radius: 999px;
@@ -719,9 +817,31 @@ const STYLE = `
         align-items: center;
         justify-content: center;
         gap: 10px;
+        animation: bl-submit-pulse 2.8s ease-in-out infinite;
     }
-    .bl-submit-btn:hover:not(:disabled) { transform: scale(1.03); box-shadow: 0 0 26px rgba(255,255,255,0.75); }
-    .bl-submit-btn:disabled { opacity: 0.7; cursor: not-allowed; }
+    @keyframes bl-submit-pulse {
+        0%, 100% {
+            transform: scale(1);
+            box-shadow: 0 4px 16px rgba(255, 255, 255, 0.25);
+        }
+        50% {
+            transform: scale(1.015);
+            box-shadow: 0 8px 28px rgba(255, 255, 255, 0.55);
+        }
+    }
+    .bl-submit-btn:hover:not(:disabled) {
+        animation-play-state: paused;
+        transform: scale(1.03);
+        box-shadow: 0 0 26px rgba(255, 255, 255, 0.75);
+    }
+    .bl-submit-btn:disabled {
+        opacity: 0.7;
+        cursor: not-allowed;
+        animation: none;
+    }
+    @media (prefers-reduced-motion: reduce) {
+        .bl-submit-btn { animation: none; }
+    }
     .bl-spinner { width: 18px; height: 18px; animation: bl-spin 0.8s linear infinite; }
     @keyframes bl-spin { to { transform: rotate(360deg); } }
 
@@ -953,7 +1073,8 @@ class BirthdayLandingElement extends HTMLElement {
             <div class="bl-section">
                 <div class="bl-desc-card">
                     <h2>${escapeHtml(workshop.title || '')}</h2>
-                    <p>${escapeHtml(workshop.description || '')}</p>
+                    ${workshop.subtitle ? `<p class="bl-desc-subtitle">${escapeHtml(workshop.subtitle)}</p>` : ''}
+                    ${renderDescription(workshop.description)}
                 </div>
             </div>
             ${this._renderMarquee(workshop)}

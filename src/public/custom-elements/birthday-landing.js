@@ -275,22 +275,87 @@ const STYLE = `
     .bl-root textarea, .bl-root select { font-family: 'Quicksand', 'Varela Round', 'Rubik', Arial, sans-serif; }
     .bl-root button { cursor: pointer; }
 
-    /* Floating background blobs */
+    /* Floating background layer */
+    .bl-bg-layer {
+        position: absolute;
+        inset: 0;
+        overflow: hidden;
+        pointer-events: none;
+        z-index: 0;
+    }
     .bl-blob {
         position: absolute;
         border-radius: 50%;
-        filter: blur(2px);
-        opacity: 0.16;
-        z-index: 0;
+        filter: blur(3px);
+        opacity: 0.14;
         pointer-events: none;
-        animation: bl-float 9s ease-in-out infinite;
+        animation: bl-float-a 11s ease-in-out infinite;
+        will-change: transform;
     }
-    @keyframes bl-float {
-        0%, 100% { transform: translateY(0) translateX(0); }
-        50% { transform: translateY(-22px) translateX(10px); }
+    .bl-blob[data-anim="b"] { animation-name: bl-float-b; }
+    .bl-blob[data-anim="c"] { animation-name: bl-drift; }
+    .bl-bg-shape {
+        position: absolute;
+        pointer-events: none;
+        opacity: 0.2;
+        will-change: transform;
+        animation: bl-float-b 13s ease-in-out infinite;
+    }
+    .bl-bg-shape[data-anim="a"] { animation-name: bl-float-a; }
+    .bl-bg-shape[data-anim="c"] { animation-name: bl-drift; }
+    .bl-bg-shape[data-anim="orbit"] { animation-name: bl-orbit; }
+    .bl-bg-ring {
+        border-radius: 50%;
+        border: 3px solid currentColor;
+        background: transparent;
+        box-sizing: border-box;
+    }
+    .bl-bg-dot {
+        border-radius: 50%;
+        filter: blur(1px);
+    }
+    .bl-bg-plus {
+        position: relative;
+        color: inherit;
+    }
+    .bl-bg-plus::before,
+    .bl-bg-plus::after {
+        content: '';
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        background: currentColor;
+        border-radius: 999px;
+        transform: translate(-50%, -50%);
+    }
+    .bl-bg-plus::before { width: 100%; height: 22%; }
+    .bl-bg-plus::after { width: 22%; height: 100%; }
+    .bl-bg-spark {
+        clip-path: polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 72%, 21% 91%, 32% 57%, 2% 35%, 39% 35%);
+    }
+    @keyframes bl-float-a {
+        0%, 100% { transform: translate(0, 0) scale(1); }
+        33% { transform: translate(14px, -20px) scale(1.05); }
+        66% { transform: translate(-10px, -32px) scale(0.97); }
+    }
+    @keyframes bl-float-b {
+        0%, 100% { transform: translate(0, 0) rotate(0deg); }
+        50% { transform: translate(-16px, 22px) rotate(10deg); }
+    }
+    @keyframes bl-drift {
+        0%, 100% { transform: translate(0, 0); }
+        50% { transform: translate(28px, -16px); }
+    }
+    @keyframes bl-orbit {
+        0%, 100% { transform: translate(0, 0) rotate(0deg) scale(1); }
+        50% { transform: translate(12px, 18px) rotate(160deg) scale(1.08); }
     }
     @media (prefers-reduced-motion: reduce) {
-        .bl-blob { animation: none; }
+        .bl-blob, .bl-bg-shape { animation: none !important; }
+    }
+    @media (max-width: 900px) {
+        .bl-blob { opacity: 0.11; filter: blur(4px); }
+        .bl-bg-shape { opacity: 0.16; }
     }
 
     .bl-section { position: relative; z-index: 1; max-width: 1180px; margin: 0 auto; padding: 0 20px; }
@@ -939,10 +1004,26 @@ const STYLE = `
 `;
 
 const BLOBS = [
-    { top: '4%', left: '2%', size: 140, color: '#00A4FD' },
-    { top: '18%', right: '4%', size: 100, color: '#FF5FC0' },
-    { top: '58%', left: '6%', size: 120, color: '#A56AF0' },
-    { top: '75%', right: '8%', size: 90, color: '#35B89A' },
+    { top: '2%', left: '1%', size: 150, color: '#00A4FD', anim: 'a', duration: 11, delay: 0 },
+    { top: '14%', right: '3%', size: 110, color: '#FF5FC0', anim: 'b', duration: 13, delay: 1.2 },
+    { top: '32%', left: '4%', size: 95, color: '#A56AF0', anim: 'c', duration: 15, delay: 0.6 },
+    { top: '48%', right: '6%', size: 130, color: '#35B89A', anim: 'a', duration: 12, delay: 2 },
+    { top: '62%', left: '2%', size: 115, color: '#F2AF49', anim: 'b', duration: 14, delay: 0.3 },
+    { top: '78%', right: '4%', size: 100, color: '#00A4FD', anim: 'c', duration: 16, delay: 1.8 },
+    { top: '90%', left: '8%', size: 85, color: '#FF5FC0', anim: 'a', duration: 10, delay: 2.4 },
+];
+
+const BG_SHAPES = [
+    { type: 'ring', top: '8%', right: '14%', size: 52, color: '#FF5FC0', anim: 'orbit', duration: 18, delay: 0 },
+    { type: 'spark', top: '22%', left: '10%', size: 26, color: '#F2AF49', anim: 'a', duration: 9, delay: 0.5 },
+    { type: 'dot', top: '38%', right: '10%', size: 18, color: '#00A4FD', anim: 'c', duration: 11, delay: 1 },
+    { type: 'plus', top: '52%', left: '6%', size: 28, color: '#A56AF0', anim: 'b', duration: 12, delay: 0.2 },
+    { type: 'ring', top: '66%', right: '12%', size: 40, color: '#35B89A', anim: 'c', duration: 14, delay: 1.5 },
+    { type: 'spark', top: '74%', left: '12%', size: 22, color: '#FF5FC0', anim: 'orbit', duration: 16, delay: 0.8 },
+    { type: 'dot', top: '84%', right: '8%', size: 14, color: '#F2AF49', anim: 'a', duration: 10, delay: 2 },
+    { type: 'plus', top: '44%', right: '3%', size: 24, color: '#00A4FD', anim: 'orbit', duration: 17, delay: 1.2 },
+    { type: 'ring', top: '28%', left: '3%', size: 34, color: '#A56AF0', anim: 'b', duration: 13, delay: 2.2 },
+    { type: 'dot', top: '58%', left: '14%', size: 12, color: '#35B89A', anim: 'a', duration: 9, delay: 0.4 },
 ];
 
 const HERO_FADE_MS = 4200;
@@ -1038,16 +1119,16 @@ class BirthdayLandingElement extends HTMLElement {
         if (this._heroTimer) clearInterval(this._heroTimer);
         const s = this._state;
         if (s.loading || !s.dataLoaded) {
-            this._root.innerHTML = `${this._renderBlobs()}${this._renderLoading()}`;
+            this._root.innerHTML = `${this._renderBackground()}${this._renderLoading()}`;
             return;
         }
         if (!s.workshops.length) {
-            this._root.innerHTML = `${this._renderBlobs()}<div class="bl-empty">אין כרגע סדנאות זמינות להצגה. נשמח לראותכם בקרוב!</div>`;
+            this._root.innerHTML = `${this._renderBackground()}<div class="bl-empty">אין כרגע סדנאות זמינות להצגה. נשמח לראותכם בקרוב!</div>`;
             return;
         }
         const active = this._activeWorkshop();
         this._root.innerHTML = h`
-            ${this._renderBlobs()}
+            ${this._renderBackground()}
             <header class="bl-hero">
                 <div class="bl-hero-gallery-wrap">
                     <div class="bl-hero-card bl-hero-card-1" aria-hidden="true"></div>
@@ -1112,15 +1193,32 @@ class BirthdayLandingElement extends HTMLElement {
         `;
     }
 
-    _renderBlobs() {
-        return BLOBS.map((b) => {
-            const pos = [
-                b.top ? `top:${b.top};` : '',
-                b.left ? `left:${b.left};` : '',
-                b.right ? `right:${b.right};` : '',
-            ].join('');
-            return `<span class="bl-blob" style="${pos}width:${b.size}px;height:${b.size}px;background:${b.color};"></span>`;
+    _renderBackground() {
+        const posStyle = (item) => [
+            item.top ? `top:${item.top};` : '',
+            item.left ? `left:${item.left};` : '',
+            item.right ? `right:${item.right};` : '',
+            item.bottom ? `bottom:${item.bottom};` : '',
+        ].join('');
+
+        const animStyle = (item) => {
+            const parts = [];
+            if (item.duration) parts.push(`animation-duration:${item.duration}s`);
+            if (item.delay) parts.push(`animation-delay:${item.delay}s`);
+            return parts.join(';');
+        };
+
+        const blobs = BLOBS.map((b) => `
+            <span class="bl-blob" data-anim="${b.anim || 'a'}" style="${posStyle(b)}width:${b.size}px;height:${b.size}px;background:${b.color};${animStyle(b)}"></span>
+        `).join('');
+
+        const shapes = BG_SHAPES.map((s) => {
+            const cls = `bl-bg-shape bl-bg-${s.type}`;
+            const bg = s.type === 'ring' ? '' : `background:${s.color};`;
+            return `<span class="${cls}" data-anim="${s.anim || 'b'}" style="${posStyle(s)}width:${s.size}px;height:${s.size}px;color:${s.color};${bg}${animStyle(s)}"></span>`;
         }).join('');
+
+        return `<div class="bl-bg-layer" aria-hidden="true">${blobs}${shapes}</div>`;
     }
 
     _renderHeroImages(workshop) {

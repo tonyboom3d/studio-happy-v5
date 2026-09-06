@@ -34,6 +34,7 @@ $w.onReady(function () {
 
     loadWorkshops(el).catch((err) => {
         console.error('[birthday-landing][velo] initial load error:', err?.message || err);
+        el.setAttribute('workshops-data', JSON.stringify({ workshops: [], __ts: Date.now() }));
     });
 });
 

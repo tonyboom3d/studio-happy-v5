@@ -105,6 +105,61 @@ function renderRicos(content) {
     return html || '<p class="bl-price-placeholder">פרטי התמחור יתעדכנו בקרוב.</p>';
 }
 
+/** Pricing layout: intro on top, tier lines in a horizontal grid. */
+function renderPricingDetails(content) {
+    if (!content) return '<p class="bl-price-placeholder">פרטי התמחור יתעדכנו בקרוב.</p>';
+    if (typeof content === 'string') {
+        try { content = JSON.parse(content); } catch (e) {
+            return `<div class="bl-price-body"><p class="bl-rich-p">${escapeHtml(content)}</p></div>`;
+        }
+    }
+    const nodes = content && Array.isArray(content.nodes) ? content.nodes : null;
+    if (!nodes || !nodes.length) return '<p class="bl-price-placeholder">פרטי התמחור יתעדכנו בקרוב.</p>';
+
+    function renderInline(node) {
+        if (!node || !node.type) return '';
+        if (node.type === 'TEXT') {
+            let text = escapeHtml(node.textData && node.textData.text);
+            (node.textData && node.textData.decorations || []).forEach((d) => {
+                if (d.type === 'BOLD') text = `<strong>${text}</strong>`;
+            });
+            return text;
+        }
+        return (node.nodes || []).map(renderInline).join('');
+    }
+
+    let intro = '';
+    const tiers = [];
+
+    nodes.forEach((node) => {
+        if (node.type === 'BULLETED_LIST' || node.type === 'ORDERED_LIST') {
+            (node.nodes || []).forEach((li) => {
+                const text = (li.nodes || []).map(renderInline).join('').trim();
+                if (text) tiers.push(text);
+            });
+        } else if (node.type === 'PARAGRAPH' || node.type === 'HEADING') {
+            const inner = (node.nodes || []).map(renderInline).join('').trim();
+            if (!inner) return;
+            const tag = node.type === 'HEADING'
+                ? `h${Math.min(Math.max((node.headingData && node.headingData.level) || 3, 2), 4)}`
+                : 'p';
+            const cls = node.type === 'HEADING' ? 'bl-rich-h bl-price-intro' : 'bl-rich-p bl-price-intro';
+            const block = `<${tag} class="${cls}">${inner}</${tag}>`;
+            if (!intro) intro = block;
+            else tiers.push(inner);
+        }
+    });
+
+    if (!intro && !tiers.length) {
+        return `<div class="bl-price-body">${renderRicos(content)}</div>`;
+    }
+
+    const tierHtml = tiers.length
+        ? `<div class="bl-price-tiers">${tiers.map((t) => `<div class="bl-price-tier">${t}</div>`).join('')}</div>`
+        : '';
+    return `<div class="bl-price-body">${intro}${tierHtml}</div>`;
+}
+
 const BULLET_ICON = `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" class="bl-bullet-icon"><path d="M5 13l4 4L19 7" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 const CHEVRON_ICON = `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" class="bl-faq-chevron"><path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 const SPINNER_ICON = `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" class="bl-spinner"><circle cx="12" cy="12" r="9" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-dasharray="40 100"/></svg>`;
@@ -343,9 +398,9 @@ const STYLE = `
     }
 
     /* ---------- Pricing & important info ---------- */
-    .bl-grid-2 {
-        display: grid;
-        grid-template-columns: 1.1fr 0.9fr;
+    .bl-stack-cards {
+        display: flex;
+        flex-direction: column;
         gap: 24px;
         margin-top: 10px;
     }
@@ -354,9 +409,53 @@ const STYLE = `
         border-radius: 24px;
         padding: 26px 28px;
         box-shadow: 0 10px 28px rgba(37, 38, 38, 0.06);
+        width: 100%;
     }
     .bl-price-card { border-top: 6px solid #00A4FD; }
-    .bl-price-card h2 { color: #00A4FD; font-size: 22px; margin-bottom: 12px; }
+    .bl-price-card h2 { color: #00A4FD; font-size: 22px; margin-bottom: 16px; text-align: center; }
+    .bl-price-body { display: flex; flex-direction: column; gap: 18px; }
+    .bl-price-intro { text-align: center; font-size: 17px; font-weight: 800; color: #262626; margin: 0; }
+    .bl-price-tiers {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 14px;
+    }
+    .bl-price-tier {
+        background: linear-gradient(180deg, #f9fbfd 0%, #fff 100%);
+        border: 2px solid #e3f4fc;
+        border-radius: 18px;
+        padding: 18px 14px;
+        text-align: center;
+        font-weight: 700;
+        font-size: 15px;
+        line-height: 1.55;
+        color: #525252;
+        box-shadow: 0 4px 14px rgba(0, 164, 253, 0.08);
+        transition: transform 0.18s ease, box-shadow 0.18s ease;
+    }
+    .bl-price-tier:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 8px 20px rgba(0, 164, 253, 0.14);
+    }
+    .bl-price-body .bl-rich-ul {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 14px;
+        list-style: none;
+        padding: 0;
+        margin: 0;
+    }
+    .bl-price-body .bl-rich-ul li {
+        background: linear-gradient(180deg, #f9fbfd 0%, #fff 100%);
+        border: 2px solid #e3f4fc;
+        border-radius: 18px;
+        padding: 18px 14px;
+        text-align: center;
+        font-weight: 700;
+        font-size: 15px;
+        line-height: 1.55;
+        color: #525252;
+    }
     .bl-rich-p { margin: 0 0 10px; font-size: 15px; line-height: 1.7; color: #525252; font-weight: 600; }
     .bl-rich-h { font-size: 18px; margin: 14px 0 8px; color: #262626; }
     .bl-rich-ul, .bl-rich-ol { margin: 0 0 12px; padding-inline-start: 22px; color: #525252; font-weight: 600; }
@@ -628,11 +727,49 @@ const STYLE = `
 
     .bl-empty { text-align: center; padding: 80px 20px; color: #525252; font-weight: 600; font-size: 16px; }
 
+    .bl-loading {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 80px 20px 100px;
+        gap: 20px;
+    }
+    .bl-loading-spinner {
+        width: 48px;
+        height: 48px;
+        border-radius: 50%;
+        border: 4px solid #e3f4fc;
+        border-top-color: #00A4FD;
+        animation: bl-spin 0.85s linear infinite;
+    }
+    .bl-loading-text { font-size: 16px; font-weight: 700; color: #525252; margin: 0; }
+    .bl-loading-skeleton {
+        width: min(520px, 100%);
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        margin-top: 8px;
+    }
+    .bl-skel {
+        border-radius: 14px;
+        background: linear-gradient(90deg, #eef3f8 25%, #f9fbfd 50%, #eef3f8 75%);
+        background-size: 200% 100%;
+        animation: bl-shimmer 1.4s ease-in-out infinite;
+    }
+    .bl-skel-hero { height: 120px; }
+    .bl-skel-line { height: 16px; }
+    .bl-skel-line.short { width: 60%; align-self: center; }
+    @keyframes bl-shimmer {
+        0% { background-position: 200% 0; }
+        100% { background-position: -200% 0; }
+    }
+
     @media (max-width: 900px) {
         .bl-hero { grid-template-columns: 1fr; }
-        .bl-grid-2 { grid-template-columns: 1fr; }
         .bl-form-grid { grid-template-columns: 1fr; }
         .bl-highlights-grid { grid-template-columns: repeat(3, 1fr); }
+        .bl-price-tiers, .bl-price-body .bl-rich-ul { grid-template-columns: 1fr; }
     }
     @media (max-width: 600px) {
         .bl-marquee-track img { height: 100px; width: 150px; }
@@ -660,6 +797,8 @@ class BirthdayLandingElement extends HTMLElement {
         this._requestSeq = 0;
         this._heroTimer = null;
         this._state = {
+            loading: true,
+            dataLoaded: false,
             workshops: [],
             activeIndex: 0,
             heroImageIndex: 0,
@@ -677,8 +816,22 @@ class BirthdayLandingElement extends HTMLElement {
         this.setAttribute('lang', 'he');
         this.innerHTML = `<style>${STYLE}</style><div class="bl-root" id="blRoot"></div>`;
         this._root = this.querySelector('#blRoot');
+        this._hydrateFromAttribute();
         this._renderAll();
         this._bindEvents();
+    }
+
+    _hydrateFromAttribute() {
+        const raw = this.getAttribute('workshops-data');
+        if (!raw) return;
+        try {
+            const data = JSON.parse(raw);
+            this._state.workshops = Array.isArray(data.workshops) ? data.workshops : [];
+            this._state.dataLoaded = true;
+            this._state.loading = false;
+        } catch (err) {
+            console.error('[birthday-landing] failed to parse initial workshops-data:', err);
+        }
     }
 
     disconnectedCallback() {
@@ -691,12 +844,17 @@ class BirthdayLandingElement extends HTMLElement {
             try {
                 const data = JSON.parse(newValue);
                 this._state.workshops = Array.isArray(data.workshops) ? data.workshops : [];
+                this._state.dataLoaded = true;
+                this._state.loading = false;
                 this._state.activeIndex = 0;
                 this._state.heroImageIndex = 0;
                 this._state.faqOpenIndex = null;
                 if (this._root) { this._renderAll(); this._bindEvents(); }
             } catch (err) {
                 console.error('[birthday-landing] failed to parse workshops-data:', err);
+                this._state.dataLoaded = true;
+                this._state.loading = false;
+                if (this._root) this._renderAll();
             }
         } else if (name === 'lead-result') {
             try { this._handleLeadResult(JSON.parse(newValue)); } catch (err) {
@@ -716,6 +874,10 @@ class BirthdayLandingElement extends HTMLElement {
     _renderAll() {
         if (this._heroTimer) clearInterval(this._heroTimer);
         const s = this._state;
+        if (s.loading || !s.dataLoaded) {
+            this._root.innerHTML = `${this._renderBlobs()}${this._renderLoading()}`;
+            return;
+        }
         if (!s.workshops.length) {
             this._root.innerHTML = `${this._renderBlobs()}<div class="bl-empty">אין כרגע סדנאות זמינות להצגה. נשמח לראותכם בקרוב!</div>`;
             return;
@@ -740,6 +902,20 @@ class BirthdayLandingElement extends HTMLElement {
             <button type="button" class="bl-fab" id="blFab" aria-label="גלילה לטופס הזמנה">${FAB_ICON}<span>להזמנה</span></button>
         `;
         this._startHeroFade();
+    }
+
+    _renderLoading() {
+        return `
+            <div class="bl-loading" aria-live="polite" aria-busy="true">
+                <div class="bl-loading-spinner"></div>
+                <p class="bl-loading-text">טוען את הסדנאות...</p>
+                <div class="bl-loading-skeleton">
+                    <div class="bl-skel bl-skel-hero"></div>
+                    <div class="bl-skel bl-skel-line"></div>
+                    <div class="bl-skel bl-skel-line short"></div>
+                </div>
+            </div>
+        `;
     }
 
     _renderBlobs() {
@@ -782,10 +958,10 @@ class BirthdayLandingElement extends HTMLElement {
             </div>
             ${this._renderMarquee(workshop)}
             <div class="bl-section">
-                <div class="bl-grid-2">
+                <div class="bl-stack-cards">
                     <div class="bl-card bl-price-card">
                         <h2>מחירים</h2>
-                        ${renderRicos(workshop.pricingDetails)}
+                        ${renderPricingDetails(workshop.pricingDetails)}
                     </div>
                     <div class="bl-card bl-info-card">
                         <h2>חשוב לדעת</h2>

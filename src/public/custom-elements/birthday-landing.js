@@ -109,6 +109,8 @@ const BULLET_ICON = `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.o
 const CHEVRON_ICON = `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" class="bl-faq-chevron"><path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 const SPINNER_ICON = `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" class="bl-spinner"><circle cx="12" cy="12" r="9" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-dasharray="40 100"/></svg>`;
 const FAB_ICON = `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" class="bl-fab-icon"><path d="M12 5v14M5 12h14" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/></svg>`;
+const WHATSAPP_ICON = `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" class="bl-faq-wa-icon"><path d="M12 2a10 10 0 00-8.7 14.9L2 22l5.3-1.3A10 10 0 1012 2z" stroke="#fff" stroke-width="2" stroke-linejoin="round"/><path d="M8.5 9.5c.3-.7 1-.7 1.3-.7h.3c.1 0 .3 0 .4.3l.6 1.4c.1.2 0 .5-.2.6l-.5.4c-.1.1-.1.3 0 .4.5.9 1.3 1.7 2.2 2.2.1.1.3.1.4 0l.4-.5c.1-.2.4-.3.6-.2l1.4.6c.3.1.3.3.3.4v.3c0 .3-.1 1-.7 1.3-.5.3-1.2.3-2.1-.1-.9-.4-1.8-1-2.6-1.8-.8-.8-1.4-1.7-1.8-2.6-.4-.9-.4-1.6-.1-2.1z" fill="#fff"/></svg>`;
+const WHATSAPP_SUPPORT_PHONE = '972522272270';
 
 const FEATURE_HIGHLIGHTS = [
     {
@@ -127,7 +129,7 @@ const FEATURE_HIGHLIGHTS = [
         title: 'מרפסת לעוגה',
         subtitle: 'לעוגה וחגיגה',
         color: '#FF5FC0',
-        icon: '<svg viewBox="0 0 24 24" fill="none"><path d="M4 14c0-3 2.5-5 5-5h6c2.5 0 5 2 5 5" stroke="#fff" stroke-width="2" stroke-linecap="round"/><path d="M8 14v3M12 14v3M16 14v3" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg>',
+        icon: '<svg viewBox="0 0 24 24" fill="none"><path d="M4 14h16v2a4 4 0 01-4 4H8a4 4 0 01-4-4v-2z" stroke="#fff" stroke-width="2" stroke-linejoin="round"/><path d="M8 14V9.5a2 2 0 014 0V14M12 14V8.5a2 2 0 014 0V14" stroke="#fff" stroke-width="2" stroke-linecap="round"/><path d="M7 9c0-1.2 1-2.2 2.2-2.2.9 0 1.6.5 1.8 1.2M14 8c0-1.2 1-2.2 2.2-2.2.9 0 1.6.5 1.8 1.2" stroke="#fff" stroke-width="1.8" stroke-linecap="round"/><circle cx="9" cy="6.5" r="0.8" fill="#fff"/><circle cx="15" cy="6.5" r="0.8" fill="#fff"/></svg>',
     },
     {
         title: 'חומרים כלולים',
@@ -447,6 +449,29 @@ const STYLE = `
         transition: color 0.2s ease;
     }
     .bl-faq-item.is-open .bl-faq-question { color: #00A4FD; }
+    .bl-faq-q-content {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        flex: 1;
+        min-width: 0;
+        text-align: right;
+    }
+    .bl-faq-num {
+        flex-shrink: 0;
+        width: 28px;
+        height: 28px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #A56AF0, #00A4FD);
+        color: #fff;
+        font-size: 13px;
+        font-weight: 800;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .bl-faq-q-text { flex: 1; min-width: 0; }
+    .bl-faq-item.is-open .bl-faq-num { background: linear-gradient(135deg, #00A4FD, #35B89A); }
     .bl-faq-chevron {
         width: 20px; height: 20px; color: #A56AF0; flex-shrink: 0;
         transition: transform 0.38s cubic-bezier(0.4, 0, 0.2, 1), color 0.2s ease;
@@ -474,6 +499,27 @@ const STYLE = `
         opacity: 1;
         transform: translateY(0);
     }
+    .bl-faq-whatsapp {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        margin-top: 4px;
+        padding: 18px 22px;
+        border-radius: 18px;
+        background: #25D366;
+        color: #fff;
+        text-decoration: none;
+        font-weight: 800;
+        font-size: 16px;
+        box-shadow: 0 8px 22px rgba(37, 211, 102, 0.35);
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    .bl-faq-whatsapp:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 12px 28px rgba(37, 211, 102, 0.45);
+    }
+    .bl-faq-wa-icon { width: 24px; height: 24px; flex-shrink: 0; }
 
     /* ---------- Floating CTA ---------- */
     .bl-fab {
@@ -791,13 +837,18 @@ class BirthdayLandingElement extends HTMLElement {
     _renderFaq(list) {
         const items = Array.isArray(list) ? list : [];
         if (!items.length) return '';
+        const waText = encodeURIComponent('היי, יש לי שאלה לגבי ימי הולדת בסטודיו Happy');
+        const waUrl = `https://api.whatsapp.com/send?phone=${WHATSAPP_SUPPORT_PHONE}&text=${waText}`;
         return `
             <div class="bl-faq-section">
                 <h2>שאלות נפוצות</h2>
                 ${items.map((item, i) => `
                     <div class="bl-faq-item ${this._state.faqOpenIndex === i ? 'is-open' : ''}" data-faq-index="${i}">
                         <button type="button" class="bl-faq-question" data-faq-toggle="${i}" aria-expanded="${this._state.faqOpenIndex === i}">
-                            <span>${escapeHtml(item.question)}</span>
+                            <span class="bl-faq-q-content">
+                                <span class="bl-faq-num">${i + 1}</span>
+                                <span class="bl-faq-q-text">${escapeHtml(item.question)}</span>
+                            </span>
                             ${CHEVRON_ICON}
                         </button>
                         <div class="bl-faq-answer" aria-hidden="${this._state.faqOpenIndex !== i}">
@@ -805,6 +856,10 @@ class BirthdayLandingElement extends HTMLElement {
                         </div>
                     </div>
                 `).join('')}
+                <a class="bl-faq-whatsapp" href="${waUrl}" target="_blank" rel="noopener noreferrer">
+                    ${WHATSAPP_ICON}
+                    <span>יש לך שאלות נוספות?</span>
+                </a>
             </div>
         `;
     }

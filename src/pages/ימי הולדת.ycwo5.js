@@ -1,8 +1,6 @@
 // "ימי הולדת" landing page — wires the birthday-landing Custom Element
-// (#customElement2) to the birthdayWorkshops CMS collection and to the
-// birthdayLeads.web.js backend module for lead submissions.
-import wixData from 'wix-data';
-import { submitBirthdayLead } from 'backend/birthdayLeads.web.js';
+// birthdayLeads.web.js backend module for data fetch and lead submissions.
+import { getBirthdayWorkshops, submitBirthdayLead } from 'backend/birthdayLeads.web.js';
 
 const ELEMENT_ID = '#customElement2';
 
@@ -40,8 +38,8 @@ $w.onReady(function () {
 });
 
 async function loadWorkshops(el) {
-    const result = await wixData.query('birthdayWorkshops').ascending('order').limit(50).find();
-    el.setAttribute('workshops-data', JSON.stringify({ workshops: result.items || [], __ts: Date.now() }));
+    const { workshops } = await getBirthdayWorkshops();
+    el.setAttribute('workshops-data', JSON.stringify({ workshops: workshops || [], __ts: Date.now() }));
 }
 
 async function handleSubmitLead(el, detail) {

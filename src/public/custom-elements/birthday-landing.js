@@ -108,6 +108,40 @@ function renderRicos(content) {
 const BULLET_ICON = `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" class="bl-bullet-icon"><path d="M5 13l4 4L19 7" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 const CHEVRON_ICON = `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" class="bl-faq-chevron"><path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 const SPINNER_ICON = `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" class="bl-spinner"><circle cx="12" cy="12" r="9" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-dasharray="40 100"/></svg>`;
+const FAB_ICON = `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" class="bl-fab-icon"><path d="M12 5v14M5 12h14" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/></svg>`;
+
+const FEATURE_HIGHLIGHTS = [
+    {
+        title: 'יצירה אישית',
+        color: '#00A4FD',
+        icon: '<svg viewBox="0 0 24 24" fill="none"><path d="M12 3l1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5L12 3z" stroke="#fff" stroke-width="2" stroke-linejoin="round"/><path d="M5 19h14" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg>',
+    },
+    {
+        title: 'שעה וחצי',
+        color: '#A56AF0',
+        icon: '<svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="8" stroke="#fff" stroke-width="2"/><path d="M12 8v5l3 2" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg>',
+    },
+    {
+        title: 'מרפסת לעוגה',
+        color: '#FF5FC0',
+        icon: '<svg viewBox="0 0 24 24" fill="none"><path d="M4 14c0-3 2.5-5 5-5h6c2.5 0 5 2 5 5" stroke="#fff" stroke-width="2" stroke-linecap="round"/><path d="M8 14v3M12 14v3M16 14v3" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg>',
+    },
+    {
+        title: 'חומרים כלולים',
+        color: '#35B89A',
+        icon: '<svg viewBox="0 0 24 24" fill="none"><path d="M8 7h8l1 12H7L8 7z" stroke="#fff" stroke-width="2" stroke-linejoin="round"/><path d="M10 7V5a2 2 0 014 0v2" stroke="#fff" stroke-width="2"/></svg>',
+    },
+    {
+        title: 'חוויה קבוצתית',
+        color: '#00A4FD',
+        icon: '<svg viewBox="0 0 24 24" fill="none"><circle cx="9" cy="9" r="3" stroke="#fff" stroke-width="2"/><circle cx="16" cy="10" r="2.5" stroke="#fff" stroke-width="2"/><path d="M4 19c0-2.5 2.2-4 5-4M13 19c0-1.8 1.6-3 3.5-3" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg>',
+    },
+    {
+        title: 'מיקום נגיש',
+        color: '#A56AF0',
+        icon: '<svg viewBox="0 0 24 24" fill="none"><path d="M12 21s6-5.2 6-10a6 6 0 10-12 0c0 4.8 6 10 6 10z" stroke="#fff" stroke-width="2"/><circle cx="12" cy="11" r="2.5" stroke="#fff" stroke-width="2"/></svg>',
+    },
+];
 
 const STYLE = `
     @import url('https://fonts.googleapis.com/css2?family=Baloo+2:wght@400;600;800&family=Quicksand:wght@400;600;800&family=Varela+Round&family=Rubik:wght@400;600;800&display=swap');
@@ -203,7 +237,11 @@ const STYLE = `
     }
     .bl-hero-text { display: flex; flex-direction: column; gap: 14px; }
     .bl-hero-title { font-size: clamp(28px, 4vw, 44px); line-height: 1.15; }
-    .bl-hero-title span { color: #00A4FD; }
+    .bl-hero-brand {
+        display: block;
+        color: #00A4FD;
+        margin-top: 4px;
+    }
     .bl-hero-subtitle { font-size: 18px; color: #525252; font-weight: 600; }
     .bl-tabs { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 8px; }
     .bl-tab {
@@ -232,7 +270,6 @@ const STYLE = `
         margin: 36px auto 0;
         max-width: 1140px;
         box-shadow: 0 10px 30px rgba(37, 38, 38, 0.06);
-        transform: rotate(-1.5deg);
         border: 3px solid #F2AF49;
         position: relative;
         z-index: 1;
@@ -257,16 +294,19 @@ const STYLE = `
         transform: rotate(-2deg) scale(1.06);
         position: relative;
         z-index: 1;
+        direction: ltr;
+        width: 100%;
     }
     .bl-marquee-track {
         display: flex;
         gap: 14px;
         width: max-content;
-        animation: bl-infinite-scroll 32s linear infinite;
+        animation: bl-infinite-scroll 40s linear infinite;
+        will-change: transform;
     }
     @keyframes bl-infinite-scroll {
-        0% { transform: translateX(0); }
-        100% { transform: translateX(-50%); }
+        from { transform: translate3d(0, 0, 0); }
+        to { transform: translate3d(-50%, 0, 0); }
     }
     @media (prefers-reduced-motion: reduce) {
         .bl-marquee-track { animation: none; }
@@ -318,6 +358,43 @@ const STYLE = `
     }
     .bl-bullet-icon { width: 14px; height: 14px; }
 
+    /* ---------- Feature highlights ---------- */
+    .bl-highlights-section { margin-top: 36px; }
+    .bl-highlights-section h2 { text-align: center; font-size: 26px; margin-bottom: 22px; color: #262626; }
+    .bl-highlights-grid {
+        display: grid;
+        grid-template-columns: repeat(6, 1fr);
+        gap: 16px;
+    }
+    .bl-highlight-item {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 12px;
+        text-align: center;
+    }
+    .bl-highlight-icon-wrap {
+        width: 72px;
+        height: 72px;
+        border-radius: 22px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 10px 24px rgba(37, 38, 38, 0.1);
+        transition: transform 0.22s ease, box-shadow 0.22s ease;
+    }
+    .bl-highlight-icon-wrap svg { width: 32px; height: 32px; }
+    .bl-highlight-item:hover .bl-highlight-icon-wrap {
+        transform: translateY(-4px) rotate(-2deg);
+        box-shadow: 0 14px 28px rgba(0, 164, 253, 0.22);
+    }
+    .bl-highlight-title {
+        font-size: 14px;
+        font-weight: 800;
+        color: #262626;
+        line-height: 1.35;
+    }
+
     /* ---------- FAQ ---------- */
     .bl-faq-section { margin-top: 30px; }
     .bl-faq-section h2 { text-align: center; font-size: 26px; margin-bottom: 18px; color: #262626; }
@@ -341,12 +418,58 @@ const STYLE = `
         font-weight: 800;
         color: #262626;
         text-align: right;
+        transition: color 0.2s ease;
     }
-    .bl-faq-chevron { width: 20px; height: 20px; color: #A56AF0; transition: transform 0.25s ease; flex-shrink: 0; }
-    .bl-faq-item.is-open .bl-faq-chevron { transform: rotate(180deg); }
-    .bl-faq-answer { max-height: 0; overflow: hidden; transition: max-height 0.3s ease; }
-    .bl-faq-answer-inner { padding: 0 20px 18px; font-size: 15px; line-height: 1.7; color: #525252; font-weight: 600; }
-    .bl-faq-item.is-open .bl-faq-answer { max-height: 600px; }
+    .bl-faq-item.is-open .bl-faq-question { color: #00A4FD; }
+    .bl-faq-chevron {
+        width: 20px; height: 20px; color: #A56AF0; flex-shrink: 0;
+        transition: transform 0.38s cubic-bezier(0.4, 0, 0.2, 1), color 0.2s ease;
+    }
+    .bl-faq-item.is-open .bl-faq-chevron { transform: rotate(180deg); color: #00A4FD; }
+    .bl-faq-answer {
+        display: grid;
+        grid-template-rows: 0fr;
+        transition: grid-template-rows 0.38s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .bl-faq-item.is-open .bl-faq-answer { grid-template-rows: 1fr; }
+    .bl-faq-answer-inner {
+        overflow: hidden;
+        padding: 0 20px;
+        font-size: 15px;
+        line-height: 1.7;
+        color: #525252;
+        font-weight: 600;
+        opacity: 0;
+        transform: translateY(-8px);
+        transition: opacity 0.32s ease, transform 0.32s ease, padding 0.38s ease;
+    }
+    .bl-faq-item.is-open .bl-faq-answer-inner {
+        padding: 0 20px 18px;
+        opacity: 1;
+        transform: translateY(0);
+    }
+
+    /* ---------- Floating CTA ---------- */
+    .bl-fab {
+        position: fixed;
+        right: 24px;
+        bottom: 24px;
+        z-index: 9999;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        border: none;
+        border-radius: 999px;
+        padding: 14px 20px 14px 16px;
+        background: linear-gradient(135deg, #00A4FD, #A56AF0);
+        color: #fff;
+        font-weight: 800;
+        font-size: 15px;
+        box-shadow: 0 8px 28px rgba(165, 106, 240, 0.45);
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    .bl-fab:hover { transform: scale(1.06); box-shadow: 0 12px 32px rgba(0, 164, 253, 0.5); }
+    .bl-fab-icon { width: 20px; height: 20px; flex-shrink: 0; }
 
     /* ---------- Lead form ---------- */
     .bl-form-section {
@@ -437,10 +560,13 @@ const STYLE = `
         .bl-hero { grid-template-columns: 1fr; }
         .bl-grid-2 { grid-template-columns: 1fr; }
         .bl-form-grid { grid-template-columns: 1fr; }
+        .bl-highlights-grid { grid-template-columns: repeat(3, 1fr); }
     }
     @media (max-width: 600px) {
         .bl-marquee-track img { height: 100px; width: 150px; }
         .bl-desc-card, .bl-card, .bl-form-section { padding: 20px; }
+        .bl-highlights-grid { grid-template-columns: repeat(2, 1fr); }
+        .bl-fab { right: 16px; bottom: 16px; padding: 12px 16px; font-size: 14px; }
     }
 `;
 
@@ -452,8 +578,6 @@ const BLOBS = [
 ];
 
 const HERO_FADE_MS = 4200;
-const MIN_MARQUEE_TILES = 8;
-
 class BirthdayLandingElement extends HTMLElement {
     static get observedAttributes() {
         return ['workshops-data', 'lead-result'];
@@ -530,13 +654,14 @@ class BirthdayLandingElement extends HTMLElement {
             <header class="bl-hero">
                 <div class="bl-hero-gallery" id="blHeroGallery">${this._renderHeroImages(active)}</div>
                 <div class="bl-hero-text">
-                    <h1 class="bl-hero-title">חוגגים יום הולדת ב<span>סטודיו Happy</span></h1>
+                    <h1 class="bl-hero-title">חוגגים יום הולדת ב<span class="bl-hero-brand">Studio Happy</span></h1>
                     <p class="bl-hero-subtitle" id="blActiveSubtitle">${escapeHtml(active.subtitle || '')}</p>
                     <div class="bl-tabs" id="blTabs">${this._renderTabs()}</div>
                 </div>
             </header>
             <div id="blContent">${this._renderContent(active)}</div>
             <div class="bl-section" id="blFormSection">${this._renderForm()}</div>
+            <button type="button" class="bl-fab" id="blFab" aria-label="גלילה לטופס הזמנה">${FAB_ICON}<span>להזמנה</span></button>
         `;
         this._startHeroFade();
     }
@@ -592,7 +717,23 @@ class BirthdayLandingElement extends HTMLElement {
                         ${this._renderImportantInfo(workshop.importantInfo)}
                     </div>
                 </div>
+                ${this._renderHighlights()}
                 ${this._renderFaq(workshop.faqList)}
+            </div>
+        `;
+    }
+
+    _renderHighlights() {
+        const items = FEATURE_HIGHLIGHTS.map((item) => `
+            <div class="bl-highlight-item">
+                <div class="bl-highlight-icon-wrap" style="background:${item.color};">${item.icon}</div>
+                <span class="bl-highlight-title">${escapeHtml(item.title)}</span>
+            </div>
+        `).join('');
+        return `
+            <div class="bl-highlights-section">
+                <h2>למה לחגוג אצלנו?</h2>
+                <div class="bl-highlights-grid">${items}</div>
             </div>
         `;
     }
@@ -600,12 +741,13 @@ class BirthdayLandingElement extends HTMLElement {
     _renderMarquee(workshop) {
         const gallery = Array.isArray(workshop.stripGallery) ? workshop.stripGallery : [];
         if (!gallery.length) return '';
-        let tiles = gallery.map((entry) => ({ src: resolveMediaUrl(entry), alt: mediaAlt(entry, workshop.title) })).filter((t) => t.src);
+        const tiles = gallery
+            .map((entry) => ({ src: resolveMediaUrl(entry), alt: mediaAlt(entry, workshop.title) }))
+            .filter((t) => t.src);
         if (!tiles.length) return '';
-        while (tiles.length < MIN_MARQUEE_TILES) tiles = tiles.concat(tiles);
-        const doubled = tiles.concat(tiles);
-        const imgs = doubled.map((t) => `<img src="${escapeHtml(t.src)}" alt="${escapeHtml(t.alt)}" loading="lazy" />`).join('');
-        return `<div class="bl-marquee-wrap"><div class="bl-marquee-track">${imgs}</div></div>`;
+        const renderTile = (t) => `<img src="${escapeHtml(t.src)}" alt="${escapeHtml(t.alt)}" loading="lazy" />`;
+        const oneSet = tiles.map(renderTile).join('');
+        return `<div class="bl-marquee-wrap"><div class="bl-marquee-track">${oneSet}${oneSet}</div></div>`;
     }
 
     _renderImportantInfo(list) {
@@ -624,11 +766,13 @@ class BirthdayLandingElement extends HTMLElement {
                 <h2>שאלות נפוצות</h2>
                 ${items.map((item, i) => `
                     <div class="bl-faq-item ${this._state.faqOpenIndex === i ? 'is-open' : ''}" data-faq-index="${i}">
-                        <button type="button" class="bl-faq-question" data-faq-toggle="${i}">
+                        <button type="button" class="bl-faq-question" data-faq-toggle="${i}" aria-expanded="${this._state.faqOpenIndex === i}">
                             <span>${escapeHtml(item.question)}</span>
                             ${CHEVRON_ICON}
                         </button>
-                        <div class="bl-faq-answer"><div class="bl-faq-answer-inner">${escapeHtml(item.answer)}</div></div>
+                        <div class="bl-faq-answer" aria-hidden="${this._state.faqOpenIndex !== i}">
+                            <div class="bl-faq-answer-inner">${escapeHtml(item.answer)}</div>
+                        </div>
                     </div>
                 `).join('')}
             </div>
@@ -739,7 +883,14 @@ class BirthdayLandingElement extends HTMLElement {
         const counterBtn = e.target.closest('[data-counter-delta]');
         if (counterBtn) { this._onCounterChange(counterBtn); return; }
 
-        if (e.target.closest('#blSubmitBtn')) { this._onSubmit(); }
+        if (e.target.closest('#blSubmitBtn')) { this._onSubmit(); return; }
+
+        if (e.target.closest('#blFab')) { this._scrollToForm(); }
+    }
+
+    _scrollToForm() {
+        const target = this._root.querySelector('#blFormSection');
+        if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
 
     _onTabClick(index) {
@@ -769,7 +920,12 @@ class BirthdayLandingElement extends HTMLElement {
     _onFaqToggle(index) {
         this._state.faqOpenIndex = this._state.faqOpenIndex === index ? null : index;
         this._root.querySelectorAll('.bl-faq-item').forEach((item) => {
-            item.classList.toggle('is-open', Number(item.dataset.faqIndex) === this._state.faqOpenIndex);
+            const isOpen = Number(item.dataset.faqIndex) === this._state.faqOpenIndex;
+            item.classList.toggle('is-open', isOpen);
+            const btn = item.querySelector('.bl-faq-question');
+            const answer = item.querySelector('.bl-faq-answer');
+            if (btn) btn.setAttribute('aria-expanded', String(isOpen));
+            if (answer) answer.setAttribute('aria-hidden', String(!isOpen));
         });
     }
 

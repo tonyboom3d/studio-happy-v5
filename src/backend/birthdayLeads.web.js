@@ -1,4 +1,4 @@
-// Public facade for the "ימי הולדת" landing page lead form.
+// Public facade for the "ימי הולדת" landing page — workshop data + lead form.
 // Validates and inserts submissions into the birthdayLeads collection
 // (insert/read restricted to ADMIN — this module elevates via suppressAuth).
 import { Permissions, webMethod } from 'wix-web-module';
@@ -37,6 +37,17 @@ function validate(payload) {
         },
     };
 }
+
+/** Returns all birthday workshop items for the landing page Custom Element. */
+export const getBirthdayWorkshops = webMethod(Permissions.Anyone, async () => {
+    try {
+        const result = await wixData.query('birthdayWorkshops').ascending('order').limit(50).find(SA);
+        return { workshops: result.items || [] };
+    } catch (err) {
+        console.error('[birthdayLeads.web] getBirthdayWorkshops failed:', err?.message || err);
+        return { workshops: [] };
+    }
+});
 
 /** Inserts a lead from the birthday-landing Custom Element's contact form. */
 export const submitBirthdayLead = webMethod(Permissions.Anyone, async (payload) => {

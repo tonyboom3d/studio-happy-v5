@@ -113,31 +113,37 @@ const FAB_ICON = `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/
 const FEATURE_HIGHLIGHTS = [
     {
         title: 'יצירה אישית',
+        subtitle: 'שחוזרים איתה הביתה',
         color: '#00A4FD',
         icon: '<svg viewBox="0 0 24 24" fill="none"><path d="M12 3l1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5L12 3z" stroke="#fff" stroke-width="2" stroke-linejoin="round"/><path d="M5 19h14" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg>',
     },
     {
         title: 'שעה וחצי',
+        subtitle: 'של כיף ויצירה',
         color: '#A56AF0',
         icon: '<svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="8" stroke="#fff" stroke-width="2"/><path d="M12 8v5l3 2" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg>',
     },
     {
         title: 'מרפסת לעוגה',
+        subtitle: 'לעוגה וחגיגה',
         color: '#FF5FC0',
         icon: '<svg viewBox="0 0 24 24" fill="none"><path d="M4 14c0-3 2.5-5 5-5h6c2.5 0 5 2 5 5" stroke="#fff" stroke-width="2" stroke-linecap="round"/><path d="M8 14v3M12 14v3M16 14v3" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg>',
     },
     {
         title: 'חומרים כלולים',
+        subtitle: 'רק להגיע',
         color: '#35B89A',
         icon: '<svg viewBox="0 0 24 24" fill="none"><path d="M8 7h8l1 12H7L8 7z" stroke="#fff" stroke-width="2" stroke-linejoin="round"/><path d="M10 7V5a2 2 0 014 0v2" stroke="#fff" stroke-width="2"/></svg>',
     },
     {
         title: 'חוויה קבוצתית',
+        subtitle: 'חוגגים יחד בכיף',
         color: '#00A4FD',
         icon: '<svg viewBox="0 0 24 24" fill="none"><circle cx="9" cy="9" r="3" stroke="#fff" stroke-width="2"/><circle cx="16" cy="10" r="2.5" stroke="#fff" stroke-width="2"/><path d="M4 19c0-2.5 2.2-4 5-4M13 19c0-1.8 1.6-3 3.5-3" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg>',
     },
     {
         title: 'מיקום נגיש',
+        subtitle: 'קל ונוח להגיע',
         color: '#A56AF0',
         icon: '<svg viewBox="0 0 24 24" fill="none"><path d="M12 21s6-5.2 6-10a6 6 0 10-12 0c0 4.8 6 10 6 10z" stroke="#fff" stroke-width="2"/><circle cx="12" cy="11" r="2.5" stroke="#fff" stroke-width="2"/></svg>',
     },
@@ -202,13 +208,37 @@ const STYLE = `
         position: relative;
         z-index: 1;
     }
+    .bl-hero-gallery-wrap {
+        position: relative;
+        padding: 18px 14px;
+    }
+    .bl-hero-card {
+        position: absolute;
+        border-radius: 28px;
+        z-index: 0;
+        width: 94%;
+        height: 90%;
+        opacity: 0.85;
+    }
+    .bl-hero-card-1 {
+        background: #00A4FD;
+        top: 0;
+        right: 0;
+        transform: rotate(5deg);
+    }
+    .bl-hero-card-2 {
+        background: #FF5FC0;
+        bottom: 0;
+        left: 0;
+        transform: rotate(-5deg);
+    }
     .bl-hero-gallery {
         position: relative;
+        z-index: 1;
         border-radius: 28px;
         overflow: hidden;
         aspect-ratio: 4 / 3;
         box-shadow: 0 16px 40px rgba(0, 164, 253, 0.18);
-        transform: rotate(-1.5deg);
         background: #e9f4fc;
     }
     .bl-hero-gallery img {
@@ -276,17 +306,6 @@ const STYLE = `
     }
     .bl-desc-card h2 { font-size: 24px; margin-bottom: 10px; color: #4097C3; }
     .bl-desc-card p { font-size: 16px; line-height: 1.7; color: #525252; font-weight: 600; }
-    .bl-duration-chip {
-        display: inline-block;
-        margin-top: 14px;
-        background: #35B89A;
-        color: #fff;
-        font-weight: 800;
-        font-size: 13px;
-        padding: 8px 16px;
-        border-radius: 999px;
-    }
-
     /* ---------- Marquee strip ---------- */
     .bl-marquee-wrap {
         margin: 40px 0;
@@ -393,6 +412,13 @@ const STYLE = `
         font-weight: 800;
         color: #262626;
         line-height: 1.35;
+    }
+    .bl-highlight-sub {
+        font-size: 12px;
+        font-weight: 600;
+        color: #525252;
+        line-height: 1.4;
+        max-width: 120px;
     }
 
     /* ---------- FAQ ---------- */
@@ -652,7 +678,11 @@ class BirthdayLandingElement extends HTMLElement {
         this._root.innerHTML = h`
             ${this._renderBlobs()}
             <header class="bl-hero">
-                <div class="bl-hero-gallery" id="blHeroGallery">${this._renderHeroImages(active)}</div>
+                <div class="bl-hero-gallery-wrap">
+                    <div class="bl-hero-card bl-hero-card-1" aria-hidden="true"></div>
+                    <div class="bl-hero-card bl-hero-card-2" aria-hidden="true"></div>
+                    <div class="bl-hero-gallery" id="blHeroGallery">${this._renderHeroImages(active)}</div>
+                </div>
                 <div class="bl-hero-text">
                     <h1 class="bl-hero-title">חוגגים יום הולדת ב<span class="bl-hero-brand">Studio Happy</span></h1>
                     <p class="bl-hero-subtitle" id="blActiveSubtitle">${escapeHtml(active.subtitle || '')}</p>
@@ -702,7 +732,6 @@ class BirthdayLandingElement extends HTMLElement {
                 <div class="bl-desc-card">
                     <h2>${escapeHtml(workshop.title || '')}</h2>
                     <p>${escapeHtml(workshop.description || '')}</p>
-                    ${workshop.duration ? `<span class="bl-duration-chip">${escapeHtml(workshop.duration)}</span>` : ''}
                 </div>
             </div>
             ${this._renderMarquee(workshop)}
@@ -728,6 +757,7 @@ class BirthdayLandingElement extends HTMLElement {
             <div class="bl-highlight-item">
                 <div class="bl-highlight-icon-wrap" style="background:${item.color};">${item.icon}</div>
                 <span class="bl-highlight-title">${escapeHtml(item.title)}</span>
+                <span class="bl-highlight-sub">${escapeHtml(item.subtitle)}</span>
             </div>
         `).join('');
         return `

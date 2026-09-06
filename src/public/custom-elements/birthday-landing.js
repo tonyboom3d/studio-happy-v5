@@ -496,6 +496,45 @@ const STYLE = `
         flex-shrink: 0;
     }
 
+    /* ---------- Scroll-reveal (mobile) ---------- */
+    @media (max-width: 900px) {
+        .bl-reveal {
+            opacity: 0;
+            transform: translateY(28px);
+            transition:
+                opacity 0.65s cubic-bezier(0.22, 1, 0.36, 1),
+                transform 0.65s cubic-bezier(0.22, 1, 0.36, 1);
+            transition-delay: var(--bl-delay, 0ms);
+            will-change: opacity, transform;
+        }
+        .bl-reveal.is-visible {
+            opacity: 1;
+            transform: translateY(0);
+        }
+        .bl-marquee-wrap {
+            transform: rotate(-1.5deg) scale(1.03);
+            margin: 34px 0;
+        }
+        .bl-marquee-track {
+            gap: 16px;
+            animation-duration: 34s;
+        }
+        .bl-marquee-track img {
+            height: 190px;
+            width: 280px;
+            border-radius: 22px;
+            border-width: 5px;
+            box-shadow: 0 10px 24px rgba(0, 0, 0, 0.14);
+        }
+    }
+    @media (prefers-reduced-motion: reduce) {
+        .bl-reveal {
+            opacity: 1 !important;
+            transform: none !important;
+            transition: none !important;
+        }
+    }
+
     /* ---------- Pricing & important info ---------- */
     .bl-stack-cards {
         display: flex;
@@ -892,7 +931,7 @@ const STYLE = `
         .bl-price-tiers, .bl-price-body .bl-rich-ul { grid-template-columns: 1fr; }
     }
     @media (max-width: 600px) {
-        .bl-marquee-track img { height: 100px; width: 150px; }
+        .bl-marquee-track img { height: 175px; width: 255px; }
         .bl-desc-card, .bl-card, .bl-form-section { padding: 20px; }
         .bl-highlights-grid { grid-template-columns: repeat(2, 1fr); }
         .bl-fab { right: 16px; bottom: 16px; padding: 12px 16px; font-size: 14px; }
@@ -956,6 +995,10 @@ class BirthdayLandingElement extends HTMLElement {
 
     disconnectedCallback() {
         if (this._heroTimer) clearInterval(this._heroTimer);
+        if (this._revealObserver) {
+            this._revealObserver.disconnect();
+            this._revealObserver = null;
+        }
     }
 
     attributeChangedCallback(name, oldValue, newValue) {
@@ -1022,6 +1065,37 @@ class BirthdayLandingElement extends HTMLElement {
             <button type="button" class="bl-fab" id="blFab" aria-label="גלילה לטופס הזמנה">${FAB_ICON}<span>להזמנה</span></button>
         `;
         this._startHeroFade();
+        this._initRevealAnimations();
+    }
+
+    _initRevealAnimations() {
+        if (this._revealObserver) {
+            this._revealObserver.disconnect();
+            this._revealObserver = null;
+        }
+
+        const nodes = this._root.querySelectorAll('.bl-reveal');
+        if (!nodes.length) return;
+
+        const isMobile = window.matchMedia('(max-width: 900px)').matches;
+        const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+        if (!isMobile || reduceMotion) {
+            nodes.forEach((el) => el.classList.add('is-visible'));
+            return;
+        }
+
+        nodes.forEach((el) => el.classList.remove('is-visible'));
+
+        this._revealObserver = new IntersectionObserver((entries) => {
+            entries.forEach((entry) => {
+                if (!entry.isIntersecting) return;
+                entry.target.classList.add('is-visible');
+                this._revealObserver.unobserve(entry.target);
+            });
+        }, { threshold: 0.12, rootMargin: '0px 0px -6% 0px' });
+
+        nodes.forEach((el) => this._revealObserver.observe(el));
     }
 
     _renderLoading() {
@@ -1071,7 +1145,7 @@ class BirthdayLandingElement extends HTMLElement {
     _renderContent(workshop) {
         return h`
             <div class="bl-section">
-                <div class="bl-desc-card">
+                <div class="bl-desc-card bl-reveal">
                     <h2>${escapeHtml(workshop.title || '')}</h2>
                     ${workshop.subtitle ? `<p class="bl-desc-subtitle">${escapeHtml(workshop.subtitle)}</p>` : ''}
                     ${renderDescription(workshop.description)}
@@ -1080,11 +1154,11 @@ class BirthdayLandingElement extends HTMLElement {
             ${this._renderMarquee(workshop)}
             <div class="bl-section">
                 <div class="bl-stack-cards">
-                    <div class="bl-card bl-price-card">
+                    <div class="bl-card bl-price-card bl-reveal" style="--bl-delay: 80ms">
                         <h2>מחירים</h2>
                         ${renderPricingDetails(workshop.pricingDetails)}
                     </div>
-                    <div class="bl-card bl-info-card">
+                    <div class="bl-card bl-info-card bl-reveal" style="--bl-delay: 160ms">
                         <h2>חשוב לדעת</h2>
                         ${this._renderImportantInfo(workshop.importantInfo)}
                     </div>
@@ -1096,15 +1170,15 @@ class BirthdayLandingElement extends HTMLElement {
     }
 
     _renderHighlights() {
-        const items = FEATURE_HIGHLIGHTS.map((item) => `
-            <div class="bl-highlight-item">
+        const items = FEATURE_HIGHLIGHTS.map((item, i) => `
+            <div class="bl-highlight-item bl-reveal" style="--bl-delay: ${Math.min(i, 5) * 70}ms">
                 <div class="bl-highlight-icon-wrap" style="background:${item.color};">${item.icon}</div>
                 <span class="bl-highlight-title">${escapeHtml(item.title)}</span>
                 <span class="bl-highlight-sub">${escapeHtml(item.subtitle)}</span>
             </div>
         `).join('');
         return `
-            <div class="bl-highlights-section">
+            <div class="bl-highlights-section bl-reveal" style="--bl-delay: 40ms">
                 <h2>למה לחגוג אצלנו?</h2>
                 <div class="bl-highlights-grid">${items}</div>
             </div>
@@ -1120,7 +1194,7 @@ class BirthdayLandingElement extends HTMLElement {
         if (!tiles.length) return '';
         const renderTile = (t) => `<img src="${escapeHtml(t.src)}" alt="${escapeHtml(t.alt)}" loading="lazy" />`;
         const oneSet = tiles.map(renderTile).join('');
-        return `<div class="bl-marquee-wrap"><div class="bl-marquee-track">${oneSet}${oneSet}</div></div>`;
+        return `<div class="bl-marquee-wrap bl-reveal"><div class="bl-marquee-track">${oneSet}${oneSet}</div></div>`;
     }
 
     _renderImportantInfo(list) {
@@ -1137,10 +1211,10 @@ class BirthdayLandingElement extends HTMLElement {
         const waText = encodeURIComponent('היי, יש לי שאלה לגבי ימי הולדת בסטודיו Happy');
         const waUrl = `https://api.whatsapp.com/send?phone=${WHATSAPP_SUPPORT_PHONE}&text=${waText}`;
         return `
-            <div class="bl-faq-section">
+            <div class="bl-faq-section bl-reveal" style="--bl-delay: 60ms">
                 <h2>שאלות נפוצות</h2>
                 ${items.map((item, i) => `
-                    <div class="bl-faq-item ${this._state.faqOpenIndex === i ? 'is-open' : ''}" data-faq-index="${i}">
+                    <div class="bl-faq-item bl-reveal ${this._state.faqOpenIndex === i ? 'is-open' : ''}" data-faq-index="${i}" style="--bl-delay: ${Math.min(i, 4) * 60}ms">
                         <button type="button" class="bl-faq-question" data-faq-toggle="${i}" aria-expanded="${this._state.faqOpenIndex === i}">
                             <span class="bl-faq-q-content">
                                 <span class="bl-faq-num">${i + 1}</span>
@@ -1153,7 +1227,7 @@ class BirthdayLandingElement extends HTMLElement {
                         </div>
                     </div>
                 `).join('')}
-                <a class="bl-faq-whatsapp" href="${waUrl}" target="_blank" rel="noopener noreferrer">
+                <a class="bl-faq-whatsapp bl-reveal" href="${waUrl}" target="_blank" rel="noopener noreferrer" style="--bl-delay: 120ms">
                     ${WHATSAPP_ICON}
                     <span>יש לך שאלות נוספות?</span>
                 </a>
@@ -1165,7 +1239,7 @@ class BirthdayLandingElement extends HTMLElement {
         const workshopOptions = this._state.workshops.map((w) => w.title).filter(Boolean);
         const f = this._state.form;
         return h`
-            <div class="bl-form-section">
+            <div class="bl-form-section bl-reveal" style="--bl-delay: 80ms">
                 <h2>רוצים לחגוג אצלנו?</h2>
                 <p class="bl-form-sub">מלאו פרטים ונחזור אליכם עם כל הפרטים לסדנה המושלמת</p>
                 <div id="blFormStatus"></div>
@@ -1292,6 +1366,7 @@ class BirthdayLandingElement extends HTMLElement {
         if (contentEl) contentEl.innerHTML = this._renderContent(active);
         if (this._heroTimer) clearInterval(this._heroTimer);
         this._startHeroFade();
+        this._initRevealAnimations();
         this.dispatchEvent(new CustomEvent('birthday-tab-change', {
             detail: { workshopId: active._id || null, title: active.title || null },
             bubbles: true,

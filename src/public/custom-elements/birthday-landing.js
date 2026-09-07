@@ -351,11 +351,50 @@ const STYLE = `
         50% { transform: translate(12px, 18px) rotate(160deg) scale(1.08); }
     }
     @media (prefers-reduced-motion: reduce) {
-        .bl-blob, .bl-bg-shape { animation: none !important; }
+        .bl-blob, .bl-bg-shape, .bl-bg-brand { animation: none !important; }
     }
     @media (max-width: 900px) {
         .bl-blob { opacity: 0.11; filter: blur(4px); }
         .bl-bg-shape { opacity: 0.16; }
+        .bl-bg-brand { opacity: calc(var(--bl-brand-opacity, 0.3) * 0.85); }
+    }
+    .bl-bg-brand {
+        position: absolute;
+        pointer-events: none;
+        border-radius: 50%;
+        overflow: hidden;
+        opacity: var(--bl-brand-opacity, 0.3);
+        animation: bl-float-b 15s ease-in-out infinite;
+        will-change: transform;
+        box-shadow: 0 8px 22px rgba(102, 34, 136, 0.1);
+    }
+    .bl-bg-brand[data-anim="a"] { animation-name: bl-float-a; }
+    .bl-bg-brand[data-anim="c"] { animation-name: bl-drift; }
+    .bl-bg-brand[data-anim="orbit"] { animation-name: bl-orbit; }
+    .bl-bg-brand img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+    }
+
+    /* ---------- Brand header ---------- */
+    .bl-brand-header {
+        position: relative;
+        z-index: 2;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        padding: 18px 20px 6px;
+        max-width: 1180px;
+        margin: 0 auto;
+    }
+    .bl-brand-logo {
+        height: 58px;
+        width: auto;
+        max-width: min(340px, 82vw);
+        object-fit: contain;
+        filter: drop-shadow(0 4px 14px rgba(38, 38, 38, 0.08));
     }
 
     .bl-section { position: relative; z-index: 1; max-width: 1180px; margin: 0 auto; padding: 0 20px; }
@@ -1000,8 +1039,13 @@ const STYLE = `
         .bl-desc-card, .bl-card, .bl-form-section { padding: 20px; }
         .bl-highlights-grid { grid-template-columns: repeat(2, 1fr); }
         .bl-fab { right: 16px; bottom: 16px; padding: 12px 16px; font-size: 14px; }
+        .bl-brand-logo { height: 46px; }
+        .bl-brand-header { padding: 14px 16px 4px; }
     }
 `;
+
+const BRAND_CIRCLE_IMG = 'https://static.wixstatic.com/media/6b73e9_6e7c52763bb24ba6812aaac51ecb4296~mv2.png';
+const BRAND_LOGO_IMG = 'https://static.wixstatic.com/media/6b73e9_7ec8f0e2bd2c4aefa96bb95bad025508~mv2.png';
 
 const BLOBS = [
     { top: '2%', left: '1%', size: 150, color: '#00A4FD', anim: 'a', duration: 11, delay: 0 },
@@ -1024,6 +1068,14 @@ const BG_SHAPES = [
     { type: 'plus', top: '44%', right: '3%', size: 24, color: '#00A4FD', anim: 'orbit', duration: 17, delay: 1.2 },
     { type: 'ring', top: '28%', left: '3%', size: 34, color: '#A56AF0', anim: 'b', duration: 13, delay: 2.2 },
     { type: 'dot', top: '58%', left: '14%', size: 12, color: '#35B89A', anim: 'a', duration: 9, delay: 0.4 },
+];
+
+const BG_BRAND_CIRCLES = [
+    { top: '5%', right: '1%', size: 92, anim: 'orbit', duration: 20, delay: 0, opacity: 0.34 },
+    { top: '30%', left: '0%', size: 76, anim: 'b', duration: 17, delay: 1.2, opacity: 0.28 },
+    { top: '55%', right: '3%', size: 88, anim: 'a', duration: 19, delay: 0.6, opacity: 0.3 },
+    { top: '72%', left: '4%', size: 68, anim: 'c', duration: 15, delay: 1.8, opacity: 0.26 },
+    { top: '92%', right: '7%', size: 80, anim: 'orbit', duration: 21, delay: 2.4, opacity: 0.24 },
 ];
 
 const HERO_FADE_MS = 4200;
@@ -1119,16 +1171,17 @@ class BirthdayLandingElement extends HTMLElement {
         if (this._heroTimer) clearInterval(this._heroTimer);
         const s = this._state;
         if (s.loading || !s.dataLoaded) {
-            this._root.innerHTML = `${this._renderBackground()}${this._renderLoading()}`;
+            this._root.innerHTML = `${this._renderBackground()}${this._renderBrandHeader()}${this._renderLoading()}`;
             return;
         }
         if (!s.workshops.length) {
-            this._root.innerHTML = `${this._renderBackground()}<div class="bl-empty">אין כרגע סדנאות זמינות להצגה. נשמח לראותכם בקרוב!</div>`;
+            this._root.innerHTML = `${this._renderBackground()}${this._renderBrandHeader()}<div class="bl-empty">אין כרגע סדנאות זמינות להצגה. נשמח לראותכם בקרוב!</div>`;
             return;
         }
         const active = this._activeWorkshop();
         this._root.innerHTML = h`
             ${this._renderBackground()}
+            ${this._renderBrandHeader()}
             <header class="bl-hero">
                 <div class="bl-hero-gallery-wrap">
                     <div class="bl-hero-card bl-hero-card-1" aria-hidden="true"></div>
@@ -1218,7 +1271,21 @@ class BirthdayLandingElement extends HTMLElement {
             return `<span class="${cls}" data-anim="${s.anim || 'b'}" style="${posStyle(s)}width:${s.size}px;height:${s.size}px;color:${s.color};${bg}${animStyle(s)}"></span>`;
         }).join('');
 
-        return `<div class="bl-bg-layer" aria-hidden="true">${blobs}${shapes}</div>`;
+        const brandCircles = BG_BRAND_CIRCLES.map((b) => `
+            <span class="bl-bg-brand" data-anim="${b.anim || 'b'}" style="${posStyle(b)}width:${b.size}px;height:${b.size}px;--bl-brand-opacity:${b.opacity ?? 0.3};${animStyle(b)}">
+                <img src="${BRAND_CIRCLE_IMG}" alt="" loading="lazy" decoding="async" />
+            </span>
+        `).join('');
+
+        return `<div class="bl-bg-layer" aria-hidden="true">${blobs}${shapes}${brandCircles}</div>`;
+    }
+
+    _renderBrandHeader() {
+        return `
+            <div class="bl-brand-header bl-reveal">
+                <img class="bl-brand-logo" src="${BRAND_LOGO_IMG}" alt="Studio Happy" loading="eager" decoding="async" />
+            </div>
+        `;
     }
 
     _renderHeroImages(workshop) {

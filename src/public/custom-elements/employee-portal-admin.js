@@ -3301,6 +3301,7 @@ export function handleAdminClick(ce, action, target) {
             ce._batchSaveSnapshot = ce._batchQueue.map(item => ({ ...item }));
             const actions = ce._batchSaveSnapshot.map(item => ({ type: item.type, payload: item.payload }));
             ce.render();
+            ce._startBusy(`שומר ${actions.length} פעולות…`);
             ce._dispatch('adminApplyBatch', { actions, notify: ce._batchNotify !== false });
             return true;
         }
@@ -3744,6 +3745,7 @@ export function handleAdminClick(ce, action, target) {
                 settingsSaveBtn.disabled = true;
                 settingsSaveBtn.innerHTML = '<span class="epa-save-spin"></span>שומר הגדרות…';
             }
+            ce._startBusy('שומר הגדרות…');
             ce._dispatch('adminUpdateSettings', {
                 patch: {
                     deadlineDaysBeforeMonthEnd,

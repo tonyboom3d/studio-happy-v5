@@ -634,14 +634,22 @@ export const reorderEmployees = webMethod(Permissions.SiteMember, async (roleIds
         throw new Error('BAD_REQUEST: חסרה רשימת עובדים לסידור.');
     }
     const unique = [...new Set(roleIds.map(id => String(id || '').trim()).filter(Boolean))];
-    await Promise.all(unique.map(async (roleId, index) => {
-        const existing = await wixData.get('Dashboard_Roles', roleId, SA).catch(() => null);
-        if (!existing) return;
-        await wixData.update('Dashboard_Roles', mergeRoleRowForUpdate(existing, {
-            _id: roleId,
-            priorityRank: index + 1,
-        }), SA);
-    }));
+    // Single query for all existing rows instead of N wixData.get() calls,
+    // then a single bulkUpdate instead of N sequential wixData.update() calls.
+    const { items: existingRows } = await wixData.query('Dashboard_Roles')
+        .hasSome('_id', unique)
+        .limit(Math.min(unique.length, 1000))
+        .find(SA);
+    const existingById = new Map(existingRows.map(row => [row._id, row]));
+    const rank = new Map(unique.map((roleId, index) => [roleId, index + 1]));
+    const rows = unique
+        .map(roleId => existingById.get(roleId))
+        .filter(Boolean)
+        .map(existing => mergeRoleRowForUpdate(existing, {
+            _id: existing._id,
+            priorityRank: rank.get(existing._id),
+        }));
+    if (rows.length) await wixData.bulkUpdate('Dashboard_Roles', rows, SA);
     await publishSchedulingUpdate('employees-reordered', { count: unique.length });
     console.log(`[staffAdminService] reorderEmployees: ${unique.length} rows by ${role._id}`);
     return { ok: true, roleIds: unique };

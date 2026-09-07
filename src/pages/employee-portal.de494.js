@@ -322,9 +322,36 @@ function pushActionResult(portalEl, result) {
     }));
 }
 
+// Pure read/load actions never write to the CMS — no need to suppress the
+// realtime echo for these, and they're harmless if another client's realtime
+// update refreshes concurrently.
+const READ_ONLY_ACTION_TYPES = new Set([
+    'refresh',
+    'promptLogin',
+    'loadSwapCandidates',
+    'loadMyHours',
+    'loadMyMessages',
+    'adminMessagesLoad',
+    'adminVacationsLoad',
+    'adminLoad',
+    'adminListEmployeeShifts',
+    'adminStaffLoad',
+    'adminTeamTimeLoad',
+    'adminTemplatesLoad',
+    'adminLoadWorkshopOrders',
+]);
+
 async function handlePortalAction(portalEl, detail) {
     const { type, payload } = detail || {};
     if (!type) return;
+
+    // Every mutating action suppresses this client's own realtime-triggered
+    // refresh for a few seconds — we already refetch directly below, so
+    // reacting to our own change's realtime echo on top of that just causes
+    // an extra redundant refresh/render.
+    if (!READ_ONLY_ACTION_TYPES.has(type)) {
+        __epSuppressRealtimeUntil = Date.now() + 4000;
+    }
 
     let refreshPortal = true;
     let refreshAdmin = !!__epLastAdminMonth;
@@ -556,7 +583,6 @@ async function handlePortalAction(portalEl, detail) {
 
         case 'adminSaveEmployee': {
             const result = await saveEmployeeAdmin(payload?.roleId, payload?.patch, payload?.permissions || null);
-            __epSuppressRealtimeUntil = Date.now() + 4000;
             pushActionResult(portalEl, { type, ...result });
             refreshPortal = false;
             refreshAdmin = false;
@@ -665,7 +691,6 @@ async function handlePortalAction(portalEl, detail) {
 
         case 'adminUpdateRule': {
             const result = await updateSchedulingRule(payload?.workshopTypeId, payload?.patch);
-            __epSuppressRealtimeUntil = Date.now() + 4000;
             pushActionResult(portalEl, { type, ...result });
             refreshPortal = false;
             refreshAdmin = true;

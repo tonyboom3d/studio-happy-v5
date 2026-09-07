@@ -1038,6 +1038,7 @@ const STYLE = `
         .bl-highlights-grid { grid-template-columns: repeat(2, 1fr); }
         .bl-fab { right: 16px; bottom: 16px; padding: 12px 16px; font-size: 14px; }
         .bl-hero-logo { height: 69px; margin-bottom: 12px; }
+        .bl-hero-text { padding-right: 28px; }
     }
 `;
 

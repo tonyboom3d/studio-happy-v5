@@ -24,6 +24,19 @@ import { ADMIN_STYLE, renderAdminTab, handleAdminClick, handleAdminChange, handl
 
 const EMPLOYEE_SAVE_HOLD_MS = 2000;
 
+// Day-level admin edits whose action-result arrives before the authoritative
+// admin-data refresh. Rendering on action-result here would show the board
+// still in its stale state; we hold the busy overlay + toast until admin-data
+// lands so the calendar only re-renders once, already showing the final state.
+const SILENT_ADMIN_REFRESH_TYPES = new Set([
+    'adminDayFlags',
+    'adminSaveDayNote',
+    'adminSetHolidayMode',
+    'adminSaveSketchDuty',
+    'adminDeleteSketchDuty',
+    'adminUpdateRule',
+]);
+
 const EP_STYLE = `
 employee-portal { display: block; direction: rtl; font-family: 'Heebo', 'Segoe UI', Arial, sans-serif; background: linear-gradient(145deg,#f8fafc,#eff6ff); color: #1f2937; min-height: 100%; width: 100%; max-width: 100%; min-width: 0; overflow-x: clip; }
 employee-portal * { box-sizing: border-box; }
@@ -669,6 +682,8 @@ class EmployeePortal extends HTMLElement {
         this._batchTimer = null;                // 1s ticker for the expiry countdown chip
         this._shiftModal = null;                // { type: 'edit'|'requestEdit'|'requestDelete'|'swap', submissionId }
         this._busy = null;                      // busy-overlay message while a mutation is in flight
+        this._pendingAdminToast = null;         // { message, kind } held until admin-data confirms a silent day-level edit
+        this._pendingAdminToastTimer = null;    // safety-net timer for _pendingAdminToast
         this._editWindowTimer = null;           // 1s ticker for the 30-min free-edit countdown
         this._autoApprovedPopup = null;         // shifts array shown right after an instant auto-approve
         this._urgentPopupOpen = false;          // urgent open-calls selection popup
@@ -900,6 +915,12 @@ class EmployeePortal extends HTMLElement {
                 return;
             }
             this._submitting = false;
+            // A silent day-level admin edit (see SILENT_ADMIN_REFRESH_TYPES) also
+            // triggers a portal-data refetch (settings like holidays/day-notes are
+            // shared with the employee view). If portal-data lands before
+            // admin-data, don't clear the busy overlay or render yet — wait for
+            // admin-data, which performs the single deferred render + toast.
+            if (this._pendingAdminToast) return;
             this._busy = null;
             if (this._data?.error === 'ACCESS_DENIED') {
                 console.warn('[employee-portal] access denied');
@@ -926,7 +947,7 @@ class EmployeePortal extends HTMLElement {
                 this._messagesRequested = true;
                 this._dispatch('loadMyMessages');
             }
-            this.render();
+            this._scheduleRender();
         }
         if (name === 'admin-data') {
             try {
@@ -940,13 +961,20 @@ class EmployeePortal extends HTMLElement {
             this._pendingWorkTypes = null;
             if (this._adminData?.monthKey) this._adminMonth = this._adminData.monthKey;
             this._loadBatch();
+            if (this._pendingAdminToast) {
+                clearTimeout(this._pendingAdminToastTimer);
+                const t = this._pendingAdminToast;
+                this._pendingAdminToast = null;
+                this._toast(t.message, t.kind); // _toast() already schedules the single render
+                return;
+            }
             console.log('[employee-portal] admin-data received', {
                 month: this._adminData.monthKey,
                 employees: this._adminData.employees?.length ?? 0,
                 days: Object.keys(this._adminData.days || {}).length,
             });
             if (this._empSaveFinishing) return;
-            this.render();
+            this._scheduleRender();
         }
         if (name === 'hours-data') {
             try {
@@ -961,7 +989,7 @@ class EmployeePortal extends HTMLElement {
                 month: this._hoursData.monthKey,
                 entries: this._hoursData.entries?.length ?? 0,
             });
-            this.render();
+            this._scheduleRender();
         }
         if (name === 'templates-data') {
             try {
@@ -971,7 +999,7 @@ class EmployeePortal extends HTMLElement {
                 return;
             }
             this._busy = null;
-            this.render();
+            this._scheduleRender();
         }
         if (name === 'staff-data') {
             try {
@@ -989,7 +1017,7 @@ class EmployeePortal extends HTMLElement {
                 return;
             }
             this._busy = null;
-            this.render();
+            this._scheduleRender();
         }
         if (name === 'team-time-data') {
             try {
@@ -1000,7 +1028,7 @@ class EmployeePortal extends HTMLElement {
             }
             this._busy = null;
             if (this._teamTimeData?.monthKey) this._teamTimeMonth = this._teamTimeData.monthKey;
-            this.render();
+            this._scheduleRender();
         }
         if (name === 'messages-data') {
             try {
@@ -1010,7 +1038,7 @@ class EmployeePortal extends HTMLElement {
                 return;
             }
             this._busy = null;
-            this.render();
+            this._scheduleRender();
         }
         if (name === 'messages-admin-data') {
             try {
@@ -1021,7 +1049,7 @@ class EmployeePortal extends HTMLElement {
                 return;
             }
             this._busy = null;
-            this.render();
+            this._scheduleRender();
         }
         if (name === 'vacations-data') {
             try {
@@ -1031,7 +1059,7 @@ class EmployeePortal extends HTMLElement {
                 return;
             }
             this._busy = null;
-            this.render();
+            this._scheduleRender();
         }
         if (name === 'action-result') {
             try {
@@ -1082,6 +1110,21 @@ class EmployeePortal extends HTMLElement {
         this.querySelector('.ep-busy')?.remove();
     }
 
+    /**
+     * Coalesces multiple render() requests that happen within the same tick
+     * (e.g. a toast's own render + the trailing render at the end of
+     * _handleActionResult, or several attribute pushes arriving back-to-back)
+     * into a single paint on the next microtask.
+     */
+    _scheduleRender() {
+        if (this._renderScheduled) return;
+        this._renderScheduled = true;
+        queueMicrotask(() => {
+            this._renderScheduled = false;
+            this.render();
+        });
+    }
+
     _handleActionResult(result) {
         this._submitting = false;
 
@@ -1109,7 +1152,7 @@ class EmployeePortal extends HTMLElement {
                 if (savedRoleId && this._empFormDraft) delete this._empFormDraft[savedRoleId];
                 this._adminModal = null;
                 this._toast('פרטי העובד/ת נשמרו בהצלחה.', 'success');
-                this.render();
+                this._scheduleRender();
             }, EMPLOYEE_SAVE_HOLD_MS);
             return;
         }
@@ -1125,7 +1168,45 @@ class EmployeePortal extends HTMLElement {
                 this._lastEmployeeSave = null;
             }
             this._toast(result.message || 'שמירת פרטי העובד/ת נכשלה.', 'error');
-            this.render();
+            this._scheduleRender();
+            return;
+        }
+
+        // Day-level admin edits (block/promote day, day note, holiday mode,
+        // sketch duty, scheduling rule): keep the busy overlay up and skip
+        // rendering here. Rendering now would rebuild the whole calendar
+        // board with the still-stale _adminData, then rebuild it again a
+        // moment later when the authoritative admin-data refresh lands —
+        // two flashes for one save. Instead, defer the toast (and the single
+        // resulting render) until admin-data arrives; see attributeChangedCallback.
+        if (SILENT_ADMIN_REFRESH_TYPES.has(result.type)) {
+            if (result.error) {
+                this._busy = null;
+                this._clearBusyOverlay();
+                this._toast(result.message || 'אירעה שגיאה. נסו שוב.', 'error');
+                return;
+            }
+            if (result.type === 'adminSaveSketchDuty' && result.needsConfirm) {
+                this._busy = null;
+                this._clearBusyOverlay();
+                this._pendingSketchDutyConfirm = { dateKey: result.dateKey, startTime: result.startTime, endTime: result.endTime };
+                this._toast('קיימת סדנת טאפטינג ביום זה — יש לאשר שוב לשמירה.', 'error');
+                return;
+            }
+            if (result.type === 'adminSaveSketchDuty' || result.type === 'adminDeleteSketchDuty') {
+                this._pendingSketchDutyConfirm = null;
+            }
+            this._pendingAdminToast = { message: 'הפעולה בוצעה בהצלחה.', kind: 'success' };
+            clearTimeout(this._pendingAdminToastTimer);
+            // Safety net: if admin-data never arrives (e.g. admin tab wasn't
+            // actually open), don't leave the user staring at a spinner forever.
+            this._pendingAdminToastTimer = setTimeout(() => {
+                if (!this._pendingAdminToast) return;
+                this._pendingAdminToast = null;
+                this._busy = null;
+                this._clearBusyOverlay();
+                this._toast('הפעולה בוצעה בהצלחה.', 'success');
+            }, 8000);
             return;
         }
 
@@ -1149,7 +1230,7 @@ class EmployeePortal extends HTMLElement {
             if (result.type === 'adminUpdateSettings') this._settingsSaving = false;
             if (result.type === 'adminUpdateHolidays') this._holidaysSaving = false;
             this._toast(result.message || 'אירעה שגיאה. נסו שוב.', 'error');
-            this.render();
+            this._scheduleRender();
             return;
         }
         if (result.type === 'adminUpdateSettings' && result.ok) {
@@ -1166,20 +1247,20 @@ class EmployeePortal extends HTMLElement {
                 saveBtn.textContent = 'שמירת הגדרות';
                 savedMark.style.display = '';
             } else {
-                this.render();
+                this._scheduleRender();
             }
             return;
         }
         if (result.type === 'adminUpdateHolidays' && result.ok) {
             this._holidaysSaving = false;
             this._toast('המועדים נשמרו בהצלחה.', 'success');
-            this.render();
+            this._scheduleRender();
             return;
         }
         if (result.type === 'adminListEmployeeShifts') {
             if (this._adminModal?.type === 'confirmDeactivate' && this._adminModal.id === result.roleId) {
                 this._deactivateShifts = result.shifts || [];
-                this.render();
+                this._scheduleRender();
             }
             return;
         }
@@ -1188,13 +1269,13 @@ class EmployeePortal extends HTMLElement {
             this._toast(result.removed
                 ? `העובד/ת הושבת/ה והוסרו ${result.removed} משמרות עתידיות.`
                 : 'העובד/ת הושבת/ה בהצלחה.', 'success');
-            this.render();
+            this._scheduleRender();
             return;
         }
         if (result.type === 'loadSwapCandidates') {
             if (this._shiftModal?.type === 'swap') {
                 this._swapCandidates = result.candidates || [];
-                this.render();
+                this._scheduleRender();
             }
             return;
         }
@@ -1237,7 +1318,7 @@ class EmployeePortal extends HTMLElement {
             } else {
                 const msgs = (result.errors || []).map(e => e.message).filter(Boolean);
                 this._toast(msgs[0] || 'ההגשה נדחתה — בדקו את הכללים.', 'error');
-                this.render();
+                this._scheduleRender();
             }
         }
         if (result.type === 'withdrawAvailability' && result.ok) {
@@ -1277,7 +1358,7 @@ class EmployeePortal extends HTMLElement {
         if (result.type === 'adminReorderEmployees' && result.ok) {
             this._busy = null;
             this._toast('סדר העובדים נשמר.', 'success');
-            this.render();
+            this._scheduleRender();
             return;
         }
         if (result.type === 'adminReorderEmployees' && result.error) {
@@ -1292,30 +1373,18 @@ class EmployeePortal extends HTMLElement {
             this._adminModal = { type: 'autoAssignSummary' };
             const totalAssigned = (result.employees || []).reduce((sum, e) => sum + (e.shifts || []).filter(s => s.status === 'ASSIGNED').length, 0);
             this._toast(totalAssigned ? `${totalAssigned} משמרות שובצו בהצלחה! 🎉` : 'לא נמצאו משמרות זמינות לשיבוץ בטווח שנבחר.', totalAssigned ? 'success' : 'error');
-            this.render();
+            this._scheduleRender();
             return;
-        }
-        if (result.type === 'adminSaveSketchDuty') {
-            if (result.needsConfirm) {
-                this._pendingSketchDutyConfirm = { dateKey: result.dateKey, startTime: result.startTime, endTime: result.endTime };
-                this._toast('קיימת סדנת טאפטינג ביום זה — יש לאשר שוב לשמירה.', 'error');
-                this.render();
-                return;
-            }
-            this._pendingSketchDutyConfirm = null;
-        }
-        if (result.type === 'adminDeleteSketchDuty' && result.ok) {
-            this._pendingSketchDutyConfirm = null;
         }
         if (result.type === 'adminSwapAssignment') {
             if (result.blocked) {
                 this._toast(result.reason || 'לא ניתן לבצע את ההחלפה.', 'error');
-                this.render();
+                this._scheduleRender();
                 return;
             }
             if (result.ok) {
                 this._toast(result.warning ? `ההחלפה בוצעה. ${result.warning}` : 'ההחלפה בוצעה בהצלחה.', 'success');
-                this.render();
+                this._scheduleRender();
                 return;
             }
         }
@@ -1323,7 +1392,7 @@ class EmployeePortal extends HTMLElement {
             this._batchSaving = false;
             if (!result.ok) {
                 this._toast(result.message || 'שמירת האצווה נכשלה.', 'error');
-                this.render();
+                this._scheduleRender();
                 return;
             }
             const results = result.results || [];
@@ -1343,7 +1412,7 @@ class EmployeePortal extends HTMLElement {
             this._batchHistoryOpen = true;
             const okCount = results.filter(r => r.ok).length;
             this._toast(`נשמרו ${okCount} מ-${results.length} פעולות.`, okCount === results.length ? 'success' : 'error');
-            this.render();
+            this._scheduleRender();
             return;
         }
         if (result.type === 'adminLoadWorkshopOrders') {
@@ -1354,13 +1423,13 @@ class EmployeePortal extends HTMLElement {
                 this._workshopOrderGroups[result.key] = [];
                 this._toast('טעינת פרטי הסדנה נכשלה.', 'error');
             }
-            this.render();
+            this._scheduleRender();
             return;
         }
         if (result.type?.startsWith('admin') && result.ok) {
             this._toast('הפעולה בוצעה בהצלחה.', 'success');
         }
-        this.render();
+        this._scheduleRender();
     }
 
     // -----------------------------------------------------------------
@@ -3178,6 +3247,7 @@ class EmployeePortal extends HTMLElement {
                 return;
             }
             case 'ack-swap':
+                this._startBusy('מאשר קבלת המשמרת…');
                 this._dispatch('acknowledgeShiftSwap', { swapId: target.dataset.id });
                 return;
             case 'shift-modal-cancel':
@@ -3227,6 +3297,7 @@ class EmployeePortal extends HTMLElement {
                 return;
             }
             case 'ack-request':
+                this._startBusy('מאשר קבלת ההודעה…');
                 this._dispatch('acknowledgeShiftRequest', { requestId: target.dataset.id });
                 return;
             case 'dismiss-auto-approved':
@@ -3605,7 +3676,7 @@ class EmployeePortal extends HTMLElement {
 
     _toast(message, kind) {
         this._pendingToast = { message, kind, expiry: Date.now() + 4200 };
-        this.render();
+        this._scheduleRender();
         clearTimeout(this._toastTimer);
         this._toastTimer = setTimeout(() => {
             this._pendingToast = null;

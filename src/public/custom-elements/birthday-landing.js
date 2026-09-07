@@ -461,7 +461,12 @@ const STYLE = `
         box-shadow: 0 6px 14px rgba(255, 95, 192, 0.35);
         z-index: 2;
     }
-    .bl-hero-text { display: flex; flex-direction: column; gap: 14px; }
+    .bl-hero-text {
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+        padding-right: 44px;
+    }
     .bl-hero-title { font-size: clamp(28px, 4vw, 44px); line-height: 1.15; }
     .bl-hero-brand {
         display: block;

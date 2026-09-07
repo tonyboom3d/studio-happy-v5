@@ -381,11 +381,12 @@ const STYLE = `
     /* ---------- Hero logo ---------- */
     .bl-hero-logo {
         display: block;
-        height: 68px;
+        height: 78px;
         width: auto;
-        max-width: min(380px, 92%);
+        max-width: min(437px, 92%);
         object-fit: contain;
         margin: 0 0 16px;
+        align-self: flex-start;
         filter: drop-shadow(0 4px 14px rgba(38, 38, 38, 0.08));
     }
 

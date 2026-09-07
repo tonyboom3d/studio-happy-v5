@@ -24,7 +24,7 @@ import { ADMIN_STYLE, renderAdminTab, handleAdminClick, handleAdminChange, handl
 
 const EMPLOYEE_SAVE_HOLD_MS = 2000;
 
-// Day-level admin edits whose action-result arrives before the authoritative
+// Admin mutations whose action-result arrives before the authoritative
 // admin-data refresh. Rendering on action-result here would show the board
 // still in its stale state; we hold the busy overlay + toast until admin-data
 // lands so the calendar only re-renders once, already showing the final state.
@@ -35,7 +35,22 @@ const SILENT_ADMIN_REFRESH_TYPES = new Set([
     'adminSaveSketchDuty',
     'adminDeleteSketchDuty',
     'adminUpdateRule',
+    'adminManualAssign',
+    'adminCancelAssignment',
+    'adminSwapAssignment',
+    'adminApproveSubmission',
+    'adminRejectSubmission',
+    'adminUpdateWorkType',
 ]);
+
+const ADMIN_REFRESH_TOAST = {
+    adminManualAssign: 'העובד/ת שובץ/ה בהצלחה.',
+    adminCancelAssignment: 'השיבוץ עודכן.',
+    adminSwapAssignment: 'ההחלפה בוצעה בהצלחה.',
+    adminApproveSubmission: 'המשמרת אושרה.',
+    adminRejectSubmission: 'המשמרת נדחתה.',
+    adminUpdateWorkType: 'סוג העבודה עודכן.',
+};
 
 const EP_STYLE = `
 employee-portal { display: block; direction: rtl; font-family: 'Heebo', 'Segoe UI', Arial, sans-serif; background: linear-gradient(145deg,#f8fafc,#eff6ff); color: #1f2937; min-height: 100%; width: 100%; max-width: 100%; min-width: 0; overflow-x: clip; }
@@ -285,7 +300,7 @@ employee-portal * { box-sizing: border-box; }
 .ep-tabbtn { border: 0; background: transparent; border-radius: 9px; padding: 8px 18px; font-size: 13px; font-weight: 700; cursor: pointer; font-family: inherit; color: #64748b; transition: color .15s,background .15s,transform .15s,box-shadow .15s; }
 .ep-tabbtn:hover { color: #1d4ed8; background: #eff6ff; }
 .ep-tabbtn.active { background: linear-gradient(135deg,#2563eb,#1d4ed8); color: #fff; box-shadow: 0 5px 14px rgba(37,99,235,.2); }
-.ep-busy { position: fixed; inset: 0; background: rgba(255,255,255,.65); z-index: 9998; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; font-size: 14px; color: #374151; font-weight: 600; backdrop-filter: blur(1px); }
+.ep-busy { position: fixed; inset: 0; background: rgba(255,255,255,.65); z-index: 10060; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; font-size: 14px; color: #374151; font-weight: 600; backdrop-filter: blur(1px); }
 .ep-day.waitlist { border-color: #fbbf24; background: #fffbeb; }
 .ep-day.noskill { background: #f9fafb; color: #c4c7cc; cursor: default; }
 .ep-day.vacation { background: #fdf2f8; border-color: #f9a8d4; color: #831843; cursor: default; }
@@ -1172,8 +1187,15 @@ class EmployeePortal extends HTMLElement {
             return;
         }
 
-        // Day-level admin edits (block/promote day, day note, holiday mode,
-        // sketch duty, scheduling rule): keep the busy overlay up and skip
+        if (result.type === 'adminSwapAssignment' && result.blocked) {
+            this._busy = null;
+            this._clearBusyOverlay();
+            this._toast(result.reason || 'לא ניתן לבצע את ההחלפה.', 'error');
+            this._scheduleRender();
+            return;
+        }
+
+        // Admin board/settings edits: keep the busy overlay up and skip
         // rendering here. Rendering now would rebuild the whole calendar
         // board with the still-stale _adminData, then rebuild it again a
         // moment later when the authoritative admin-data refresh lands —
@@ -1184,6 +1206,7 @@ class EmployeePortal extends HTMLElement {
                 this._busy = null;
                 this._clearBusyOverlay();
                 this._toast(result.message || 'אירעה שגיאה. נסו שוב.', 'error');
+                this._scheduleRender();
                 return;
             }
             if (result.type === 'adminSaveSketchDuty' && result.needsConfirm) {
@@ -1191,12 +1214,17 @@ class EmployeePortal extends HTMLElement {
                 this._clearBusyOverlay();
                 this._pendingSketchDutyConfirm = { dateKey: result.dateKey, startTime: result.startTime, endTime: result.endTime };
                 this._toast('קיימת סדנת טאפטינג ביום זה — יש לאשר שוב לשמירה.', 'error');
+                this._scheduleRender();
                 return;
             }
             if (result.type === 'adminSaveSketchDuty' || result.type === 'adminDeleteSketchDuty') {
                 this._pendingSketchDutyConfirm = null;
             }
-            this._pendingAdminToast = { message: 'הפעולה בוצעה בהצלחה.', kind: 'success' };
+            let toastMessage = ADMIN_REFRESH_TOAST[result.type] || 'הפעולה בוצעה בהצלחה.';
+            if (result.type === 'adminSwapAssignment' && result.warning) {
+                toastMessage = `ההחלפה בוצעה. ${result.warning}`;
+            }
+            this._pendingAdminToast = { message: toastMessage, kind: 'success' };
             clearTimeout(this._pendingAdminToastTimer);
             // Safety net: if admin-data never arrives (e.g. admin tab wasn't
             // actually open), don't leave the user staring at a spinner forever.
@@ -1375,18 +1403,6 @@ class EmployeePortal extends HTMLElement {
             this._toast(totalAssigned ? `${totalAssigned} משמרות שובצו בהצלחה! 🎉` : 'לא נמצאו משמרות זמינות לשיבוץ בטווח שנבחר.', totalAssigned ? 'success' : 'error');
             this._scheduleRender();
             return;
-        }
-        if (result.type === 'adminSwapAssignment') {
-            if (result.blocked) {
-                this._toast(result.reason || 'לא ניתן לבצע את ההחלפה.', 'error');
-                this._scheduleRender();
-                return;
-            }
-            if (result.ok) {
-                this._toast(result.warning ? `ההחלפה בוצעה. ${result.warning}` : 'ההחלפה בוצעה בהצלחה.', 'success');
-                this._scheduleRender();
-                return;
-            }
         }
         if (result.type === 'adminApplyBatch') {
             this._batchSaving = false;

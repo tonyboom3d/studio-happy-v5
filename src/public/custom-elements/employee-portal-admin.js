@@ -3258,7 +3258,8 @@ export function handleAdminClick(ce, action, target) {
                 return true;
             }
             ce._adminModal = null;
-            ce._startBusy('משבץ…');
+            ce._startBusy('משבץ עובד/ת…');
+            ce.render();
             ce._dispatch('adminManualAssign', assignPayload);
             return true;
         }
@@ -3395,7 +3396,8 @@ export function handleAdminClick(ce, action, target) {
                 return true;
             }
             ce._adminModal = null;
-            ce._startBusy('משבץ…');
+            ce._startBusy('משבץ עובד/ת…');
+            ce.render();
             ce._dispatch('adminManualAssign', wsAssignPayload);
             return true;
         }
@@ -3428,6 +3430,7 @@ export function handleAdminClick(ce, action, target) {
             }
             ce._adminModal = null;
             ce._startBusy('מבצע החלפה…');
+            ce.render();
             ce._dispatch('adminSwapAssignment', swapPayload);
             return true;
         }
@@ -3475,6 +3478,7 @@ export function handleAdminClick(ce, action, target) {
             }
             ce._adminModal = null;
             ce._startBusy(target.dataset.disposition === 'delete' ? 'מסיר הגשה…' : 'מחזיר להגשות פעילות…');
+            ce.render();
             ce._dispatch('adminCancelAssignment', cancelPayload);
             return true;
         }
@@ -3491,11 +3495,13 @@ export function handleAdminClick(ce, action, target) {
                 || ce.querySelector(`.epa-sub-worktype[data-sub="${subId}"]`)?.value
                 || DEFAULT_WORK_TYPE;
             ce._startBusy('מאשר משמרת…');
+            ce.render();
             ce._dispatch('adminApproveSubmission', { submissionId: subId, workshopTypeId, workType });
             return true;
         }
         case 'admin-reject-submission':
             ce._startBusy('דוחה משמרת…');
+            ce.render();
             ce._dispatch('adminRejectSubmission', { submissionId: target.dataset.sub });
             return true;
         case 'admin-worktype-confirm': {
@@ -3505,6 +3511,7 @@ export function handleAdminClick(ce, action, target) {
             const s = (d?.submissions || []).find(x => x.id === pending.submissionId);
             if (s?.status === 'SCHEDULED') {
                 ce._startBusy('מעדכן סוג עבודה…');
+                ce.render();
                 ce._dispatch('adminUpdateWorkType', { submissionId: pending.submissionId, workType: pending.workType });
             } else {
                 ce._pendingWorkTypes = ce._pendingWorkTypes || {};

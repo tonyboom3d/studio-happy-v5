@@ -378,22 +378,14 @@ const STYLE = `
         display: block;
     }
 
-    /* ---------- Brand header ---------- */
-    .bl-brand-header {
-        position: relative;
-        z-index: 2;
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        padding: 18px 20px 6px;
-        max-width: 1180px;
-        margin: 0 auto;
-    }
-    .bl-brand-logo {
-        height: 58px;
+    /* ---------- Hero logo ---------- */
+    .bl-hero-logo {
+        display: block;
+        height: 68px;
         width: auto;
-        max-width: min(340px, 82vw);
+        max-width: min(380px, 92%);
         object-fit: contain;
+        margin: 0 0 16px;
         filter: drop-shadow(0 4px 14px rgba(38, 38, 38, 0.08));
     }
 
@@ -1039,13 +1031,12 @@ const STYLE = `
         .bl-desc-card, .bl-card, .bl-form-section { padding: 20px; }
         .bl-highlights-grid { grid-template-columns: repeat(2, 1fr); }
         .bl-fab { right: 16px; bottom: 16px; padding: 12px 16px; font-size: 14px; }
-        .bl-brand-logo { height: 46px; }
-        .bl-brand-header { padding: 14px 16px 4px; }
+        .bl-hero-logo { height: 52px; margin-bottom: 12px; }
     }
 `;
 
 const BRAND_CIRCLE_IMG = 'https://static.wixstatic.com/media/6b73e9_6e7c52763bb24ba6812aaac51ecb4296~mv2.png';
-const BRAND_LOGO_IMG = 'https://static.wixstatic.com/media/6b73e9_7ec8f0e2bd2c4aefa96bb95bad025508~mv2.png';
+const BRAND_LOGO_IMG = 'https://static.wixstatic.com/media/6b73e9_60fb2a8f865d4e2588d46f75ffe6d0d7~mv2.png';
 
 const BLOBS = [
     { top: '2%', left: '1%', size: 150, color: '#00A4FD', anim: 'a', duration: 11, delay: 0 },
@@ -1171,17 +1162,16 @@ class BirthdayLandingElement extends HTMLElement {
         if (this._heroTimer) clearInterval(this._heroTimer);
         const s = this._state;
         if (s.loading || !s.dataLoaded) {
-            this._root.innerHTML = `${this._renderBackground()}${this._renderBrandHeader()}${this._renderLoading()}`;
+            this._root.innerHTML = `${this._renderBackground()}${this._renderLoading()}`;
             return;
         }
         if (!s.workshops.length) {
-            this._root.innerHTML = `${this._renderBackground()}${this._renderBrandHeader()}<div class="bl-empty">אין כרגע סדנאות זמינות להצגה. נשמח לראותכם בקרוב!</div>`;
+            this._root.innerHTML = `${this._renderBackground()}<div class="bl-empty">אין כרגע סדנאות זמינות להצגה. נשמח לראותכם בקרוב!</div>`;
             return;
         }
         const active = this._activeWorkshop();
         this._root.innerHTML = h`
             ${this._renderBackground()}
-            ${this._renderBrandHeader()}
             <header class="bl-hero">
                 <div class="bl-hero-gallery-wrap">
                     <div class="bl-hero-card bl-hero-card-1" aria-hidden="true"></div>
@@ -1189,6 +1179,7 @@ class BirthdayLandingElement extends HTMLElement {
                     <div class="bl-hero-gallery" id="blHeroGallery">${this._renderHeroImages(active)}</div>
                 </div>
                 <div class="bl-hero-text">
+                    ${this._renderHeroLogo()}
                     <h1 class="bl-hero-title">חוגגים יום הולדת ב<span class="bl-hero-brand">Studio Happy</span></h1>
                     <p class="bl-hero-subtitle" id="blActiveSubtitle">${escapeHtml(active.subtitle || '')}</p>
                     <div class="bl-tabs" id="blTabs">${this._renderTabs()}</div>
@@ -1280,12 +1271,8 @@ class BirthdayLandingElement extends HTMLElement {
         return `<div class="bl-bg-layer" aria-hidden="true">${blobs}${shapes}${brandCircles}</div>`;
     }
 
-    _renderBrandHeader() {
-        return `
-            <div class="bl-brand-header bl-reveal">
-                <img class="bl-brand-logo" src="${BRAND_LOGO_IMG}" alt="Studio Happy" loading="eager" decoding="async" />
-            </div>
-        `;
+    _renderHeroLogo() {
+        return `<img class="bl-hero-logo bl-reveal" src="${BRAND_LOGO_IMG}" alt="Studio Happy" loading="eager" decoding="async" />`;
     }
 
     _renderHeroImages(workshop) {

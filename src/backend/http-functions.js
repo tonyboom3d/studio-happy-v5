@@ -32,6 +32,28 @@ const WORKSHOP_SERVICE_IDS = {
   ceramics: ['ad89914a-1845-48c6-804d-544cd17f179b'],
 };
 
+const WORKSHOP_TYPE_ALIASES = {
+  tufting: 'tufting',
+  'טאפטינג': 'tufting',
+  candles: 'candles',
+  'נרות': 'candles',
+  charms: 'charms',
+  "צ'ארמס": 'charms',
+  'צארמס': 'charms',
+  jewelry: 'jewelry',
+  'תכשיטים': 'jewelry',
+  ceramics: 'ceramics',
+  'קרמיקה': 'ceramics',
+};
+
+const WORKSHOP_TYPE_LABELS_HE = ['טאפטינג', 'נרות', 'תכשיטים', "צ'ארמס", 'קרמיקה'];
+
+function resolveWorkshopType(raw) {
+  const trimmed = String(raw || '').trim();
+  if (!trimmed) return null;
+  return WORKSHOP_TYPE_ALIASES[trimmed] || WORKSHOP_TYPE_ALIASES[trimmed.toLowerCase()] || null;
+}
+
 function israelDateKey(d) {
   const parts = new Intl.DateTimeFormat('en-CA', {
     timeZone: ISRAEL_TZ, year: 'numeric', month: '2-digit', day: '2-digit',
@@ -125,11 +147,12 @@ function buildNextPageUrl(request, workshopType, nextOffset) {
   }
 }
 
-// GET https://<yourdomain>/_functions/availableDates?workshopType=tufting&offset=0
+// GET https://<yourdomain>/_functions/availableDates?workshopType=טאפטינג&offset=0
 export async function get_availableDates(request) {
   try {
-    const workshopType = String(request.query.workshopType || '').toLowerCase().trim();
-    const serviceIds = WORKSHOP_SERVICE_IDS[workshopType];
+    const workshopTypeRaw = String(request.query.workshopType || '').trim();
+    const workshopKey = resolveWorkshopType(workshopTypeRaw);
+    const serviceIds = workshopKey ? WORKSHOP_SERVICE_IDS[workshopKey] : null;
 
     if (!serviceIds) {
       return badRequest({
@@ -139,7 +162,7 @@ export async function get_availableDates(request) {
           content: {
             messages: [{
               type: 'text',
-              text: `Invalid workshopType. Use one of: ${Object.keys(WORKSHOP_SERVICE_IDS).join(', ')}`,
+              text: `סוג סדנה לא תקין. השתמש באחד מהערכים: ${WORKSHOP_TYPE_LABELS_HE.join(' | ')}`,
             }],
           },
           error: 'invalid_workshopType',
@@ -163,15 +186,15 @@ export async function get_availableDates(request) {
 
     const hasMore = sortedDates.length > offset + PAGE_SIZE;
     const nextOffset = hasMore ? offset + PAGE_SIZE : null;
-    const nextPageUrl = hasMore ? buildNextPageUrl(request, workshopType, nextOffset) : null;
-    const datesText = dates.length ? dates.join('\n') : 'No available dates found.';
+    const nextPageUrl = hasMore ? buildNextPageUrl(request, workshopTypeRaw, nextOffset) : null;
+    const datesText = dates.length ? dates.join('\n') : 'לא נמצאו תאריכים פנויים.';
 
     return ok({
       headers: { 'Content-Type': 'application/json' },
       body: {
         version: 'v2',
         content: { messages: [{ type: 'text', text: datesText }] },
-        workshopType,
+        workshopType: workshopTypeRaw,
         offset,
         count: dates.length,
         dates,

@@ -381,9 +381,9 @@ const STYLE = `
     /* ---------- Hero logo ---------- */
     .bl-hero-logo {
         display: block;
-        height: 78px;
+        height: 90px;
         width: auto;
-        max-width: min(437px, 92%);
+        max-width: min(503px, 92%);
         object-fit: contain;
         margin: 0 0 16px;
         align-self: flex-start;
@@ -1032,12 +1032,12 @@ const STYLE = `
         .bl-desc-card, .bl-card, .bl-form-section { padding: 20px; }
         .bl-highlights-grid { grid-template-columns: repeat(2, 1fr); }
         .bl-fab { right: 16px; bottom: 16px; padding: 12px 16px; font-size: 14px; }
-        .bl-hero-logo { height: 52px; margin-bottom: 12px; }
+        .bl-hero-logo { height: 69px; margin-bottom: 12px; }
     }
 `;
 
 const BRAND_CIRCLE_IMG = 'https://static.wixstatic.com/media/6b73e9_6e7c52763bb24ba6812aaac51ecb4296~mv2.png';
-const BRAND_LOGO_IMG = 'https://static.wixstatic.com/media/6b73e9_60fb2a8f865d4e2588d46f75ffe6d0d7~mv2.png';
+const BRAND_LOGO_IMG = 'https://static.wixstatic.com/media/6b73e9_3d8054d68ecb422a82c328f8c4c163f3~mv2.png';
 
 const BLOBS = [
     { top: '2%', left: '1%', size: 150, color: '#00A4FD', anim: 'a', duration: 11, delay: 0 },

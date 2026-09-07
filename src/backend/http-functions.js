@@ -147,6 +147,13 @@ function buildNextPageUrl(request, workshopType, nextOffset) {
   }
 }
 
+function parseOffset(raw) {
+  const value = String(raw ?? '').trim();
+  if (!value || value === 'null' || value === 'undefined') return 0;
+  const parsed = parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
+}
+
 // GET https://<yourdomain>/_functions/availableDates?workshopType=טאפטינג&offset=0
 export async function get_availableDates(request) {
   try {
@@ -170,8 +177,7 @@ export async function get_availableDates(request) {
       });
     }
 
-    let offset = parseInt(request.query.offset, 10);
-    if (!Number.isFinite(offset) || offset < 0) offset = 0;
+    const offset = parseOffset(request.query.offset);
 
     const neededCount = offset + PAGE_SIZE + 1;
     const byDate = await collectAvailableDates(serviceIds, neededCount);

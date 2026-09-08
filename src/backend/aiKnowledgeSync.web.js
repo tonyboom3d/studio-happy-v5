@@ -5,11 +5,12 @@
  * CMS inserts via the REST API (or bulk import) do NOT fire Velo data hooks,
  * so openAiFileId stays empty until items are synced through the backend.
  *
- * Run once from the Velo Editor sandbox after seeding FAQ content:
- *   import { syncAllKnowledgeBaseItems } from 'backend/aiKnowledgeSync.web';
+ * Run once from the Velo Editor sandbox (after Publish):
+ *   import { syncAllKnowledgeBaseItems } from 'backend/aiKnowledgeSync.web.js';
  *   syncAllKnowledgeBaseItems().then(console.log);
  */
 import wixData from 'wix-data';
+import { Permissions, webMethod } from 'wix-web-module';
 import { uploadFile, attachToVectorStore } from 'backend/openaiService.jsw';
 
 const SA = { suppressAuth: true, suppressHooks: true };
@@ -24,7 +25,7 @@ function buildKnowledgeBaseText(item) {
 }
 
 /** Syncs every Workshops_KnowledgeBase item missing openAiFileId. */
-export async function syncAllKnowledgeBaseItems() {
+export const syncAllKnowledgeBaseItems = webMethod(Permissions.Admin, async () => {
     const result = await wixData.query('Workshops_KnowledgeBase').limit(1000).find(SA);
     let synced = 0;
     let skipped = 0;
@@ -54,4 +55,4 @@ export async function syncAllKnowledgeBaseItems() {
     const summary = { synced, skipped, failed, total: (result.items || []).length };
     console.log('[aiKnowledgeSync] done:', JSON.stringify(summary));
     return summary;
-}
+});

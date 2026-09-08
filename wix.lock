@@ -23,7 +23,7 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
     "fallbackPool": [\
       [\
         "@babel/runtime",\
-        "npm:7.29.2"\
+        "npm:7.29.7"\
       ],\
       [\
         "@formatjs/ecma402-abstract",\
@@ -47,39 +47,47 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
       ],\
       [\
         "@internationalized/date",\
-        "npm:3.12.1"\
+        "npm:3.12.4"\
       ],\
       [\
         "@internationalized/number",\
-        "npm:3.6.6"\
+        "npm:3.6.8"\
       ],\
       [\
         "@internationalized/string",\
-        "npm:3.2.8"\
+        "npm:3.2.10"\
       ],\
       [\
         "@preact/signals-core",\
-        "npm:1.14.2"\
+        "npm:1.14.4"\
       ],\
       [\
         "@preact/signals-react",\
-        "virtual:644f3e3c48a9f7c1586864750dd4f710086df76f6f16beb4ae365179f232da7b82a8c73017d19cfbc98baa034e2b569ce46d9d91cd335df57ea92cc5319f2c5d#npm:3.10.1"\
+        "virtual:25e4cff409fae9943cf7783911b01c297b27505453ced47ee4183bec0ba06a63ccb1dd14f7701d5c8b34bc1c7fc03b6374cfb51e9234fc52aed5cac51137de02#npm:3.12.0"\
       ],\
       [\
         "@radix-ui/react-compose-refs",\
-        "virtual:9e4b7879becf66a8e37047b65f004d679dea29acaac031590d0d7d0561eafbc62bc8462541ee2f9bcd9ce6495d2c8b4e3a6cf3cd7dc832ac12f66728848e15bc#npm:1.1.2"\
+        "virtual:58090d7092536bae16635570a76611ef7ad982de2630791af17f867e5dd1ece5c7a018f6887e1c577d25a841b0144513798f23b0e13b8aad8998f28f908b3a0b#npm:1.1.5"\
       ],\
       [\
         "@radix-ui/react-slot",\
-        "virtual:5471f29e4256143a4c50687d7247b075dff14d7163af1287815c62f4ea0e9aa612b1a74baa92add4f07e4dd2fda7ae33380c79e9a27e5961395a45bcd56287d7#npm:1.2.4"\
+        "virtual:5471f29e4256143a4c50687d7247b075dff14d7163af1287815c62f4ea0e9aa612b1a74baa92add4f07e4dd2fda7ae33380c79e9a27e5961395a45bcd56287d7#npm:1.3.3"\
       ],\
       [\
         "@react-types/shared",\
-        "virtual:ec4c216041cea79b0dea011001eb74cc4d7d8fb89fcdc93274cf88f79f5e273705f5e6b7ed94bcfe4509e394abf421275824eacb948582686e6f93badde74e98#npm:3.34.0"\
+        "virtual:13191bc152364555bec13b0645e783c377c939976d32be1469523a6d6731a06b781d111345d4d49610e417fcbede83cd19030cd75ef49c173670ab91f3dbd181#npm:3.36.1"\
       ],\
       [\
         "@swc/helpers",\
-        "npm:0.5.21"\
+        "npm:0.5.23"\
+      ],\
+      [\
+        "@wix/analytics",\
+        "npm:1.19.0"\
+      ],\
+      [\
+        "@wix/authentication",\
+        "npm:1.16.0"\
       ],\
       [\
         "@wix/auto_sdk_bookings_add-ons",\
@@ -120,6 +128,10 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
       [\
         "@wix/auto_sdk_bookings_bookings-validation",\
         "npm:1.0.5"\
+      ],\
+      [\
+        "@wix/auto_sdk_bookings_catalog-search",\
+        "npm:1.0.30"\
       ],\
       [\
         "@wix/auto_sdk_bookings_categories",\
@@ -203,7 +215,7 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
       ],\
       [\
         "@wix/auto_sdk_ecom_cart-v-2",\
-        "npm:1.0.142"\
+        "npm:1.0.198"\
       ],\
       [\
         "@wix/auto_sdk_ecom_catalog",\
@@ -403,27 +415,31 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
       ],\
       [\
         "@wix/auto_sdk_forms_chat-settings",\
-        "npm:1.0.23"\
+        "npm:1.0.27"\
       ],\
       [\
         "@wix/auto_sdk_forms_form-spam-submission-reports",\
-        "npm:1.0.37"\
+        "npm:1.0.43"\
       ],\
       [\
         "@wix/auto_sdk_forms_form-submissions",\
-        "npm:1.0.21"\
+        "npm:1.0.26"\
       ],\
       [\
         "@wix/auto_sdk_forms_forms",\
-        "npm:1.0.127"\
+        "npm:1.0.135"\
       ],\
       [\
         "@wix/auto_sdk_forms_interactive-form-sessions",\
-        "npm:1.0.61"\
+        "npm:1.0.82"\
+      ],\
+      [\
+        "@wix/auto_sdk_forms_restrictions",\
+        "npm:1.0.1"\
       ],\
       [\
         "@wix/auto_sdk_forms_submissions",\
-        "npm:1.0.123"\
+        "npm:1.0.157"\
       ],\
       [\
         "@wix/auto_sdk_headless-site-assets_scripts",\
@@ -431,23 +447,27 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
       ],\
       [\
         "@wix/auto_sdk_identity_authentication",\
-        "npm:1.0.46"\
+        "npm:1.0.59"\
       ],\
       [\
         "@wix/auto_sdk_identity_oauth",\
-        "npm:1.0.37"\
+        "npm:1.0.55"\
       ],\
       [\
         "@wix/auto_sdk_identity_recovery",\
-        "npm:1.0.43"\
+        "npm:1.0.48"\
+      ],\
+      [\
+        "@wix/auto_sdk_identity_sign-on-policy",\
+        "npm:1.0.4"\
       ],\
       [\
         "@wix/auto_sdk_identity_verification",\
-        "npm:1.0.43"\
+        "npm:1.0.50"\
       ],\
       [\
         "@wix/auto_sdk_redirects_redirects",\
-        "npm:1.0.41"\
+        "npm:1.0.54"\
       ],\
       [\
         "@wix/bookings",\
@@ -456,6 +476,10 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
       [\
         "@wix/bookings_app-extensions",\
         "npm:1.0.105"\
+      ],\
+      [\
+        "@wix/consent-policy-manager",\
+        "npm:1.15.0"\
       ],\
       [\
         "@wix/ecom",\
@@ -499,7 +523,7 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
       ],\
       [\
         "@wix/headless-bookings",\
-        "virtual:c5a01aa4657b67c941d0ec8897d9723191b57bcd1504f23518704f1d609108bf88f6a8bcfd7c5055c195f0a05314afaeea339e5b9c436fab6525291bfa74a5da#npm:1.0.5"\
+        "virtual:c5a01aa4657b67c941d0ec8897d9723191b57bcd1504f23518704f1d609108bf88f6a8bcfd7c5055c195f0a05314afaeea339e5b9c436fab6525291bfa74a5da#npm:1.0.18"\
       ],\
       [\
         "@wix/headless-ecom",\
@@ -523,7 +547,7 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
       ],\
       [\
         "@wix/headless-node",\
-        "npm:1.42.0"\
+        "npm:1.44.0"\
       ],\
       [\
         "@wix/headless-site-assets",\
@@ -535,11 +559,11 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
       ],\
       [\
         "@wix/identity",\
-        "npm:1.0.195"\
+        "npm:1.0.234"\
       ],\
       [\
         "@wix/image-kit",\
-        "npm:1.123.0"\
+        "npm:1.125.0"\
       ],\
       [\
         "@wix/monitoring",\
@@ -547,7 +571,7 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
       ],\
       [\
         "@wix/monitoring-common",\
-        "npm:1.13.0"\
+        "npm:1.15.0"\
       ],\
       [\
         "@wix/monitoring-types",\
@@ -555,15 +579,15 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
       ],\
       [\
         "@wix/monitoring-velo",\
-        "npm:1.26.0"\
+        "npm:1.33.0"\
       ],\
       [\
         "@wix/multilingual-manager",\
-        "npm:1.10.0"\
+        "npm:1.11.0"\
       ],\
       [\
         "@wix/redirects",\
-        "npm:1.0.113"\
+        "npm:1.0.127"\
       ],\
       [\
         "@wix/sdk",\
@@ -575,27 +599,27 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
       ],\
       [\
         "@wix/sdk-react-context",\
-        "virtual:644f3e3c48a9f7c1586864750dd4f710086df76f6f16beb4ae365179f232da7b82a8c73017d19cfbc98baa034e2b569ce46d9d91cd335df57ea92cc5319f2c5d#npm:1.0.2"\
+        "virtual:25e4cff409fae9943cf7783911b01c297b27505453ced47ee4183bec0ba06a63ccb1dd14f7701d5c8b34bc1c7fc03b6374cfb51e9234fc52aed5cac51137de02#npm:1.0.2"\
       ],\
       [\
         "@wix/sdk-runtime",\
-        "npm:1.0.14"\
+        "npm:1.0.24"\
       ],\
       [\
         "@wix/sdk-types",\
-        "npm:1.17.8"\
+        "npm:1.17.11"\
       ],\
       [\
         "@wix/services-definitions",\
-        "npm:1.0.2"\
-      ],\
-      [\
-        "@wix/services-manager",\
-        "npm:1.0.4"\
+        "npm:1.0.5"\
       ],\
       [\
         "@wix/services-manager-react",\
-        "virtual:0d765e4bba0d1f3357a1d492c7cefeffd7e5398a2a48989d9847511f8d42bbb0915c7548aa5959728db0d0336e3a36918e0ac15792fcfed663175b31d068e17b#npm:1.0.5"\
+        "virtual:0d765e4bba0d1f3357a1d492c7cefeffd7e5398a2a48989d9847511f8d42bbb0915c7548aa5959728db0d0336e3a36918e0ac15792fcfed663175b31d068e17b#npm:1.0.8"\
+      ],\
+      [\
+        "@wix/site",\
+        "npm:1.66.0"\
       ],\
       [\
         "@wix/site-site",\
@@ -615,7 +639,7 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
       ],\
       [\
         "date-fns",\
-        "npm:4.2.1"\
+        "npm:4.4.0"\
       ],\
       [\
         "decimal.js",\
@@ -631,11 +655,11 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
       ],\
       [\
         "graphql",\
-        "npm:16.14.0"\
+        "npm:17.0.2"\
       ],\
       [\
         "html-parse-stringify",\
-        "npm:3.0.1"\
+        "npm:3.1.0"\
       ],\
       [\
         "http-status-codes",\
@@ -647,7 +671,7 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
       ],\
       [\
         "i18next-icu",\
-        "virtual:e5d2db011284bfb91bca4b9d7ba6945d67c210f8d38e8f8e61d6d6585b0a14967bc484c11e2c3ebed635a89f74cddb33913fb85d1487c7530881891ed7450a24#npm:2.4.3"\
+        "virtual:e5d2db011284bfb91bca4b9d7ba6945d67c210f8d38e8f8e61d6d6585b0a14967bc484c11e2c3ebed635a89f74cddb33913fb85d1487c7530881891ed7450a24#npm:2.4.4"\
       ],\
       [\
         "intl-messageformat",\
@@ -675,7 +699,7 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
       ],\
       [\
         "motion-dom",\
-        "npm:12.39.0"\
+        "npm:12.43.0"\
       ],\
       [\
         "motion-utils",\
@@ -687,11 +711,11 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
       ],\
       [\
         "react-aria",\
-        "virtual:ec4c216041cea79b0dea011001eb74cc4d7d8fb89fcdc93274cf88f79f5e273705f5e6b7ed94bcfe4509e394abf421275824eacb948582686e6f93badde74e98#npm:3.48.0"\
+        "virtual:13191bc152364555bec13b0645e783c377c939976d32be1469523a6d6731a06b781d111345d4d49610e417fcbede83cd19030cd75ef49c173670ab91f3dbd181#npm:3.52.1"\
       ],\
       [\
         "react-aria-components",\
-        "virtual:0d765e4bba0d1f3357a1d492c7cefeffd7e5398a2a48989d9847511f8d42bbb0915c7548aa5959728db0d0336e3a36918e0ac15792fcfed663175b31d068e17b#npm:1.17.0"\
+        "virtual:0d765e4bba0d1f3357a1d492c7cefeffd7e5398a2a48989d9847511f8d42bbb0915c7548aa5959728db0d0336e3a36918e0ac15792fcfed663175b31d068e17b#npm:1.21.1"\
       ],\
       [\
         "react-dom",\
@@ -703,7 +727,7 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
       ],\
       [\
         "react-stately",\
-        "virtual:ec4c216041cea79b0dea011001eb74cc4d7d8fb89fcdc93274cf88f79f5e273705f5e6b7ed94bcfe4509e394abf421275824eacb948582686e6f93badde74e98#npm:3.46.0"\
+        "virtual:13191bc152364555bec13b0645e783c377c939976d32be1469523a6d6731a06b781d111345d4d49610e417fcbede83cd19030cd75ef49c173670ab91f3dbd181#npm:3.50.0"\
       ],\
       [\
         "scheduler",\
@@ -719,7 +743,7 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
       ],\
       [\
         "use-sync-external-store",\
-        "virtual:1772147de175ea83154c9538d251f03191fd8b5287e68aa65530a50a281d2e6ec444263a25c88e584dd7e3b51277700ded478e357aaa1c352b140328685eca7e#npm:1.6.0"\
+        "virtual:9339aef3c9d524ecab4b966d6f6460a4b178acd01a5fcbf895acc9d7eb9205bfcf31baff1b819be4cd1303eaf2517d705d79f0d816fde80f99faa2ef0d8882b6#npm:1.6.0"\
       ],\
       [\
         "uuid",\
@@ -731,7 +755,7 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
       ],\
       [\
         "zod",\
-        "npm:4.4.3"\
+        "npm:4.5.4"\
       ]\
     ],\
     "packageRegistryData": [\
@@ -744,7 +768,9 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
             ["@wix/embeds", "npm:1.0.15"],\
             ["@wix/essentials", "npm:1.0.6"],\
             ["@wix/faq", "npm:1.0.50"],\
+            ["@wix/forms", "npm:1.0.439"],\
             ["@wix/sdk", "npm:1.21.5"],\
+            ["@wix/site", "npm:1.66.0"],\
             ["@wix/site-site", "npm:1.29.0"],\
             ["framer-motion", "virtual:3397cda259050948159fbd931312d20a0aae6accf6344e358928d6f5f5c9e1e27fdf63201a9a8a6cfa009a9ae05ab59f4163c96553fd690e9bc993fd8410a44d#npm:12.38.0"],\
             ["lucide-react", "virtual:3397cda259050948159fbd931312d20a0aae6accf6344e358928d6f5f5c9e1e27fdf63201a9a8a6cfa009a9ae05ab59f4163c96553fd690e9bc993fd8410a44d#npm:1.6.0"],\
@@ -755,10 +781,10 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
         }]\
       ]],\
       ["@babel/runtime", [\
-        ["npm:7.29.2", {\
-          "packageLocation": "../dynamic-modules/yarn-cache/cache/@babel-runtime-npm-7.29.2-b49cad1c67-8c0.zip/node_modules/@babel/runtime/",\
+        ["npm:7.29.7", {\
+          "packageLocation": "../dynamic-modules/yarn-cache/cache/@babel-runtime-npm-7.29.7-423e8cd4b6-8c0.zip/node_modules/@babel/runtime/",\
           "packageDependencies": [\
-            ["@babel/runtime", "npm:7.29.2"]\
+            ["@babel/runtime", "npm:7.29.7"]\
           ],\
           "linkType": "HARD"\
         }]\
@@ -820,60 +846,60 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
         }]\
       ]],\
       ["@internationalized/date", [\
-        ["npm:3.12.1", {\
-          "packageLocation": "../dynamic-modules/yarn-cache/cache/@internationalized-date-npm-3.12.1-7e6f15e940-8c0.zip/node_modules/@internationalized/date/",\
+        ["npm:3.12.4", {\
+          "packageLocation": "../dynamic-modules/yarn-cache/cache/@internationalized-date-npm-3.12.4-2038227f20-8c0.zip/node_modules/@internationalized/date/",\
           "packageDependencies": [\
-            ["@internationalized/date", "npm:3.12.1"],\
-            ["@swc/helpers", "npm:0.5.21"]\
+            ["@internationalized/date", "npm:3.12.4"],\
+            ["@swc/helpers", "npm:0.5.23"]\
           ],\
           "linkType": "HARD"\
         }]\
       ]],\
       ["@internationalized/number", [\
-        ["npm:3.6.6", {\
-          "packageLocation": "../dynamic-modules/yarn-cache/cache/@internationalized-number-npm-3.6.6-f9f7267b10-8c0.zip/node_modules/@internationalized/number/",\
+        ["npm:3.6.8", {\
+          "packageLocation": "../dynamic-modules/yarn-cache/cache/@internationalized-number-npm-3.6.8-5adcf71d63-8c0.zip/node_modules/@internationalized/number/",\
           "packageDependencies": [\
-            ["@internationalized/number", "npm:3.6.6"],\
-            ["@swc/helpers", "npm:0.5.21"]\
+            ["@internationalized/number", "npm:3.6.8"],\
+            ["@swc/helpers", "npm:0.5.23"]\
           ],\
           "linkType": "HARD"\
         }]\
       ]],\
       ["@internationalized/string", [\
-        ["npm:3.2.8", {\
-          "packageLocation": "../dynamic-modules/yarn-cache/cache/@internationalized-string-npm-3.2.8-51ed89986e-8c0.zip/node_modules/@internationalized/string/",\
+        ["npm:3.2.10", {\
+          "packageLocation": "../dynamic-modules/yarn-cache/cache/@internationalized-string-npm-3.2.10-b7b6fe73f2-8c0.zip/node_modules/@internationalized/string/",\
           "packageDependencies": [\
-            ["@internationalized/string", "npm:3.2.8"],\
-            ["@swc/helpers", "npm:0.5.21"]\
+            ["@internationalized/string", "npm:3.2.10"],\
+            ["@swc/helpers", "npm:0.5.23"]\
           ],\
           "linkType": "HARD"\
         }]\
       ]],\
       ["@preact/signals-core", [\
-        ["npm:1.14.2", {\
-          "packageLocation": "../dynamic-modules/yarn-cache/cache/@preact-signals-core-npm-1.14.2-7a4d89c880-8c0.zip/node_modules/@preact/signals-core/",\
+        ["npm:1.14.4", {\
+          "packageLocation": "../dynamic-modules/yarn-cache/cache/@preact-signals-core-npm-1.14.4-cb4f024b78-8c0.zip/node_modules/@preact/signals-core/",\
           "packageDependencies": [\
-            ["@preact/signals-core", "npm:1.14.2"]\
+            ["@preact/signals-core", "npm:1.14.4"]\
           ],\
           "linkType": "HARD"\
         }]\
       ]],\
       ["@preact/signals-react", [\
-        ["npm:3.10.1", {\
-          "packageLocation": "../dynamic-modules/yarn-cache/cache/@preact-signals-react-npm-3.10.1-47b4c78a53-8c0.zip/node_modules/@preact/signals-react/",\
+        ["npm:3.12.0", {\
+          "packageLocation": "../dynamic-modules/yarn-cache/cache/@preact-signals-react-npm-3.12.0-77779aac7e-8c0.zip/node_modules/@preact/signals-react/",\
           "packageDependencies": [\
-            ["@preact/signals-react", "npm:3.10.1"]\
+            ["@preact/signals-react", "npm:3.12.0"]\
           ],\
           "linkType": "SOFT"\
         }],\
-        ["virtual:644f3e3c48a9f7c1586864750dd4f710086df76f6f16beb4ae365179f232da7b82a8c73017d19cfbc98baa034e2b569ce46d9d91cd335df57ea92cc5319f2c5d#npm:3.10.1", {\
-          "packageLocation": "./.yarn/__virtual__/@preact-signals-react-virtual-1772147de1/2/dynamic-modules/yarn-cache/cache/@preact-signals-react-npm-3.10.1-47b4c78a53-8c0.zip/node_modules/@preact/signals-react/",\
+        ["virtual:25e4cff409fae9943cf7783911b01c297b27505453ced47ee4183bec0ba06a63ccb1dd14f7701d5c8b34bc1c7fc03b6374cfb51e9234fc52aed5cac51137de02#npm:3.12.0", {\
+          "packageLocation": "./.yarn/__virtual__/@preact-signals-react-virtual-9339aef3c9/2/dynamic-modules/yarn-cache/cache/@preact-signals-react-npm-3.12.0-77779aac7e-8c0.zip/node_modules/@preact/signals-react/",\
           "packageDependencies": [\
-            ["@preact/signals-react", "virtual:644f3e3c48a9f7c1586864750dd4f710086df76f6f16beb4ae365179f232da7b82a8c73017d19cfbc98baa034e2b569ce46d9d91cd335df57ea92cc5319f2c5d#npm:3.10.1"],\
-            ["@preact/signals-core", "npm:1.14.2"],\
+            ["@preact/signals-react", "virtual:25e4cff409fae9943cf7783911b01c297b27505453ced47ee4183bec0ba06a63ccb1dd14f7701d5c8b34bc1c7fc03b6374cfb51e9234fc52aed5cac51137de02#npm:3.12.0"],\
+            ["@preact/signals-core", "npm:1.14.4"],\
             ["@types/react", null],\
             ["react", null],\
-            ["use-sync-external-store", "virtual:1772147de175ea83154c9538d251f03191fd8b5287e68aa65530a50a281d2e6ec444263a25c88e584dd7e3b51277700ded478e357aaa1c352b140328685eca7e#npm:1.6.0"]\
+            ["use-sync-external-store", "virtual:9339aef3c9d524ecab4b966d6f6460a4b178acd01a5fcbf895acc9d7eb9205bfcf31baff1b819be4cd1303eaf2517d705d79f0d816fde80f99faa2ef0d8882b6#npm:1.6.0"]\
           ],\
           "packagePeers": [\
             "@types/react",\
@@ -883,17 +909,17 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
         }]\
       ]],\
       ["@radix-ui/react-compose-refs", [\
-        ["npm:1.1.2", {\
-          "packageLocation": "../dynamic-modules/yarn-cache/cache/@radix-ui-react-compose-refs-npm-1.1.2-f0371f8267-8c0.zip/node_modules/@radix-ui/react-compose-refs/",\
+        ["npm:1.1.5", {\
+          "packageLocation": "../dynamic-modules/yarn-cache/cache/@radix-ui-react-compose-refs-npm-1.1.5-0cbc179f16-8c0.zip/node_modules/@radix-ui/react-compose-refs/",\
           "packageDependencies": [\
-            ["@radix-ui/react-compose-refs", "npm:1.1.2"]\
+            ["@radix-ui/react-compose-refs", "npm:1.1.5"]\
           ],\
           "linkType": "SOFT"\
         }],\
-        ["virtual:9e4b7879becf66a8e37047b65f004d679dea29acaac031590d0d7d0561eafbc62bc8462541ee2f9bcd9ce6495d2c8b4e3a6cf3cd7dc832ac12f66728848e15bc#npm:1.1.2", {\
-          "packageLocation": "./.yarn/__virtual__/@radix-ui-react-compose-refs-virtual-19ad643b24/2/dynamic-modules/yarn-cache/cache/@radix-ui-react-compose-refs-npm-1.1.2-f0371f8267-8c0.zip/node_modules/@radix-ui/react-compose-refs/",\
+        ["virtual:58090d7092536bae16635570a76611ef7ad982de2630791af17f867e5dd1ece5c7a018f6887e1c577d25a841b0144513798f23b0e13b8aad8998f28f908b3a0b#npm:1.1.5", {\
+          "packageLocation": "./.yarn/__virtual__/@radix-ui-react-compose-refs-virtual-936352ee6e/2/dynamic-modules/yarn-cache/cache/@radix-ui-react-compose-refs-npm-1.1.5-0cbc179f16-8c0.zip/node_modules/@radix-ui/react-compose-refs/",\
           "packageDependencies": [\
-            ["@radix-ui/react-compose-refs", "virtual:9e4b7879becf66a8e37047b65f004d679dea29acaac031590d0d7d0561eafbc62bc8462541ee2f9bcd9ce6495d2c8b4e3a6cf3cd7dc832ac12f66728848e15bc#npm:1.1.2"],\
+            ["@radix-ui/react-compose-refs", "virtual:58090d7092536bae16635570a76611ef7ad982de2630791af17f867e5dd1ece5c7a018f6887e1c577d25a841b0144513798f23b0e13b8aad8998f28f908b3a0b#npm:1.1.5"],\
             ["@types/react", null],\
             ["react", null]\
           ],\
@@ -905,18 +931,18 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
         }]\
       ]],\
       ["@radix-ui/react-slot", [\
-        ["npm:1.2.4", {\
-          "packageLocation": "../dynamic-modules/yarn-cache/cache/@radix-ui-react-slot-npm-1.2.4-0035a0681c-8c0.zip/node_modules/@radix-ui/react-slot/",\
+        ["npm:1.3.3", {\
+          "packageLocation": "../dynamic-modules/yarn-cache/cache/@radix-ui-react-slot-npm-1.3.3-6335330b30-8c0.zip/node_modules/@radix-ui/react-slot/",\
           "packageDependencies": [\
-            ["@radix-ui/react-slot", "npm:1.2.4"]\
+            ["@radix-ui/react-slot", "npm:1.3.3"]\
           ],\
           "linkType": "SOFT"\
         }],\
-        ["virtual:5471f29e4256143a4c50687d7247b075dff14d7163af1287815c62f4ea0e9aa612b1a74baa92add4f07e4dd2fda7ae33380c79e9a27e5961395a45bcd56287d7#npm:1.2.4", {\
-          "packageLocation": "./.yarn/__virtual__/@radix-ui-react-slot-virtual-9e4b7879be/2/dynamic-modules/yarn-cache/cache/@radix-ui-react-slot-npm-1.2.4-0035a0681c-8c0.zip/node_modules/@radix-ui/react-slot/",\
+        ["virtual:5471f29e4256143a4c50687d7247b075dff14d7163af1287815c62f4ea0e9aa612b1a74baa92add4f07e4dd2fda7ae33380c79e9a27e5961395a45bcd56287d7#npm:1.3.3", {\
+          "packageLocation": "./.yarn/__virtual__/@radix-ui-react-slot-virtual-58090d7092/2/dynamic-modules/yarn-cache/cache/@radix-ui-react-slot-npm-1.3.3-6335330b30-8c0.zip/node_modules/@radix-ui/react-slot/",\
           "packageDependencies": [\
-            ["@radix-ui/react-slot", "virtual:5471f29e4256143a4c50687d7247b075dff14d7163af1287815c62f4ea0e9aa612b1a74baa92add4f07e4dd2fda7ae33380c79e9a27e5961395a45bcd56287d7#npm:1.2.4"],\
-            ["@radix-ui/react-compose-refs", "virtual:9e4b7879becf66a8e37047b65f004d679dea29acaac031590d0d7d0561eafbc62bc8462541ee2f9bcd9ce6495d2c8b4e3a6cf3cd7dc832ac12f66728848e15bc#npm:1.1.2"],\
+            ["@radix-ui/react-slot", "virtual:5471f29e4256143a4c50687d7247b075dff14d7163af1287815c62f4ea0e9aa612b1a74baa92add4f07e4dd2fda7ae33380c79e9a27e5961395a45bcd56287d7#npm:1.3.3"],\
+            ["@radix-ui/react-compose-refs", "virtual:58090d7092536bae16635570a76611ef7ad982de2630791af17f867e5dd1ece5c7a018f6887e1c577d25a841b0144513798f23b0e13b8aad8998f28f908b3a0b#npm:1.1.5"],\
             ["@types/react", null],\
             ["react", null]\
           ],\
@@ -928,17 +954,17 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
         }]\
       ]],\
       ["@react-types/shared", [\
-        ["npm:3.34.0", {\
-          "packageLocation": "../dynamic-modules/yarn-cache/cache/@react-types-shared-npm-3.34.0-59447c198e-8c0.zip/node_modules/@react-types/shared/",\
+        ["npm:3.36.1", {\
+          "packageLocation": "../dynamic-modules/yarn-cache/cache/@react-types-shared-npm-3.36.1-ba5303311d-8c0.zip/node_modules/@react-types/shared/",\
           "packageDependencies": [\
-            ["@react-types/shared", "npm:3.34.0"]\
+            ["@react-types/shared", "npm:3.36.1"]\
           ],\
           "linkType": "SOFT"\
         }],\
-        ["virtual:ec4c216041cea79b0dea011001eb74cc4d7d8fb89fcdc93274cf88f79f5e273705f5e6b7ed94bcfe4509e394abf421275824eacb948582686e6f93badde74e98#npm:3.34.0", {\
-          "packageLocation": "./.yarn/__virtual__/@react-types-shared-virtual-5c6f632bfd/2/dynamic-modules/yarn-cache/cache/@react-types-shared-npm-3.34.0-59447c198e-8c0.zip/node_modules/@react-types/shared/",\
+        ["virtual:13191bc152364555bec13b0645e783c377c939976d32be1469523a6d6731a06b781d111345d4d49610e417fcbede83cd19030cd75ef49c173670ab91f3dbd181#npm:3.36.1", {\
+          "packageLocation": "./.yarn/__virtual__/@react-types-shared-virtual-8de4ebb348/2/dynamic-modules/yarn-cache/cache/@react-types-shared-npm-3.36.1-ba5303311d-8c0.zip/node_modules/@react-types/shared/",\
           "packageDependencies": [\
-            ["@react-types/shared", "virtual:ec4c216041cea79b0dea011001eb74cc4d7d8fb89fcdc93274cf88f79f5e273705f5e6b7ed94bcfe4509e394abf421275824eacb948582686e6f93badde74e98#npm:3.34.0"],\
+            ["@react-types/shared", "virtual:13191bc152364555bec13b0645e783c377c939976d32be1469523a6d6731a06b781d111345d4d49610e417fcbede83cd19030cd75ef49c173670ab91f3dbd181#npm:3.36.1"],\
             ["@types/react", null],\
             ["react", null]\
           ],\
@@ -950,11 +976,31 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
         }]\
       ]],\
       ["@swc/helpers", [\
-        ["npm:0.5.21", {\
-          "packageLocation": "../dynamic-modules/yarn-cache/cache/@swc-helpers-npm-0.5.21-8f854c3b92-8c0.zip/node_modules/@swc/helpers/",\
+        ["npm:0.5.23", {\
+          "packageLocation": "../dynamic-modules/yarn-cache/cache/@swc-helpers-npm-0.5.23-82c8c0a8b6-8c0.zip/node_modules/@swc/helpers/",\
           "packageDependencies": [\
-            ["@swc/helpers", "npm:0.5.21"],\
+            ["@swc/helpers", "npm:0.5.23"],\
             ["tslib", "npm:2.8.1"]\
+          ],\
+          "linkType": "HARD"\
+        }]\
+      ]],\
+      ["@wix/analytics", [\
+        ["npm:1.19.0", {\
+          "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-analytics-npm-1.19.0-8b15a187fc-8c0.zip/node_modules/@wix/analytics/",\
+          "packageDependencies": [\
+            ["@wix/analytics", "npm:1.19.0"]\
+          ],\
+          "linkType": "HARD"\
+        }]\
+      ]],\
+      ["@wix/authentication", [\
+        ["npm:1.16.0", {\
+          "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-authentication-npm-1.16.0-37e787e384-8c0.zip/node_modules/@wix/authentication/",\
+          "packageDependencies": [\
+            ["@wix/authentication", "npm:1.16.0"],\
+            ["@wix/sdk-runtime", "npm:1.0.24"],\
+            ["@wix/sdk-types", "npm:1.17.11"]\
           ],\
           "linkType": "HARD"\
         }]\
@@ -964,9 +1010,9 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_bookings_add-ons-npm-1.0.30-480c3b0ca9-8c0.zip/node_modules/@wix/auto_sdk_bookings_add-ons/",\
           "packageDependencies": [\
             ["@wix/auto_sdk_bookings_add-ons", "npm:1.0.30"],\
-            ["@wix/sdk-runtime", "npm:1.0.14"],\
-            ["@wix/sdk-types", "npm:1.17.8"],\
-            ["zod", "npm:4.4.3"]\
+            ["@wix/sdk-runtime", "npm:1.0.24"],\
+            ["@wix/sdk-types", "npm:1.17.11"],\
+            ["zod", "npm:4.5.4"]\
           ],\
           "linkType": "HARD"\
         }]\
@@ -976,9 +1022,9 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_bookings_attendance-npm-1.0.65-d0752ef658-8c0.zip/node_modules/@wix/auto_sdk_bookings_attendance/",\
           "packageDependencies": [\
             ["@wix/auto_sdk_bookings_attendance", "npm:1.0.65"],\
-            ["@wix/sdk-runtime", "npm:1.0.14"],\
-            ["@wix/sdk-types", "npm:1.17.8"],\
-            ["zod", "npm:4.4.3"]\
+            ["@wix/sdk-runtime", "npm:1.0.24"],\
+            ["@wix/sdk-types", "npm:1.17.11"],\
+            ["zod", "npm:4.5.4"]\
           ],\
           "linkType": "HARD"\
         }]\
@@ -988,9 +1034,9 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_bookings_availability-calendar-npm-1.0.192-c33ffc3f7f-8c0.zip/node_modules/@wix/auto_sdk_bookings_availability-calendar/",\
           "packageDependencies": [\
             ["@wix/auto_sdk_bookings_availability-calendar", "npm:1.0.192"],\
-            ["@wix/sdk-runtime", "npm:1.0.14"],\
-            ["@wix/sdk-types", "npm:1.17.8"],\
-            ["zod", "npm:4.4.3"]\
+            ["@wix/sdk-runtime", "npm:1.0.24"],\
+            ["@wix/sdk-types", "npm:1.17.11"],\
+            ["zod", "npm:4.5.4"]\
           ],\
           "linkType": "HARD"\
         }]\
@@ -1000,9 +1046,18 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_bookings_availability-time-slots-npm-1.0.244-08534dd960-8c0.zip/node_modules/@wix/auto_sdk_bookings_availability-time-slots/",\
           "packageDependencies": [\
             ["@wix/auto_sdk_bookings_availability-time-slots", "npm:1.0.244"],\
-            ["@wix/sdk-runtime", "npm:1.0.14"],\
-            ["@wix/sdk-types", "npm:1.17.8"],\
-            ["zod", "npm:4.4.3"]\
+            ["@wix/sdk-runtime", "npm:1.0.24"],\
+            ["@wix/sdk-types", "npm:1.17.11"],\
+            ["zod", "npm:4.5.4"]\
+          ],\
+          "linkType": "HARD"\
+        }],\
+        ["npm:1.0.273", {\
+          "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_bookings_availability-time-slots-npm-1.0.273-24fd8bb4bb-8c0.zip/node_modules/@wix/auto_sdk_bookings_availability-time-slots/",\
+          "packageDependencies": [\
+            ["@wix/auto_sdk_bookings_availability-time-slots", "npm:1.0.273"],\
+            ["@wix/sdk-runtime", "npm:1.0.24"],\
+            ["@wix/sdk-types", "npm:1.17.11"]\
           ],\
           "linkType": "HARD"\
         }]\
@@ -1012,9 +1067,9 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_bookings_booking-fees-npm-1.0.55-60f92b8ba2-8c0.zip/node_modules/@wix/auto_sdk_bookings_booking-fees/",\
           "packageDependencies": [\
             ["@wix/auto_sdk_bookings_booking-fees", "npm:1.0.55"],\
-            ["@wix/sdk-runtime", "npm:1.0.14"],\
-            ["@wix/sdk-types", "npm:1.17.8"],\
-            ["zod", "npm:4.4.3"]\
+            ["@wix/sdk-runtime", "npm:1.0.24"],\
+            ["@wix/sdk-types", "npm:1.17.11"],\
+            ["zod", "npm:4.5.4"]\
           ],\
           "linkType": "HARD"\
         }]\
@@ -1024,9 +1079,9 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_bookings_booking-policies-npm-1.0.126-d06681d1bf-8c0.zip/node_modules/@wix/auto_sdk_bookings_booking-policies/",\
           "packageDependencies": [\
             ["@wix/auto_sdk_bookings_booking-policies", "npm:1.0.126"],\
-            ["@wix/sdk-runtime", "npm:1.0.14"],\
-            ["@wix/sdk-types", "npm:1.17.8"],\
-            ["zod", "npm:4.4.3"]\
+            ["@wix/sdk-runtime", "npm:1.0.24"],\
+            ["@wix/sdk-types", "npm:1.17.11"],\
+            ["zod", "npm:4.5.4"]\
           ],\
           "linkType": "HARD"\
         }]\
@@ -1036,9 +1091,9 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_bookings_booking-policy-npm-1.0.1-5ef450f192-8c0.zip/node_modules/@wix/auto_sdk_bookings_booking-policy/",\
           "packageDependencies": [\
             ["@wix/auto_sdk_bookings_booking-policy", "npm:1.0.1"],\
-            ["@wix/sdk-runtime", "npm:1.0.14"],\
-            ["@wix/sdk-types", "npm:1.17.8"],\
-            ["zod", "npm:4.4.3"]\
+            ["@wix/sdk-runtime", "npm:1.0.24"],\
+            ["@wix/sdk-types", "npm:1.17.11"],\
+            ["zod", "npm:4.5.4"]\
           ],\
           "linkType": "HARD"\
         }]\
@@ -1048,9 +1103,9 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_bookings_booking-policy-snapshots-npm-1.0.48-0bdac8b5b3-8c0.zip/node_modules/@wix/auto_sdk_bookings_booking-policy-snapshots/",\
           "packageDependencies": [\
             ["@wix/auto_sdk_bookings_booking-policy-snapshots", "npm:1.0.48"],\
-            ["@wix/sdk-runtime", "npm:1.0.14"],\
-            ["@wix/sdk-types", "npm:1.17.8"],\
-            ["zod", "npm:4.4.3"]\
+            ["@wix/sdk-runtime", "npm:1.0.24"],\
+            ["@wix/sdk-types", "npm:1.17.11"],\
+            ["zod", "npm:4.5.4"]\
           ],\
           "linkType": "HARD"\
         }]\
@@ -1060,9 +1115,18 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_bookings_bookings-npm-1.0.189-16b0a1b4ed-8c0.zip/node_modules/@wix/auto_sdk_bookings_bookings/",\
           "packageDependencies": [\
             ["@wix/auto_sdk_bookings_bookings", "npm:1.0.189"],\
-            ["@wix/sdk-runtime", "npm:1.0.14"],\
-            ["@wix/sdk-types", "npm:1.17.8"],\
-            ["zod", "npm:4.4.3"]\
+            ["@wix/sdk-runtime", "npm:1.0.24"],\
+            ["@wix/sdk-types", "npm:1.17.11"],\
+            ["zod", "npm:4.5.4"]\
+          ],\
+          "linkType": "HARD"\
+        }],\
+        ["npm:1.0.238", {\
+          "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_bookings_bookings-npm-1.0.238-718751945f-8c0.zip/node_modules/@wix/auto_sdk_bookings_bookings/",\
+          "packageDependencies": [\
+            ["@wix/auto_sdk_bookings_bookings", "npm:1.0.238"],\
+            ["@wix/sdk-runtime", "npm:1.0.24"],\
+            ["@wix/sdk-types", "npm:1.17.11"]\
           ],\
           "linkType": "HARD"\
         }]\
@@ -1072,9 +1136,20 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_bookings_bookings-validation-npm-1.0.5-657af5dec9-8c0.zip/node_modules/@wix/auto_sdk_bookings_bookings-validation/",\
           "packageDependencies": [\
             ["@wix/auto_sdk_bookings_bookings-validation", "npm:1.0.5"],\
-            ["@wix/sdk-runtime", "npm:1.0.14"],\
-            ["@wix/sdk-types", "npm:1.17.8"],\
-            ["zod", "npm:4.4.3"]\
+            ["@wix/sdk-runtime", "npm:1.0.24"],\
+            ["@wix/sdk-types", "npm:1.17.11"],\
+            ["zod", "npm:4.5.4"]\
+          ],\
+          "linkType": "HARD"\
+        }]\
+      ]],\
+      ["@wix/auto_sdk_bookings_catalog-search", [\
+        ["npm:1.0.30", {\
+          "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_bookings_catalog-search-npm-1.0.30-36e0ca9d83-8c0.zip/node_modules/@wix/auto_sdk_bookings_catalog-search/",\
+          "packageDependencies": [\
+            ["@wix/auto_sdk_bookings_catalog-search", "npm:1.0.30"],\
+            ["@wix/sdk-runtime", "npm:1.0.24"],\
+            ["@wix/sdk-types", "npm:1.17.11"]\
           ],\
           "linkType": "HARD"\
         }]\
@@ -1084,9 +1159,9 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_bookings_categories-npm-1.0.56-54486bbb23-8c0.zip/node_modules/@wix/auto_sdk_bookings_categories/",\
           "packageDependencies": [\
             ["@wix/auto_sdk_bookings_categories", "npm:1.0.56"],\
-            ["@wix/sdk-runtime", "npm:1.0.14"],\
-            ["@wix/sdk-types", "npm:1.17.8"],\
-            ["zod", "npm:4.4.3"]\
+            ["@wix/sdk-runtime", "npm:1.0.24"],\
+            ["@wix/sdk-types", "npm:1.17.11"],\
+            ["zod", "npm:4.5.4"]\
           ],\
           "linkType": "HARD"\
         }]\
@@ -1096,9 +1171,9 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_bookings_categories-v-2-npm-1.0.54-5f9fee246c-8c0.zip/node_modules/@wix/auto_sdk_bookings_categories-v-2/",\
           "packageDependencies": [\
             ["@wix/auto_sdk_bookings_categories-v-2", "npm:1.0.54"],\
-            ["@wix/sdk-runtime", "npm:1.0.14"],\
-            ["@wix/sdk-types", "npm:1.17.8"],\
-            ["zod", "npm:4.4.3"]\
+            ["@wix/sdk-runtime", "npm:1.0.24"],\
+            ["@wix/sdk-types", "npm:1.17.11"],\
+            ["zod", "npm:4.5.4"]\
           ],\
           "linkType": "HARD"\
         }]\
@@ -1108,9 +1183,18 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_bookings_event-time-slots-npm-1.0.112-0076634efe-8c0.zip/node_modules/@wix/auto_sdk_bookings_event-time-slots/",\
           "packageDependencies": [\
             ["@wix/auto_sdk_bookings_event-time-slots", "npm:1.0.112"],\
-            ["@wix/sdk-runtime", "npm:1.0.14"],\
-            ["@wix/sdk-types", "npm:1.17.8"],\
-            ["zod", "npm:4.4.3"]\
+            ["@wix/sdk-runtime", "npm:1.0.24"],\
+            ["@wix/sdk-types", "npm:1.17.11"],\
+            ["zod", "npm:4.5.4"]\
+          ],\
+          "linkType": "HARD"\
+        }],\
+        ["npm:1.0.140", {\
+          "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_bookings_event-time-slots-npm-1.0.140-f8e28a62e5-8c0.zip/node_modules/@wix/auto_sdk_bookings_event-time-slots/",\
+          "packageDependencies": [\
+            ["@wix/auto_sdk_bookings_event-time-slots", "npm:1.0.140"],\
+            ["@wix/sdk-runtime", "npm:1.0.24"],\
+            ["@wix/sdk-types", "npm:1.17.11"]\
           ],\
           "linkType": "HARD"\
         }]\
@@ -1120,9 +1204,9 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_bookings_extended-bookings-npm-1.0.110-ad8a2a72fe-8c0.zip/node_modules/@wix/auto_sdk_bookings_extended-bookings/",\
           "packageDependencies": [\
             ["@wix/auto_sdk_bookings_extended-bookings", "npm:1.0.110"],\
-            ["@wix/sdk-runtime", "npm:1.0.14"],\
-            ["@wix/sdk-types", "npm:1.17.8"],\
-            ["zod", "npm:4.4.3"]\
+            ["@wix/sdk-runtime", "npm:1.0.24"],\
+            ["@wix/sdk-types", "npm:1.17.11"],\
+            ["zod", "npm:4.5.4"]\
           ],\
           "linkType": "HARD"\
         }]\
@@ -1132,9 +1216,9 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_bookings_external-calendars-npm-1.0.56-a1ef6396f9-8c0.zip/node_modules/@wix/auto_sdk_bookings_external-calendars/",\
           "packageDependencies": [\
             ["@wix/auto_sdk_bookings_external-calendars", "npm:1.0.56"],\
-            ["@wix/sdk-runtime", "npm:1.0.14"],\
-            ["@wix/sdk-types", "npm:1.17.8"],\
-            ["zod", "npm:4.4.3"]\
+            ["@wix/sdk-runtime", "npm:1.0.24"],\
+            ["@wix/sdk-types", "npm:1.17.11"],\
+            ["zod", "npm:4.5.4"]\
           ],\
           "linkType": "HARD"\
         }]\
@@ -1144,21 +1228,30 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_bookings_multi-service-availability-time-slots-npm-1.0.238-51d19a59f0-8c0.zip/node_modules/@wix/auto_sdk_bookings_multi-service-availability-time-slots/",\
           "packageDependencies": [\
             ["@wix/auto_sdk_bookings_multi-service-availability-time-slots", "npm:1.0.238"],\
-            ["@wix/sdk-runtime", "npm:1.0.14"],\
-            ["@wix/sdk-types", "npm:1.17.8"],\
-            ["zod", "npm:4.4.3"]\
+            ["@wix/sdk-runtime", "npm:1.0.24"],\
+            ["@wix/sdk-types", "npm:1.17.11"],\
+            ["zod", "npm:4.5.4"]\
           ],\
           "linkType": "HARD"\
         }]\
       ]],\
       ["@wix/auto_sdk_bookings_pricing", [\
+        ["npm:1.0.106", {\
+          "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_bookings_pricing-npm-1.0.106-4a06ceabcd-8c0.zip/node_modules/@wix/auto_sdk_bookings_pricing/",\
+          "packageDependencies": [\
+            ["@wix/auto_sdk_bookings_pricing", "npm:1.0.106"],\
+            ["@wix/sdk-runtime", "npm:1.0.24"],\
+            ["@wix/sdk-types", "npm:1.17.11"]\
+          ],\
+          "linkType": "HARD"\
+        }],\
         ["npm:1.0.90", {\
           "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_bookings_pricing-npm-1.0.90-747a06a0e5-8c0.zip/node_modules/@wix/auto_sdk_bookings_pricing/",\
           "packageDependencies": [\
             ["@wix/auto_sdk_bookings_pricing", "npm:1.0.90"],\
-            ["@wix/sdk-runtime", "npm:1.0.14"],\
-            ["@wix/sdk-types", "npm:1.17.8"],\
-            ["zod", "npm:4.4.3"]\
+            ["@wix/sdk-runtime", "npm:1.0.24"],\
+            ["@wix/sdk-types", "npm:1.17.11"],\
+            ["zod", "npm:4.5.4"]\
           ],\
           "linkType": "HARD"\
         }]\
@@ -1168,9 +1261,9 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_bookings_pricing-provider-npm-1.0.21-f30d7cc518-8c0.zip/node_modules/@wix/auto_sdk_bookings_pricing-provider/",\
           "packageDependencies": [\
             ["@wix/auto_sdk_bookings_pricing-provider", "npm:1.0.21"],\
-            ["@wix/sdk-runtime", "npm:1.0.14"],\
-            ["@wix/sdk-types", "npm:1.17.8"],\
-            ["zod", "npm:4.4.3"]\
+            ["@wix/sdk-runtime", "npm:1.0.24"],\
+            ["@wix/sdk-types", "npm:1.17.11"],\
+            ["zod", "npm:4.5.4"]\
           ],\
           "linkType": "HARD"\
         }]\
@@ -1180,9 +1273,9 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_bookings_resource-types-npm-1.0.75-3cf26dd300-8c0.zip/node_modules/@wix/auto_sdk_bookings_resource-types/",\
           "packageDependencies": [\
             ["@wix/auto_sdk_bookings_resource-types", "npm:1.0.75"],\
-            ["@wix/sdk-runtime", "npm:1.0.14"],\
-            ["@wix/sdk-types", "npm:1.17.8"],\
-            ["zod", "npm:4.4.3"]\
+            ["@wix/sdk-runtime", "npm:1.0.24"],\
+            ["@wix/sdk-types", "npm:1.17.11"],\
+            ["zod", "npm:4.5.4"]\
           ],\
           "linkType": "HARD"\
         }]\
@@ -1192,9 +1285,9 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_bookings_resources-npm-1.0.83-8b8aabd5b1-8c0.zip/node_modules/@wix/auto_sdk_bookings_resources/",\
           "packageDependencies": [\
             ["@wix/auto_sdk_bookings_resources", "npm:1.0.83"],\
-            ["@wix/sdk-runtime", "npm:1.0.14"],\
-            ["@wix/sdk-types", "npm:1.17.8"],\
-            ["zod", "npm:4.4.3"]\
+            ["@wix/sdk-runtime", "npm:1.0.24"],\
+            ["@wix/sdk-types", "npm:1.17.11"],\
+            ["zod", "npm:4.5.4"]\
           ],\
           "linkType": "HARD"\
         }]\
@@ -1204,9 +1297,9 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_bookings_service-options-and-variants-npm-1.0.78-dbf7ec47b6-8c0.zip/node_modules/@wix/auto_sdk_bookings_service-options-and-variants/",\
           "packageDependencies": [\
             ["@wix/auto_sdk_bookings_service-options-and-variants", "npm:1.0.78"],\
-            ["@wix/sdk-runtime", "npm:1.0.14"],\
-            ["@wix/sdk-types", "npm:1.17.8"],\
-            ["zod", "npm:4.4.3"]\
+            ["@wix/sdk-runtime", "npm:1.0.24"],\
+            ["@wix/sdk-types", "npm:1.17.11"],\
+            ["zod", "npm:4.5.4"]\
           ],\
           "linkType": "HARD"\
         }]\
@@ -1216,9 +1309,18 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_bookings_services-npm-1.0.235-363c8f8b95-8c0.zip/node_modules/@wix/auto_sdk_bookings_services/",\
           "packageDependencies": [\
             ["@wix/auto_sdk_bookings_services", "npm:1.0.235"],\
-            ["@wix/sdk-runtime", "npm:1.0.14"],\
-            ["@wix/sdk-types", "npm:1.17.8"],\
-            ["zod", "npm:4.4.3"]\
+            ["@wix/sdk-runtime", "npm:1.0.24"],\
+            ["@wix/sdk-types", "npm:1.17.11"],\
+            ["zod", "npm:4.5.4"]\
+          ],\
+          "linkType": "HARD"\
+        }],\
+        ["npm:1.0.283", {\
+          "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_bookings_services-npm-1.0.283-8b28c76395-8c0.zip/node_modules/@wix/auto_sdk_bookings_services/",\
+          "packageDependencies": [\
+            ["@wix/auto_sdk_bookings_services", "npm:1.0.283"],\
+            ["@wix/sdk-runtime", "npm:1.0.24"],\
+            ["@wix/sdk-types", "npm:1.17.11"]\
           ],\
           "linkType": "HARD"\
         }]\
@@ -1228,9 +1330,9 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_bookings_staff-member-settings-npm-1.0.20-43b8d302f0-8c0.zip/node_modules/@wix/auto_sdk_bookings_staff-member-settings/",\
           "packageDependencies": [\
             ["@wix/auto_sdk_bookings_staff-member-settings", "npm:1.0.20"],\
-            ["@wix/sdk-runtime", "npm:1.0.14"],\
-            ["@wix/sdk-types", "npm:1.17.8"],\
-            ["zod", "npm:4.4.3"]\
+            ["@wix/sdk-runtime", "npm:1.0.24"],\
+            ["@wix/sdk-types", "npm:1.17.11"],\
+            ["zod", "npm:4.5.4"]\
           ],\
           "linkType": "HARD"\
         }]\
@@ -1240,9 +1342,9 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_bookings_staff-members-npm-1.0.110-010fdbb600-8c0.zip/node_modules/@wix/auto_sdk_bookings_staff-members/",\
           "packageDependencies": [\
             ["@wix/auto_sdk_bookings_staff-members", "npm:1.0.110"],\
-            ["@wix/sdk-runtime", "npm:1.0.14"],\
-            ["@wix/sdk-types", "npm:1.17.8"],\
-            ["zod", "npm:4.4.3"]\
+            ["@wix/sdk-runtime", "npm:1.0.24"],\
+            ["@wix/sdk-types", "npm:1.17.11"],\
+            ["zod", "npm:4.5.4"]\
           ],\
           "linkType": "HARD"\
         }]\
@@ -1252,9 +1354,9 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_bookings_staff-sorting-npm-1.0.6-0febf5ea40-8c0.zip/node_modules/@wix/auto_sdk_bookings_staff-sorting/",\
           "packageDependencies": [\
             ["@wix/auto_sdk_bookings_staff-sorting", "npm:1.0.6"],\
-            ["@wix/sdk-runtime", "npm:1.0.14"],\
-            ["@wix/sdk-types", "npm:1.17.8"],\
-            ["zod", "npm:4.4.3"]\
+            ["@wix/sdk-runtime", "npm:1.0.24"],\
+            ["@wix/sdk-types", "npm:1.17.11"],\
+            ["zod", "npm:4.5.4"]\
           ],\
           "linkType": "HARD"\
         }]\
@@ -1264,9 +1366,9 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_ecom_abandoned-checkouts-npm-1.0.74-af7d511a3c-8c0.zip/node_modules/@wix/auto_sdk_ecom_abandoned-checkouts/",\
           "packageDependencies": [\
             ["@wix/auto_sdk_ecom_abandoned-checkouts", "npm:1.0.74"],\
-            ["@wix/sdk-runtime", "npm:1.0.14"],\
-            ["@wix/sdk-types", "npm:1.17.8"],\
-            ["zod", "npm:4.4.3"]\
+            ["@wix/sdk-runtime", "npm:1.0.24"],\
+            ["@wix/sdk-types", "npm:1.17.11"],\
+            ["zod", "npm:4.5.4"]\
           ],\
           "linkType": "HARD"\
         }]\
@@ -1276,9 +1378,9 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_ecom_additional-fees-npm-1.0.45-034caee4a0-8c0.zip/node_modules/@wix/auto_sdk_ecom_additional-fees/",\
           "packageDependencies": [\
             ["@wix/auto_sdk_ecom_additional-fees", "npm:1.0.45"],\
-            ["@wix/sdk-runtime", "npm:1.0.14"],\
-            ["@wix/sdk-types", "npm:1.17.8"],\
-            ["zod", "npm:4.4.3"]\
+            ["@wix/sdk-runtime", "npm:1.0.24"],\
+            ["@wix/sdk-types", "npm:1.17.11"],\
+            ["zod", "npm:4.5.4"]\
           ],\
           "linkType": "HARD"\
         }]\
@@ -1288,9 +1390,9 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_ecom_back-in-stock-notifications-npm-1.0.60-fe50fdc625-8c0.zip/node_modules/@wix/auto_sdk_ecom_back-in-stock-notifications/",\
           "packageDependencies": [\
             ["@wix/auto_sdk_ecom_back-in-stock-notifications", "npm:1.0.60"],\
-            ["@wix/sdk-runtime", "npm:1.0.14"],\
-            ["@wix/sdk-types", "npm:1.17.8"],\
-            ["zod", "npm:4.4.3"]\
+            ["@wix/sdk-runtime", "npm:1.0.24"],\
+            ["@wix/sdk-types", "npm:1.17.11"],\
+            ["zod", "npm:4.5.4"]\
           ],\
           "linkType": "HARD"\
         }]\
@@ -1300,9 +1402,9 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_ecom_back-in-stock-settings-npm-1.0.40-10a6714cfe-8c0.zip/node_modules/@wix/auto_sdk_ecom_back-in-stock-settings/",\
           "packageDependencies": [\
             ["@wix/auto_sdk_ecom_back-in-stock-settings", "npm:1.0.40"],\
-            ["@wix/sdk-runtime", "npm:1.0.14"],\
-            ["@wix/sdk-types", "npm:1.17.8"],\
-            ["zod", "npm:4.4.3"]\
+            ["@wix/sdk-runtime", "npm:1.0.24"],\
+            ["@wix/sdk-types", "npm:1.17.11"],\
+            ["zod", "npm:4.5.4"]\
           ],\
           "linkType": "HARD"\
         }]\
@@ -1312,9 +1414,9 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_ecom_cart-npm-1.0.155-c4f8ecdfac-8c0.zip/node_modules/@wix/auto_sdk_ecom_cart/",\
           "packageDependencies": [\
             ["@wix/auto_sdk_ecom_cart", "npm:1.0.155"],\
-            ["@wix/sdk-runtime", "npm:1.0.14"],\
-            ["@wix/sdk-types", "npm:1.17.8"],\
-            ["zod", "npm:4.4.3"]\
+            ["@wix/sdk-runtime", "npm:1.0.24"],\
+            ["@wix/sdk-types", "npm:1.17.11"],\
+            ["zod", "npm:4.5.4"]\
           ],\
           "linkType": "HARD"\
         }]\
@@ -1324,9 +1426,18 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_ecom_cart-v-2-npm-1.0.142-0f541a48d4-8c0.zip/node_modules/@wix/auto_sdk_ecom_cart-v-2/",\
           "packageDependencies": [\
             ["@wix/auto_sdk_ecom_cart-v-2", "npm:1.0.142"],\
-            ["@wix/sdk-runtime", "npm:1.0.14"],\
-            ["@wix/sdk-types", "npm:1.17.8"],\
-            ["zod", "npm:4.4.3"]\
+            ["@wix/sdk-runtime", "npm:1.0.24"],\
+            ["@wix/sdk-types", "npm:1.17.11"],\
+            ["zod", "npm:4.5.4"]\
+          ],\
+          "linkType": "HARD"\
+        }],\
+        ["npm:1.0.198", {\
+          "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_ecom_cart-v-2-npm-1.0.198-431294821c-8c0.zip/node_modules/@wix/auto_sdk_ecom_cart-v-2/",\
+          "packageDependencies": [\
+            ["@wix/auto_sdk_ecom_cart-v-2", "npm:1.0.198"],\
+            ["@wix/sdk-runtime", "npm:1.0.24"],\
+            ["@wix/sdk-types", "npm:1.17.11"]\
           ],\
           "linkType": "HARD"\
         }]\
@@ -1336,9 +1447,9 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_ecom_catalog-npm-1.0.59-9d16a57042-8c0.zip/node_modules/@wix/auto_sdk_ecom_catalog/",\
           "packageDependencies": [\
             ["@wix/auto_sdk_ecom_catalog", "npm:1.0.59"],\
-            ["@wix/sdk-runtime", "npm:1.0.14"],\
-            ["@wix/sdk-types", "npm:1.17.8"],\
-            ["zod", "npm:4.4.3"]\
+            ["@wix/sdk-runtime", "npm:1.0.24"],\
+            ["@wix/sdk-types", "npm:1.17.11"],\
+            ["zod", "npm:4.5.4"]\
           ],\
           "linkType": "HARD"\
         }]\
@@ -1348,9 +1459,18 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_ecom_checkout-npm-1.0.150-6fdcca95cd-8c0.zip/node_modules/@wix/auto_sdk_ecom_checkout/",\
           "packageDependencies": [\
             ["@wix/auto_sdk_ecom_checkout", "npm:1.0.150"],\
-            ["@wix/sdk-runtime", "npm:1.0.14"],\
-            ["@wix/sdk-types", "npm:1.17.8"],\
-            ["zod", "npm:4.4.3"]\
+            ["@wix/sdk-runtime", "npm:1.0.24"],\
+            ["@wix/sdk-types", "npm:1.17.11"],\
+            ["zod", "npm:4.5.4"]\
+          ],\
+          "linkType": "HARD"\
+        }],\
+        ["npm:1.0.171", {\
+          "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_ecom_checkout-npm-1.0.171-9748b44bdb-8c0.zip/node_modules/@wix/auto_sdk_ecom_checkout/",\
+          "packageDependencies": [\
+            ["@wix/auto_sdk_ecom_checkout", "npm:1.0.171"],\
+            ["@wix/sdk-runtime", "npm:1.0.24"],\
+            ["@wix/sdk-types", "npm:1.17.11"]\
           ],\
           "linkType": "HARD"\
         }]\
@@ -1360,9 +1480,9 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_ecom_checkout-content-npm-1.0.35-fdb9c18688-8c0.zip/node_modules/@wix/auto_sdk_ecom_checkout-content/",\
           "packageDependencies": [\
             ["@wix/auto_sdk_ecom_checkout-content", "npm:1.0.35"],\
-            ["@wix/sdk-runtime", "npm:1.0.14"],\
-            ["@wix/sdk-types", "npm:1.17.8"],\
-            ["zod", "npm:4.4.3"]\
+            ["@wix/sdk-runtime", "npm:1.0.24"],\
+            ["@wix/sdk-types", "npm:1.17.11"],\
+            ["zod", "npm:4.5.4"]\
           ],\
           "linkType": "HARD"\
         }]\
@@ -1372,9 +1492,9 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_ecom_checkout-settings-npm-1.0.63-e6459898a8-8c0.zip/node_modules/@wix/auto_sdk_ecom_checkout-settings/",\
           "packageDependencies": [\
             ["@wix/auto_sdk_ecom_checkout-settings", "npm:1.0.63"],\
-            ["@wix/sdk-runtime", "npm:1.0.14"],\
-            ["@wix/sdk-types", "npm:1.17.8"],\
-            ["zod", "npm:4.4.3"]\
+            ["@wix/sdk-runtime", "npm:1.0.24"],\
+            ["@wix/sdk-types", "npm:1.17.11"],\
+            ["zod", "npm:4.5.4"]\
           ],\
           "linkType": "HARD"\
         }]\
@@ -1384,9 +1504,9 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_ecom_checkout-templates-npm-1.0.134-6275e88868-8c0.zip/node_modules/@wix/auto_sdk_ecom_checkout-templates/",\
           "packageDependencies": [\
             ["@wix/auto_sdk_ecom_checkout-templates", "npm:1.0.134"],\
-            ["@wix/sdk-runtime", "npm:1.0.14"],\
-            ["@wix/sdk-types", "npm:1.17.8"],\
-            ["zod", "npm:4.4.3"]\
+            ["@wix/sdk-runtime", "npm:1.0.24"],\
+            ["@wix/sdk-types", "npm:1.17.11"],\
+            ["zod", "npm:4.5.4"]\
           ],\
           "linkType": "HARD"\
         }]\
@@ -1396,9 +1516,9 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_ecom_currencies-npm-1.0.34-2056999aac-8c0.zip/node_modules/@wix/auto_sdk_ecom_currencies/",\
           "packageDependencies": [\
             ["@wix/auto_sdk_ecom_currencies", "npm:1.0.34"],\
-            ["@wix/sdk-runtime", "npm:1.0.14"],\
-            ["@wix/sdk-types", "npm:1.17.8"],\
-            ["zod", "npm:4.4.3"]\
+            ["@wix/sdk-runtime", "npm:1.0.24"],\
+            ["@wix/sdk-types", "npm:1.17.11"],\
+            ["zod", "npm:4.5.4"]\
           ],\
           "linkType": "HARD"\
         }]\
@@ -1408,9 +1528,18 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_ecom_current-cart-npm-1.0.165-1f52b0c201-8c0.zip/node_modules/@wix/auto_sdk_ecom_current-cart/",\
           "packageDependencies": [\
             ["@wix/auto_sdk_ecom_current-cart", "npm:1.0.165"],\
-            ["@wix/sdk-runtime", "npm:1.0.14"],\
-            ["@wix/sdk-types", "npm:1.17.8"],\
-            ["zod", "npm:4.4.3"]\
+            ["@wix/sdk-runtime", "npm:1.0.24"],\
+            ["@wix/sdk-types", "npm:1.17.11"],\
+            ["zod", "npm:4.5.4"]\
+          ],\
+          "linkType": "HARD"\
+        }],\
+        ["npm:1.0.187", {\
+          "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_ecom_current-cart-npm-1.0.187-b2c367540d-8c0.zip/node_modules/@wix/auto_sdk_ecom_current-cart/",\
+          "packageDependencies": [\
+            ["@wix/auto_sdk_ecom_current-cart", "npm:1.0.187"],\
+            ["@wix/sdk-runtime", "npm:1.0.24"],\
+            ["@wix/sdk-types", "npm:1.17.11"]\
           ],\
           "linkType": "HARD"\
         }]\
@@ -1420,9 +1549,9 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_ecom_current-cart-v-2-npm-1.0.143-6c48bffa19-8c0.zip/node_modules/@wix/auto_sdk_ecom_current-cart-v-2/",\
           "packageDependencies": [\
             ["@wix/auto_sdk_ecom_current-cart-v-2", "npm:1.0.143"],\
-            ["@wix/sdk-runtime", "npm:1.0.14"],\
-            ["@wix/sdk-types", "npm:1.17.8"],\
-            ["zod", "npm:4.4.3"]\
+            ["@wix/sdk-runtime", "npm:1.0.24"],\
+            ["@wix/sdk-types", "npm:1.17.11"],\
+            ["zod", "npm:4.5.4"]\
           ],\
           "linkType": "HARD"\
         }]\
@@ -1432,9 +1561,9 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_ecom_custom-triggers-npm-1.0.37-4d717a0207-8c0.zip/node_modules/@wix/auto_sdk_ecom_custom-triggers/",\
           "packageDependencies": [\
             ["@wix/auto_sdk_ecom_custom-triggers", "npm:1.0.37"],\
-            ["@wix/sdk-runtime", "npm:1.0.14"],\
-            ["@wix/sdk-types", "npm:1.17.8"],\
-            ["zod", "npm:4.4.3"]\
+            ["@wix/sdk-runtime", "npm:1.0.24"],\
+            ["@wix/sdk-types", "npm:1.17.11"],\
+            ["zod", "npm:4.5.4"]\
           ],\
           "linkType": "HARD"\
         }]\
@@ -1444,9 +1573,9 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_ecom_delivery-profile-npm-1.0.402-4186261294-8c0.zip/node_modules/@wix/auto_sdk_ecom_delivery-profile/",\
           "packageDependencies": [\
             ["@wix/auto_sdk_ecom_delivery-profile", "npm:1.0.402"],\
-            ["@wix/sdk-runtime", "npm:1.0.14"],\
-            ["@wix/sdk-types", "npm:1.17.8"],\
-            ["zod", "npm:4.4.3"]\
+            ["@wix/sdk-runtime", "npm:1.0.24"],\
+            ["@wix/sdk-types", "npm:1.17.11"],\
+            ["zod", "npm:4.5.4"]\
           ],\
           "linkType": "HARD"\
         }]\
@@ -1456,9 +1585,9 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_ecom_delivery-solutions-npm-1.0.59-7b0ba0daf7-8c0.zip/node_modules/@wix/auto_sdk_ecom_delivery-solutions/",\
           "packageDependencies": [\
             ["@wix/auto_sdk_ecom_delivery-solutions", "npm:1.0.59"],\
-            ["@wix/sdk-runtime", "npm:1.0.14"],\
-            ["@wix/sdk-types", "npm:1.17.8"],\
-            ["zod", "npm:4.4.3"]\
+            ["@wix/sdk-runtime", "npm:1.0.24"],\
+            ["@wix/sdk-types", "npm:1.17.11"],\
+            ["zod", "npm:4.5.4"]\
           ],\
           "linkType": "HARD"\
         }]\
@@ -1468,9 +1597,9 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_ecom_discount-rules-npm-1.0.109-f6a74d6430-8c0.zip/node_modules/@wix/auto_sdk_ecom_discount-rules/",\
           "packageDependencies": [\
             ["@wix/auto_sdk_ecom_discount-rules", "npm:1.0.109"],\
-            ["@wix/sdk-runtime", "npm:1.0.14"],\
-            ["@wix/sdk-types", "npm:1.17.8"],\
-            ["zod", "npm:4.4.3"]\
+            ["@wix/sdk-runtime", "npm:1.0.24"],\
+            ["@wix/sdk-types", "npm:1.17.11"],\
+            ["zod", "npm:4.5.4"]\
           ],\
           "linkType": "HARD"\
         }]\
@@ -1480,9 +1609,9 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_ecom_discounts-npm-1.0.33-735a4207f8-8c0.zip/node_modules/@wix/auto_sdk_ecom_discounts/",\
           "packageDependencies": [\
             ["@wix/auto_sdk_ecom_discounts", "npm:1.0.33"],\
-            ["@wix/sdk-runtime", "npm:1.0.14"],\
-            ["@wix/sdk-types", "npm:1.17.8"],\
-            ["zod", "npm:4.4.3"]\
+            ["@wix/sdk-runtime", "npm:1.0.24"],\
+            ["@wix/sdk-types", "npm:1.17.11"],\
+            ["zod", "npm:4.5.4"]\
           ],\
           "linkType": "HARD"\
         }]\
@@ -1492,9 +1621,9 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_ecom_discounts-custom-trigger-npm-1.0.43-29d46ce4e1-8c0.zip/node_modules/@wix/auto_sdk_ecom_discounts-custom-trigger/",\
           "packageDependencies": [\
             ["@wix/auto_sdk_ecom_discounts-custom-trigger", "npm:1.0.43"],\
-            ["@wix/sdk-runtime", "npm:1.0.14"],\
-            ["@wix/sdk-types", "npm:1.17.8"],\
-            ["zod", "npm:4.4.3"]\
+            ["@wix/sdk-runtime", "npm:1.0.24"],\
+            ["@wix/sdk-types", "npm:1.17.11"],\
+            ["zod", "npm:4.5.4"]\
           ],\
           "linkType": "HARD"\
         }]\
@@ -1504,9 +1633,9 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_ecom_draft-orders-npm-1.0.153-0cd45d8c2c-8c0.zip/node_modules/@wix/auto_sdk_ecom_draft-orders/",\
           "packageDependencies": [\
             ["@wix/auto_sdk_ecom_draft-orders", "npm:1.0.153"],\
-            ["@wix/sdk-runtime", "npm:1.0.14"],\
-            ["@wix/sdk-types", "npm:1.17.8"],\
-            ["zod", "npm:4.4.3"]\
+            ["@wix/sdk-runtime", "npm:1.0.24"],\
+            ["@wix/sdk-types", "npm:1.17.11"],\
+            ["zod", "npm:4.5.4"]\
           ],\
           "linkType": "HARD"\
         }]\
@@ -1516,9 +1645,9 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_ecom_ecommerce-settings-npm-1.0.24-e6432caf75-8c0.zip/node_modules/@wix/auto_sdk_ecom_ecommerce-settings/",\
           "packageDependencies": [\
             ["@wix/auto_sdk_ecom_ecommerce-settings", "npm:1.0.24"],\
-            ["@wix/sdk-runtime", "npm:1.0.14"],\
-            ["@wix/sdk-types", "npm:1.17.8"],\
-            ["zod", "npm:4.4.3"]\
+            ["@wix/sdk-runtime", "npm:1.0.24"],\
+            ["@wix/sdk-types", "npm:1.17.11"],\
+            ["zod", "npm:4.5.4"]\
           ],\
           "linkType": "HARD"\
         }]\
@@ -1528,9 +1657,9 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_ecom_gift-vouchers-npm-1.0.42-0143b61a18-8c0.zip/node_modules/@wix/auto_sdk_ecom_gift-vouchers/",\
           "packageDependencies": [\
             ["@wix/auto_sdk_ecom_gift-vouchers", "npm:1.0.42"],\
-            ["@wix/sdk-runtime", "npm:1.0.14"],\
-            ["@wix/sdk-types", "npm:1.17.8"],\
-            ["zod", "npm:4.4.3"]\
+            ["@wix/sdk-runtime", "npm:1.0.24"],\
+            ["@wix/sdk-types", "npm:1.17.11"],\
+            ["zod", "npm:4.5.4"]\
           ],\
           "linkType": "HARD"\
         }]\
@@ -1540,9 +1669,9 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_ecom_gift-vouchers-provider-npm-1.0.32-fce662985c-8c0.zip/node_modules/@wix/auto_sdk_ecom_gift-vouchers-provider/",\
           "packageDependencies": [\
             ["@wix/auto_sdk_ecom_gift-vouchers-provider", "npm:1.0.32"],\
-            ["@wix/sdk-runtime", "npm:1.0.14"],\
-            ["@wix/sdk-types", "npm:1.17.8"],\
-            ["zod", "npm:4.4.3"]\
+            ["@wix/sdk-runtime", "npm:1.0.24"],\
+            ["@wix/sdk-types", "npm:1.17.11"],\
+            ["zod", "npm:4.5.4"]\
           ],\
           "linkType": "HARD"\
         }]\
@@ -1552,9 +1681,9 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_ecom_inventory-npm-1.0.23-efac023191-8c0.zip/node_modules/@wix/auto_sdk_ecom_inventory/",\
           "packageDependencies": [\
             ["@wix/auto_sdk_ecom_inventory", "npm:1.0.23"],\
-            ["@wix/sdk-runtime", "npm:1.0.14"],\
-            ["@wix/sdk-types", "npm:1.17.8"],\
-            ["zod", "npm:4.4.3"]\
+            ["@wix/sdk-runtime", "npm:1.0.24"],\
+            ["@wix/sdk-types", "npm:1.17.11"],\
+            ["zod", "npm:4.5.4"]\
           ],\
           "linkType": "HARD"\
         }]\
@@ -1564,9 +1693,9 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_ecom_local-delivery-options-npm-1.0.50-98b6a5deb7-8c0.zip/node_modules/@wix/auto_sdk_ecom_local-delivery-options/",\
           "packageDependencies": [\
             ["@wix/auto_sdk_ecom_local-delivery-options", "npm:1.0.50"],\
-            ["@wix/sdk-runtime", "npm:1.0.14"],\
-            ["@wix/sdk-types", "npm:1.17.8"],\
-            ["zod", "npm:4.4.3"]\
+            ["@wix/sdk-runtime", "npm:1.0.24"],\
+            ["@wix/sdk-types", "npm:1.17.11"],\
+            ["zod", "npm:4.5.4"]\
           ],\
           "linkType": "HARD"\
         }]\
@@ -1576,9 +1705,9 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_ecom_manual-tax-mappings-npm-1.0.36-0ed0f4ffc9-8c0.zip/node_modules/@wix/auto_sdk_ecom_manual-tax-mappings/",\
           "packageDependencies": [\
             ["@wix/auto_sdk_ecom_manual-tax-mappings", "npm:1.0.36"],\
-            ["@wix/sdk-runtime", "npm:1.0.14"],\
-            ["@wix/sdk-types", "npm:1.17.8"],\
-            ["zod", "npm:4.4.3"]\
+            ["@wix/sdk-runtime", "npm:1.0.24"],\
+            ["@wix/sdk-types", "npm:1.17.11"],\
+            ["zod", "npm:4.5.4"]\
           ],\
           "linkType": "HARD"\
         }]\
@@ -1588,9 +1717,9 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_ecom_memberships-npm-1.0.35-84d7097225-8c0.zip/node_modules/@wix/auto_sdk_ecom_memberships/",\
           "packageDependencies": [\
             ["@wix/auto_sdk_ecom_memberships", "npm:1.0.35"],\
-            ["@wix/sdk-runtime", "npm:1.0.14"],\
-            ["@wix/sdk-types", "npm:1.17.8"],\
-            ["zod", "npm:4.4.3"]\
+            ["@wix/sdk-runtime", "npm:1.0.24"],\
+            ["@wix/sdk-types", "npm:1.17.11"],\
+            ["zod", "npm:4.5.4"]\
           ],\
           "linkType": "HARD"\
         }]\
@@ -1600,9 +1729,9 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_ecom_order-billing-npm-1.0.82-32c8eb35f3-8c0.zip/node_modules/@wix/auto_sdk_ecom_order-billing/",\
           "packageDependencies": [\
             ["@wix/auto_sdk_ecom_order-billing", "npm:1.0.82"],\
-            ["@wix/sdk-runtime", "npm:1.0.14"],\
-            ["@wix/sdk-types", "npm:1.17.8"],\
-            ["zod", "npm:4.4.3"]\
+            ["@wix/sdk-runtime", "npm:1.0.24"],\
+            ["@wix/sdk-types", "npm:1.17.11"],\
+            ["zod", "npm:4.5.4"]\
           ],\
           "linkType": "HARD"\
         }]\
@@ -1612,9 +1741,9 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_ecom_order-fulfillments-npm-1.0.58-6dabef1758-8c0.zip/node_modules/@wix/auto_sdk_ecom_order-fulfillments/",\
           "packageDependencies": [\
             ["@wix/auto_sdk_ecom_order-fulfillments", "npm:1.0.58"],\
-            ["@wix/sdk-runtime", "npm:1.0.14"],\
-            ["@wix/sdk-types", "npm:1.17.8"],\
-            ["zod", "npm:4.4.3"]\
+            ["@wix/sdk-runtime", "npm:1.0.24"],\
+            ["@wix/sdk-types", "npm:1.17.11"],\
+            ["zod", "npm:4.5.4"]\
           ],\
           "linkType": "HARD"\
         }]\
@@ -1624,9 +1753,9 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_ecom_order-invoices-npm-1.0.50-b85964462d-8c0.zip/node_modules/@wix/auto_sdk_ecom_order-invoices/",\
           "packageDependencies": [\
             ["@wix/auto_sdk_ecom_order-invoices", "npm:1.0.50"],\
-            ["@wix/sdk-runtime", "npm:1.0.14"],\
-            ["@wix/sdk-types", "npm:1.17.8"],\
-            ["zod", "npm:4.4.3"]\
+            ["@wix/sdk-runtime", "npm:1.0.24"],\
+            ["@wix/sdk-types", "npm:1.17.11"],\
+            ["zod", "npm:4.5.4"]\
           ],\
           "linkType": "HARD"\
         }]\
@@ -1636,9 +1765,9 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_ecom_order-payment-requests-npm-1.0.58-564980f986-8c0.zip/node_modules/@wix/auto_sdk_ecom_order-payment-requests/",\
           "packageDependencies": [\
             ["@wix/auto_sdk_ecom_order-payment-requests", "npm:1.0.58"],\
-            ["@wix/sdk-runtime", "npm:1.0.14"],\
-            ["@wix/sdk-types", "npm:1.17.8"],\
-            ["zod", "npm:4.4.3"]\
+            ["@wix/sdk-runtime", "npm:1.0.24"],\
+            ["@wix/sdk-types", "npm:1.17.11"],\
+            ["zod", "npm:4.5.4"]\
           ],\
           "linkType": "HARD"\
         }]\
@@ -1648,9 +1777,9 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_ecom_order-transactions-npm-1.0.86-c584513d7d-8c0.zip/node_modules/@wix/auto_sdk_ecom_order-transactions/",\
           "packageDependencies": [\
             ["@wix/auto_sdk_ecom_order-transactions", "npm:1.0.86"],\
-            ["@wix/sdk-runtime", "npm:1.0.14"],\
-            ["@wix/sdk-types", "npm:1.17.8"],\
-            ["zod", "npm:4.4.3"]\
+            ["@wix/sdk-runtime", "npm:1.0.24"],\
+            ["@wix/sdk-types", "npm:1.17.11"],\
+            ["zod", "npm:4.5.4"]\
           ],\
           "linkType": "HARD"\
         }]\
@@ -1660,9 +1789,9 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_ecom_orders-npm-1.0.254-94fda81888-8c0.zip/node_modules/@wix/auto_sdk_ecom_orders/",\
           "packageDependencies": [\
             ["@wix/auto_sdk_ecom_orders", "npm:1.0.254"],\
-            ["@wix/sdk-runtime", "npm:1.0.14"],\
-            ["@wix/sdk-types", "npm:1.17.8"],\
-            ["zod", "npm:4.4.3"]\
+            ["@wix/sdk-runtime", "npm:1.0.24"],\
+            ["@wix/sdk-types", "npm:1.17.11"],\
+            ["zod", "npm:4.5.4"]\
           ],\
           "linkType": "HARD"\
         }]\
@@ -1672,9 +1801,9 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_ecom_orders-settings-npm-1.0.52-8a3d970b0d-8c0.zip/node_modules/@wix/auto_sdk_ecom_orders-settings/",\
           "packageDependencies": [\
             ["@wix/auto_sdk_ecom_orders-settings", "npm:1.0.52"],\
-            ["@wix/sdk-runtime", "npm:1.0.14"],\
-            ["@wix/sdk-types", "npm:1.17.8"],\
-            ["zod", "npm:4.4.3"]\
+            ["@wix/sdk-runtime", "npm:1.0.24"],\
+            ["@wix/sdk-types", "npm:1.17.11"],\
+            ["zod", "npm:4.5.4"]\
           ],\
           "linkType": "HARD"\
         }]\
@@ -1684,9 +1813,9 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_ecom_payment-settings-npm-1.0.125-77df5ca0d8-8c0.zip/node_modules/@wix/auto_sdk_ecom_payment-settings/",\
           "packageDependencies": [\
             ["@wix/auto_sdk_ecom_payment-settings", "npm:1.0.125"],\
-            ["@wix/sdk-runtime", "npm:1.0.14"],\
-            ["@wix/sdk-types", "npm:1.17.8"],\
-            ["zod", "npm:4.4.3"]\
+            ["@wix/sdk-runtime", "npm:1.0.24"],\
+            ["@wix/sdk-types", "npm:1.17.11"],\
+            ["zod", "npm:4.5.4"]\
           ],\
           "linkType": "HARD"\
         }]\
@@ -1696,9 +1825,9 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_ecom_pickup-locations-npm-1.0.48-a6ef15e093-8c0.zip/node_modules/@wix/auto_sdk_ecom_pickup-locations/",\
           "packageDependencies": [\
             ["@wix/auto_sdk_ecom_pickup-locations", "npm:1.0.48"],\
-            ["@wix/sdk-runtime", "npm:1.0.14"],\
-            ["@wix/sdk-types", "npm:1.17.8"],\
-            ["zod", "npm:4.4.3"]\
+            ["@wix/sdk-runtime", "npm:1.0.24"],\
+            ["@wix/sdk-types", "npm:1.17.11"],\
+            ["zod", "npm:4.5.4"]\
           ],\
           "linkType": "HARD"\
         }]\
@@ -1708,9 +1837,9 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_ecom_recommendations-npm-1.0.45-65996eeed7-8c0.zip/node_modules/@wix/auto_sdk_ecom_recommendations/",\
           "packageDependencies": [\
             ["@wix/auto_sdk_ecom_recommendations", "npm:1.0.45"],\
-            ["@wix/sdk-runtime", "npm:1.0.14"],\
-            ["@wix/sdk-types", "npm:1.17.8"],\
-            ["zod", "npm:4.4.3"]\
+            ["@wix/sdk-runtime", "npm:1.0.24"],\
+            ["@wix/sdk-types", "npm:1.17.11"],\
+            ["zod", "npm:4.5.4"]\
           ],\
           "linkType": "HARD"\
         }]\
@@ -1720,9 +1849,9 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_ecom_recommendations-provider-npm-1.0.32-7748d8b8e3-8c0.zip/node_modules/@wix/auto_sdk_ecom_recommendations-provider/",\
           "packageDependencies": [\
             ["@wix/auto_sdk_ecom_recommendations-provider", "npm:1.0.32"],\
-            ["@wix/sdk-runtime", "npm:1.0.14"],\
-            ["@wix/sdk-types", "npm:1.17.8"],\
-            ["zod", "npm:4.4.3"]\
+            ["@wix/sdk-runtime", "npm:1.0.24"],\
+            ["@wix/sdk-types", "npm:1.17.11"],\
+            ["zod", "npm:4.5.4"]\
           ],\
           "linkType": "HARD"\
         }]\
@@ -1732,9 +1861,9 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_ecom_shipping-options-npm-1.0.142-dd17882fa9-8c0.zip/node_modules/@wix/auto_sdk_ecom_shipping-options/",\
           "packageDependencies": [\
             ["@wix/auto_sdk_ecom_shipping-options", "npm:1.0.142"],\
-            ["@wix/sdk-runtime", "npm:1.0.14"],\
-            ["@wix/sdk-types", "npm:1.17.8"],\
-            ["zod", "npm:4.4.3"]\
+            ["@wix/sdk-runtime", "npm:1.0.24"],\
+            ["@wix/sdk-types", "npm:1.17.11"],\
+            ["zod", "npm:4.5.4"]\
           ],\
           "linkType": "HARD"\
         }]\
@@ -1744,9 +1873,9 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_ecom_shipping-rates-npm-1.0.38-8919035f6d-8c0.zip/node_modules/@wix/auto_sdk_ecom_shipping-rates/",\
           "packageDependencies": [\
             ["@wix/auto_sdk_ecom_shipping-rates", "npm:1.0.38"],\
-            ["@wix/sdk-runtime", "npm:1.0.14"],\
-            ["@wix/sdk-types", "npm:1.17.8"],\
-            ["zod", "npm:4.4.3"]\
+            ["@wix/sdk-runtime", "npm:1.0.24"],\
+            ["@wix/sdk-types", "npm:1.17.11"],\
+            ["zod", "npm:4.5.4"]\
           ],\
           "linkType": "HARD"\
         }]\
@@ -1756,9 +1885,9 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_ecom_shippo-configurations-npm-1.0.67-3fb9df2fac-8c0.zip/node_modules/@wix/auto_sdk_ecom_shippo-configurations/",\
           "packageDependencies": [\
             ["@wix/auto_sdk_ecom_shippo-configurations", "npm:1.0.67"],\
-            ["@wix/sdk-runtime", "npm:1.0.14"],\
-            ["@wix/sdk-types", "npm:1.17.8"],\
-            ["zod", "npm:4.4.3"]\
+            ["@wix/sdk-runtime", "npm:1.0.24"],\
+            ["@wix/sdk-types", "npm:1.17.11"],\
+            ["zod", "npm:4.5.4"]\
           ],\
           "linkType": "HARD"\
         }]\
@@ -1768,9 +1897,9 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_ecom_subscription-contracts-npm-1.0.112-c814961e42-8c0.zip/node_modules/@wix/auto_sdk_ecom_subscription-contracts/",\
           "packageDependencies": [\
             ["@wix/auto_sdk_ecom_subscription-contracts", "npm:1.0.112"],\
-            ["@wix/sdk-runtime", "npm:1.0.14"],\
-            ["@wix/sdk-types", "npm:1.17.8"],\
-            ["zod", "npm:4.4.3"]\
+            ["@wix/sdk-runtime", "npm:1.0.24"],\
+            ["@wix/sdk-types", "npm:1.17.11"],\
+            ["zod", "npm:4.5.4"]\
           ],\
           "linkType": "HARD"\
         }]\
@@ -1780,9 +1909,9 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_ecom_tax-calculation-npm-1.0.50-7982bc12d7-8c0.zip/node_modules/@wix/auto_sdk_ecom_tax-calculation/",\
           "packageDependencies": [\
             ["@wix/auto_sdk_ecom_tax-calculation", "npm:1.0.50"],\
-            ["@wix/sdk-runtime", "npm:1.0.14"],\
-            ["@wix/sdk-types", "npm:1.17.8"],\
-            ["zod", "npm:4.4.3"]\
+            ["@wix/sdk-runtime", "npm:1.0.24"],\
+            ["@wix/sdk-types", "npm:1.17.11"],\
+            ["zod", "npm:4.5.4"]\
           ],\
           "linkType": "HARD"\
         }]\
@@ -1792,9 +1921,9 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_ecom_tax-calculation-provider-npm-1.0.28-3558b2d49e-8c0.zip/node_modules/@wix/auto_sdk_ecom_tax-calculation-provider/",\
           "packageDependencies": [\
             ["@wix/auto_sdk_ecom_tax-calculation-provider", "npm:1.0.28"],\
-            ["@wix/sdk-runtime", "npm:1.0.14"],\
-            ["@wix/sdk-types", "npm:1.17.8"],\
-            ["zod", "npm:4.4.3"]\
+            ["@wix/sdk-runtime", "npm:1.0.24"],\
+            ["@wix/sdk-types", "npm:1.17.11"],\
+            ["zod", "npm:4.5.4"]\
           ],\
           "linkType": "HARD"\
         }]\
@@ -1804,9 +1933,9 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_ecom_tax-groups-npm-1.0.58-982c37020a-8c0.zip/node_modules/@wix/auto_sdk_ecom_tax-groups/",\
           "packageDependencies": [\
             ["@wix/auto_sdk_ecom_tax-groups", "npm:1.0.58"],\
-            ["@wix/sdk-runtime", "npm:1.0.14"],\
-            ["@wix/sdk-types", "npm:1.17.8"],\
-            ["zod", "npm:4.4.3"]\
+            ["@wix/sdk-runtime", "npm:1.0.24"],\
+            ["@wix/sdk-types", "npm:1.17.11"],\
+            ["zod", "npm:4.5.4"]\
           ],\
           "linkType": "HARD"\
         }]\
@@ -1816,9 +1945,9 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_ecom_tax-regions-npm-1.0.56-42489b90f7-8c0.zip/node_modules/@wix/auto_sdk_ecom_tax-regions/",\
           "packageDependencies": [\
             ["@wix/auto_sdk_ecom_tax-regions", "npm:1.0.56"],\
-            ["@wix/sdk-runtime", "npm:1.0.14"],\
-            ["@wix/sdk-types", "npm:1.17.8"],\
-            ["zod", "npm:4.4.3"]\
+            ["@wix/sdk-runtime", "npm:1.0.24"],\
+            ["@wix/sdk-types", "npm:1.17.11"],\
+            ["zod", "npm:4.5.4"]\
           ],\
           "linkType": "HARD"\
         }]\
@@ -1828,9 +1957,9 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_ecom_tip-settings-npm-1.0.51-5c2baa42e5-8c0.zip/node_modules/@wix/auto_sdk_ecom_tip-settings/",\
           "packageDependencies": [\
             ["@wix/auto_sdk_ecom_tip-settings", "npm:1.0.51"],\
-            ["@wix/sdk-runtime", "npm:1.0.14"],\
-            ["@wix/sdk-types", "npm:1.17.8"],\
-            ["zod", "npm:4.4.3"]\
+            ["@wix/sdk-runtime", "npm:1.0.24"],\
+            ["@wix/sdk-types", "npm:1.17.11"],\
+            ["zod", "npm:4.5.4"]\
           ],\
           "linkType": "HARD"\
         }]\
@@ -1840,9 +1969,9 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_ecom_tippable-staff-npm-1.0.39-136df447cc-8c0.zip/node_modules/@wix/auto_sdk_ecom_tippable-staff/",\
           "packageDependencies": [\
             ["@wix/auto_sdk_ecom_tippable-staff", "npm:1.0.39"],\
-            ["@wix/sdk-runtime", "npm:1.0.14"],\
-            ["@wix/sdk-types", "npm:1.17.8"],\
-            ["zod", "npm:4.4.3"]\
+            ["@wix/sdk-runtime", "npm:1.0.24"],\
+            ["@wix/sdk-types", "npm:1.17.11"],\
+            ["zod", "npm:4.5.4"]\
           ],\
           "linkType": "HARD"\
         }]\
@@ -1852,9 +1981,9 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_ecom_tips-npm-1.0.60-77b37e5880-8c0.zip/node_modules/@wix/auto_sdk_ecom_tips/",\
           "packageDependencies": [\
             ["@wix/auto_sdk_ecom_tips", "npm:1.0.60"],\
-            ["@wix/sdk-runtime", "npm:1.0.14"],\
-            ["@wix/sdk-types", "npm:1.17.8"],\
-            ["zod", "npm:4.4.3"]\
+            ["@wix/sdk-runtime", "npm:1.0.24"],\
+            ["@wix/sdk-types", "npm:1.17.11"],\
+            ["zod", "npm:4.5.4"]\
           ],\
           "linkType": "HARD"\
         }]\
@@ -1864,9 +1993,9 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_ecom_totals-calculator-npm-1.0.96-5f1ca76544-8c0.zip/node_modules/@wix/auto_sdk_ecom_totals-calculator/",\
           "packageDependencies": [\
             ["@wix/auto_sdk_ecom_totals-calculator", "npm:1.0.96"],\
-            ["@wix/sdk-runtime", "npm:1.0.14"],\
-            ["@wix/sdk-types", "npm:1.17.8"],\
-            ["zod", "npm:4.4.3"]\
+            ["@wix/sdk-runtime", "npm:1.0.24"],\
+            ["@wix/sdk-types", "npm:1.17.11"],\
+            ["zod", "npm:4.5.4"]\
           ],\
           "linkType": "HARD"\
         }]\
@@ -1876,9 +2005,9 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_ecom_validations-npm-1.0.53-b04dabeb95-8c0.zip/node_modules/@wix/auto_sdk_ecom_validations/",\
           "packageDependencies": [\
             ["@wix/auto_sdk_ecom_validations", "npm:1.0.53"],\
-            ["@wix/sdk-runtime", "npm:1.0.14"],\
-            ["@wix/sdk-types", "npm:1.17.8"],\
-            ["zod", "npm:4.4.3"]\
+            ["@wix/sdk-runtime", "npm:1.0.24"],\
+            ["@wix/sdk-types", "npm:1.17.11"],\
+            ["zod", "npm:4.5.4"]\
           ],\
           "linkType": "HARD"\
         }]\
@@ -1888,8 +2017,8 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_embeds_custom-embeds-npm-1.0.15-a1072024da-8c0.zip/node_modules/@wix/auto_sdk_embeds_custom-embeds/",\
           "packageDependencies": [\
             ["@wix/auto_sdk_embeds_custom-embeds", "npm:1.0.15"],\
-            ["@wix/sdk-runtime", "npm:1.0.14"],\
-            ["@wix/sdk-types", "npm:1.17.8"]\
+            ["@wix/sdk-runtime", "npm:1.0.24"],\
+            ["@wix/sdk-types", "npm:1.17.11"]\
           ],\
           "linkType": "HARD"\
         }]\
@@ -1899,18 +2028,18 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_faq_category-npm-1.0.34-c1fa28c7bf-8c0.zip/node_modules/@wix/auto_sdk_faq_category/",\
           "packageDependencies": [\
             ["@wix/auto_sdk_faq_category", "npm:1.0.34"],\
-            ["@wix/sdk-runtime", "npm:1.0.14"],\
-            ["@wix/sdk-types", "npm:1.17.8"]\
+            ["@wix/sdk-runtime", "npm:1.0.24"],\
+            ["@wix/sdk-types", "npm:1.17.11"]\
           ],\
           "linkType": "HARD"\
         }],\
-        ["npm:1.0.35", {\
-          "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_faq_category-npm-1.0.35-7049137cf7-8c0.zip/node_modules/@wix/auto_sdk_faq_category/",\
+        ["npm:1.0.40", {\
+          "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_faq_category-npm-1.0.40-66eb61950c-8c0.zip/node_modules/@wix/auto_sdk_faq_category/",\
           "packageDependencies": [\
-            ["@wix/auto_sdk_faq_category", "npm:1.0.35"],\
-            ["@wix/sdk-runtime", "npm:1.0.14"],\
-            ["@wix/sdk-types", "npm:1.17.8"],\
-            ["zod", "npm:4.4.3"]\
+            ["@wix/auto_sdk_faq_category", "npm:1.0.40"],\
+            ["@wix/sdk-runtime", "npm:1.0.24"],\
+            ["@wix/sdk-types", "npm:1.17.11"],\
+            ["zod", "npm:4.5.4"]\
           ],\
           "linkType": "HARD"\
         }]\
@@ -1920,18 +2049,18 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_faq_question-entry-npm-1.0.42-131b8c7b6d-8c0.zip/node_modules/@wix/auto_sdk_faq_question-entry/",\
           "packageDependencies": [\
             ["@wix/auto_sdk_faq_question-entry", "npm:1.0.42"],\
-            ["@wix/sdk-runtime", "npm:1.0.14"],\
-            ["@wix/sdk-types", "npm:1.17.8"]\
+            ["@wix/sdk-runtime", "npm:1.0.24"],\
+            ["@wix/sdk-types", "npm:1.17.11"]\
           ],\
           "linkType": "HARD"\
         }],\
-        ["npm:1.0.46", {\
-          "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_faq_question-entry-npm-1.0.46-44969ad1dd-8c0.zip/node_modules/@wix/auto_sdk_faq_question-entry/",\
+        ["npm:1.0.61", {\
+          "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_faq_question-entry-npm-1.0.61-94875f86d4-8c0.zip/node_modules/@wix/auto_sdk_faq_question-entry/",\
           "packageDependencies": [\
-            ["@wix/auto_sdk_faq_question-entry", "npm:1.0.46"],\
-            ["@wix/sdk-runtime", "npm:1.0.14"],\
-            ["@wix/sdk-types", "npm:1.17.8"],\
-            ["zod", "npm:4.4.3"]\
+            ["@wix/auto_sdk_faq_question-entry", "npm:1.0.61"],\
+            ["@wix/sdk-runtime", "npm:1.0.24"],\
+            ["@wix/sdk-types", "npm:1.17.11"],\
+            ["zod", "npm:4.5.4"]\
           ],\
           "linkType": "HARD"\
         }]\
@@ -1941,9 +2070,19 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_forms_chat-settings-npm-1.0.23-9b18657322-8c0.zip/node_modules/@wix/auto_sdk_forms_chat-settings/",\
           "packageDependencies": [\
             ["@wix/auto_sdk_forms_chat-settings", "npm:1.0.23"],\
-            ["@wix/sdk-runtime", "npm:1.0.14"],\
-            ["@wix/sdk-types", "npm:1.17.8"],\
-            ["zod", "npm:4.4.3"]\
+            ["@wix/sdk-runtime", "npm:1.0.24"],\
+            ["@wix/sdk-types", "npm:1.17.11"],\
+            ["zod", "npm:4.5.4"]\
+          ],\
+          "linkType": "HARD"\
+        }],\
+        ["npm:1.0.27", {\
+          "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_forms_chat-settings-npm-1.0.27-b28189254b-8c0.zip/node_modules/@wix/auto_sdk_forms_chat-settings/",\
+          "packageDependencies": [\
+            ["@wix/auto_sdk_forms_chat-settings", "npm:1.0.27"],\
+            ["@wix/sdk-runtime", "npm:1.0.24"],\
+            ["@wix/sdk-types", "npm:1.17.11"],\
+            ["zod", "npm:4.5.4"]\
           ],\
           "linkType": "HARD"\
         }]\
@@ -1953,9 +2092,18 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_forms_form-spam-submission-reports-npm-1.0.37-654d3c8dfe-8c0.zip/node_modules/@wix/auto_sdk_forms_form-spam-submission-reports/",\
           "packageDependencies": [\
             ["@wix/auto_sdk_forms_form-spam-submission-reports", "npm:1.0.37"],\
-            ["@wix/sdk-runtime", "npm:1.0.14"],\
-            ["@wix/sdk-types", "npm:1.17.8"],\
-            ["zod", "npm:4.4.3"]\
+            ["@wix/sdk-runtime", "npm:1.0.24"],\
+            ["@wix/sdk-types", "npm:1.17.11"],\
+            ["zod", "npm:4.5.4"]\
+          ],\
+          "linkType": "HARD"\
+        }],\
+        ["npm:1.0.43", {\
+          "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_forms_form-spam-submission-reports-npm-1.0.43-871cfa4456-8c0.zip/node_modules/@wix/auto_sdk_forms_form-spam-submission-reports/",\
+          "packageDependencies": [\
+            ["@wix/auto_sdk_forms_form-spam-submission-reports", "npm:1.0.43"],\
+            ["@wix/sdk-runtime", "npm:1.0.24"],\
+            ["@wix/sdk-types", "npm:1.17.11"]\
           ],\
           "linkType": "HARD"\
         }]\
@@ -1965,9 +2113,18 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_forms_form-submissions-npm-1.0.21-cde0c1dc4e-8c0.zip/node_modules/@wix/auto_sdk_forms_form-submissions/",\
           "packageDependencies": [\
             ["@wix/auto_sdk_forms_form-submissions", "npm:1.0.21"],\
-            ["@wix/sdk-runtime", "npm:1.0.14"],\
-            ["@wix/sdk-types", "npm:1.17.8"],\
-            ["zod", "npm:4.4.3"]\
+            ["@wix/sdk-runtime", "npm:1.0.24"],\
+            ["@wix/sdk-types", "npm:1.17.11"],\
+            ["zod", "npm:4.5.4"]\
+          ],\
+          "linkType": "HARD"\
+        }],\
+        ["npm:1.0.26", {\
+          "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_forms_form-submissions-npm-1.0.26-621658f8a0-8c0.zip/node_modules/@wix/auto_sdk_forms_form-submissions/",\
+          "packageDependencies": [\
+            ["@wix/auto_sdk_forms_form-submissions", "npm:1.0.26"],\
+            ["@wix/sdk-runtime", "npm:1.0.24"],\
+            ["@wix/sdk-types", "npm:1.17.11"]\
           ],\
           "linkType": "HARD"\
         }]\
@@ -1977,9 +2134,19 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_forms_forms-npm-1.0.127-df971132ea-8c0.zip/node_modules/@wix/auto_sdk_forms_forms/",\
           "packageDependencies": [\
             ["@wix/auto_sdk_forms_forms", "npm:1.0.127"],\
-            ["@wix/sdk-runtime", "npm:1.0.14"],\
-            ["@wix/sdk-types", "npm:1.17.8"],\
-            ["zod", "npm:4.4.3"]\
+            ["@wix/sdk-runtime", "npm:1.0.24"],\
+            ["@wix/sdk-types", "npm:1.17.11"],\
+            ["zod", "npm:4.5.4"]\
+          ],\
+          "linkType": "HARD"\
+        }],\
+        ["npm:1.0.135", {\
+          "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_forms_forms-npm-1.0.135-0bb2303699-8c0.zip/node_modules/@wix/auto_sdk_forms_forms/",\
+          "packageDependencies": [\
+            ["@wix/auto_sdk_forms_forms", "npm:1.0.135"],\
+            ["@wix/sdk-runtime", "npm:1.0.24"],\
+            ["@wix/sdk-types", "npm:1.17.11"],\
+            ["zod", "npm:4.5.4"]\
           ],\
           "linkType": "HARD"\
         }]\
@@ -1989,9 +2156,29 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_forms_interactive-form-sessions-npm-1.0.61-e59e4ee83b-8c0.zip/node_modules/@wix/auto_sdk_forms_interactive-form-sessions/",\
           "packageDependencies": [\
             ["@wix/auto_sdk_forms_interactive-form-sessions", "npm:1.0.61"],\
-            ["@wix/sdk-runtime", "npm:1.0.14"],\
-            ["@wix/sdk-types", "npm:1.17.8"],\
-            ["zod", "npm:4.4.3"]\
+            ["@wix/sdk-runtime", "npm:1.0.24"],\
+            ["@wix/sdk-types", "npm:1.17.11"],\
+            ["zod", "npm:4.5.4"]\
+          ],\
+          "linkType": "HARD"\
+        }],\
+        ["npm:1.0.82", {\
+          "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_forms_interactive-form-sessions-npm-1.0.82-94fc972a37-8c0.zip/node_modules/@wix/auto_sdk_forms_interactive-form-sessions/",\
+          "packageDependencies": [\
+            ["@wix/auto_sdk_forms_interactive-form-sessions", "npm:1.0.82"],\
+            ["@wix/sdk-runtime", "npm:1.0.24"],\
+            ["@wix/sdk-types", "npm:1.17.11"]\
+          ],\
+          "linkType": "HARD"\
+        }]\
+      ]],\
+      ["@wix/auto_sdk_forms_restrictions", [\
+        ["npm:1.0.1", {\
+          "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_forms_restrictions-npm-1.0.1-d24f07a43f-8c0.zip/node_modules/@wix/auto_sdk_forms_restrictions/",\
+          "packageDependencies": [\
+            ["@wix/auto_sdk_forms_restrictions", "npm:1.0.1"],\
+            ["@wix/sdk-runtime", "npm:1.0.24"],\
+            ["@wix/sdk-types", "npm:1.17.11"]\
           ],\
           "linkType": "HARD"\
         }]\
@@ -2001,9 +2188,18 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_forms_submissions-npm-1.0.123-c8e4f66bd0-8c0.zip/node_modules/@wix/auto_sdk_forms_submissions/",\
           "packageDependencies": [\
             ["@wix/auto_sdk_forms_submissions", "npm:1.0.123"],\
-            ["@wix/sdk-runtime", "npm:1.0.14"],\
-            ["@wix/sdk-types", "npm:1.17.8"],\
-            ["zod", "npm:4.4.3"]\
+            ["@wix/sdk-runtime", "npm:1.0.24"],\
+            ["@wix/sdk-types", "npm:1.17.11"],\
+            ["zod", "npm:4.5.4"]\
+          ],\
+          "linkType": "HARD"\
+        }],\
+        ["npm:1.0.157", {\
+          "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_forms_submissions-npm-1.0.157-8a5fb015c9-8c0.zip/node_modules/@wix/auto_sdk_forms_submissions/",\
+          "packageDependencies": [\
+            ["@wix/auto_sdk_forms_submissions", "npm:1.0.157"],\
+            ["@wix/sdk-runtime", "npm:1.0.24"],\
+            ["@wix/sdk-types", "npm:1.17.11"]\
           ],\
           "linkType": "HARD"\
         }]\
@@ -2013,69 +2209,75 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_headless-site-assets_scripts-npm-1.0.13-b3f9411068-8c0.zip/node_modules/@wix/auto_sdk_headless-site-assets_scripts/",\
           "packageDependencies": [\
             ["@wix/auto_sdk_headless-site-assets_scripts", "npm:1.0.13"],\
-            ["@wix/sdk-runtime", "npm:1.0.14"],\
-            ["@wix/sdk-types", "npm:1.17.8"],\
-            ["zod", "npm:4.4.3"]\
+            ["@wix/sdk-runtime", "npm:1.0.24"],\
+            ["@wix/sdk-types", "npm:1.17.11"],\
+            ["zod", "npm:4.5.4"]\
           ],\
           "linkType": "HARD"\
         }]\
       ]],\
       ["@wix/auto_sdk_identity_authentication", [\
-        ["npm:1.0.46", {\
-          "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_identity_authentication-npm-1.0.46-f77891a352-8c0.zip/node_modules/@wix/auto_sdk_identity_authentication/",\
+        ["npm:1.0.59", {\
+          "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_identity_authentication-npm-1.0.59-9df3bfad13-8c0.zip/node_modules/@wix/auto_sdk_identity_authentication/",\
           "packageDependencies": [\
-            ["@wix/auto_sdk_identity_authentication", "npm:1.0.46"],\
-            ["@wix/sdk-runtime", "npm:1.0.14"],\
-            ["@wix/sdk-types", "npm:1.17.8"],\
-            ["zod", "npm:4.4.3"]\
+            ["@wix/auto_sdk_identity_authentication", "npm:1.0.59"],\
+            ["@wix/sdk-runtime", "npm:1.0.24"],\
+            ["@wix/sdk-types", "npm:1.17.11"]\
           ],\
           "linkType": "HARD"\
         }]\
       ]],\
       ["@wix/auto_sdk_identity_oauth", [\
-        ["npm:1.0.37", {\
-          "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_identity_oauth-npm-1.0.37-2be81a2136-8c0.zip/node_modules/@wix/auto_sdk_identity_oauth/",\
+        ["npm:1.0.55", {\
+          "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_identity_oauth-npm-1.0.55-1f7ef0277f-8c0.zip/node_modules/@wix/auto_sdk_identity_oauth/",\
           "packageDependencies": [\
-            ["@wix/auto_sdk_identity_oauth", "npm:1.0.37"],\
-            ["@wix/sdk-runtime", "npm:1.0.14"],\
-            ["@wix/sdk-types", "npm:1.17.8"],\
-            ["zod", "npm:4.4.3"]\
+            ["@wix/auto_sdk_identity_oauth", "npm:1.0.55"],\
+            ["@wix/sdk-runtime", "npm:1.0.24"],\
+            ["@wix/sdk-types", "npm:1.17.11"]\
           ],\
           "linkType": "HARD"\
         }]\
       ]],\
       ["@wix/auto_sdk_identity_recovery", [\
-        ["npm:1.0.43", {\
-          "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_identity_recovery-npm-1.0.43-ed1042fa17-8c0.zip/node_modules/@wix/auto_sdk_identity_recovery/",\
+        ["npm:1.0.48", {\
+          "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_identity_recovery-npm-1.0.48-e2a453fb7d-8c0.zip/node_modules/@wix/auto_sdk_identity_recovery/",\
           "packageDependencies": [\
-            ["@wix/auto_sdk_identity_recovery", "npm:1.0.43"],\
-            ["@wix/sdk-runtime", "npm:1.0.14"],\
-            ["@wix/sdk-types", "npm:1.17.8"],\
-            ["zod", "npm:4.4.3"]\
+            ["@wix/auto_sdk_identity_recovery", "npm:1.0.48"],\
+            ["@wix/sdk-runtime", "npm:1.0.24"],\
+            ["@wix/sdk-types", "npm:1.17.11"]\
+          ],\
+          "linkType": "HARD"\
+        }]\
+      ]],\
+      ["@wix/auto_sdk_identity_sign-on-policy", [\
+        ["npm:1.0.4", {\
+          "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_identity_sign-on-policy-npm-1.0.4-03e3ad73aa-8c0.zip/node_modules/@wix/auto_sdk_identity_sign-on-policy/",\
+          "packageDependencies": [\
+            ["@wix/auto_sdk_identity_sign-on-policy", "npm:1.0.4"],\
+            ["@wix/sdk-runtime", "npm:1.0.24"],\
+            ["@wix/sdk-types", "npm:1.17.11"]\
           ],\
           "linkType": "HARD"\
         }]\
       ]],\
       ["@wix/auto_sdk_identity_verification", [\
-        ["npm:1.0.43", {\
-          "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_identity_verification-npm-1.0.43-0d9cd255e4-8c0.zip/node_modules/@wix/auto_sdk_identity_verification/",\
+        ["npm:1.0.50", {\
+          "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_identity_verification-npm-1.0.50-d5b52f1ee8-8c0.zip/node_modules/@wix/auto_sdk_identity_verification/",\
           "packageDependencies": [\
-            ["@wix/auto_sdk_identity_verification", "npm:1.0.43"],\
-            ["@wix/sdk-runtime", "npm:1.0.14"],\
-            ["@wix/sdk-types", "npm:1.17.8"],\
-            ["zod", "npm:4.4.3"]\
+            ["@wix/auto_sdk_identity_verification", "npm:1.0.50"],\
+            ["@wix/sdk-runtime", "npm:1.0.24"],\
+            ["@wix/sdk-types", "npm:1.17.11"]\
           ],\
           "linkType": "HARD"\
         }]\
       ]],\
       ["@wix/auto_sdk_redirects_redirects", [\
-        ["npm:1.0.41", {\
-          "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_redirects_redirects-npm-1.0.41-c3a074264b-8c0.zip/node_modules/@wix/auto_sdk_redirects_redirects/",\
+        ["npm:1.0.54", {\
+          "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_redirects_redirects-npm-1.0.54-013079a4f6-8c0.zip/node_modules/@wix/auto_sdk_redirects_redirects/",\
           "packageDependencies": [\
-            ["@wix/auto_sdk_redirects_redirects", "npm:1.0.41"],\
-            ["@wix/sdk-runtime", "npm:1.0.14"],\
-            ["@wix/sdk-types", "npm:1.17.8"],\
-            ["zod", "npm:4.4.3"]\
+            ["@wix/auto_sdk_redirects_redirects", "npm:1.0.54"],\
+            ["@wix/sdk-runtime", "npm:1.0.24"],\
+            ["@wix/sdk-types", "npm:1.17.11"]\
           ],\
           "linkType": "HARD"\
         }]\
@@ -2111,7 +2313,7 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
             ["@wix/auto_sdk_bookings_staff-members", "npm:1.0.110"],\
             ["@wix/auto_sdk_bookings_staff-sorting", "npm:1.0.6"],\
             ["@wix/bookings_app-extensions", "npm:1.0.105"],\
-            ["@wix/headless-bookings", "virtual:c5a01aa4657b67c941d0ec8897d9723191b57bcd1504f23518704f1d609108bf88f6a8bcfd7c5055c195f0a05314afaeea339e5b9c436fab6525291bfa74a5da#npm:1.0.5"]\
+            ["@wix/headless-bookings", "virtual:c5a01aa4657b67c941d0ec8897d9723191b57bcd1504f23518704f1d609108bf88f6a8bcfd7c5055c195f0a05314afaeea339e5b9c436fab6525291bfa74a5da#npm:1.0.18"]\
           ],\
           "linkType": "HARD"\
         }]\
@@ -2121,9 +2323,18 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-bookings_app-extensions-npm-1.0.105-4c5042f328-8c0.zip/node_modules/@wix/bookings_app-extensions/",\
           "packageDependencies": [\
             ["@wix/bookings_app-extensions", "npm:1.0.105"],\
-            ["@wix/sdk-runtime", "npm:1.0.14"],\
-            ["@wix/sdk-types", "npm:1.17.8"],\
-            ["zod", "npm:4.4.3"]\
+            ["@wix/sdk-runtime", "npm:1.0.24"],\
+            ["@wix/sdk-types", "npm:1.17.11"],\
+            ["zod", "npm:4.5.4"]\
+          ],\
+          "linkType": "HARD"\
+        }]\
+      ]],\
+      ["@wix/consent-policy-manager", [\
+        ["npm:1.15.0", {\
+          "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-consent-policy-manager-npm-1.15.0-0cebfd673b-8c0.zip/node_modules/@wix/consent-policy-manager/",\
+          "packageDependencies": [\
+            ["@wix/consent-policy-manager", "npm:1.15.0"]\
           ],\
           "linkType": "HARD"\
         }]\
@@ -2196,9 +2407,9 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-ecom_app-extensions-npm-1.0.104-969bcf499d-8c0.zip/node_modules/@wix/ecom_app-extensions/",\
           "packageDependencies": [\
             ["@wix/ecom_app-extensions", "npm:1.0.104"],\
-            ["@wix/sdk-runtime", "npm:1.0.14"],\
-            ["@wix/sdk-types", "npm:1.17.8"],\
-            ["zod", "npm:4.4.3"]\
+            ["@wix/sdk-runtime", "npm:1.0.24"],\
+            ["@wix/sdk-types", "npm:1.17.11"],\
+            ["zod", "npm:4.5.4"]\
           ],\
           "linkType": "HARD"\
         }]\
@@ -2225,7 +2436,7 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "./.yarn/__virtual__/@wix-error-handler-virtual-fbbd1865d6/2/dynamic-modules/yarn-cache/cache/@wix-error-handler-npm-1.68.0-b0871da4c0-8c0.zip/node_modules/@wix/error-handler/",\
           "packageDependencies": [\
             ["@wix/error-handler", "virtual:e5d2db011284bfb91bca4b9d7ba6945d67c210f8d38e8f8e61d6d6585b0a14967bc484c11e2c3ebed635a89f74cddb33913fb85d1487c7530881891ed7450a24#npm:1.68.0"],\
-            ["@babel/runtime", "npm:7.29.2"],\
+            ["@babel/runtime", "npm:7.29.7"],\
             ["@types/i18next", null],\
             ["@types/i18next-icu", null],\
             ["@types/intl-messageformat", null],\
@@ -2235,7 +2446,7 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
             ["events", "npm:3.3.0"],\
             ["http-status-codes", "npm:2.3.0"],\
             ["i18next", "virtual:e5d2db011284bfb91bca4b9d7ba6945d67c210f8d38e8f8e61d6d6585b0a14967bc484c11e2c3ebed635a89f74cddb33913fb85d1487c7530881891ed7450a24#npm:25.10.10"],\
-            ["i18next-icu", "virtual:e5d2db011284bfb91bca4b9d7ba6945d67c210f8d38e8f8e61d6d6585b0a14967bc484c11e2c3ebed635a89f74cddb33913fb85d1487c7530881891ed7450a24#npm:2.4.3"],\
+            ["i18next-icu", "virtual:e5d2db011284bfb91bca4b9d7ba6945d67c210f8d38e8f8e61d6d6585b0a14967bc484c11e2c3ebed635a89f74cddb33913fb85d1487c7530881891ed7450a24#npm:2.4.4"],\
             ["intl-messageformat", "npm:10.7.18"],\
             ["uuid", "npm:11.1.1"]\
           ],\
@@ -2257,7 +2468,7 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-error-handler-core-npm-1.20.0-5422e33bfe-8c0.zip/node_modules/@wix/error-handler-core/",\
           "packageDependencies": [\
             ["@wix/error-handler-core", "npm:1.20.0"],\
-            ["@babel/runtime", "npm:7.29.2"],\
+            ["@babel/runtime", "npm:7.29.7"],\
             ["@wix/error-handler-types", "npm:1.20.0"]\
           ],\
           "linkType": "HARD"\
@@ -2268,7 +2479,7 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-error-handler-types-npm-1.20.0-38cc55c375-8c0.zip/node_modules/@wix/error-handler-types/",\
           "packageDependencies": [\
             ["@wix/error-handler-types", "npm:1.20.0"],\
-            ["@babel/runtime", "npm:7.29.2"]\
+            ["@babel/runtime", "npm:7.29.7"]\
           ],\
           "linkType": "HARD"\
         }]\
@@ -2281,10 +2492,10 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
             ["@wix/error-handler", "virtual:e5d2db011284bfb91bca4b9d7ba6945d67c210f8d38e8f8e61d6d6585b0a14967bc484c11e2c3ebed635a89f74cddb33913fb85d1487c7530881891ed7450a24#npm:1.68.0"],\
             ["@wix/monitoring", "npm:0.21.0"],\
             ["@wix/sdk-runtime", "npm:0.3.62"],\
-            ["@wix/sdk-types", "npm:1.17.8"],\
-            ["graphql", "npm:16.14.0"],\
+            ["@wix/sdk-types", "npm:1.17.11"],\
+            ["graphql", "npm:17.0.2"],\
             ["i18next", "virtual:e5d2db011284bfb91bca4b9d7ba6945d67c210f8d38e8f8e61d6d6585b0a14967bc484c11e2c3ebed635a89f74cddb33913fb85d1487c7530881891ed7450a24#npm:25.10.10"],\
-            ["i18next-icu", "virtual:e5d2db011284bfb91bca4b9d7ba6945d67c210f8d38e8f8e61d6d6585b0a14967bc484c11e2c3ebed635a89f74cddb33913fb85d1487c7530881891ed7450a24#npm:2.4.3"],\
+            ["i18next-icu", "virtual:e5d2db011284bfb91bca4b9d7ba6945d67c210f8d38e8f8e61d6d6585b0a14967bc484c11e2c3ebed635a89f74cddb33913fb85d1487c7530881891ed7450a24#npm:2.4.4"],\
             ["intl-messageformat", "npm:10.7.18"]\
           ],\
           "linkType": "HARD"\
@@ -2295,12 +2506,12 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
             ["@wix/essentials", "npm:1.0.6"],\
             ["@wix/error-handler", "virtual:e5d2db011284bfb91bca4b9d7ba6945d67c210f8d38e8f8e61d6d6585b0a14967bc484c11e2c3ebed635a89f74cddb33913fb85d1487c7530881891ed7450a24#npm:1.68.0"],\
             ["@wix/monitoring", "npm:0.21.0"],\
-            ["@wix/multilingual-manager", "npm:1.10.0"],\
+            ["@wix/multilingual-manager", "npm:1.11.0"],\
             ["@wix/sdk-runtime", "npm:1.0.8"],\
             ["@wix/sdk-types", "npm:1.17.4"],\
-            ["graphql", "npm:16.14.0"],\
+            ["graphql", "npm:17.0.2"],\
             ["i18next", "virtual:e5d2db011284bfb91bca4b9d7ba6945d67c210f8d38e8f8e61d6d6585b0a14967bc484c11e2c3ebed635a89f74cddb33913fb85d1487c7530881891ed7450a24#npm:25.10.10"],\
-            ["i18next-icu", "virtual:e5d2db011284bfb91bca4b9d7ba6945d67c210f8d38e8f8e61d6d6585b0a14967bc484c11e2c3ebed635a89f74cddb33913fb85d1487c7530881891ed7450a24#npm:2.4.3"],\
+            ["i18next-icu", "virtual:e5d2db011284bfb91bca4b9d7ba6945d67c210f8d38e8f8e61d6d6585b0a14967bc484c11e2c3ebed635a89f74cddb33913fb85d1487c7530881891ed7450a24#npm:2.4.4"],\
             ["intl-messageformat", "npm:10.7.18"],\
             ["react-i18next", "virtual:c52a20e50e33599e7546c5650caa362d299a89dd3a16670df866fdc737493e453357c8e83f52216452b186b9619df264202388dd5322fae88c5f626e4bfb0164#npm:16.6.6"]\
           ],\
@@ -2318,12 +2529,12 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           ],\
           "linkType": "HARD"\
         }],\
-        ["npm:1.0.54", {\
-          "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-faq-npm-1.0.54-7c8bd5bdf5-8c0.zip/node_modules/@wix/faq/",\
+        ["npm:1.0.73", {\
+          "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-faq-npm-1.0.73-9f042c88a2-8c0.zip/node_modules/@wix/faq/",\
           "packageDependencies": [\
-            ["@wix/faq", "npm:1.0.54"],\
-            ["@wix/auto_sdk_faq_category", "npm:1.0.35"],\
-            ["@wix/auto_sdk_faq_question-entry", "npm:1.0.46"],\
+            ["@wix/faq", "npm:1.0.73"],\
+            ["@wix/auto_sdk_faq_category", "npm:1.0.40"],\
+            ["@wix/auto_sdk_faq_question-entry", "npm:1.0.61"],\
             ["@wix/headless-faq", "npm:0.0.9"]\
           ],\
           "linkType": "HARD"\
@@ -2370,34 +2581,53 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
             ["@wix/headless-forms", "npm:0.0.45"]\
           ],\
           "linkType": "HARD"\
+        }],\
+        ["npm:1.0.507", {\
+          "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-forms-npm-1.0.507-3d948101bb-8c0.zip/node_modules/@wix/forms/",\
+          "packageDependencies": [\
+            ["@wix/forms", "npm:1.0.507"],\
+            ["@wix/auto_sdk_forms_chat-settings", "npm:1.0.27"],\
+            ["@wix/auto_sdk_forms_form-spam-submission-reports", "npm:1.0.43"],\
+            ["@wix/auto_sdk_forms_form-submissions", "npm:1.0.26"],\
+            ["@wix/auto_sdk_forms_forms", "npm:1.0.135"],\
+            ["@wix/auto_sdk_forms_interactive-form-sessions", "npm:1.0.82"],\
+            ["@wix/auto_sdk_forms_restrictions", "npm:1.0.1"],\
+            ["@wix/auto_sdk_forms_submissions", "npm:1.0.157"],\
+            ["@wix/headless-forms", "npm:0.0.45"]\
+          ],\
+          "linkType": "HARD"\
         }]\
       ]],\
       ["@wix/headless-bookings", [\
-        ["npm:1.0.5", {\
-          "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-headless-bookings-npm-1.0.5-61634a667e-8c0.zip/node_modules/@wix/headless-bookings/",\
+        ["npm:1.0.18", {\
+          "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-headless-bookings-npm-1.0.18-e46696f468-8c0.zip/node_modules/@wix/headless-bookings/",\
           "packageDependencies": [\
-            ["@wix/headless-bookings", "npm:1.0.5"]\
+            ["@wix/headless-bookings", "npm:1.0.18"]\
           ],\
           "linkType": "SOFT"\
         }],\
-        ["virtual:c5a01aa4657b67c941d0ec8897d9723191b57bcd1504f23518704f1d609108bf88f6a8bcfd7c5055c195f0a05314afaeea339e5b9c436fab6525291bfa74a5da#npm:1.0.5", {\
-          "packageLocation": "./.yarn/__virtual__/@wix-headless-bookings-virtual-1e765d39ed/2/dynamic-modules/yarn-cache/cache/@wix-headless-bookings-npm-1.0.5-61634a667e-8c0.zip/node_modules/@wix/headless-bookings/",\
+        ["virtual:c5a01aa4657b67c941d0ec8897d9723191b57bcd1504f23518704f1d609108bf88f6a8bcfd7c5055c195f0a05314afaeea339e5b9c436fab6525291bfa74a5da#npm:1.0.18", {\
+          "packageLocation": "./.yarn/__virtual__/@wix-headless-bookings-virtual-26ecd62c88/2/dynamic-modules/yarn-cache/cache/@wix-headless-bookings-npm-1.0.18-e46696f468-8c0.zip/node_modules/@wix/headless-bookings/",\
           "packageDependencies": [\
-            ["@wix/headless-bookings", "virtual:c5a01aa4657b67c941d0ec8897d9723191b57bcd1504f23518704f1d609108bf88f6a8bcfd7c5055c195f0a05314afaeea339e5b9c436fab6525291bfa74a5da#npm:1.0.5"],\
+            ["@wix/headless-bookings", "virtual:c5a01aa4657b67c941d0ec8897d9723191b57bcd1504f23518704f1d609108bf88f6a8bcfd7c5055c195f0a05314afaeea339e5b9c436fab6525291bfa74a5da#npm:1.0.18"],\
             ["@types/react", null],\
             ["@types/wix__headless-components", null],\
-            ["@wix/auto_sdk_bookings_bookings", "npm:1.0.189"],\
-            ["@wix/auto_sdk_bookings_event-time-slots", "npm:1.0.112"],\
-            ["@wix/auto_sdk_bookings_pricing", "npm:1.0.90"],\
-            ["@wix/auto_sdk_bookings_services", "npm:1.0.235"],\
-            ["@wix/auto_sdk_ecom_cart-v-2", "npm:1.0.142"],\
-            ["@wix/forms", "npm:1.0.439"],\
+            ["@wix/auto_sdk_bookings_availability-time-slots", "npm:1.0.273"],\
+            ["@wix/auto_sdk_bookings_bookings", "npm:1.0.238"],\
+            ["@wix/auto_sdk_bookings_catalog-search", "npm:1.0.30"],\
+            ["@wix/auto_sdk_bookings_event-time-slots", "npm:1.0.140"],\
+            ["@wix/auto_sdk_bookings_pricing", "npm:1.0.106"],\
+            ["@wix/auto_sdk_bookings_services", "npm:1.0.283"],\
+            ["@wix/auto_sdk_ecom_cart-v-2", "npm:1.0.198"],\
+            ["@wix/forms", "npm:1.0.507"],\
             ["@wix/headless-components", null],\
             ["@wix/headless-media", "npm:0.0.25"],\
             ["@wix/headless-utils", "virtual:0d765e4bba0d1f3357a1d492c7cefeffd7e5398a2a48989d9847511f8d42bbb0915c7548aa5959728db0d0336e3a36918e0ac15792fcfed663175b31d068e17b#npm:0.0.12"],\
-            ["@wix/services-definitions", "npm:1.0.2"],\
-            ["@wix/services-manager-react", "virtual:0d765e4bba0d1f3357a1d492c7cefeffd7e5398a2a48989d9847511f8d42bbb0915c7548aa5959728db0d0336e3a36918e0ac15792fcfed663175b31d068e17b#npm:1.0.5"],\
-            ["date-fns", "npm:4.2.1"],\
+            ["@wix/sdk-runtime", "npm:1.0.24"],\
+            ["@wix/sdk-types", "npm:1.17.11"],\
+            ["@wix/services-definitions", "npm:1.0.5"],\
+            ["@wix/services-manager-react", "virtual:0d765e4bba0d1f3357a1d492c7cefeffd7e5398a2a48989d9847511f8d42bbb0915c7548aa5959728db0d0336e3a36918e0ac15792fcfed663175b31d068e17b#npm:1.0.8"],\
+            ["date-fns", "npm:4.4.0"],\
             ["react", null]\
           ],\
           "packagePeers": [\
@@ -2421,16 +2651,16 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "./.yarn/__virtual__/@wix-headless-ecom-virtual-7c5cee5c85/2/dynamic-modules/yarn-cache/cache/@wix-headless-ecom-npm-0.0.41-1dfd4a6be0-8c0.zip/node_modules/@wix/headless-ecom/",\
           "packageDependencies": [\
             ["@wix/headless-ecom", "virtual:4f7f3f8a47e93459b58f1c0cd57f6d98d29a63734f03f2970441200f58bfffb62742af8e9459ab644ee034f8c9f9fa66faa42eeb4182ea5ccf8aa3871561d5ab#npm:0.0.41"],\
-            ["@radix-ui/react-slot", "virtual:5471f29e4256143a4c50687d7247b075dff14d7163af1287815c62f4ea0e9aa612b1a74baa92add4f07e4dd2fda7ae33380c79e9a27e5961395a45bcd56287d7#npm:1.2.4"],\
+            ["@radix-ui/react-slot", "virtual:5471f29e4256143a4c50687d7247b075dff14d7163af1287815c62f4ea0e9aa612b1a74baa92add4f07e4dd2fda7ae33380c79e9a27e5961395a45bcd56287d7#npm:1.3.3"],\
             ["@types/wix__headless-components", null],\
-            ["@wix/auto_sdk_ecom_checkout", "npm:1.0.150"],\
-            ["@wix/auto_sdk_ecom_current-cart", "npm:1.0.165"],\
+            ["@wix/auto_sdk_ecom_checkout", "npm:1.0.171"],\
+            ["@wix/auto_sdk_ecom_current-cart", "npm:1.0.187"],\
             ["@wix/headless-components", null],\
             ["@wix/headless-media", "npm:0.0.21"],\
-            ["@wix/redirects", "npm:1.0.113"],\
-            ["@wix/sdk", "npm:1.21.12"],\
-            ["@wix/services-definitions", "npm:1.0.2"],\
-            ["@wix/services-manager-react", "virtual:0d765e4bba0d1f3357a1d492c7cefeffd7e5398a2a48989d9847511f8d42bbb0915c7548aa5959728db0d0336e3a36918e0ac15792fcfed663175b31d068e17b#npm:1.0.5"]\
+            ["@wix/redirects", "npm:1.0.127"],\
+            ["@wix/sdk", "npm:1.21.16"],\
+            ["@wix/services-definitions", "npm:1.0.5"],\
+            ["@wix/services-manager-react", "virtual:0d765e4bba0d1f3357a1d492c7cefeffd7e5398a2a48989d9847511f8d42bbb0915c7548aa5959728db0d0336e3a36918e0ac15792fcfed663175b31d068e17b#npm:1.0.8"]\
           ],\
           "packagePeers": [\
             "@types/wix__headless-components",\
@@ -2444,12 +2674,12 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-headless-faq-npm-0.0.9-31fafb6fde-8c0.zip/node_modules/@wix/headless-faq/",\
           "packageDependencies": [\
             ["@wix/headless-faq", "npm:0.0.9"],\
-            ["@radix-ui/react-slot", "virtual:5471f29e4256143a4c50687d7247b075dff14d7163af1287815c62f4ea0e9aa612b1a74baa92add4f07e4dd2fda7ae33380c79e9a27e5961395a45bcd56287d7#npm:1.2.4"],\
+            ["@radix-ui/react-slot", "virtual:5471f29e4256143a4c50687d7247b075dff14d7163af1287815c62f4ea0e9aa612b1a74baa92add4f07e4dd2fda7ae33380c79e9a27e5961395a45bcd56287d7#npm:1.3.3"],\
             ["@wix/essentials", "npm:0.1.28"],\
-            ["@wix/faq", "npm:1.0.54"],\
+            ["@wix/faq", "npm:1.0.73"],\
             ["@wix/headless-utils", "virtual:31fafb6fde3165f59be0262aaedd18e487c7b5270ce658db56d365f42ff51222c9c3ba6b03ed3cfa1c52b0f02cfeb0877524e73eb19c1ff5b5cf53eaa9a3e9f8#npm:0.0.8"],\
-            ["@wix/services-definitions", "npm:1.0.2"],\
-            ["@wix/services-manager-react", "virtual:0d765e4bba0d1f3357a1d492c7cefeffd7e5398a2a48989d9847511f8d42bbb0915c7548aa5959728db0d0336e3a36918e0ac15792fcfed663175b31d068e17b#npm:1.0.5"]\
+            ["@wix/services-definitions", "npm:1.0.5"],\
+            ["@wix/services-manager-react", "virtual:0d765e4bba0d1f3357a1d492c7cefeffd7e5398a2a48989d9847511f8d42bbb0915c7548aa5959728db0d0336e3a36918e0ac15792fcfed663175b31d068e17b#npm:1.0.8"]\
           ],\
           "linkType": "HARD"\
         }]\
@@ -2460,11 +2690,11 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageDependencies": [\
             ["@wix/headless-forms", "npm:0.0.45"],\
             ["@wix/form-public", "virtual:0d765e4bba0d1f3357a1d492c7cefeffd7e5398a2a48989d9847511f8d42bbb0915c7548aa5959728db0d0336e3a36918e0ac15792fcfed663175b31d068e17b#npm:0.145.0"],\
-            ["@wix/forms", "npm:1.0.439"],\
+            ["@wix/forms", "npm:1.0.507"],\
             ["@wix/headless-utils", "virtual:0d765e4bba0d1f3357a1d492c7cefeffd7e5398a2a48989d9847511f8d42bbb0915c7548aa5959728db0d0336e3a36918e0ac15792fcfed663175b31d068e17b#npm:0.0.12"],\
-            ["@wix/services-definitions", "npm:1.0.2"],\
-            ["@wix/services-manager-react", "virtual:0d765e4bba0d1f3357a1d492c7cefeffd7e5398a2a48989d9847511f8d42bbb0915c7548aa5959728db0d0336e3a36918e0ac15792fcfed663175b31d068e17b#npm:1.0.5"],\
-            ["react-aria-components", "virtual:0d765e4bba0d1f3357a1d492c7cefeffd7e5398a2a48989d9847511f8d42bbb0915c7548aa5959728db0d0336e3a36918e0ac15792fcfed663175b31d068e17b#npm:1.17.0"]\
+            ["@wix/services-definitions", "npm:1.0.5"],\
+            ["@wix/services-manager-react", "virtual:0d765e4bba0d1f3357a1d492c7cefeffd7e5398a2a48989d9847511f8d42bbb0915c7548aa5959728db0d0336e3a36918e0ac15792fcfed663175b31d068e17b#npm:1.0.8"],\
+            ["react-aria-components", "virtual:0d765e4bba0d1f3357a1d492c7cefeffd7e5398a2a48989d9847511f8d42bbb0915c7548aa5959728db0d0336e3a36918e0ac15792fcfed663175b31d068e17b#npm:1.21.1"]\
           ],\
           "linkType": "HARD"\
         }]\
@@ -2474,7 +2704,7 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-headless-localization-utils-npm-1.0.15-33e8f7d85b-8c0.zip/node_modules/@wix/headless-localization-utils/",\
           "packageDependencies": [\
             ["@wix/headless-localization-utils", "npm:1.0.15"],\
-            ["@wix/headless-node", "npm:1.42.0"],\
+            ["@wix/headless-node", "npm:1.44.0"],\
             ["@wix/headless-site-assets", "npm:1.0.13"]\
           ],\
           "linkType": "HARD"\
@@ -2485,9 +2715,9 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-headless-media-npm-0.0.21-126f165984-8c0.zip/node_modules/@wix/headless-media/",\
           "packageDependencies": [\
             ["@wix/headless-media", "npm:0.0.21"],\
-            ["@wix/sdk", "npm:1.21.12"],\
-            ["@wix/services-definitions", "npm:1.0.2"],\
-            ["@wix/services-manager-react", "virtual:0d765e4bba0d1f3357a1d492c7cefeffd7e5398a2a48989d9847511f8d42bbb0915c7548aa5959728db0d0336e3a36918e0ac15792fcfed663175b31d068e17b#npm:1.0.5"]\
+            ["@wix/sdk", "npm:1.21.16"],\
+            ["@wix/services-definitions", "npm:1.0.5"],\
+            ["@wix/services-manager-react", "virtual:0d765e4bba0d1f3357a1d492c7cefeffd7e5398a2a48989d9847511f8d42bbb0915c7548aa5959728db0d0336e3a36918e0ac15792fcfed663175b31d068e17b#npm:1.0.8"]\
           ],\
           "linkType": "HARD"\
         }],\
@@ -2495,21 +2725,21 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-headless-media-npm-0.0.25-89f61624b0-8c0.zip/node_modules/@wix/headless-media/",\
           "packageDependencies": [\
             ["@wix/headless-media", "npm:0.0.25"],\
-            ["@wix/sdk", "npm:1.21.12"],\
-            ["@wix/services-definitions", "npm:1.0.2"],\
-            ["@wix/services-manager-react", "virtual:0d765e4bba0d1f3357a1d492c7cefeffd7e5398a2a48989d9847511f8d42bbb0915c7548aa5959728db0d0336e3a36918e0ac15792fcfed663175b31d068e17b#npm:1.0.5"]\
+            ["@wix/sdk", "npm:1.21.16"],\
+            ["@wix/services-definitions", "npm:1.0.5"],\
+            ["@wix/services-manager-react", "virtual:0d765e4bba0d1f3357a1d492c7cefeffd7e5398a2a48989d9847511f8d42bbb0915c7548aa5959728db0d0336e3a36918e0ac15792fcfed663175b31d068e17b#npm:1.0.8"]\
           ],\
           "linkType": "HARD"\
         }]\
       ]],\
       ["@wix/headless-node", [\
-        ["npm:1.42.0", {\
-          "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-headless-node-npm-1.42.0-3a42f387ce-8c0.zip/node_modules/@wix/headless-node/",\
+        ["npm:1.44.0", {\
+          "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-headless-node-npm-1.44.0-9c0e7ef334-8c0.zip/node_modules/@wix/headless-node/",\
           "packageDependencies": [\
-            ["@wix/headless-node", "npm:1.42.0"],\
-            ["@babel/runtime", "npm:7.29.2"],\
-            ["@wix/monitoring-velo", "npm:1.26.0"],\
-            ["@wix/sdk-runtime", "npm:1.0.14"]\
+            ["@wix/headless-node", "npm:1.44.0"],\
+            ["@babel/runtime", "npm:7.29.7"],\
+            ["@wix/monitoring-velo", "npm:1.33.0"],\
+            ["@wix/sdk-runtime", "npm:1.0.24"]\
           ],\
           "linkType": "HARD"\
         }]\
@@ -2543,7 +2773,7 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "./.yarn/__virtual__/@wix-headless-utils-virtual-5471f29e42/2/dynamic-modules/yarn-cache/cache/@wix-headless-utils-npm-0.0.12-47959e24fd-8c0.zip/node_modules/@wix/headless-utils/",\
           "packageDependencies": [\
             ["@wix/headless-utils", "virtual:0d765e4bba0d1f3357a1d492c7cefeffd7e5398a2a48989d9847511f8d42bbb0915c7548aa5959728db0d0336e3a36918e0ac15792fcfed663175b31d068e17b#npm:0.0.12"],\
-            ["@radix-ui/react-slot", "virtual:5471f29e4256143a4c50687d7247b075dff14d7163af1287815c62f4ea0e9aa612b1a74baa92add4f07e4dd2fda7ae33380c79e9a27e5961395a45bcd56287d7#npm:1.2.4"],\
+            ["@radix-ui/react-slot", "virtual:5471f29e4256143a4c50687d7247b075dff14d7163af1287815c62f4ea0e9aa612b1a74baa92add4f07e4dd2fda7ae33380c79e9a27e5961395a45bcd56287d7#npm:1.3.3"],\
             ["@types/react", null],\
             ["react", null]\
           ],\
@@ -2557,7 +2787,7 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "./.yarn/__virtual__/@wix-headless-utils-virtual-a1a74e1450/2/dynamic-modules/yarn-cache/cache/@wix-headless-utils-npm-0.0.8-d0c5ded81a-8c0.zip/node_modules/@wix/headless-utils/",\
           "packageDependencies": [\
             ["@wix/headless-utils", "virtual:31fafb6fde3165f59be0262aaedd18e487c7b5270ce658db56d365f42ff51222c9c3ba6b03ed3cfa1c52b0f02cfeb0877524e73eb19c1ff5b5cf53eaa9a3e9f8#npm:0.0.8"],\
-            ["@radix-ui/react-slot", "virtual:5471f29e4256143a4c50687d7247b075dff14d7163af1287815c62f4ea0e9aa612b1a74baa92add4f07e4dd2fda7ae33380c79e9a27e5961395a45bcd56287d7#npm:1.2.4"],\
+            ["@radix-ui/react-slot", "virtual:5471f29e4256143a4c50687d7247b075dff14d7163af1287815c62f4ea0e9aa612b1a74baa92add4f07e4dd2fda7ae33380c79e9a27e5961395a45bcd56287d7#npm:1.3.3"],\
             ["@types/react", null],\
             ["react", null]\
           ],\
@@ -2569,24 +2799,25 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
         }]\
       ]],\
       ["@wix/identity", [\
-        ["npm:1.0.195", {\
-          "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-identity-npm-1.0.195-103df68a3f-8c0.zip/node_modules/@wix/identity/",\
+        ["npm:1.0.234", {\
+          "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-identity-npm-1.0.234-111b173a22-8c0.zip/node_modules/@wix/identity/",\
           "packageDependencies": [\
-            ["@wix/identity", "npm:1.0.195"],\
-            ["@wix/auto_sdk_identity_authentication", "npm:1.0.46"],\
-            ["@wix/auto_sdk_identity_oauth", "npm:1.0.37"],\
-            ["@wix/auto_sdk_identity_recovery", "npm:1.0.43"],\
-            ["@wix/auto_sdk_identity_verification", "npm:1.0.43"]\
+            ["@wix/identity", "npm:1.0.234"],\
+            ["@wix/auto_sdk_identity_authentication", "npm:1.0.59"],\
+            ["@wix/auto_sdk_identity_oauth", "npm:1.0.55"],\
+            ["@wix/auto_sdk_identity_recovery", "npm:1.0.48"],\
+            ["@wix/auto_sdk_identity_sign-on-policy", "npm:1.0.4"],\
+            ["@wix/auto_sdk_identity_verification", "npm:1.0.50"]\
           ],\
           "linkType": "HARD"\
         }]\
       ]],\
       ["@wix/image-kit", [\
-        ["npm:1.123.0", {\
-          "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-image-kit-npm-1.123.0-8c61ab11db-8c0.zip/node_modules/@wix/image-kit/",\
+        ["npm:1.125.0", {\
+          "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-image-kit-npm-1.125.0-20216fb121-8c0.zip/node_modules/@wix/image-kit/",\
           "packageDependencies": [\
-            ["@wix/image-kit", "npm:1.123.0"],\
-            ["@babel/runtime", "npm:7.29.2"],\
+            ["@wix/image-kit", "npm:1.125.0"],\
+            ["@babel/runtime", "npm:7.29.7"],\
             ["tslib", "npm:2.8.1"]\
           ],\
           "linkType": "HARD"\
@@ -2601,20 +2832,20 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           ],\
           "linkType": "HARD"\
         }],\
-        ["npm:0.26.0", {\
-          "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-monitoring-npm-0.26.0-257370898a-8c0.zip/node_modules/@wix/monitoring/",\
+        ["npm:1.2.0", {\
+          "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-monitoring-npm-1.2.0-c1a983ba96-8c0.zip/node_modules/@wix/monitoring/",\
           "packageDependencies": [\
-            ["@wix/monitoring", "npm:0.26.0"],\
-            ["@wix/monitoring-types", "npm:0.17.0"]\
+            ["@wix/monitoring", "npm:1.2.0"],\
+            ["@wix/monitoring-types", "npm:1.1.0"]\
           ],\
           "linkType": "HARD"\
         }]\
       ]],\
       ["@wix/monitoring-common", [\
-        ["npm:1.13.0", {\
-          "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-monitoring-common-npm-1.13.0-49f2369662-8c0.zip/node_modules/@wix/monitoring-common/",\
+        ["npm:1.15.0", {\
+          "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-monitoring-common-npm-1.15.0-6ecc9e6376-8c0.zip/node_modules/@wix/monitoring-common/",\
           "packageDependencies": [\
-            ["@wix/monitoring-common", "npm:1.13.0"]\
+            ["@wix/monitoring-common", "npm:1.15.0"]\
           ],\
           "linkType": "HARD"\
         }]\
@@ -2627,32 +2858,31 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           ],\
           "linkType": "HARD"\
         }],\
-        ["npm:0.17.0", {\
-          "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-monitoring-types-npm-0.17.0-efa4a0c328-8c0.zip/node_modules/@wix/monitoring-types/",\
+        ["npm:1.1.0", {\
+          "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-monitoring-types-npm-1.1.0-87dcacbf8d-8c0.zip/node_modules/@wix/monitoring-types/",\
           "packageDependencies": [\
-            ["@wix/monitoring-types", "npm:0.17.0"]\
+            ["@wix/monitoring-types", "npm:1.1.0"]\
           ],\
           "linkType": "HARD"\
         }]\
       ]],\
       ["@wix/monitoring-velo", [\
-        ["npm:1.26.0", {\
-          "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-monitoring-velo-npm-1.26.0-27f807df4d-8c0.zip/node_modules/@wix/monitoring-velo/",\
+        ["npm:1.33.0", {\
+          "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-monitoring-velo-npm-1.33.0-ae47d9dc25-8c0.zip/node_modules/@wix/monitoring-velo/",\
           "packageDependencies": [\
-            ["@wix/monitoring-velo", "npm:1.26.0"],\
-            ["@wix/monitoring", "npm:0.26.0"],\
-            ["@wix/monitoring-common", "npm:1.13.0"],\
-            ["@wix/monitoring-types", "npm:0.17.0"],\
-            ["lodash", "npm:4.18.1"]\
+            ["@wix/monitoring-velo", "npm:1.33.0"],\
+            ["@wix/monitoring", "npm:1.2.0"],\
+            ["@wix/monitoring-common", "npm:1.15.0"],\
+            ["@wix/monitoring-types", "npm:1.1.0"]\
           ],\
           "linkType": "HARD"\
         }]\
       ]],\
       ["@wix/multilingual-manager", [\
-        ["npm:1.10.0", {\
-          "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-multilingual-manager-npm-1.10.0-5732b7fcdb-8c0.zip/node_modules/@wix/multilingual-manager/",\
+        ["npm:1.11.0", {\
+          "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-multilingual-manager-npm-1.11.0-5c837cdbde-8c0.zip/node_modules/@wix/multilingual-manager/",\
           "packageDependencies": [\
-            ["@wix/multilingual-manager", "npm:1.10.0"],\
+            ["@wix/multilingual-manager", "npm:1.11.0"],\
             ["@wix/headless-localization-utils", "npm:1.0.15"],\
             ["lodash", "npm:4.18.1"]\
           ],\
@@ -2660,27 +2890,27 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
         }]\
       ]],\
       ["@wix/redirects", [\
-        ["npm:1.0.113", {\
-          "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-redirects-npm-1.0.113-685c07d4bf-8c0.zip/node_modules/@wix/redirects/",\
+        ["npm:1.0.127", {\
+          "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-redirects-npm-1.0.127-f1619a2eba-8c0.zip/node_modules/@wix/redirects/",\
           "packageDependencies": [\
-            ["@wix/redirects", "npm:1.0.113"],\
-            ["@wix/auto_sdk_redirects_redirects", "npm:1.0.41"]\
+            ["@wix/redirects", "npm:1.0.127"],\
+            ["@wix/auto_sdk_redirects_redirects", "npm:1.0.54"]\
           ],\
           "linkType": "HARD"\
         }]\
       ]],\
       ["@wix/sdk", [\
-        ["npm:1.21.12", {\
-          "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-sdk-npm-1.21.12-521eb961f0-8c0.zip/node_modules/@wix/sdk/",\
+        ["npm:1.21.16", {\
+          "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-sdk-npm-1.21.16-2e84ef6d9c-8c0.zip/node_modules/@wix/sdk/",\
           "packageDependencies": [\
-            ["@wix/sdk", "npm:1.21.12"],\
-            ["@wix/identity", "npm:1.0.195"],\
-            ["@wix/image-kit", "npm:1.123.0"],\
-            ["@wix/redirects", "npm:1.0.113"],\
+            ["@wix/sdk", "npm:1.21.16"],\
+            ["@wix/identity", "npm:1.0.234"],\
+            ["@wix/image-kit", "npm:1.125.0"],\
+            ["@wix/redirects", "npm:1.0.127"],\
             ["@wix/sdk-context", "npm:0.0.1"],\
-            ["@wix/sdk-runtime", "npm:1.0.14"],\
-            ["@wix/sdk-types", "npm:1.17.8"],\
-            ["graphql", "npm:16.14.0"],\
+            ["@wix/sdk-runtime", "npm:1.0.22"],\
+            ["@wix/sdk-types", "npm:1.17.11"],\
+            ["graphql", "npm:17.0.2"],\
             ["jose", "npm:5.10.0"],\
             ["type-fest", "npm:4.41.0"]\
           ],\
@@ -2690,13 +2920,13 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-sdk-npm-1.21.5-c86e3bcb82-8c0.zip/node_modules/@wix/sdk/",\
           "packageDependencies": [\
             ["@wix/sdk", "npm:1.21.5"],\
-            ["@wix/identity", "npm:1.0.195"],\
-            ["@wix/image-kit", "npm:1.123.0"],\
-            ["@wix/redirects", "npm:1.0.113"],\
+            ["@wix/identity", "npm:1.0.234"],\
+            ["@wix/image-kit", "npm:1.125.0"],\
+            ["@wix/redirects", "npm:1.0.127"],\
             ["@wix/sdk-context", "npm:0.0.1"],\
             ["@wix/sdk-runtime", "npm:1.0.10"],\
             ["@wix/sdk-types", "npm:1.17.6"],\
-            ["graphql", "npm:16.14.0"],\
+            ["graphql", "npm:17.0.2"],\
             ["jose", "npm:5.10.0"],\
             ["type-fest", "npm:4.41.0"]\
           ],\
@@ -2720,10 +2950,10 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           ],\
           "linkType": "SOFT"\
         }],\
-        ["virtual:644f3e3c48a9f7c1586864750dd4f710086df76f6f16beb4ae365179f232da7b82a8c73017d19cfbc98baa034e2b569ce46d9d91cd335df57ea92cc5319f2c5d#npm:1.0.2", {\
-          "packageLocation": "./.yarn/__virtual__/@wix-sdk-react-context-virtual-f2e8cbe0d9/2/dynamic-modules/yarn-cache/cache/@wix-sdk-react-context-npm-1.0.2-d7448cc57f-8c0.zip/node_modules/@wix/sdk-react-context/",\
+        ["virtual:25e4cff409fae9943cf7783911b01c297b27505453ced47ee4183bec0ba06a63ccb1dd14f7701d5c8b34bc1c7fc03b6374cfb51e9234fc52aed5cac51137de02#npm:1.0.2", {\
+          "packageLocation": "./.yarn/__virtual__/@wix-sdk-react-context-virtual-888fdc3059/2/dynamic-modules/yarn-cache/cache/@wix-sdk-react-context-npm-1.0.2-d7448cc57f-8c0.zip/node_modules/@wix/sdk-react-context/",\
           "packageDependencies": [\
-            ["@wix/sdk-react-context", "virtual:644f3e3c48a9f7c1586864750dd4f710086df76f6f16beb4ae365179f232da7b82a8c73017d19cfbc98baa034e2b569ce46d9d91cd335df57ea92cc5319f2c5d#npm:1.0.2"],\
+            ["@wix/sdk-react-context", "virtual:25e4cff409fae9943cf7783911b01c297b27505453ced47ee4183bec0ba06a63ccb1dd14f7701d5c8b34bc1c7fc03b6374cfb51e9234fc52aed5cac51137de02#npm:1.0.2"],\
             ["@types/react", null],\
             ["react", null]\
           ],\
@@ -2740,7 +2970,7 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageDependencies": [\
             ["@wix/sdk-runtime", "npm:0.3.62"],\
             ["@wix/sdk-context", "npm:0.0.1"],\
-            ["@wix/sdk-types", "npm:1.17.8"]\
+            ["@wix/sdk-types", "npm:1.17.11"]\
           ],\
           "linkType": "HARD"\
         }],\
@@ -2753,12 +2983,21 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           ],\
           "linkType": "HARD"\
         }],\
-        ["npm:1.0.14", {\
-          "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-sdk-runtime-npm-1.0.14-8e28255c15-8c0.zip/node_modules/@wix/sdk-runtime/",\
+        ["npm:1.0.22", {\
+          "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-sdk-runtime-npm-1.0.22-e2172b77da-8c0.zip/node_modules/@wix/sdk-runtime/",\
           "packageDependencies": [\
-            ["@wix/sdk-runtime", "npm:1.0.14"],\
+            ["@wix/sdk-runtime", "npm:1.0.22"],\
             ["@wix/sdk-context", "npm:0.0.1"],\
-            ["@wix/sdk-types", "npm:1.17.8"]\
+            ["@wix/sdk-types", "npm:1.17.11"]\
+          ],\
+          "linkType": "HARD"\
+        }],\
+        ["npm:1.0.24", {\
+          "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-sdk-runtime-npm-1.0.24-4117fab1a3-8c0.zip/node_modules/@wix/sdk-runtime/",\
+          "packageDependencies": [\
+            ["@wix/sdk-runtime", "npm:1.0.24"],\
+            ["@wix/sdk-context", "npm:0.0.1"],\
+            ["@wix/sdk-types", "npm:1.17.11"]\
           ],\
           "linkType": "HARD"\
         }],\
@@ -2773,6 +3012,16 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
         }]\
       ]],\
       ["@wix/sdk-types", [\
+        ["npm:1.17.11", {\
+          "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-sdk-types-npm-1.17.11-5f44118f07-8c0.zip/node_modules/@wix/sdk-types/",\
+          "packageDependencies": [\
+            ["@wix/sdk-types", "npm:1.17.11"],\
+            ["@wix/error-handler-types", "npm:1.20.0"],\
+            ["@wix/monitoring-types", "npm:0.12.0"],\
+            ["type-fest", "npm:4.41.0"]\
+          ],\
+          "linkType": "HARD"\
+        }],\
         ["npm:1.17.4", {\
           "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-sdk-types-npm-1.17.4-2ea0907e46-8c0.zip/node_modules/@wix/sdk-types/",\
           "packageDependencies": [\
@@ -2792,66 +3041,66 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
             ["type-fest", "npm:4.41.0"]\
           ],\
           "linkType": "HARD"\
-        }],\
-        ["npm:1.17.8", {\
-          "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-sdk-types-npm-1.17.8-41dc6cf5b8-8c0.zip/node_modules/@wix/sdk-types/",\
-          "packageDependencies": [\
-            ["@wix/sdk-types", "npm:1.17.8"],\
-            ["@wix/error-handler-types", "npm:1.20.0"],\
-            ["@wix/monitoring-types", "npm:0.12.0"],\
-            ["type-fest", "npm:4.41.0"]\
-          ],\
-          "linkType": "HARD"\
         }]\
       ]],\
       ["@wix/services-definitions", [\
-        ["npm:1.0.2", {\
-          "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-services-definitions-npm-1.0.2-35494da52f-8c0.zip/node_modules/@wix/services-definitions/",\
+        ["npm:1.0.5", {\
+          "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-services-definitions-npm-1.0.5-d8446c4d0d-8c0.zip/node_modules/@wix/services-definitions/",\
           "packageDependencies": [\
-            ["@wix/services-definitions", "npm:1.0.2"],\
+            ["@wix/services-definitions", "npm:1.0.5"],\
             ["type-fest", "npm:4.41.0"]\
-          ],\
-          "linkType": "HARD"\
-        }]\
-      ]],\
-      ["@wix/services-manager", [\
-        ["npm:1.0.4", {\
-          "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-services-manager-npm-1.0.4-942b1f509f-8c0.zip/node_modules/@wix/services-manager/",\
-          "packageDependencies": [\
-            ["@wix/services-manager", "npm:1.0.4"],\
-            ["@preact/signals-core", "npm:1.14.2"],\
-            ["@wix/sdk-context", "npm:0.0.1"],\
-            ["@wix/services-definitions", "npm:1.0.2"]\
           ],\
           "linkType": "HARD"\
         }]\
       ]],\
       ["@wix/services-manager-react", [\
-        ["npm:1.0.5", {\
-          "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-services-manager-react-npm-1.0.5-ee3b54b143-8c0.zip/node_modules/@wix/services-manager-react/",\
+        ["npm:1.0.8", {\
+          "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-services-manager-react-npm-1.0.8-50f2bf6d78-8c0.zip/node_modules/@wix/services-manager-react/",\
           "packageDependencies": [\
-            ["@wix/services-manager-react", "npm:1.0.5"]\
+            ["@wix/services-manager-react", "npm:1.0.8"]\
           ],\
           "linkType": "SOFT"\
         }],\
-        ["virtual:0d765e4bba0d1f3357a1d492c7cefeffd7e5398a2a48989d9847511f8d42bbb0915c7548aa5959728db0d0336e3a36918e0ac15792fcfed663175b31d068e17b#npm:1.0.5", {\
-          "packageLocation": "./.yarn/__virtual__/@wix-services-manager-react-virtual-644f3e3c48/2/dynamic-modules/yarn-cache/cache/@wix-services-manager-react-npm-1.0.5-ee3b54b143-8c0.zip/node_modules/@wix/services-manager-react/",\
+        ["virtual:0d765e4bba0d1f3357a1d492c7cefeffd7e5398a2a48989d9847511f8d42bbb0915c7548aa5959728db0d0336e3a36918e0ac15792fcfed663175b31d068e17b#npm:1.0.8", {\
+          "packageLocation": "./.yarn/__virtual__/@wix-services-manager-react-virtual-25e4cff409/2/dynamic-modules/yarn-cache/cache/@wix-services-manager-react-npm-1.0.8-50f2bf6d78-8c0.zip/node_modules/@wix/services-manager-react/",\
           "packageDependencies": [\
-            ["@wix/services-manager-react", "virtual:0d765e4bba0d1f3357a1d492c7cefeffd7e5398a2a48989d9847511f8d42bbb0915c7548aa5959728db0d0336e3a36918e0ac15792fcfed663175b31d068e17b#npm:1.0.5"],\
-            ["@preact/signals-react", "virtual:644f3e3c48a9f7c1586864750dd4f710086df76f6f16beb4ae365179f232da7b82a8c73017d19cfbc98baa034e2b569ce46d9d91cd335df57ea92cc5319f2c5d#npm:3.10.1"],\
+            ["@wix/services-manager-react", "virtual:0d765e4bba0d1f3357a1d492c7cefeffd7e5398a2a48989d9847511f8d42bbb0915c7548aa5959728db0d0336e3a36918e0ac15792fcfed663175b31d068e17b#npm:1.0.8"],\
+            ["@preact/signals-react", "virtual:25e4cff409fae9943cf7783911b01c297b27505453ced47ee4183bec0ba06a63ccb1dd14f7701d5c8b34bc1c7fc03b6374cfb51e9234fc52aed5cac51137de02#npm:3.12.0"],\
             ["@types/react", null],\
+            ["@types/react-dom", null],\
             ["@types/use-sync-external-store", null],\
-            ["@wix/sdk-react-context", "virtual:644f3e3c48a9f7c1586864750dd4f710086df76f6f16beb4ae365179f232da7b82a8c73017d19cfbc98baa034e2b569ce46d9d91cd335df57ea92cc5319f2c5d#npm:1.0.2"],\
-            ["@wix/services-definitions", "npm:1.0.2"],\
-            ["@wix/services-manager", "npm:1.0.4"],\
+            ["@types/wix__services-manager", null],\
+            ["@wix/sdk-react-context", "virtual:25e4cff409fae9943cf7783911b01c297b27505453ced47ee4183bec0ba06a63ccb1dd14f7701d5c8b34bc1c7fc03b6374cfb51e9234fc52aed5cac51137de02#npm:1.0.2"],\
+            ["@wix/services-definitions", "npm:1.0.5"],\
+            ["@wix/services-manager", null],\
             ["react", null],\
+            ["react-dom", null],\
             ["use-sync-external-store", null]\
           ],\
           "packagePeers": [\
+            "@types/react-dom",\
             "@types/react",\
             "@types/use-sync-external-store",\
+            "@types/wix__services-manager",\
+            "@wix/services-manager",\
+            "react-dom",\
             "react",\
             "use-sync-external-store"\
+          ],\
+          "linkType": "HARD"\
+        }]\
+      ]],\
+      ["@wix/site", [\
+        ["npm:1.66.0", {\
+          "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-site-npm-1.66.0-381ddc1684-8c0.zip/node_modules/@wix/site/",\
+          "packageDependencies": [\
+            ["@wix/site", "npm:1.66.0"],\
+            ["@babel/runtime", "npm:7.29.7"],\
+            ["@wix/analytics", "npm:1.19.0"],\
+            ["@wix/authentication", "npm:1.16.0"],\
+            ["@wix/consent-policy-manager", "npm:1.15.0"],\
+            ["@wix/multilingual-manager", "npm:1.11.0"],\
+            ["@wix/sdk-types", "npm:1.17.11"]\
           ],\
           "linkType": "HARD"\
         }]\
@@ -2861,9 +3110,9 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-site-site-npm-1.29.0-e6de365225-8c0.zip/node_modules/@wix/site-site/",\
           "packageDependencies": [\
             ["@wix/site-site", "npm:1.29.0"],\
-            ["@babel/runtime", "npm:7.29.2"],\
+            ["@babel/runtime", "npm:7.29.7"],\
             ["@wix/sdk-runtime", "npm:0.3.62"],\
-            ["@wix/sdk-types", "npm:1.17.8"]\
+            ["@wix/sdk-types", "npm:1.17.11"]\
           ],\
           "linkType": "HARD"\
         }]\
@@ -2897,10 +3146,10 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
         }]\
       ]],\
       ["date-fns", [\
-        ["npm:4.2.1", {\
-          "packageLocation": "../dynamic-modules/yarn-cache/cache/date-fns-npm-4.2.1-0d5977878b-8c0.zip/node_modules/date-fns/",\
+        ["npm:4.4.0", {\
+          "packageLocation": "../dynamic-modules/yarn-cache/cache/date-fns-npm-4.4.0-6a5186bdb1-8c0.zip/node_modules/date-fns/",\
           "packageDependencies": [\
-            ["date-fns", "npm:4.2.1"]\
+            ["date-fns", "npm:4.4.0"]\
           ],\
           "linkType": "HARD"\
         }]\
@@ -2939,7 +3188,7 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
             ["@types/emotion__is-prop-valid", null],\
             ["@types/react", null],\
             ["@types/react-dom", null],\
-            ["motion-dom", "npm:12.39.0"],\
+            ["motion-dom", "npm:12.43.0"],\
             ["motion-utils", "npm:12.39.0"],\
             ["react", "npm:19.2.4"],\
             ["react-dom", "virtual:3397cda259050948159fbd931312d20a0aae6accf6344e358928d6f5f5c9e1e27fdf63201a9a8a6cfa009a9ae05ab59f4163c96553fd690e9bc993fd8410a44d#npm:19.2.4"],\
@@ -2957,19 +3206,19 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
         }]\
       ]],\
       ["graphql", [\
-        ["npm:16.14.0", {\
-          "packageLocation": "../dynamic-modules/yarn-cache/cache/graphql-npm-16.14.0-6cb4a97fed-8c0.zip/node_modules/graphql/",\
+        ["npm:17.0.2", {\
+          "packageLocation": "../dynamic-modules/yarn-cache/cache/graphql-npm-17.0.2-c01331d4e3-8c0.zip/node_modules/graphql/",\
           "packageDependencies": [\
-            ["graphql", "npm:16.14.0"]\
+            ["graphql", "npm:17.0.2"]\
           ],\
           "linkType": "HARD"\
         }]\
       ]],\
       ["html-parse-stringify", [\
-        ["npm:3.0.1", {\
-          "packageLocation": "../dynamic-modules/yarn-cache/cache/html-parse-stringify-npm-3.0.1-5762cd4b01-8c0.zip/node_modules/html-parse-stringify/",\
+        ["npm:3.1.0", {\
+          "packageLocation": "../dynamic-modules/yarn-cache/cache/html-parse-stringify-npm-3.1.0-02c27e4fb3-8c0.zip/node_modules/html-parse-stringify/",\
           "packageDependencies": [\
-            ["html-parse-stringify", "npm:3.0.1"],\
+            ["html-parse-stringify", "npm:3.1.0"],\
             ["void-elements", "npm:3.1.0"]\
           ],\
           "linkType": "HARD"\
@@ -2989,7 +3238,7 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "../dynamic-modules/yarn-cache/cache/i18next-npm-19.9.2-de8338ce18-8c0.zip/node_modules/i18next/",\
           "packageDependencies": [\
             ["i18next", "npm:19.9.2"],\
-            ["@babel/runtime", "npm:7.29.2"]\
+            ["@babel/runtime", "npm:7.29.7"]\
           ],\
           "linkType": "HARD"\
         }],\
@@ -3004,7 +3253,7 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "./.yarn/__virtual__/i18next-virtual-9672dbdbb7/2/dynamic-modules/yarn-cache/cache/i18next-npm-25.10.10-fe3144fcbf-8c0.zip/node_modules/i18next/",\
           "packageDependencies": [\
             ["i18next", "virtual:e5d2db011284bfb91bca4b9d7ba6945d67c210f8d38e8f8e61d6d6585b0a14967bc484c11e2c3ebed635a89f74cddb33913fb85d1487c7530881891ed7450a24#npm:25.10.10"],\
-            ["@babel/runtime", "npm:7.29.2"],\
+            ["@babel/runtime", "npm:7.29.7"],\
             ["@types/typescript", null],\
             ["typescript", null]\
           ],\
@@ -3016,17 +3265,17 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
         }]\
       ]],\
       ["i18next-icu", [\
-        ["npm:2.4.3", {\
-          "packageLocation": "../dynamic-modules/yarn-cache/cache/i18next-icu-npm-2.4.3-99f36a3dbe-8c0.zip/node_modules/i18next-icu/",\
+        ["npm:2.4.4", {\
+          "packageLocation": "../dynamic-modules/yarn-cache/cache/i18next-icu-npm-2.4.4-19e9e77628-8c0.zip/node_modules/i18next-icu/",\
           "packageDependencies": [\
-            ["i18next-icu", "npm:2.4.3"]\
+            ["i18next-icu", "npm:2.4.4"]\
           ],\
           "linkType": "SOFT"\
         }],\
-        ["virtual:e5d2db011284bfb91bca4b9d7ba6945d67c210f8d38e8f8e61d6d6585b0a14967bc484c11e2c3ebed635a89f74cddb33913fb85d1487c7530881891ed7450a24#npm:2.4.3", {\
-          "packageLocation": "./.yarn/__virtual__/i18next-icu-virtual-0733b9d58f/2/dynamic-modules/yarn-cache/cache/i18next-icu-npm-2.4.3-99f36a3dbe-8c0.zip/node_modules/i18next-icu/",\
+        ["virtual:e5d2db011284bfb91bca4b9d7ba6945d67c210f8d38e8f8e61d6d6585b0a14967bc484c11e2c3ebed635a89f74cddb33913fb85d1487c7530881891ed7450a24#npm:2.4.4", {\
+          "packageLocation": "./.yarn/__virtual__/i18next-icu-virtual-a883aba4f7/2/dynamic-modules/yarn-cache/cache/i18next-icu-npm-2.4.4-19e9e77628-8c0.zip/node_modules/i18next-icu/",\
           "packageDependencies": [\
-            ["i18next-icu", "virtual:e5d2db011284bfb91bca4b9d7ba6945d67c210f8d38e8f8e61d6d6585b0a14967bc484c11e2c3ebed635a89f74cddb33913fb85d1487c7530881891ed7450a24#npm:2.4.3"],\
+            ["i18next-icu", "virtual:e5d2db011284bfb91bca4b9d7ba6945d67c210f8d38e8f8e61d6d6585b0a14967bc484c11e2c3ebed635a89f74cddb33913fb85d1487c7530881891ed7450a24#npm:2.4.4"],\
             ["@types/intl-messageformat", null],\
             ["intl-messageformat", "npm:10.7.18"]\
           ],\
@@ -3109,10 +3358,10 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
         }]\
       ]],\
       ["motion-dom", [\
-        ["npm:12.39.0", {\
-          "packageLocation": "../dynamic-modules/yarn-cache/cache/motion-dom-npm-12.39.0-d6ba4d8ad5-8c0.zip/node_modules/motion-dom/",\
+        ["npm:12.43.0", {\
+          "packageLocation": "../dynamic-modules/yarn-cache/cache/motion-dom-npm-12.43.0-5ed81b11fa-8c0.zip/node_modules/motion-dom/",\
           "packageDependencies": [\
-            ["motion-dom", "npm:12.39.0"],\
+            ["motion-dom", "npm:12.43.0"],\
             ["motion-utils", "npm:12.39.0"]\
           ],\
           "linkType": "HARD"\
@@ -3137,30 +3386,30 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
         }]\
       ]],\
       ["react-aria", [\
-        ["npm:3.48.0", {\
-          "packageLocation": "../dynamic-modules/yarn-cache/cache/react-aria-npm-3.48.0-0945840d84-8c0.zip/node_modules/react-aria/",\
+        ["npm:3.52.1", {\
+          "packageLocation": "../dynamic-modules/yarn-cache/cache/react-aria-npm-3.52.1-bb7de71d08-8c0.zip/node_modules/react-aria/",\
           "packageDependencies": [\
-            ["react-aria", "npm:3.48.0"]\
+            ["react-aria", "npm:3.52.1"]\
           ],\
           "linkType": "SOFT"\
         }],\
-        ["virtual:ec4c216041cea79b0dea011001eb74cc4d7d8fb89fcdc93274cf88f79f5e273705f5e6b7ed94bcfe4509e394abf421275824eacb948582686e6f93badde74e98#npm:3.48.0", {\
-          "packageLocation": "./.yarn/__virtual__/react-aria-virtual-eab87cdf0e/2/dynamic-modules/yarn-cache/cache/react-aria-npm-3.48.0-0945840d84-8c0.zip/node_modules/react-aria/",\
+        ["virtual:13191bc152364555bec13b0645e783c377c939976d32be1469523a6d6731a06b781d111345d4d49610e417fcbede83cd19030cd75ef49c173670ab91f3dbd181#npm:3.52.1", {\
+          "packageLocation": "./.yarn/__virtual__/react-aria-virtual-59d6ab84f9/2/dynamic-modules/yarn-cache/cache/react-aria-npm-3.52.1-bb7de71d08-8c0.zip/node_modules/react-aria/",\
           "packageDependencies": [\
-            ["react-aria", "virtual:ec4c216041cea79b0dea011001eb74cc4d7d8fb89fcdc93274cf88f79f5e273705f5e6b7ed94bcfe4509e394abf421275824eacb948582686e6f93badde74e98#npm:3.48.0"],\
-            ["@internationalized/date", "npm:3.12.1"],\
-            ["@internationalized/number", "npm:3.6.6"],\
-            ["@internationalized/string", "npm:3.2.8"],\
-            ["@react-types/shared", "virtual:ec4c216041cea79b0dea011001eb74cc4d7d8fb89fcdc93274cf88f79f5e273705f5e6b7ed94bcfe4509e394abf421275824eacb948582686e6f93badde74e98#npm:3.34.0"],\
-            ["@swc/helpers", "npm:0.5.21"],\
+            ["react-aria", "virtual:13191bc152364555bec13b0645e783c377c939976d32be1469523a6d6731a06b781d111345d4d49610e417fcbede83cd19030cd75ef49c173670ab91f3dbd181#npm:3.52.1"],\
+            ["@internationalized/date", "npm:3.12.4"],\
+            ["@internationalized/number", "npm:3.6.8"],\
+            ["@internationalized/string", "npm:3.2.10"],\
+            ["@react-types/shared", "virtual:13191bc152364555bec13b0645e783c377c939976d32be1469523a6d6731a06b781d111345d4d49610e417fcbede83cd19030cd75ef49c173670ab91f3dbd181#npm:3.36.1"],\
+            ["@swc/helpers", "npm:0.5.23"],\
             ["@types/react", null],\
             ["@types/react-dom", null],\
             ["aria-hidden", "npm:1.2.6"],\
             ["clsx", "npm:2.1.1"],\
             ["react", null],\
             ["react-dom", null],\
-            ["react-stately", "virtual:ec4c216041cea79b0dea011001eb74cc4d7d8fb89fcdc93274cf88f79f5e273705f5e6b7ed94bcfe4509e394abf421275824eacb948582686e6f93badde74e98#npm:3.46.0"],\
-            ["use-sync-external-store", "virtual:1772147de175ea83154c9538d251f03191fd8b5287e68aa65530a50a281d2e6ec444263a25c88e584dd7e3b51277700ded478e357aaa1c352b140328685eca7e#npm:1.6.0"]\
+            ["react-stately", "virtual:13191bc152364555bec13b0645e783c377c939976d32be1469523a6d6731a06b781d111345d4d49610e417fcbede83cd19030cd75ef49c173670ab91f3dbd181#npm:3.50.0"],\
+            ["use-sync-external-store", "virtual:9339aef3c9d524ecab4b966d6f6460a4b178acd01a5fcbf895acc9d7eb9205bfcf31baff1b819be4cd1303eaf2517d705d79f0d816fde80f99faa2ef0d8882b6#npm:1.6.0"]\
           ],\
           "packagePeers": [\
             "@types/react-dom",\
@@ -3172,27 +3421,28 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
         }]\
       ]],\
       ["react-aria-components", [\
-        ["npm:1.17.0", {\
-          "packageLocation": "../dynamic-modules/yarn-cache/cache/react-aria-components-npm-1.17.0-7daefb66ab-8c0.zip/node_modules/react-aria-components/",\
+        ["npm:1.21.1", {\
+          "packageLocation": "../dynamic-modules/yarn-cache/cache/react-aria-components-npm-1.21.1-59997a0aa2-8c0.zip/node_modules/react-aria-components/",\
           "packageDependencies": [\
-            ["react-aria-components", "npm:1.17.0"]\
+            ["react-aria-components", "npm:1.21.1"]\
           ],\
           "linkType": "SOFT"\
         }],\
-        ["virtual:0d765e4bba0d1f3357a1d492c7cefeffd7e5398a2a48989d9847511f8d42bbb0915c7548aa5959728db0d0336e3a36918e0ac15792fcfed663175b31d068e17b#npm:1.17.0", {\
-          "packageLocation": "./.yarn/__virtual__/react-aria-components-virtual-ec4c216041/2/dynamic-modules/yarn-cache/cache/react-aria-components-npm-1.17.0-7daefb66ab-8c0.zip/node_modules/react-aria-components/",\
+        ["virtual:0d765e4bba0d1f3357a1d492c7cefeffd7e5398a2a48989d9847511f8d42bbb0915c7548aa5959728db0d0336e3a36918e0ac15792fcfed663175b31d068e17b#npm:1.21.1", {\
+          "packageLocation": "./.yarn/__virtual__/react-aria-components-virtual-13191bc152/2/dynamic-modules/yarn-cache/cache/react-aria-components-npm-1.21.1-59997a0aa2-8c0.zip/node_modules/react-aria-components/",\
           "packageDependencies": [\
-            ["react-aria-components", "virtual:0d765e4bba0d1f3357a1d492c7cefeffd7e5398a2a48989d9847511f8d42bbb0915c7548aa5959728db0d0336e3a36918e0ac15792fcfed663175b31d068e17b#npm:1.17.0"],\
-            ["@internationalized/date", "npm:3.12.1"],\
-            ["@react-types/shared", "virtual:ec4c216041cea79b0dea011001eb74cc4d7d8fb89fcdc93274cf88f79f5e273705f5e6b7ed94bcfe4509e394abf421275824eacb948582686e6f93badde74e98#npm:3.34.0"],\
-            ["@swc/helpers", "npm:0.5.21"],\
+            ["react-aria-components", "virtual:0d765e4bba0d1f3357a1d492c7cefeffd7e5398a2a48989d9847511f8d42bbb0915c7548aa5959728db0d0336e3a36918e0ac15792fcfed663175b31d068e17b#npm:1.21.1"],\
+            ["@internationalized/date", "npm:3.12.4"],\
+            ["@internationalized/string", "npm:3.2.10"],\
+            ["@react-types/shared", "virtual:13191bc152364555bec13b0645e783c377c939976d32be1469523a6d6731a06b781d111345d4d49610e417fcbede83cd19030cd75ef49c173670ab91f3dbd181#npm:3.36.1"],\
+            ["@swc/helpers", "npm:0.5.23"],\
             ["@types/react", null],\
             ["@types/react-dom", null],\
             ["client-only", "npm:0.0.1"],\
             ["react", null],\
-            ["react-aria", "virtual:ec4c216041cea79b0dea011001eb74cc4d7d8fb89fcdc93274cf88f79f5e273705f5e6b7ed94bcfe4509e394abf421275824eacb948582686e6f93badde74e98#npm:3.48.0"],\
+            ["react-aria", "virtual:13191bc152364555bec13b0645e783c377c939976d32be1469523a6d6731a06b781d111345d4d49610e417fcbede83cd19030cd75ef49c173670ab91f3dbd181#npm:3.52.1"],\
             ["react-dom", null],\
-            ["react-stately", "virtual:ec4c216041cea79b0dea011001eb74cc4d7d8fb89fcdc93274cf88f79f5e273705f5e6b7ed94bcfe4509e394abf421275824eacb948582686e6f93badde74e98#npm:3.46.0"]\
+            ["react-stately", "virtual:13191bc152364555bec13b0645e783c377c939976d32be1469523a6d6731a06b781d111345d4d49610e417fcbede83cd19030cd75ef49c173670ab91f3dbd181#npm:3.50.0"]\
           ],\
           "packagePeers": [\
             "@types/react-dom",\
@@ -3245,12 +3495,12 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "./.yarn/__virtual__/react-i18next-virtual-916818631e/2/dynamic-modules/yarn-cache/cache/react-i18next-npm-11.18.6-53352f444a-8c0.zip/node_modules/react-i18next/",\
           "packageDependencies": [\
             ["react-i18next", "virtual:a7d94ab670151ff6d64577270e11f19934e9ebc0c8acb931a88a0d006a1fdddb6706696e6acc8d870612b5c8b6a02f400923f9019fa850100cd2b16fee381ef7#npm:11.18.6"],\
-            ["@babel/runtime", "npm:7.29.2"],\
+            ["@babel/runtime", "npm:7.29.7"],\
             ["@types/i18next", null],\
             ["@types/react", null],\
             ["@types/react-dom", null],\
             ["@types/react-native", null],\
-            ["html-parse-stringify", "npm:3.0.1"],\
+            ["html-parse-stringify", "npm:3.1.0"],\
             ["i18next", "npm:19.9.2"],\
             ["react", null],\
             ["react-dom", null],\
@@ -3272,19 +3522,19 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "./.yarn/__virtual__/react-i18next-virtual-0ae0aa875b/2/dynamic-modules/yarn-cache/cache/react-i18next-npm-16.6.6-705d98c2da-8c0.zip/node_modules/react-i18next/",\
           "packageDependencies": [\
             ["react-i18next", "virtual:c52a20e50e33599e7546c5650caa362d299a89dd3a16670df866fdc737493e453357c8e83f52216452b186b9619df264202388dd5322fae88c5f626e4bfb0164#npm:16.6.6"],\
-            ["@babel/runtime", "npm:7.29.2"],\
+            ["@babel/runtime", "npm:7.29.7"],\
             ["@types/i18next", null],\
             ["@types/react", null],\
             ["@types/react-dom", null],\
             ["@types/react-native", null],\
             ["@types/typescript", null],\
-            ["html-parse-stringify", "npm:3.0.1"],\
+            ["html-parse-stringify", "npm:3.1.0"],\
             ["i18next", "virtual:e5d2db011284bfb91bca4b9d7ba6945d67c210f8d38e8f8e61d6d6585b0a14967bc484c11e2c3ebed635a89f74cddb33913fb85d1487c7530881891ed7450a24#npm:25.10.10"],\
             ["react", null],\
             ["react-dom", null],\
             ["react-native", null],\
             ["typescript", null],\
-            ["use-sync-external-store", "virtual:1772147de175ea83154c9538d251f03191fd8b5287e68aa65530a50a281d2e6ec444263a25c88e584dd7e3b51277700ded478e357aaa1c352b140328685eca7e#npm:1.6.0"]\
+            ["use-sync-external-store", "virtual:9339aef3c9d524ecab4b966d6f6460a4b178acd01a5fcbf895acc9d7eb9205bfcf31baff1b819be4cd1303eaf2517d705d79f0d816fde80f99faa2ef0d8882b6#npm:1.6.0"]\
           ],\
           "packagePeers": [\
             "@types/i18next",\
@@ -3302,25 +3552,25 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
         }]\
       ]],\
       ["react-stately", [\
-        ["npm:3.46.0", {\
-          "packageLocation": "../dynamic-modules/yarn-cache/cache/react-stately-npm-3.46.0-15c941e679-8c0.zip/node_modules/react-stately/",\
+        ["npm:3.50.0", {\
+          "packageLocation": "../dynamic-modules/yarn-cache/cache/react-stately-npm-3.50.0-ce14143a14-8c0.zip/node_modules/react-stately/",\
           "packageDependencies": [\
-            ["react-stately", "npm:3.46.0"]\
+            ["react-stately", "npm:3.50.0"]\
           ],\
           "linkType": "SOFT"\
         }],\
-        ["virtual:ec4c216041cea79b0dea011001eb74cc4d7d8fb89fcdc93274cf88f79f5e273705f5e6b7ed94bcfe4509e394abf421275824eacb948582686e6f93badde74e98#npm:3.46.0", {\
-          "packageLocation": "./.yarn/__virtual__/react-stately-virtual-cab64307be/2/dynamic-modules/yarn-cache/cache/react-stately-npm-3.46.0-15c941e679-8c0.zip/node_modules/react-stately/",\
+        ["virtual:13191bc152364555bec13b0645e783c377c939976d32be1469523a6d6731a06b781d111345d4d49610e417fcbede83cd19030cd75ef49c173670ab91f3dbd181#npm:3.50.0", {\
+          "packageLocation": "./.yarn/__virtual__/react-stately-virtual-bb3e6f424d/2/dynamic-modules/yarn-cache/cache/react-stately-npm-3.50.0-ce14143a14-8c0.zip/node_modules/react-stately/",\
           "packageDependencies": [\
-            ["react-stately", "virtual:ec4c216041cea79b0dea011001eb74cc4d7d8fb89fcdc93274cf88f79f5e273705f5e6b7ed94bcfe4509e394abf421275824eacb948582686e6f93badde74e98#npm:3.46.0"],\
-            ["@internationalized/date", "npm:3.12.1"],\
-            ["@internationalized/number", "npm:3.6.6"],\
-            ["@internationalized/string", "npm:3.2.8"],\
-            ["@react-types/shared", "virtual:ec4c216041cea79b0dea011001eb74cc4d7d8fb89fcdc93274cf88f79f5e273705f5e6b7ed94bcfe4509e394abf421275824eacb948582686e6f93badde74e98#npm:3.34.0"],\
-            ["@swc/helpers", "npm:0.5.21"],\
+            ["react-stately", "virtual:13191bc152364555bec13b0645e783c377c939976d32be1469523a6d6731a06b781d111345d4d49610e417fcbede83cd19030cd75ef49c173670ab91f3dbd181#npm:3.50.0"],\
+            ["@internationalized/date", "npm:3.12.4"],\
+            ["@internationalized/number", "npm:3.6.8"],\
+            ["@internationalized/string", "npm:3.2.10"],\
+            ["@react-types/shared", "virtual:13191bc152364555bec13b0645e783c377c939976d32be1469523a6d6731a06b781d111345d4d49610e417fcbede83cd19030cd75ef49c173670ab91f3dbd181#npm:3.36.1"],\
+            ["@swc/helpers", "npm:0.5.23"],\
             ["@types/react", null],\
             ["react", null],\
-            ["use-sync-external-store", "virtual:1772147de175ea83154c9538d251f03191fd8b5287e68aa65530a50a281d2e6ec444263a25c88e584dd7e3b51277700ded478e357aaa1c352b140328685eca7e#npm:1.6.0"]\
+            ["use-sync-external-store", "virtual:9339aef3c9d524ecab4b966d6f6460a4b178acd01a5fcbf895acc9d7eb9205bfcf31baff1b819be4cd1303eaf2517d705d79f0d816fde80f99faa2ef0d8882b6#npm:1.6.0"]\
           ],\
           "packagePeers": [\
             "@types/react",\
@@ -3364,10 +3614,10 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           ],\
           "linkType": "SOFT"\
         }],\
-        ["virtual:1772147de175ea83154c9538d251f03191fd8b5287e68aa65530a50a281d2e6ec444263a25c88e584dd7e3b51277700ded478e357aaa1c352b140328685eca7e#npm:1.6.0", {\
-          "packageLocation": "./.yarn/__virtual__/use-sync-external-store-virtual-69572edb3d/2/dynamic-modules/yarn-cache/cache/use-sync-external-store-npm-1.6.0-2db2af616d-8c0.zip/node_modules/use-sync-external-store/",\
+        ["virtual:9339aef3c9d524ecab4b966d6f6460a4b178acd01a5fcbf895acc9d7eb9205bfcf31baff1b819be4cd1303eaf2517d705d79f0d816fde80f99faa2ef0d8882b6#npm:1.6.0", {\
+          "packageLocation": "./.yarn/__virtual__/use-sync-external-store-virtual-90dc83e5c8/2/dynamic-modules/yarn-cache/cache/use-sync-external-store-npm-1.6.0-2db2af616d-8c0.zip/node_modules/use-sync-external-store/",\
           "packageDependencies": [\
-            ["use-sync-external-store", "virtual:1772147de175ea83154c9538d251f03191fd8b5287e68aa65530a50a281d2e6ec444263a25c88e584dd7e3b51277700ded478e357aaa1c352b140328685eca7e#npm:1.6.0"],\
+            ["use-sync-external-store", "virtual:9339aef3c9d524ecab4b966d6f6460a4b178acd01a5fcbf895acc9d7eb9205bfcf31baff1b819be4cd1303eaf2517d705d79f0d816fde80f99faa2ef0d8882b6#npm:1.6.0"],\
             ["@types/react", null],\
             ["react", null]\
           ],\
@@ -3388,7 +3638,9 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
             ["@wix/embeds", "npm:1.0.15"],\
             ["@wix/essentials", "npm:1.0.6"],\
             ["@wix/faq", "npm:1.0.50"],\
+            ["@wix/forms", "npm:1.0.439"],\
             ["@wix/sdk", "npm:1.21.5"],\
+            ["@wix/site", "npm:1.66.0"],\
             ["@wix/site-site", "npm:1.29.0"],\
             ["framer-motion", "virtual:3397cda259050948159fbd931312d20a0aae6accf6344e358928d6f5f5c9e1e27fdf63201a9a8a6cfa009a9ae05ab59f4163c96553fd690e9bc993fd8410a44d#npm:12.38.0"],\
             ["lucide-react", "virtual:3397cda259050948159fbd931312d20a0aae6accf6344e358928d6f5f5c9e1e27fdf63201a9a8a6cfa009a9ae05ab59f4163c96553fd690e9bc993fd8410a44d#npm:1.6.0"],\
@@ -3417,10 +3669,10 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
         }]\
       ]],\
       ["zod", [\
-        ["npm:4.4.3", {\
-          "packageLocation": "../dynamic-modules/yarn-cache/cache/zod-npm-4.4.3-36e81f791e-8c0.zip/node_modules/zod/",\
+        ["npm:4.5.4", {\
+          "packageLocation": "../dynamic-modules/yarn-cache/cache/zod-npm-4.5.4-5303b3afef-8c0.zip/node_modules/zod/",\
           "packageDependencies": [\
-            ["zod", "npm:4.4.3"]\
+            ["zod", "npm:4.5.4"]\
           ],\
           "linkType": "HARD"\
         }]\

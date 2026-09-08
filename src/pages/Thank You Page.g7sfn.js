@@ -17,7 +17,6 @@
  * On success, persist the resolved order ID in local storage (mainly so a
  * plain page refresh, with no new checkout involved, stays on the same order).
  */
-import { analytics } from '@wix/site';
 import { local } from "wix-storage-frontend";
 import wixPay from 'wix-pay';
 import wixWindowFrontend from 'wix-window-frontend';
@@ -55,30 +54,36 @@ import {
     acceptAITerms,
 } from 'backend/bookingService.web.js';
 
-/** Meta custom event — workshop name for campaign attribution (does not duplicate Purchase). */
-analytics.registerEventListener((eventName, eventData) => {
-    if (eventName !== 'Purchase') return;
+/** Meta WorkshopPurchase — workshop name for campaign attribution (does not duplicate Purchase). */
+function trackWorkshopPurchaseFromEcomOrder(ecomOrder) {
+    if (!ecomOrder?._id) return;
 
-    const orderId = eventData.orderId;
-    if (!orderId) return;
-
+    const orderId = ecomOrder._id;
     const key = 'wp_' + orderId;
-    if (sessionStorage.getItem(key)) return;
-    sessionStorage.setItem(key, '1');
+    try {
+        if (sessionStorage.getItem(key)) return;
+        sessionStorage.setItem(key, '1');
+    } catch (_) {}
 
-    const items = eventData.contents || [];
+    const items = (ecomOrder.lineItems || []).map((li) => ({
+        id: li.catalogReference?.catalogItemId || li._id || li.id || '',
+        name: li.name || li.translatedName || '',
+        price: Number(li.price?.amount ?? li.price ?? li.lineItemPrice?.amount ?? 0) || 0,
+        quantity: li.quantity || 1,
+    }));
+    const totals = ecomOrder.totals || {};
 
     window.fbq && window.fbq('trackCustom', 'WorkshopPurchase', {
         content_name: items.map((i) => i.name).filter(Boolean).join(' | '),
-        content_ids: items.map((i) => i.id),
+        content_ids: items.map((i) => i.id).filter(Boolean),
         contents: items.map((i) => ({ id: i.id, quantity: i.quantity, item_price: i.price })),
         num_items: items.reduce((s, i) => s + (i.quantity || 1), 0),
-        value: eventData.revenue,
-        currency: eventData.currency,
+        value: totals.total ?? totals.subtotal ?? 0,
+        currency: ecomOrder.currency || 'ILS',
         order_id: orderId,
-        origin: eventData.origin,
+        origin: 'Bookings',
     }, { eventID: 'wp_' + orderId });
-});
+}
 
 let resolvedSection = null;
 let pendingIframePayload = null;
@@ -394,6 +399,8 @@ async function resolveCurrentEcomOrder(thankYouPage) {
     }
 
     if (!order?._id) return null;
+
+    trackWorkshopPurchaseFromEcomOrder(order);
 
     // NOTE: do NOT reveal section16 (the iframe hub) here. This fires for
     // EVERY completed eCom order on the site, not just tapping workshop

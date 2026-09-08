@@ -516,8 +516,16 @@ export async function sendManyChatText(subscriberId, text) {
         console.log('[ManyChat] ✅ sendManyChatText — נשלח. subscriberId:', subscriberId);
         return { sent: true };
     } catch (err) {
-        console.error('[ManyChat] ❌ sendManyChatText נכשל. subscriberId:', subscriberId, 'error:', err?.message || err);
-        return { sent: false, reason: 'error', error: err?.message || String(err) };
+        const message = err?.message || String(err);
+        if (/3011|24 hours|message tag/i.test(message)) {
+            console.error(
+                '[ManyChat] ❌ sendManyChatText — חלון 24 שעות נסגר (subscriber לא שלח הודעה לאחרונה). ' +
+                'לבדיקה: שלח הודעה מה-WhatsApp לעמוד ואז הפעל את ה-flow. subscriberId:', subscriberId
+            );
+        } else {
+            console.error('[ManyChat] ❌ sendManyChatText נכשל. subscriberId:', subscriberId, 'error:', message);
+        }
+        return { sent: false, reason: 'error', error: message };
     }
 }
 

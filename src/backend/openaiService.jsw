@@ -6,6 +6,7 @@
  *
  * Secrets Manager keys used:
  *   OPENAI_API_KEY       — OpenAI API key
+ *   OPENAI_MODEL         — optional; defaults to gpt-4.1-mini
  *   openai_vectorStoreId — Vector Store id for file_search
  *
  * Note on system instructions: OpenAI is deprecating managed Prompt objects
@@ -19,8 +20,10 @@ import wixSecretsBackend from 'wix-secrets-backend';
 import { fetch } from 'wix-fetch';
 
 const OPENAI_BASE_URL = 'https://api.openai.com/v1';
+const DEFAULT_OPENAI_MODEL = 'gpt-4.1-mini';
 
 let cachedApiKey = null;
+let cachedModel = null;
 let cachedVectorStoreId = null;
 
 // System instructions (PRD §8) — code-managed per OpenAI's prompt-object
@@ -49,6 +52,14 @@ async function getVectorStoreId() {
     if (!id) throw new Error('[OpenAI] Missing "openai_vectorStoreId" in Wix Secrets Manager');
     cachedVectorStoreId = id;
     return id;
+}
+
+/** Model is required when using instructions (no dashboard prompt object). */
+async function getModel() {
+    if (cachedModel) return cachedModel;
+    const fromSecret = await wixSecretsBackend.getSecret('OPENAI_MODEL').catch(() => null);
+    cachedModel = String(fromSecret || DEFAULT_OPENAI_MODEL).trim() || DEFAULT_OPENAI_MODEL;
+    return cachedModel;
 }
 
 /** Generic JSON request helper — mirrors manychatRequest() in manychatService.jsw. */
@@ -226,10 +237,12 @@ function usedFileSearch(response) {
  */
 export async function createResponse({ conversationId, input }) {
     const vsId = await getVectorStoreId();
+    const model = await getModel();
 
     const response = await openaiRequest('/responses', {
         method: 'POST',
         body: {
+            model,
             instructions: SYSTEM_INSTRUCTIONS,
             conversation: conversationId,
             input,
@@ -240,6 +253,7 @@ export async function createResponse({ conversationId, input }) {
     console.log(
         '[OpenAI][cost]',
         JSON.stringify({
+            model,
             responseId: response?.id,
             conversationId,
             fileSearchUsed: usedFileSearch(response),

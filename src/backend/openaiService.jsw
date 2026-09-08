@@ -5,7 +5,7 @@
  * manychatService.jsw.
  *
  * Secrets Manager keys used:
- *   openai_apiKey        — OpenAI API key
+ *   OPENAI_API_KEY       — OpenAI API key
  *   openai_vectorStoreId — Vector Store id for file_search
  *
  * Note on system instructions: OpenAI is deprecating managed Prompt objects
@@ -37,8 +37,8 @@ const SYSTEM_INSTRUCTIONS = `את/ה עוזר/ת אישי/ת חמה, מקצוע�
 
 async function getApiKey() {
     if (cachedApiKey) return cachedApiKey;
-    const key = await wixSecretsBackend.getSecret('openai_apiKey');
-    if (!key) throw new Error('[OpenAI] Missing "openai_apiKey" in Wix Secrets Manager');
+    const key = await wixSecretsBackend.getSecret('OPENAI_API_KEY');
+    if (!key) throw new Error('[OpenAI] Missing "OPENAI_API_KEY" in Wix Secrets Manager');
     cachedApiKey = key;
     return key;
 }

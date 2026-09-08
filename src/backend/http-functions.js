@@ -329,7 +329,7 @@ export async function post_manychatMessage(request) {
 
     const subscriberId = String(payload?.subscriber_id || '').trim();
     const userMessage = String(payload?.user_message || '').trim();
-    const workshopName = String(payload?.current_workshop || '').trim() || 'General';
+    const workshopName = String(payload?.current_workshop || '').trim() || 'כללי';
 
     if (!subscriberId || !userMessage) {
       return badRequest({ body: { status: 'error', error: 'missing_subscriber_id_or_user_message' } });

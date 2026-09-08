@@ -83,7 +83,7 @@ function stripHtml(richText) {
 }
 
 function buildKnowledgeBaseText(item) {
-    const workshopName = item.workshopName || 'General';
+    const workshopName = item.workshopName || 'כללי';
     return `Workshop Name: ${workshopName}\nTitle: ${item.title || ''}\nContent: ${stripHtml(item.content)}`;
 }
 

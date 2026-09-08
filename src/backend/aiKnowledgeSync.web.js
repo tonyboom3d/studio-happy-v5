@@ -5,13 +5,14 @@
  * CMS inserts via the REST API (or bulk import) do NOT fire Velo data hooks,
  * so openAiFileId stays empty until items are synced through the backend.
  *
- * Run once from the Velo Editor sandbox (after Publish):
- *   import { syncAllKnowledgeBaseItems } from 'backend/aiKnowledgeSync.web.js';
- *   syncAllKnowledgeBaseItems().then(console.log);
+ * Run from the Velo Editor sandbox (after Publish):
+ *   import { syncAllKnowledgeBaseItems, resyncAllKnowledgeBaseItems } from 'backend/aiKnowledgeSync.web.js';
+ *   syncAllKnowledgeBaseItems().then(console.log);      // new items only
+ *   resyncAllKnowledgeBaseItems().then(console.log);    // force all items
  */
 import wixData from 'wix-data';
 import { Permissions, webMethod } from 'wix-web-module';
-import { uploadFile, attachToVectorStore } from 'backend/openaiService.jsw';
+import { uploadFile, attachToVectorStore, detachFromVectorStore, deleteFile } from 'backend/openaiService.jsw';
 
 const SA = { suppressAuth: true, suppressHooks: true };
 
@@ -20,7 +21,7 @@ function stripHtml(richText) {
 }
 
 function buildKnowledgeBaseText(item) {
-    const workshopName = item.workshopName || 'General';
+    const workshopName = item.workshopName || 'כללי';
     return `Workshop Name: ${workshopName}\nTitle: ${item.title || ''}\nContent: ${stripHtml(item.content)}`;
 }
 
@@ -54,5 +55,37 @@ export const syncAllKnowledgeBaseItems = webMethod(Permissions.Admin, async () =
 
     const summary = { synced, skipped, failed, total: (result.items || []).length };
     console.log('[aiKnowledgeSync] done:', JSON.stringify(summary));
+    return summary;
+});
+
+/** Force re-upload of every item (use after REST/CMS bulk edits). */
+export const resyncAllKnowledgeBaseItems = webMethod(Permissions.Admin, async () => {
+    const result = await wixData.query('Workshops_KnowledgeBase').limit(1000).find(SA);
+    let synced = 0;
+    let failed = 0;
+
+    for (const item of result.items || []) {
+        try {
+            if (item.openAiFileId) {
+                await detachFromVectorStore(item.openAiFileId);
+                await deleteFile(item.openAiFileId);
+            }
+            const fileId = await uploadFile(buildKnowledgeBaseText(item), `kb-${item._id}.txt`);
+            await attachToVectorStore(fileId);
+            await wixData.update('Workshops_KnowledgeBase', {
+                ...item,
+                openAiFileId: fileId,
+                lastSynced: new Date(),
+            }, SA);
+            synced++;
+            console.log('[aiKnowledgeSync] re-synced:', item.title, 'fileId:', fileId);
+        } catch (err) {
+            failed++;
+            console.error('[aiKnowledgeSync] re-sync failed:', item._id, item.title, err?.message || err);
+        }
+    }
+
+    const summary = { synced, failed, total: (result.items || []).length };
+    console.log('[aiKnowledgeSync] resync done:', JSON.stringify(summary));
     return summary;
 });

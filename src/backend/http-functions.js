@@ -159,7 +159,7 @@ function parseOffset(raw) {
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
 }
 
-// GET https://<yourdomain>/_functions/availableDates?workshopType=טאפטינג&offset=0
+// GET https://www.studiohappy.art/_functions/availableDates?workshopType=טאפטינג&offset=0
 export async function get_availableDates(request) {
   try {
     const workshopTypeRaw = String(request.query.workshopType || '').trim();
@@ -222,8 +222,8 @@ export async function get_availableDates(request) {
 
 // ============================================================
 // AI Assistant for Workshops — ManyChat message endpoint (PRD §5)
-// POST /_functions/manychatMessage
-// Body: { subscriber_id, user_message, workshop_name }
+// POST https://www.studiohappy.art/_functions/manychatMessage
+// Body: { subscriber_id, user_message, current_workshop }
 // Header: X-API-KEY (validated against "manychat_webhook_apiKey" secret)
 // ============================================================
 
@@ -308,7 +308,6 @@ async function handleAiTurn({ subscriberId, userMessage, workshopName }) {
   }
 }
 
-// POST https://<yourdomain>/_functions/manychatMessage
 export async function post_manychatMessage(request) {
   try {
     const apiKeyHeader = getHeader(request, 'X-API-KEY');
@@ -330,7 +329,7 @@ export async function post_manychatMessage(request) {
 
     const subscriberId = String(payload?.subscriber_id || '').trim();
     const userMessage = String(payload?.user_message || '').trim();
-    const workshopName = String(payload?.workshop_name || '').trim() || 'General';
+    const workshopName = String(payload?.current_workshop || '').trim() || 'General';
 
     if (!subscriberId || !userMessage) {
       return badRequest({ body: { status: 'error', error: 'missing_subscriber_id_or_user_message' } });

@@ -6,8 +6,14 @@
  *
  * Secrets Manager keys used:
  *   openai_apiKey        — OpenAI API key
- *   openai_promptId      — Dashboard Prompt object id (system instructions + tools)
  *   openai_vectorStoreId — Vector Store id for file_search
+ *
+ * Note on system instructions: OpenAI is deprecating managed Prompt objects
+ * (prompt_id) — creation was de-emphasized June 3, 2026 and v1/prompts shuts
+ * down Nov 30, 2026 (see the Responses API "Migrate from Prompt Object"
+ * guide). Per their recommended migration, the system instructions live in
+ * code (SYSTEM_INSTRUCTIONS below) and are sent as `instructions` on every
+ * Responses API call instead of referencing a dashboard prompt id.
  */
 import wixSecretsBackend from 'wix-secrets-backend';
 import { fetch } from 'wix-fetch';
@@ -15,8 +21,19 @@ import { fetch } from 'wix-fetch';
 const OPENAI_BASE_URL = 'https://api.openai.com/v1';
 
 let cachedApiKey = null;
-let cachedPromptId = null;
 let cachedVectorStoreId = null;
+
+// System instructions (PRD §8) — code-managed per OpenAI's prompt-object
+// migration guidance. Update via a normal commit/PR instead of a dashboard
+// edit; changes are then reviewed and deployed like any other code change.
+const SYSTEM_INSTRUCTIONS = `את/ה עוזר/ת אישי/ת חמה, מקצועית ואדיבה לצוות שירות הלקוחות של סדנאות.
+
+- ענה/י בעברית בלבד, בטון חיובי ומזמין.
+- שמור/י על תשובות קצרות וברורות, מתאימות ל-WhatsApp. הימנע/י מפסקאות ארוכות.
+- אם שם סדנה ספציפי מוזכר בהקשר ההודעה, התייחס/י אליו במפורש.
+- ענה/י רק על סמך מאגר הידע (file_search). לעולם אל תמציא/י פרטים. אם המידע חסר, אמור/י זאת בעדינות והצע/י העברה לנציג אנושי.
+- אם המשתמש/ת מקלל/ת או שואל/ת על נושאים לא רלוונטיים (פוליטיקה, עניינים אישיים, בקשות הנחה לא מאושרות), סרב/י בעדינות והפנה/י בחזרה לנושאי הסדנאות.
+- אם נדרשת העברה לנציג אנושי (מידע חסר, בקשה מפורשת לנציג, או כל מקרה גבולי), הוסף/י בסוף התגובה את הסמן [[HANDOFF]] (הוא יוסר לפני השליחה למשתמש/ת).`;
 
 async function getApiKey() {
     if (cachedApiKey) return cachedApiKey;
@@ -24,14 +41,6 @@ async function getApiKey() {
     if (!key) throw new Error('[OpenAI] Missing "openai_apiKey" in Wix Secrets Manager');
     cachedApiKey = key;
     return key;
-}
-
-async function getPromptId() {
-    if (cachedPromptId) return cachedPromptId;
-    const id = await wixSecretsBackend.getSecret('openai_promptId');
-    if (!id) throw new Error('[OpenAI] Missing "openai_promptId" in Wix Secrets Manager');
-    cachedPromptId = id;
-    return id;
 }
 
 async function getVectorStoreId() {
@@ -210,18 +219,18 @@ function usedFileSearch(response) {
 }
 
 /**
- * Calls the Responses API with the configured Prompt + file_search tool
- * bound to the Vector Store, scoped to the given persistent conversation.
- * Logs a greppable cost line (see PRD §10 — cost monitoring).
+ * Calls the Responses API with the code-managed system instructions +
+ * file_search tool bound to the Vector Store, scoped to the given
+ * persistent conversation. Logs a greppable cost line (see PRD §10 — cost
+ * monitoring).
  */
 export async function createResponse({ conversationId, input }) {
-    const promptId = await getPromptId();
     const vsId = await getVectorStoreId();
 
     const response = await openaiRequest('/responses', {
         method: 'POST',
         body: {
-            prompt: { id: promptId },
+            instructions: SYSTEM_INSTRUCTIONS,
             conversation: conversationId,
             input,
             tools: [{ type: 'file_search', vector_store_ids: [vsId] }],

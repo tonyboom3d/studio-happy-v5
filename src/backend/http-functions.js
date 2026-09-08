@@ -1,7 +1,7 @@
 import { ok, badRequest, serverError, response } from 'wix-http-functions';
 import { availabilityCalendar } from 'wix-bookings.v2';
 import wixSecretsBackend from 'wix-secrets-backend';
-import { checkRateLimit, checkGuardrails, detectHandoff } from 'backend/aiGuardrails.js';
+import { checkRateLimit, checkGuardrails, detectHandoff, HANDOFF_REPLY_DEFAULT } from 'backend/aiGuardrails.js';
 import { tagHandoff } from 'backend/manychatService.jsw';
 import { createConversation, createResponse, extractReplyText } from 'backend/openaiService.jsw';
 import { getUserConversation, upsertUserConversation } from 'backend/userConversationsStore.js';
@@ -226,18 +226,19 @@ export async function get_availableDates(request) {
 // Body: { subscriber_id, user_message, current_workshop }
 // Header: X-API-KEY (validated against "manychat_webhook_apiKey" secret)
 //
-// Response: { status, reply, needs_handoff } — ManyChat flow must send
-// `reply` via a native Send Message step (NOT sendContent API — Meta blocks
-// outbound API text even inside the 24h window when the flow already handles UX).
+// Response: { status, reply, needs_handoff, show_handoff_button }
+// ManyChat: branch on show_handoff_button → message + Quick Reply button → handoff flow.
 // ============================================================
 
-const AI_DEFAULT_FALLBACK_TEXT = 'מצטערים, לא הצלחנו לענות כרגע 🙏 ניצור קשר בהקדם.';
+const AI_DEFAULT_FALLBACK_TEXT = 'מצטערים, לא הצלחנו לענות כרגע 🙏';
 
 function aiOkBody({ reply, needsHandoff = false, guardrail = false } = {}) {
+  const handoff = !!needsHandoff;
   return {
     status: 'ok',
     reply: String(reply || '').trim(),
-    needs_handoff: !!needsHandoff,
+    needs_handoff: handoff,
+    show_handoff_button: handoff,
     ...(guardrail ? { guardrail: true } : {}),
   };
 }
@@ -277,14 +278,18 @@ async function handleAiTurn({ subscriberId, userMessage, workshopName }) {
     if (!rawReply) {
       console.warn('[http-functions] Empty AI reply. subscriberId:', subscriberId);
       await upsertUserConversation(subscriberId, { lastActive: new Date(), lastWorkshop: workshopName });
-      return { reply: AI_DEFAULT_FALLBACK_TEXT, needsHandoff: false };
+      await tagHandoff(subscriberId, 'empty_ai_reply');
+      return { reply: HANDOFF_REPLY_DEFAULT, needsHandoff: true };
     }
 
-    const { needsHandoff, cleanedReply } = detectHandoff(rawReply, userMessage);
-    const finalReply = cleanedReply || AI_DEFAULT_FALLBACK_TEXT;
+    const { needsHandoff, cleanedReply, reason } = detectHandoff(rawReply, userMessage);
+    const finalReply = needsHandoff
+      ? (cleanedReply || HANDOFF_REPLY_DEFAULT)
+      : (cleanedReply || AI_DEFAULT_FALLBACK_TEXT);
 
     if (needsHandoff) {
-      await tagHandoff(subscriberId, 'ai_or_keyword_trigger');
+      console.log('[http-functions] Handoff triggered. subscriberId:', subscriberId, 'reason:', reason || 'unknown');
+      await tagHandoff(subscriberId, reason || 'ai_or_keyword_trigger');
       await upsertUserConversation(subscriberId, {
         needsHumanReview: true,
         needsReviewAt: new Date(),
@@ -298,7 +303,8 @@ async function handleAiTurn({ subscriberId, userMessage, workshopName }) {
     return { reply: finalReply, needsHandoff };
   } catch (err) {
     console.error('[http-functions] handleAiTurn failed. subscriberId:', subscriberId, 'error:', err?.message || err);
-    return { reply: AI_DEFAULT_FALLBACK_TEXT, needsHandoff: false, error: true };
+    await tagHandoff(subscriberId, 'ai_error').catch(() => {});
+    return { reply: HANDOFF_REPLY_DEFAULT, needsHandoff: true, error: true };
   }
 }
 

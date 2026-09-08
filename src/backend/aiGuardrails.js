@@ -128,23 +128,43 @@ export async function checkGuardrails(userMessage) {
 // person). It's stripped from the text actually sent back to the user.
 const HANDOFF_MARKER = '[[HANDOFF]]';
 
-// Keyword-based trigger as a second, independent path (works even if the
-// model forgets the marker) — extend as needed.
-const HANDOFF_KEYWORDS = ['נציג', 'לדבר עם מישהו', 'אדם אמיתי', 'בן אדם', 'מוקד'];
+const HANDOFF_KEYWORDS = ['נציג', 'לדבר עם מישהו', 'אדם אמיתי', 'בן אדם', 'מוקד', 'נציגה', 'שירות לקוחות'];
+
+// AI phrasing that indicates missing knowledge — triggers handoff button in ManyChat.
+const HANDOFF_UNKNOWN_PHRASES = [
+    'אין לי מידע',
+    'אין מידע',
+    'לא מצאתי',
+    'אין במאגר',
+    'לא זמין במאגר',
+    'איני יודע',
+    'איני בטוח',
+    'לא בטוח',
+    'אין לי את המידע',
+    'לא הצלחתי למצוא',
+];
+
+export const HANDOFF_REPLY_DEFAULT =
+    'מצטער/ת, אין לי את המידע המדויק על זה כרגע 🙏\n\nלחץ/י על הכפתור למטה ונציג מהצוות יחזור אליך בהקדם 💬';
 
 /**
- * Detects whether this turn needs human handoff, from either the model's
- * output marker or the user's own wording. Returns the reply text with the
- * marker stripped so it's never shown to the end user.
+ * Detects whether this turn needs human handoff, from the model marker,
+ * user keywords, or AI reply indicating unknown/missing info.
  */
 export function detectHandoff(replyText, userMessage) {
     const rawReply = String(replyText || '');
     const markerHit = rawReply.includes(HANDOFF_MARKER);
 
     const normalizedUserMessage = normalize(userMessage);
+    const normalizedReply = normalize(rawReply.split(HANDOFF_MARKER).join(''));
     const keywordHit = HANDOFF_KEYWORDS.some((k) => normalizedUserMessage.includes(normalize(k)));
+    const unknownHit = HANDOFF_UNKNOWN_PHRASES.some((p) => normalizedReply.includes(normalize(p)));
 
     const cleanedReply = rawReply.split(HANDOFF_MARKER).join('').trim();
 
-    return { needsHandoff: markerHit || keywordHit, cleanedReply };
+    return {
+        needsHandoff: markerHit || keywordHit || unknownHit,
+        cleanedReply,
+        reason: markerHit ? 'marker' : keywordHit ? 'user_keyword' : unknownHit ? 'unknown_answer' : null,
+    };
 }

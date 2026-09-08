@@ -493,10 +493,10 @@ async function sendFlow(subscriberId, flowNs) {
 // above, which only have phone/email to work with).
 
 /**
- * POST /fb/sending/sendContent — sends free-form text to a subscriber.
- * Valid without a message tag/template because the user just messaged us,
- * i.e. we're inside WhatsApp's 24h customer-service session window.
- * Never throws — same contract as the other ManyChat senders.
+ * POST /fb/sending/sendContent — legacy direct API send (order flows etc.).
+ * AI Assistant replies are returned in the External Request HTTP body and
+ * sent by a native ManyChat flow step — sendContent is blocked by Meta when
+ * used alongside in-flow messaging on WhatsApp.
  */
 export async function sendManyChatText(subscriberId, text) {
     if (!subscriberId || !String(text || '').trim()) {
@@ -521,6 +521,12 @@ export async function sendManyChatText(subscriberId, text) {
             console.error(
                 '[ManyChat] ❌ sendManyChatText — חלון 24 שעות נסגר (subscriber לא שלח הודעה לאחרונה). ' +
                 'לבדיקה: שלח הודעה מה-WhatsApp לעמוד ואז הפעל את ה-flow. subscriberId:', subscriberId
+            );
+        } else if (/not active|Subscriber is not active/i.test(message)) {
+            console.error(
+                '[ManyChat] ❌ sendManyChatText — ה-subscriber לא פעיל ב-ManyChat (ביטל מנוי / חסם / נמחק / לא opt-in ל-WhatsApp). ' +
+                'בדוק ב-Audience את subscriberId:', subscriberId,
+                '— שלח הודעה חדשה מה-WhatsApp כדי להפעיל מחדש, או ודא שב-External Request משתמשים ב-{{user_id}} של אותו contact.'
             );
         } else {
             console.error('[ManyChat] ❌ sendManyChatText נכשל. subscriberId:', subscriberId, 'error:', message);

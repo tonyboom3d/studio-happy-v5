@@ -6,6 +6,7 @@
  * this module and http-functions.js can do O(1) get/update lookups.
  */
 import wixData from 'wix-data';
+import { getUserConversation, upsertUserConversation } from 'backend/userConversationsStore.js';
 
 const SA = { suppressAuth: true, suppressHooks: true };
 
@@ -24,15 +25,13 @@ export async function checkRateLimit(subscriberId) {
     if (!subscriberId) return { allowed: false, reason: 'no-subscriber-id' };
 
     const now = new Date();
-    const existing = await wixData.get('UserConversations', subscriberId, SA).catch(() => null);
+    const existing = await getUserConversation(subscriberId);
 
     if (!existing) {
-        await wixData.insert('UserConversations', {
-            _id: subscriberId,
-            subscriberId,
+        await upsertUserConversation(subscriberId, {
             rateWindowStart: now,
             rateCount: 1,
-        }, SA).catch((err) => console.warn('[aiGuardrails] rate-limit insert failed:', err?.message || err));
+        }).catch((err) => console.warn('[aiGuardrails] rate-limit upsert failed:', err?.message || err));
         return { allowed: true };
     }
 
@@ -41,11 +40,10 @@ export async function checkRateLimit(subscriberId) {
     const nextCount = withinWindow ? (existing.rateCount || 0) + 1 : 1;
     const nextWindowStart = withinWindow ? windowStart : now;
 
-    await wixData.update('UserConversations', {
-        ...existing,
+    await upsertUserConversation(subscriberId, {
         rateWindowStart: nextWindowStart,
         rateCount: nextCount,
-    }, SA).catch((err) => console.warn('[aiGuardrails] rate-limit update failed:', err?.message || err));
+    }).catch((err) => console.warn('[aiGuardrails] rate-limit upsert failed:', err?.message || err));
 
     if (withinWindow && nextCount > RATE_LIMIT_MAX_MESSAGES) {
         console.warn('[aiGuardrails] rate-limited subscriber:', subscriberId, 'count:', nextCount);

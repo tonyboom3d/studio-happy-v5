@@ -1,10 +1,10 @@
 import { ok, badRequest, serverError, response } from 'wix-http-functions';
 import { availabilityCalendar } from 'wix-bookings.v2';
 import wixSecretsBackend from 'wix-secrets-backend';
-import wixData from 'wix-data';
 import { checkRateLimit, checkGuardrails, detectHandoff } from 'backend/aiGuardrails.js';
-import { sendManyChatText, tagHandoff } from 'backend/manychatService.jsw';
+import { tagHandoff } from 'backend/manychatService.jsw';
 import { createConversation, createResponse, extractReplyText } from 'backend/openaiService.jsw';
+import { getUserConversation, upsertUserConversation } from 'backend/userConversationsStore.js';
 
 // ============================================================
 // ManyChat availability endpoint
@@ -225,10 +225,22 @@ export async function get_availableDates(request) {
 // POST https://www.studiohappy.art/_functions/manychatMessage
 // Body: { subscriber_id, user_message, current_workshop }
 // Header: X-API-KEY (validated against "manychat_webhook_apiKey" secret)
+//
+// Response: { status, reply, needs_handoff } — ManyChat flow must send
+// `reply` via a native Send Message step (NOT sendContent API — Meta blocks
+// outbound API text even inside the 24h window when the flow already handles UX).
 // ============================================================
 
-const SA = { suppressAuth: true, suppressHooks: true };
 const AI_DEFAULT_FALLBACK_TEXT = 'מצטערים, לא הצלחנו לענות כרגע 🙏 ניצור קשר בהקדם.';
+
+function aiOkBody({ reply, needsHandoff = false, guardrail = false } = {}) {
+  return {
+    status: 'ok',
+    reply: String(reply || '').trim(),
+    needs_handoff: !!needsHandoff,
+    ...(guardrail ? { guardrail: true } : {}),
+  };
+}
 
 function getHeader(request, name) {
   const headers = request?.headers || {};
@@ -237,46 +249,23 @@ function getHeader(request, name) {
   return key ? headers[key] : undefined;
 }
 
-/** Merge-then-update so partial patches never clobber existing fields (wixData.update replaces the whole item). */
-async function mergeUpdateUserConversation(subscriberId, patch) {
-  const current = await wixData.get('UserConversations', subscriberId, SA).catch(() => null);
-  const merged = { ...(current || { _id: subscriberId, subscriberId }), ...patch };
-  return wixData.update('UserConversations', merged, SA).catch((err) => {
-    console.warn('[http-functions] UserConversations update failed. subscriberId:', subscriberId, err?.message || err);
-  });
-}
-
 /**
  * Finds-or-creates the UserConversations record + OpenAI Conversation for
  * this subscriber. checkRateLimit() may have already inserted a bare record
  * (rateWindowStart/rateCount only) — this fills in conversationId.
- * Handles the create-race (PRD §5 step 5, §9) by re-fetching on conflict
- * rather than trusting a hard lock (Wix Data has no cross-request locks).
  */
 async function resolveConversation(subscriberId) {
-  let record = await wixData.get('UserConversations', subscriberId, SA).catch(() => null);
+  let record = await getUserConversation(subscriberId);
   if (record?.conversationId) return record;
 
   const conversationId = await createConversation();
-  const merged = { ...(record || { _id: subscriberId, subscriberId }), conversationId };
-
-  try {
-    record = record
-      ? await wixData.update('UserConversations', merged, SA)
-      : await wixData.insert('UserConversations', merged, SA);
-  } catch (err) {
-    console.warn('[http-functions] resolveConversation race, re-fetching. subscriberId:', subscriberId, err?.message || err);
-    record = await wixData.get('UserConversations', subscriberId, SA).catch(() => merged);
-  }
-  return record;
+  record = await upsertUserConversation(subscriberId, { conversationId });
+  return record || { _id: subscriberId, subscriberId, conversationId };
 }
 
 /**
- * Runs the OpenAI turn and delivers the reply via ManyChat. Inline (not
- * fire-and-forget after the HTTP response) because Wix http-functions don't
- * reliably keep running once a response has been returned — the ACK to
- * ManyChat is independent anyway, since the actual reply goes out via the
- * Send Message API, not the HTTP response body. Never throws.
+ * Runs the OpenAI turn and returns reply text for ManyChat flow delivery.
+ * Never throws — returns fallback reply on failure.
  */
 async function handleAiTurn({ subscriberId, userMessage, workshopName }) {
   try {
@@ -287,9 +276,8 @@ async function handleAiTurn({ subscriberId, userMessage, workshopName }) {
 
     if (!rawReply) {
       console.warn('[http-functions] Empty AI reply. subscriberId:', subscriberId);
-      await sendManyChatText(subscriberId, AI_DEFAULT_FALLBACK_TEXT);
-      await mergeUpdateUserConversation(subscriberId, { lastActive: new Date(), lastWorkshop: workshopName });
-      return;
+      await upsertUserConversation(subscriberId, { lastActive: new Date(), lastWorkshop: workshopName });
+      return { reply: AI_DEFAULT_FALLBACK_TEXT, needsHandoff: false };
     }
 
     const { needsHandoff, cleanedReply } = detectHandoff(rawReply, userMessage);
@@ -297,14 +285,20 @@ async function handleAiTurn({ subscriberId, userMessage, workshopName }) {
 
     if (needsHandoff) {
       await tagHandoff(subscriberId, 'ai_or_keyword_trigger');
-      await mergeUpdateUserConversation(subscriberId, { needsHumanReview: true, needsReviewAt: new Date() });
+      await upsertUserConversation(subscriberId, {
+        needsHumanReview: true,
+        needsReviewAt: new Date(),
+        lastActive: new Date(),
+        lastWorkshop: workshopName,
+      });
+    } else {
+      await upsertUserConversation(subscriberId, { lastActive: new Date(), lastWorkshop: workshopName });
     }
 
-    await sendManyChatText(subscriberId, finalReply);
-    await mergeUpdateUserConversation(subscriberId, { lastActive: new Date(), lastWorkshop: workshopName });
+    return { reply: finalReply, needsHandoff };
   } catch (err) {
     console.error('[http-functions] handleAiTurn failed. subscriberId:', subscriberId, 'error:', err?.message || err);
-    await sendManyChatText(subscriberId, AI_DEFAULT_FALLBACK_TEXT).catch(() => {});
+    return { reply: AI_DEFAULT_FALLBACK_TEXT, needsHandoff: false, error: true };
   }
 }
 
@@ -339,21 +333,27 @@ export async function post_manychatMessage(request) {
     const rate = await checkRateLimit(subscriberId);
     if (!rate.allowed) {
       console.warn('[http-functions] post_manychatMessage rate-limited. subscriberId:', subscriberId);
-      return ok({ headers: { 'Content-Type': 'application/json' }, body: { status: 'received' } });
+      return ok({
+        headers: { 'Content-Type': 'application/json' },
+        body: { status: 'rate_limited', reply: '', needs_handoff: false },
+      });
     }
 
     // Guardrails — before any OpenAI call (PRD §5 step 3, §9).
     const guard = await checkGuardrails(userMessage);
     if (guard.triggered) {
-      await sendManyChatText(subscriberId, guard.fallbackMessage);
-      return ok({ headers: { 'Content-Type': 'application/json' }, body: { status: 'received' } });
+      return ok({
+        headers: { 'Content-Type': 'application/json' },
+        body: aiOkBody({ reply: guard.fallbackMessage, guardrail: true }),
+      });
     }
 
-    // Inline AI turn — see handleAiTurn() doc comment for why this isn't
-    // fire-and-forget. The ACK below is independent of the ManyChat reply.
-    await handleAiTurn({ subscriberId, userMessage, workshopName });
+    const result = await handleAiTurn({ subscriberId, userMessage, workshopName });
 
-    return ok({ headers: { 'Content-Type': 'application/json' }, body: { status: 'received' } });
+    return ok({
+      headers: { 'Content-Type': 'application/json' },
+      body: aiOkBody({ reply: result.reply, needsHandoff: result.needsHandoff }),
+    });
   } catch (err) {
     console.error('[http-functions] post_manychatMessage failed:', err?.message || err);
     return serverError({ body: { status: 'error', error: String(err?.message || err) } });

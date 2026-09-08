@@ -18,7 +18,7 @@
  * plain page refresh, with no new checkout involved, stays on the same order).
  */
 import { analytics } from '@wix/site';
-import { local } from "wix-storage-frontend";
+import { local, session } from "wix-storage-frontend";
 import wixPay from 'wix-pay';
 import wixWindowFrontend from 'wix-window-frontend';
 import {
@@ -55,7 +55,14 @@ import {
     acceptAITerms,
 } from 'backend/bookingService.web.js';
 
-/** Meta custom event — workshop name for campaign attribution (does not duplicate Purchase). */
+/**
+ * Meta custom event — workshop name for campaign attribution (does not duplicate Purchase).
+ * NOTE: Velo page code runs in a sandboxed worker with no `window`/`document` access,
+ * so `window.fbq` is unreachable here (throws ReferenceError). `analytics.trackEvent()`
+ * is Wix's supported bridge — it runs in the real page context and forwards the event
+ * to whichever platforms are connected via Marketing Integrations (incl. Facebook Pixel),
+ * firing `fbq('trackCustom', 'WorkshopPurchase', ...)` on our behalf.
+ */
 analytics.registerEventListener((eventName, eventData) => {
     if (eventName !== 'Purchase') return;
 
@@ -64,13 +71,13 @@ analytics.registerEventListener((eventName, eventData) => {
 
     const key = 'wp_' + orderId;
     try {
-        if (sessionStorage.getItem(key)) return;
-        sessionStorage.setItem(key, '1');
+        if (session.getItem(key)) return;
+        session.setItem(key, '1');
     } catch (_) {}
 
     const items = eventData.contents || [];
 
-    window.fbq && window.fbq('trackCustom', 'WorkshopPurchase', {
+    analytics.trackEvent('WorkshopPurchase', {
         content_name: items.map((i) => i.name).filter(Boolean).join(' | '),
         content_ids: items.map((i) => i.id),
         contents: items.map((i) => ({ id: i.id, quantity: i.quantity, item_price: i.price })),
@@ -79,7 +86,7 @@ analytics.registerEventListener((eventName, eventData) => {
         currency: eventData.currency,
         order_id: orderId,
         origin: eventData.origin,
-    }, { eventID: 'wp_' + orderId });
+    });
 });
 
 let resolvedSection = null;

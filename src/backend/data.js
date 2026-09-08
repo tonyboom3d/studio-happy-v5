@@ -1,6 +1,7 @@
 import wixData from 'wix-data';
 import { sendOrderConfirmationManyChat } from 'backend/manychatService.jsw';
 import { processBookingPaid } from 'backend/schedulingEngine.js';
+import { uploadFile, attachToVectorStore, deleteFile, detachFromVectorStore } from 'backend/openaiService.jsw';
 
 const SA = { suppressAuth: true, suppressHooks: true };
 
@@ -63,6 +64,85 @@ export function WorkshopOrders_afterUpdate(item, context) {
         .catch(err => {
             // Never let a messaging failure affect the saved order — log only.
             console.error('[data.js hook] Confirmation send failed. orderId:', item._id, 'error:', err?.message || err);
+        });
+
+    return item;
+}
+
+// ============================================================
+// Workshops_KnowledgeBase → OpenAI Vector Store sync (AI Assistant PRD §4)
+//
+// Keeps the file_search knowledge base in sync with the CMS. All three
+// hooks are fire-and-forget (never block the CMS write) and use SA
+// (suppressHooks: true) for their own write-back, so they never
+// re-trigger themselves.
+// ============================================================
+
+function stripHtml(richText) {
+    return String(richText || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function buildKnowledgeBaseText(item) {
+    const workshopName = item.workshopName || 'General';
+    return `Workshop Name: ${workshopName}\nTitle: ${item.title || ''}\nContent: ${stripHtml(item.content)}`;
+}
+
+async function syncKnowledgeBaseItem(item) {
+    const text = buildKnowledgeBaseText(item);
+    const fileId = await uploadFile(text, `kb-${item._id}.txt`);
+    await attachToVectorStore(fileId);
+    await wixData.update('Workshops_KnowledgeBase', {
+        ...item,
+        openAiFileId: fileId,
+        lastSynced: new Date(),
+    }, SA);
+    console.log('[data.js hook] Workshops_KnowledgeBase synced. itemId:', item._id, 'fileId:', fileId);
+}
+
+export function Workshops_KnowledgeBase_afterInsert(item, context) {
+    syncKnowledgeBaseItem(item).catch(err => {
+        console.error('[data.js hook] Workshops_KnowledgeBase_afterInsert sync failed. itemId:', item._id, 'error:', err?.message || err);
+    });
+    return item;
+}
+
+async function resyncKnowledgeBaseItem(item, oldFileId) {
+    if (oldFileId) {
+        await detachFromVectorStore(oldFileId);
+        await deleteFile(oldFileId);
+    }
+    const text = buildKnowledgeBaseText(item);
+    const fileId = await uploadFile(text, `kb-${item._id}.txt`);
+    await attachToVectorStore(fileId);
+    await wixData.update('Workshops_KnowledgeBase', {
+        ...item,
+        openAiFileId: fileId,
+        lastSynced: new Date(),
+    }, SA);
+    console.log('[data.js hook] Workshops_KnowledgeBase re-synced. itemId:', item._id, 'fileId:', fileId);
+}
+
+export function Workshops_KnowledgeBase_afterUpdate(item, context) {
+    const previousItem = context.currentItem;
+
+    const contentChanged = item.title !== previousItem?.title
+        || item.workshopName !== previousItem?.workshopName
+        || item.content !== previousItem?.content;
+    if (!contentChanged) return item;
+
+    resyncKnowledgeBaseItem(item, previousItem?.openAiFileId).catch(err => {
+        console.error('[data.js hook] Workshops_KnowledgeBase_afterUpdate sync failed. itemId:', item._id, 'error:', err?.message || err);
+    });
+    return item;
+}
+
+export function Workshops_KnowledgeBase_afterRemove(item, context) {
+    if (!item.openAiFileId) return item;
+
+    detachFromVectorStore(item.openAiFileId)
+        .then(() => deleteFile(item.openAiFileId))
+        .catch(err => {
+            console.error('[data.js hook] Workshops_KnowledgeBase_afterRemove cleanup failed. itemId:', item._id, 'error:', err?.message || err);
         });
 
     return item;

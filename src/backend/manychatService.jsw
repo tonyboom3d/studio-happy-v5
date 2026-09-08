@@ -486,6 +486,73 @@ async function sendFlow(subscriberId, flowNs) {
     });
 }
 
+// --- AI Assistant (Workshops) — free-text reply + human handoff ---
+// See http-functions.js post_manychatMessage. subscriberId here is the
+// ManyChat subscriber id passed directly by the External Request step
+// (no phone/email lookup needed — unlike the order-confirmation senders
+// above, which only have phone/email to work with).
+
+/**
+ * POST /fb/sending/sendContent — sends free-form text to a subscriber.
+ * Valid without a message tag/template because the user just messaged us,
+ * i.e. we're inside WhatsApp's 24h customer-service session window.
+ * Never throws — same contract as the other ManyChat senders.
+ */
+export async function sendManyChatText(subscriberId, text) {
+    if (!subscriberId || !String(text || '').trim()) {
+        return { sent: false, reason: 'missing-subscriberId-or-text' };
+    }
+    try {
+        await manychatRequest('/fb/sending/sendContent', {
+            method: 'POST',
+            body: {
+                subscriber_id: subscriberId,
+                data: {
+                    version: 'v2',
+                    content: { messages: [{ type: 'text', text }] },
+                },
+            },
+        });
+        console.log('[ManyChat] ✅ sendManyChatText — נשלח. subscriberId:', subscriberId);
+        return { sent: true };
+    } catch (err) {
+        console.error('[ManyChat] ❌ sendManyChatText נכשל. subscriberId:', subscriberId, 'error:', err?.message || err);
+        return { sent: false, reason: 'error', error: err?.message || String(err) };
+    }
+}
+
+// Custom field flagging a subscriber for human review (Settings > Custom
+// Fields, type "Text", auto-created on first use like the staff fields).
+const HANDOFF_FIELD = 'ai_handoff';
+
+// Dedicated ManyChat flow to notify staff / route the subscriber to a human
+// — create it in ManyChat and paste its content ns here. Left blank until
+// supplied; tagHandoff() still sets the custom field either way so the
+// dashboard/manual review can rely on UserConversations.needsHumanReview.
+const HANDOFF_FLOW_NS = '';
+
+/**
+ * Flags a subscriber for human review (PRD §7): sets the ai_handoff custom
+ * field and, if configured, fires the dedicated handoff flow. Never throws
+ * — a handoff-tagging failure must not block the AI reply that triggered it.
+ */
+export async function tagHandoff(subscriberId, reason) {
+    if (!subscriberId) return { sent: false, reason: 'no-subscriberId' };
+    try {
+        await setCustomFieldByName(subscriberId, HANDOFF_FIELD, reason || 'needs_human');
+        if (HANDOFF_FLOW_NS) {
+            await sendFlow(subscriberId, HANDOFF_FLOW_NS);
+        } else {
+            console.warn('[ManyChat] tagHandoff: HANDOFF_FLOW_NS not configured yet — only the custom field was set. subscriberId:', subscriberId);
+        }
+        console.log('[ManyChat] ✅ tagHandoff — סומן לבדיקה אנושית. subscriberId:', subscriberId, 'reason:', reason);
+        return { sent: true };
+    } catch (err) {
+        console.error('[ManyChat] ❌ tagHandoff נכשל. subscriberId:', subscriberId, 'error:', err?.message || err);
+        return { sent: false, reason: 'error', error: err?.message || String(err) };
+    }
+}
+
 // --- Order confirmation entry point ---
 
 /**

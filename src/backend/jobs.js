@@ -6,6 +6,7 @@ import { fetchEcomOrderByCheckoutId, reconcileEcomOrder } from 'backend/orderRec
 import { ensureHolidaysSynced } from 'backend/holidayService.js';
 import { flushOutbox } from 'backend/notificationOutbox.js';
 import { retryPendingPrintJobs } from 'backend/studioUpsell/printDispatch.js';
+import { deleteConversation } from 'backend/openaiService.jsw';
 
 const SA = { suppressAuth: true, suppressHooks: true };
 
@@ -233,4 +234,45 @@ export async function reconcileStuckWorkshopOrders() {
  */
 export async function retryPrintQueueHourly() {
     return retryPendingPrintJobs();
+}
+
+// AI Assistant for Workshops — cleanup constants (PRD §6).
+const CONVERSATION_STALE_HOURS = 72;
+
+/**
+ * Scheduled job (hourly via jobs.config) — Task 3 of the AI Assistant PRD.
+ * Deletes UserConversations records whose lastActive is older than
+ * CONVERSATION_STALE_HOURS, first deleting the matching OpenAI Conversation
+ * object so nothing is orphaned on the OpenAI side. Records that never
+ * reached lastActive (e.g. rate-limit-only or guardrail-only contacts) are
+ * cleaned up too, keyed off _createdDate as a fallback.
+ */
+export async function cleanupStaleConversations() {
+    const cutoff = new Date(Date.now() - CONVERSATION_STALE_HOURS * 3600000);
+
+    const stale = await wixData.query('UserConversations')
+        .lt('lastActive', cutoff)
+        .or(
+            wixData.query('UserConversations')
+                .isEmpty('lastActive')
+                .lt('_createdDate', cutoff)
+        )
+        .limit(500)
+        .find(SA)
+        .catch((err) => {
+            console.error('[jobs] cleanupStaleConversations query failed:', err?.message || err);
+            return { items: [] };
+        });
+
+    let deleted = 0;
+    for (const record of stale.items || []) {
+        await deleteConversation(record.conversationId);
+        await wixData.remove('UserConversations', record._id, SA).catch((err) => {
+            console.error('[jobs] cleanupStaleConversations: failed to remove record', record._id, err?.message || err);
+        });
+        deleted++;
+    }
+
+    if (deleted) console.log(`[jobs] cleanupStaleConversations: deleted ${deleted} stale conversation(s)`);
+    return { deleted };
 }

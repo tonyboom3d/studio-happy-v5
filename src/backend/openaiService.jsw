@@ -1,0 +1,242 @@
+/**
+ * openaiService.jsw — thin REST wrappers around the OpenAI API for the
+ * Workshops AI Assistant (see PRD). No npm SDK dependency — everything goes
+ * through wix-fetch, mirroring the auth/error pattern used in
+ * manychatService.jsw.
+ *
+ * Secrets Manager keys used:
+ *   openai_apiKey        — OpenAI API key
+ *   openai_promptId      — Dashboard Prompt object id (system instructions + tools)
+ *   openai_vectorStoreId — Vector Store id for file_search
+ */
+import wixSecretsBackend from 'wix-secrets-backend';
+import { fetch } from 'wix-fetch';
+
+const OPENAI_BASE_URL = 'https://api.openai.com/v1';
+
+let cachedApiKey = null;
+let cachedPromptId = null;
+let cachedVectorStoreId = null;
+
+async function getApiKey() {
+    if (cachedApiKey) return cachedApiKey;
+    const key = await wixSecretsBackend.getSecret('openai_apiKey');
+    if (!key) throw new Error('[OpenAI] Missing "openai_apiKey" in Wix Secrets Manager');
+    cachedApiKey = key;
+    return key;
+}
+
+async function getPromptId() {
+    if (cachedPromptId) return cachedPromptId;
+    const id = await wixSecretsBackend.getSecret('openai_promptId');
+    if (!id) throw new Error('[OpenAI] Missing "openai_promptId" in Wix Secrets Manager');
+    cachedPromptId = id;
+    return id;
+}
+
+async function getVectorStoreId() {
+    if (cachedVectorStoreId) return cachedVectorStoreId;
+    const id = await wixSecretsBackend.getSecret('openai_vectorStoreId');
+    if (!id) throw new Error('[OpenAI] Missing "openai_vectorStoreId" in Wix Secrets Manager');
+    cachedVectorStoreId = id;
+    return id;
+}
+
+/** Generic JSON request helper — mirrors manychatRequest() in manychatService.jsw. */
+async function openaiRequest(path, { method = 'GET', body, extraHeaders } = {}) {
+    const apiKey = await getApiKey();
+
+    const response = await fetch(`${OPENAI_BASE_URL}${path}`, {
+        method,
+        headers: {
+            Authorization: `Bearer ${apiKey}`,
+            ...(body ? { 'Content-Type': 'application/json' } : {}),
+            ...(extraHeaders || {}),
+        },
+        body: body ? JSON.stringify(body) : undefined,
+    });
+
+    const json = await response.json().catch(() => null);
+
+    if (!response.ok) {
+        const detail = json ? JSON.stringify(json) : await response.text().catch(() => '');
+        throw new Error(`[OpenAI] ${method} ${path} failed (${response.status}): ${detail}`);
+    }
+
+    return json;
+}
+
+// --- Multipart upload helper ---
+// wix-fetch's fetch() does not reliably support the browser FormData/Blob
+// APIs for file uploads, so the multipart/form-data body is built by hand.
+const MULTIPART_BOUNDARY = '----WixOpenAIBoundary';
+
+function buildMultipartBody(fields, fileField) {
+    const parts = [];
+    for (const [name, value] of Object.entries(fields)) {
+        parts.push(
+            `--${MULTIPART_BOUNDARY}\r\n` +
+            `Content-Disposition: form-data; name="${name}"\r\n\r\n` +
+            `${value}\r\n`
+        );
+    }
+    parts.push(
+        `--${MULTIPART_BOUNDARY}\r\n` +
+        `Content-Disposition: form-data; name="${fileField.name}"; filename="${fileField.filename}"\r\n` +
+        `Content-Type: ${fileField.contentType || 'text/plain'}\r\n\r\n` +
+        `${fileField.content}\r\n`
+    );
+    parts.push(`--${MULTIPART_BOUNDARY}--\r\n`);
+    return parts.join('');
+}
+
+/** Uploads a text file to OpenAI (purpose "assistants") and returns the file id. */
+export async function uploadFile(text, filename) {
+    const apiKey = await getApiKey();
+    const body = buildMultipartBody(
+        { purpose: 'assistants' },
+        { name: 'file', filename: filename || 'knowledge-base.txt', content: text, contentType: 'text/plain' }
+    );
+
+    const response = await fetch(`${OPENAI_BASE_URL}/files`, {
+        method: 'POST',
+        headers: {
+            Authorization: `Bearer ${apiKey}`,
+            'Content-Type': `multipart/form-data; boundary=${MULTIPART_BOUNDARY}`,
+        },
+        body,
+    });
+
+    const json = await response.json().catch(() => null);
+    if (!response.ok || !json?.id) {
+        const detail = json ? JSON.stringify(json) : await response.text().catch(() => '');
+        throw new Error(`[OpenAI] uploadFile failed (${response.status}): ${detail}`);
+    }
+    return json.id;
+}
+
+/** Attaches an already-uploaded file to the configured Vector Store and polls until processed. */
+export async function attachToVectorStore(fileId) {
+    const vsId = await getVectorStoreId();
+    const created = await openaiRequest(`/vector_stores/${vsId}/files`, {
+        method: 'POST',
+        body: { file_id: fileId },
+    });
+
+    // Poll (createAndPoll equivalent) — Vector Store file processing is fast
+    // but not synchronous.
+    const maxAttempts = 15;
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+        const status = await openaiRequest(`/vector_stores/${vsId}/files/${fileId}`).catch(() => null);
+        if (status?.status === 'completed') return status;
+        if (status?.status === 'failed' || status?.status === 'cancelled') {
+            throw new Error(`[OpenAI] Vector store file processing ${status.status} for file ${fileId}`);
+        }
+        await new Promise((r) => setTimeout(r, 1000));
+    }
+    console.warn(`[OpenAI] attachToVectorStore: gave up polling for file ${fileId} after ${maxAttempts}s`);
+    return created;
+}
+
+/** Deletes a file from OpenAI entirely (files storage, not just the vector store link). */
+export async function deleteFile(fileId) {
+    if (!fileId) return;
+    try {
+        await openaiRequest(`/files/${fileId}`, { method: 'DELETE' });
+    } catch (err) {
+        console.warn('[OpenAI] deleteFile failed (continuing):', fileId, err?.message || err);
+    }
+}
+
+/** Detaches a file from the Vector Store (does not delete the underlying file). */
+export async function detachFromVectorStore(fileId) {
+    if (!fileId) return;
+    const vsId = await getVectorStoreId();
+    try {
+        await openaiRequest(`/vector_stores/${vsId}/files/${fileId}`, { method: 'DELETE' });
+    } catch (err) {
+        console.warn('[OpenAI] detachFromVectorStore failed (continuing):', fileId, err?.message || err);
+    }
+}
+
+/** Creates a persistent OpenAI Conversation object and returns its id. */
+export async function createConversation() {
+    const json = await openaiRequest('/conversations', { method: 'POST', body: {} });
+    if (!json?.id) throw new Error('[OpenAI] createConversation: no id in response');
+    return json.id;
+}
+
+/** Deletes a persistent OpenAI Conversation object. Never throws — used by cleanup job. */
+export async function deleteConversation(conversationId) {
+    if (!conversationId) return;
+    try {
+        await openaiRequest(`/conversations/${conversationId}`, { method: 'DELETE' });
+    } catch (err) {
+        console.warn('[OpenAI] deleteConversation failed (continuing):', conversationId, err?.message || err);
+    }
+}
+
+/**
+ * Strips file_search citation annotations from a Responses API output_text
+ * item. Citations appear either as structured `annotations` (removed by
+ * only keeping `text`) or as inline bracketed markers like "[1]" / "【4:0†source】".
+ */
+function stripCitations(text) {
+    if (!text) return text;
+    return String(text)
+        .replace(/【[^】]*】/g, '')
+        .replace(/\[\d+(?::\d+)?\]/g, '')
+        .replace(/[ \t]{2,}/g, ' ')
+        .trim();
+}
+
+/** Extracts the plain assistant reply text (citations stripped) from a Responses API result. */
+export function extractReplyText(response) {
+    const output = Array.isArray(response?.output) ? response.output : [];
+    const messageItem = output.find((item) => item.type === 'message');
+    const contentItems = Array.isArray(messageItem?.content) ? messageItem.content : [];
+    const text = contentItems
+        .filter((c) => c.type === 'output_text')
+        .map((c) => c.text || '')
+        .join('\n')
+        .trim();
+    return stripCitations(text);
+}
+
+/** True if the model actually invoked file_search for this response (cost tracking). */
+function usedFileSearch(response) {
+    const output = Array.isArray(response?.output) ? response.output : [];
+    return output.some((item) => item.type === 'file_search_call');
+}
+
+/**
+ * Calls the Responses API with the configured Prompt + file_search tool
+ * bound to the Vector Store, scoped to the given persistent conversation.
+ * Logs a greppable cost line (see PRD §10 — cost monitoring).
+ */
+export async function createResponse({ conversationId, input }) {
+    const promptId = await getPromptId();
+    const vsId = await getVectorStoreId();
+
+    const response = await openaiRequest('/responses', {
+        method: 'POST',
+        body: {
+            prompt: { id: promptId },
+            conversation: conversationId,
+            input,
+            tools: [{ type: 'file_search', vector_store_ids: [vsId] }],
+        },
+    });
+
+    console.log(
+        '[OpenAI][cost]',
+        JSON.stringify({
+            responseId: response?.id,
+            conversationId,
+            fileSearchUsed: usedFileSearch(response),
+            usage: response?.usage || null,
+        })
+    );
+
+    return response;
+}

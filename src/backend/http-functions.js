@@ -1,5 +1,10 @@
-import { ok, badRequest, serverError } from 'wix-http-functions';
+import { ok, badRequest, serverError, response } from 'wix-http-functions';
 import { availabilityCalendar } from 'wix-bookings.v2';
+import wixSecretsBackend from 'wix-secrets-backend';
+import wixData from 'wix-data';
+import { checkRateLimit, checkGuardrails, detectHandoff } from 'backend/aiGuardrails.js';
+import { sendManyChatText, tagHandoff } from 'backend/manychatService.jsw';
+import { createConversation, createResponse, extractReplyText } from 'backend/openaiService.jsw';
 
 // ============================================================
 // ManyChat availability endpoint
@@ -212,5 +217,146 @@ export async function get_availableDates(request) {
     });
   } catch (err) {
     return serverError({ body: { error: String(err) } });
+  }
+}
+
+// ============================================================
+// AI Assistant for Workshops — ManyChat message endpoint (PRD §5)
+// POST /_functions/manychatMessage
+// Body: { subscriber_id, user_message, workshop_name }
+// Header: X-API-KEY (validated against "manychat_webhook_apiKey" secret)
+// ============================================================
+
+const SA = { suppressAuth: true, suppressHooks: true };
+const AI_DEFAULT_FALLBACK_TEXT = 'מצטערים, לא הצלחנו לענות כרגע 🙏 ניצור קשר בהקדם.';
+
+function getHeader(request, name) {
+  const headers = request?.headers || {};
+  const lower = String(name).toLowerCase();
+  const key = Object.keys(headers).find((k) => k.toLowerCase() === lower);
+  return key ? headers[key] : undefined;
+}
+
+/** Merge-then-update so partial patches never clobber existing fields (wixData.update replaces the whole item). */
+async function mergeUpdateUserConversation(subscriberId, patch) {
+  const current = await wixData.get('UserConversations', subscriberId, SA).catch(() => null);
+  const merged = { ...(current || { _id: subscriberId, subscriberId }), ...patch };
+  return wixData.update('UserConversations', merged, SA).catch((err) => {
+    console.warn('[http-functions] UserConversations update failed. subscriberId:', subscriberId, err?.message || err);
+  });
+}
+
+/**
+ * Finds-or-creates the UserConversations record + OpenAI Conversation for
+ * this subscriber. checkRateLimit() may have already inserted a bare record
+ * (rateWindowStart/rateCount only) — this fills in conversationId.
+ * Handles the create-race (PRD §5 step 5, §9) by re-fetching on conflict
+ * rather than trusting a hard lock (Wix Data has no cross-request locks).
+ */
+async function resolveConversation(subscriberId) {
+  let record = await wixData.get('UserConversations', subscriberId, SA).catch(() => null);
+  if (record?.conversationId) return record;
+
+  const conversationId = await createConversation();
+  const merged = { ...(record || { _id: subscriberId, subscriberId }), conversationId };
+
+  try {
+    record = record
+      ? await wixData.update('UserConversations', merged, SA)
+      : await wixData.insert('UserConversations', merged, SA);
+  } catch (err) {
+    console.warn('[http-functions] resolveConversation race, re-fetching. subscriberId:', subscriberId, err?.message || err);
+    record = await wixData.get('UserConversations', subscriberId, SA).catch(() => merged);
+  }
+  return record;
+}
+
+/**
+ * Runs the OpenAI turn and delivers the reply via ManyChat. Inline (not
+ * fire-and-forget after the HTTP response) because Wix http-functions don't
+ * reliably keep running once a response has been returned — the ACK to
+ * ManyChat is independent anyway, since the actual reply goes out via the
+ * Send Message API, not the HTTP response body. Never throws.
+ */
+async function handleAiTurn({ subscriberId, userMessage, workshopName }) {
+  try {
+    const conversationRecord = await resolveConversation(subscriberId);
+    const input = `[Current workshop context: "${workshopName}"]\nUser message: ${userMessage}`;
+    const aiResponse = await createResponse({ conversationId: conversationRecord.conversationId, input });
+    const rawReply = extractReplyText(aiResponse);
+
+    if (!rawReply) {
+      console.warn('[http-functions] Empty AI reply. subscriberId:', subscriberId);
+      await sendManyChatText(subscriberId, AI_DEFAULT_FALLBACK_TEXT);
+      await mergeUpdateUserConversation(subscriberId, { lastActive: new Date(), lastWorkshop: workshopName });
+      return;
+    }
+
+    const { needsHandoff, cleanedReply } = detectHandoff(rawReply, userMessage);
+    const finalReply = cleanedReply || AI_DEFAULT_FALLBACK_TEXT;
+
+    if (needsHandoff) {
+      await tagHandoff(subscriberId, 'ai_or_keyword_trigger');
+      await mergeUpdateUserConversation(subscriberId, { needsHumanReview: true, needsReviewAt: new Date() });
+    }
+
+    await sendManyChatText(subscriberId, finalReply);
+    await mergeUpdateUserConversation(subscriberId, { lastActive: new Date(), lastWorkshop: workshopName });
+  } catch (err) {
+    console.error('[http-functions] handleAiTurn failed. subscriberId:', subscriberId, 'error:', err?.message || err);
+    await sendManyChatText(subscriberId, AI_DEFAULT_FALLBACK_TEXT).catch(() => {});
+  }
+}
+
+// POST https://<yourdomain>/_functions/manychatMessage
+export async function post_manychatMessage(request) {
+  try {
+    const apiKeyHeader = getHeader(request, 'X-API-KEY');
+    const expectedApiKey = await wixSecretsBackend.getSecret('manychat_webhook_apiKey').catch(() => null);
+    if (!expectedApiKey || apiKeyHeader !== expectedApiKey) {
+      return response({
+        status: 401,
+        headers: { 'Content-Type': 'application/json' },
+        body: { status: 'error', error: 'unauthorized' },
+      });
+    }
+
+    let payload;
+    try {
+      payload = await request.body.json();
+    } catch (_) {
+      return badRequest({ body: { status: 'error', error: 'invalid_json' } });
+    }
+
+    const subscriberId = String(payload?.subscriber_id || '').trim();
+    const userMessage = String(payload?.user_message || '').trim();
+    const workshopName = String(payload?.workshop_name || '').trim() || 'General';
+
+    if (!subscriberId || !userMessage) {
+      return badRequest({ body: { status: 'error', error: 'missing_subscriber_id_or_user_message' } });
+    }
+
+    // Rate limit — runs before guardrails/OpenAI (PRD §5 step 2, §9).
+    const rate = await checkRateLimit(subscriberId);
+    if (!rate.allowed) {
+      console.warn('[http-functions] post_manychatMessage rate-limited. subscriberId:', subscriberId);
+      return ok({ headers: { 'Content-Type': 'application/json' }, body: { status: 'received' } });
+    }
+
+    // Guardrails — before any OpenAI call (PRD §5 step 3, §9).
+    const guard = await checkGuardrails(userMessage);
+    if (guard.triggered) {
+      await sendManyChatText(subscriberId, guard.fallbackMessage);
+      return ok({ headers: { 'Content-Type': 'application/json' }, body: { status: 'received' } });
+    }
+
+    // Inline AI turn — see handleAiTurn() doc comment for why this isn't
+    // fire-and-forget. The ACK below is independent of the ManyChat reply.
+    await handleAiTurn({ subscriberId, userMessage, workshopName });
+
+    return ok({ headers: { 'Content-Type': 'application/json' }, body: { status: 'received' } });
+  } catch (err) {
+    console.error('[http-functions] post_manychatMessage failed:', err?.message || err);
+    return serverError({ body: { status: 'error', error: String(err?.message || err) } });
   }
 }

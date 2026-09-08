@@ -17,6 +17,7 @@
  * On success, persist the resolved order ID in local storage (mainly so a
  * plain page refresh, with no new checkout involved, stays on the same order).
  */
+import { analytics } from '@wix/site';
 import { local } from "wix-storage-frontend";
 import wixPay from 'wix-pay';
 import wixWindowFrontend from 'wix-window-frontend';
@@ -53,6 +54,31 @@ import {
     getAITermsStatus,
     acceptAITerms,
 } from 'backend/bookingService.web.js';
+
+/** Meta custom event — workshop name for campaign attribution (does not duplicate Purchase). */
+analytics.registerEventListener((eventName, eventData) => {
+    if (eventName !== 'Purchase') return;
+
+    const orderId = eventData.orderId;
+    if (!orderId) return;
+
+    const key = 'wp_' + orderId;
+    if (sessionStorage.getItem(key)) return;
+    sessionStorage.setItem(key, '1');
+
+    const items = eventData.contents || [];
+
+    window.fbq && window.fbq('trackCustom', 'WorkshopPurchase', {
+        content_name: items.map((i) => i.name).filter(Boolean).join(' | '),
+        content_ids: items.map((i) => i.id),
+        contents: items.map((i) => ({ id: i.id, quantity: i.quantity, item_price: i.price })),
+        num_items: items.reduce((s, i) => s + (i.quantity || 1), 0),
+        value: eventData.revenue,
+        currency: eventData.currency,
+        order_id: orderId,
+        origin: eventData.origin,
+    }, { eventID: 'wp_' + orderId });
+});
 
 let resolvedSection = null;
 let pendingIframePayload = null;

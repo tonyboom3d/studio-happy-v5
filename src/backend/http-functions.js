@@ -1,7 +1,13 @@
 import { ok, badRequest, serverError, response } from 'wix-http-functions';
 import { availabilityCalendar } from 'wix-bookings.v2';
 import wixSecretsBackend from 'wix-secrets-backend';
-import { checkRateLimit, checkGuardrails, detectHandoff, HANDOFF_REPLY_DEFAULT } from 'backend/aiGuardrails.js';
+import {
+  checkRateLimit,
+  checkGuardrails,
+  detectHandoff,
+  HANDOFF_REPLY_DEFAULT,
+  appendFollowUpQuestion,
+} from 'backend/aiGuardrails.js';
 import { tagHandoff } from 'backend/manychatService.jsw';
 import { createConversation, createResponse, extractReplyText } from 'backend/openaiService.jsw';
 import { getUserConversation, upsertUserConversation } from 'backend/userConversationsStore.js';
@@ -236,7 +242,7 @@ function aiOkBody({ reply, needsHandoff = false, guardrail = false } = {}) {
   const handoff = !!needsHandoff;
   return {
     status: 'ok',
-    reply: String(reply || '').trim(),
+    reply: appendFollowUpQuestion(reply),
     needs_handoff: handoff,
     show_handoff_button: handoff,
     ...(guardrail ? { guardrail: true } : {}),

@@ -44,8 +44,9 @@ const ORDER_CHANGE_PHRASES = [
 ];
 
 const BIRTHDAY_EVENT_PHRASES = [
-    'יום הולדת', 'ימי הולדת', 'יום-הולדת', 'birthday', 'אירוע', 'אירועים',
-    'חגיגה', 'מסיבה', 'מסיבת', 'party', 'אירוע פרטי', 'אירועים פרטיים',
+    'יום הולדת', 'ימי הולדת', 'יום-הולדת', 'birthday',
+    'חגיגת יום הולדת', 'מסיבת יום הולדת', 'מסיבת', 'party',
+    'אירוע פרטי', 'אירועים פרטיים', 'אירוע בסטודיו', 'אירועים בסטודיו',
 ];
 
 const SCHEDULE_PHRASES = [
@@ -133,6 +134,27 @@ export function detectSuggestedAction(userMessage, workshopName) {
     }
 
     return null;
+}
+
+export const ROUTE_REPLY_OVERRIDES = {
+    birthday_events:
+        'כן! ב-Studio Happy אפשר לקיים ימי הולדת ואירועים בסטודיו 🎉 יש לנו חבילות מותאמות — לחצ/י על הכפתור לפרטים.',
+};
+
+/** True when the model wrongly refused a valid studio topic. */
+export function looksLikeOffTopicRefusal(text) {
+    const n = normalize(text);
+    return /סדנאות בלבד|לא רלוונט|עניינים אישיים|איך נוכל לעזור לך לגבי הסדנה/.test(n);
+}
+
+/** If AI refused a routed business intent, use a safe default reply instead. */
+export function finalizeRoutedReply(action, aiReply) {
+    if (!action || !looksLikeOffTopicRefusal(aiReply)) return aiReply;
+    return ROUTE_REPLY_OVERRIDES[action.route] || aiReply;
+}
+
+export function isRoutingIntent(userMessage, workshopName) {
+    return !!detectSuggestedAction(userMessage, workshopName);
 }
 
 /** Short CTA appended when a route button is shown (ManyChat renders the button). */

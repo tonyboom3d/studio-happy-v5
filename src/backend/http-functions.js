@@ -5,7 +5,7 @@ import { checkRateLimit, checkGuardrails, detectHandoff, HANDOFF_REPLY_DEFAULT }
 import { tagHandoff } from 'backend/manychatService.jsw';
 import { createConversation, createResponse, extractReplyText } from 'backend/openaiService.jsw';
 import { getUserConversation, upsertUserConversation } from 'backend/userConversationsStore.js';
-import { detectSuggestedAction, buildRouteCtaSuffix } from 'backend/aiRouting.js';
+import { detectSuggestedAction, buildRouteCtaSuffix, finalizeRoutedReply } from 'backend/aiRouting.js';
 
 // ============================================================
 // ManyChat availability endpoint
@@ -290,10 +290,28 @@ async function resolveConversation(subscriberId) {
  * Runs the OpenAI turn and returns reply text for ManyChat flow delivery.
  * Never throws — returns fallback reply on failure.
  */
-async function handleAiTurn({ subscriberId, userMessage, workshopName }) {
+function resolveWorkshopContext(workshopName, conversationRecord) {
+  const current = String(workshopName || '').trim() || 'כללי';
+  if (current !== 'כללי' && current !== 'General') return current;
+  return String(conversationRecord?.lastWorkshop || '').trim() || current;
+}
+
+function buildAiInput({ userMessage, workshopName, conversationRecord, action }) {
+  const contextWorkshop = resolveWorkshopContext(workshopName, conversationRecord);
+  const intentLine = action ? `[Detected intent: ${action.route}]` : '';
+  return [
+    intentLine,
+    `[Current workshop context: "${contextWorkshop}"]`,
+    '[Note: follow-ups like "ומה לגבי" refer to prior messages — use conversation history.]',
+    `User message: ${userMessage}`,
+  ].filter(Boolean).join('\n');
+}
+
+async function handleAiTurn({ subscriberId, userMessage, workshopName, action = null }) {
   try {
     const conversationRecord = await resolveConversation(subscriberId);
-    const input = `[Current workshop context: "${workshopName}"]\nUser message: ${userMessage}`;
+    const routingAction = action || detectSuggestedAction(userMessage, workshopName);
+    const input = buildAiInput({ userMessage, workshopName, conversationRecord, action: routingAction });
     const aiResponse = await createResponse({ conversationId: conversationRecord.conversationId, input });
     const rawReply = extractReplyText(aiResponse);
 
@@ -305,9 +323,10 @@ async function handleAiTurn({ subscriberId, userMessage, workshopName }) {
     }
 
     const { needsHandoff, cleanedReply, reason } = detectHandoff(rawReply, userMessage);
-    const finalReply = needsHandoff
+    let finalReply = needsHandoff
       ? (cleanedReply || HANDOFF_REPLY_DEFAULT)
       : (cleanedReply || AI_DEFAULT_FALLBACK_TEXT);
+    finalReply = finalizeRoutedReply(routingAction, finalReply);
 
     if (needsHandoff) {
       console.log('[http-functions] Handoff triggered. subscriberId:', subscriberId, 'reason:', reason || 'unknown');
@@ -322,12 +341,11 @@ async function handleAiTurn({ subscriberId, userMessage, workshopName }) {
       await upsertUserConversation(subscriberId, { lastActive: new Date(), lastWorkshop: workshopName });
     }
 
-    const action = detectSuggestedAction(userMessage, workshopName);
-    if (action) {
-      console.log('[http-functions] Route suggested. subscriberId:', subscriberId, 'route:', action.route, 'target:', action.action_target);
+    if (routingAction) {
+      console.log('[http-functions] Route suggested. subscriberId:', subscriberId, 'route:', routingAction.route, 'target:', routingAction.action_target);
     }
 
-    return { reply: finalReply, needsHandoff: action ? false : needsHandoff, action };
+    return { reply: finalReply, needsHandoff: routingAction ? false : needsHandoff, action: routingAction };
   } catch (err) {
     console.error('[http-functions] handleAiTurn failed. subscriberId:', subscriberId, 'error:', err?.message || err);
     await tagHandoff(subscriberId, 'ai_error').catch(() => {});
@@ -372,16 +390,20 @@ export async function post_manychatMessage(request) {
       });
     }
 
-    // Guardrails — before any OpenAI call (PRD §5 step 3, §9).
-    const guard = await checkGuardrails(userMessage);
-    if (guard.triggered) {
-      return ok({
-        headers: { 'Content-Type': 'application/json' },
-        body: aiOkBody({ reply: guard.fallbackMessage, guardrail: true }),
-      });
+    const routingAction = detectSuggestedAction(userMessage, workshopName);
+
+    // Guardrails — skip for known business routes (birthdays, orders, schedule).
+    if (!routingAction && !isRoutingIntent(userMessage, workshopName)) {
+      const guard = await checkGuardrails(userMessage);
+      if (guard.triggered) {
+        return ok({
+          headers: { 'Content-Type': 'application/json' },
+          body: aiOkBody({ reply: guard.fallbackMessage, guardrail: true }),
+        });
+      }
     }
 
-    const result = await handleAiTurn({ subscriberId, userMessage, workshopName });
+    const result = await handleAiTurn({ subscriberId, userMessage, workshopName, action: routingAction });
 
     return ok({
       headers: { 'Content-Type': 'application/json' },

@@ -45,9 +45,11 @@ const SYSTEM_INSTRUCTIONS = `את/ה עוזר/ת אישי/ת חמה, מקצוע�
   "שעות הפעילות שלנו 📍
   
   • א'-ה': 10:00–19:00
-  • ו': 10:00–14:00
-  
-  רוצה לקבוע סדנה? אשמח לעזור ✨"
+  • ו': 10:00–14:00"
+
+סיום תשובה (חובה):
+- סיים/י ישירות בתשובה לשאלה — ללא משפטי סיום כלליים.
+- אסור לכתוב: "האם יש לך שאלות נוספות", "אם יש לך שאלות נוספות", "אני כאן לעזור", "אשמח לעזור" — התפריט ב-ManyChat מטפל בזה.
 
 ניתוב (המערכת מוסיפה כפתור — אל תכלול/י קישורים בטקסט):
 - שאלות על שעות/ימים/זמינות — ענה/י מהמאגר; כפתור הרשמה יתווסף אוטומטית.
@@ -235,14 +237,31 @@ function stripCitations(text) {
         .trim();
 }
 
+/** Removes model-added closing lines — ManyChat shows follow-up menu separately. */
+function stripClosingPhrases(text) {
+    let out = String(text || '');
+    const closers = [
+        /\s*(?:[,.]\s*)?(?:אם\s*)?(?:האם\s*)?יש\s+לך\s+שאלות\s+נוספות[^]*$/iu,
+        /\s*(?:[,.]\s*)?אני\s+כאן\s+לעזור[^]*$/iu,
+        /\s*(?:[,.]\s*)?אשמח\s+לעזור[^]*$/iu,
+        /\s*(?:[,.]\s*)?רוצה[^?\n]{0,40}\?\s*אשמח\s+לעזור[^]*$/iu,
+    ];
+    for (const pattern of closers) {
+        out = out.replace(pattern, '');
+    }
+    return out.trim();
+}
+
 /** Light WhatsApp cleanup after citation stripping. */
 export function formatWhatsAppReply(text) {
     if (!text) return '';
-    return String(text)
-        .replace(/\r\n/g, '\n')
-        .replace(/\n{3,}/g, '\n\n')
-        .replace(/[ \t]+\n/g, '\n')
-        .trim();
+    return stripClosingPhrases(
+        String(text)
+            .replace(/\r\n/g, '\n')
+            .replace(/\n{3,}/g, '\n\n')
+            .replace(/[ \t]+\n/g, '\n')
+            .trim()
+    );
 }
 
 /** Extracts the plain assistant reply text (citations stripped) from a Responses API result. */

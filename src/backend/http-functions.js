@@ -393,7 +393,7 @@ export async function post_manychatMessage(request) {
     const routingAction = detectSuggestedAction(userMessage, workshopName);
 
     // Guardrails — skip for known business routes (birthdays, orders, schedule).
-    if (!routingAction && !isRoutingIntent(userMessage, workshopName)) {
+    if (!routingAction) {
       const guard = await checkGuardrails(userMessage);
       if (guard.triggered) {
         return ok({

@@ -5,6 +5,7 @@ import { checkRateLimit, checkGuardrails, detectHandoff, HANDOFF_REPLY_DEFAULT }
 import { tagHandoff } from 'backend/manychatService.jsw';
 import { createConversation, createResponse, extractReplyText } from 'backend/openaiService.jsw';
 import { getUserConversation, upsertUserConversation } from 'backend/userConversationsStore.js';
+import { detectSuggestedAction, buildRouteCtaSuffix } from 'backend/aiRouting.js';
 
 // ============================================================
 // ManyChat availability endpoint
@@ -226,19 +227,40 @@ export async function get_availableDates(request) {
 // Body: { subscriber_id, user_message, current_workshop }
 // Header: X-API-KEY (validated against "manychat_webhook_apiKey" secret)
 //
-// Response: { status, reply, needs_handoff, show_handoff_button }
-// ManyChat: branch on show_handoff_button → message + Quick Reply button → handoff flow.
+// Response: { status, reply, needs_handoff, show_handoff_button,
+//   show_action_button, action_type, action_target, button_label, suggested_route }
+// ManyChat: map action_* fields → URL button or Go To flow.
 // ============================================================
 
 const AI_DEFAULT_FALLBACK_TEXT = 'מצטערים, לא הצלחנו לענות כרגע 🙏';
 
-function aiOkBody({ reply, needsHandoff = false, guardrail = false } = {}) {
+function aiOkBody({ reply, needsHandoff = false, guardrail = false, action = null } = {}) {
+  const text = String(reply || '').trim();
+  if (action) {
+    return {
+      status: 'ok',
+      reply: `${text}${buildRouteCtaSuffix(action)}`.trim(),
+      needs_handoff: false,
+      show_handoff_button: false,
+      show_action_button: true,
+      action_type: action.action_type,
+      action_target: action.action_target,
+      button_label: action.button_label,
+      suggested_route: action.route,
+      ...(guardrail ? { guardrail: true } : {}),
+    };
+  }
   const handoff = !!needsHandoff;
   return {
     status: 'ok',
-    reply: appendFollowUpQuestion(reply),
+    reply: text,
     needs_handoff: handoff,
     show_handoff_button: handoff,
+    show_action_button: false,
+    action_type: '',
+    action_target: '',
+    button_label: '',
+    suggested_route: '',
     ...(guardrail ? { guardrail: true } : {}),
   };
 }
@@ -300,7 +322,12 @@ async function handleAiTurn({ subscriberId, userMessage, workshopName }) {
       await upsertUserConversation(subscriberId, { lastActive: new Date(), lastWorkshop: workshopName });
     }
 
-    return { reply: finalReply, needsHandoff };
+    const action = detectSuggestedAction(userMessage, workshopName);
+    if (action) {
+      console.log('[http-functions] Route suggested. subscriberId:', subscriberId, 'route:', action.route, 'target:', action.action_target);
+    }
+
+    return { reply: finalReply, needsHandoff: action ? false : needsHandoff, action };
   } catch (err) {
     console.error('[http-functions] handleAiTurn failed. subscriberId:', subscriberId, 'error:', err?.message || err);
     await tagHandoff(subscriberId, 'ai_error').catch(() => {});
@@ -358,7 +385,11 @@ export async function post_manychatMessage(request) {
 
     return ok({
       headers: { 'Content-Type': 'application/json' },
-      body: aiOkBody({ reply: result.reply, needsHandoff: result.needsHandoff }),
+      body: aiOkBody({
+        reply: result.reply,
+        needsHandoff: result.needsHandoff,
+        action: result.action || null,
+      }),
     });
   } catch (err) {
     console.error('[http-functions] post_manychatMessage failed:', err?.message || err);

@@ -5,7 +5,7 @@ import { checkRateLimit, checkGuardrails, detectHandoff, HANDOFF_REPLY_DEFAULT }
 import { tagHandoff } from 'backend/manychatService.jsw';
 import { createConversation, createResponse, extractReplyText } from 'backend/openaiService.jsw';
 import { getUserConversation, upsertUserConversation } from 'backend/userConversationsStore.js';
-import { detectSuggestedAction, buildRouteCtaSuffix, finalizeRoutedReply } from 'backend/aiRouting.js';
+import { detectSuggestedAction, finalizeRoutedReply } from 'backend/aiRouting.js';
 
 // ============================================================
 // ManyChat availability endpoint
@@ -228,8 +228,8 @@ export async function get_availableDates(request) {
 // Header: X-API-KEY (validated against "manychat_webhook_apiKey" secret)
 //
 // Response: { status, reply, needs_handoff, show_handoff_button,
-//   show_action_button, action_type, action_target, button_label, suggested_route }
-// ManyChat: map action_* fields → URL button or Go To flow.
+//   show_action_button / ai_show_action ("true"|"false"), action_type, action_target, button_label }
+// ManyChat: map ai_show_action (Text) — booleans as strings for reliable field mapping.
 // ============================================================
 
 const AI_DEFAULT_FALLBACK_TEXT = 'מצטערים, לא הצלחנו לענות כרגע 🙏';
@@ -239,10 +239,11 @@ function aiOkBody({ reply, needsHandoff = false, guardrail = false, action = nul
   if (action) {
     return {
       status: 'ok',
-      reply: `${text}${buildRouteCtaSuffix(action)}`.trim(),
+      reply: text,
       needs_handoff: false,
-      show_handoff_button: false,
-      show_action_button: true,
+      show_handoff_button: 'false',
+      show_action_button: 'true',
+      ai_show_action: 'true',
       action_type: action.action_type,
       action_target: action.action_target,
       button_label: action.button_label,
@@ -255,8 +256,9 @@ function aiOkBody({ reply, needsHandoff = false, guardrail = false, action = nul
     status: 'ok',
     reply: text,
     needs_handoff: handoff,
-    show_handoff_button: handoff,
-    show_action_button: false,
+    show_handoff_button: handoff ? 'true' : 'false',
+    show_action_button: 'false',
+    ai_show_action: 'false',
     action_type: '',
     action_target: '',
     button_label: '',

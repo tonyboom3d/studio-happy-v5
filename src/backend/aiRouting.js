@@ -157,10 +157,3 @@ export function isRoutingIntent(userMessage, workshopName) {
     return !!detectSuggestedAction(userMessage, workshopName);
 }
 
-/** Short CTA appended when a route button is shown (ManyChat renders the button). */
-export function buildRouteCtaSuffix(action) {
-    if (!action) return '';
-    if (action.route === 'order_change') return '\n\nרוצה/ה לטפל בהזמנה? לחץ/י על הכפתור 👇';
-    if (action.route === 'birthday_events') return '\n\nרוצה/ה לשמוע עוד? לחץ/י על הכפתור 👇';
-    return '\n\nרוצה/ה להמשיך? לחץ/י על הכפתור 👇';
-}

@@ -486,6 +486,53 @@ async function sendFlow(subscriberId, flowNs) {
     });
 }
 
+// --- AI Assistant (Workshops) — sync External Request fields via API ---
+// ManyChat External Request response mapping often fails to write Boolean
+// custom fields — set them directly on the subscriber after each AI turn.
+
+const AI_MC_FIELDS = {
+    showAction: 'ai_show_action',
+    showHandoff: 'show_handoff_button',
+    actionType: 'ai_action_type',
+    actionTarget: 'ai_action_target',
+    buttonLabel: 'ai_button_label',
+};
+
+async function setBooleanCustomField(subscriberId, fieldName, value) {
+    return manychatRequest('/fb/subscriber/setCustomFieldByName', {
+        method: 'POST',
+        body: {
+            subscriber_id: subscriberId,
+            field_name: fieldName,
+            field_value: !!value,
+        },
+    });
+}
+
+/**
+ * Writes AI routing fields on the subscriber (Boolean + Text).
+ * Never throws — flow can still use HTTP response body for ai_reply.
+ */
+export async function syncAiResponseFields(subscriberId, payload = {}) {
+    if (!subscriberId) return { synced: false, reason: 'no-subscriberId' };
+    try {
+        await setBooleanCustomField(subscriberId, AI_MC_FIELDS.showAction, payload.show_action_button);
+        await setBooleanCustomField(subscriberId, AI_MC_FIELDS.showHandoff, payload.show_handoff_button);
+        await setCustomFieldsByName(subscriberId, [
+            { name: AI_MC_FIELDS.actionType, value: payload.action_type || '' },
+            { name: AI_MC_FIELDS.actionTarget, value: payload.action_target || '' },
+            { name: AI_MC_FIELDS.buttonLabel, value: payload.button_label || '' },
+        ]);
+        console.log('[ManyChat] ✅ syncAiResponseFields. subscriberId:', subscriberId,
+            'ai_show_action:', !!payload.show_action_button,
+            'type:', payload.action_type || '(none)');
+        return { synced: true };
+    } catch (err) {
+        console.warn('[ManyChat] syncAiResponseFields failed. subscriberId:', subscriberId, err?.message || err);
+        return { synced: false, error: err?.message || String(err) };
+    }
+}
+
 // --- AI Assistant (Workshops) — free-text reply + human handoff ---
 // See http-functions.js post_manychatMessage. subscriberId here is the
 // ManyChat subscriber id passed directly by the External Request step

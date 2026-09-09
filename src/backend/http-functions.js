@@ -2,7 +2,7 @@ import { ok, badRequest, serverError, response } from 'wix-http-functions';
 import { availabilityCalendar } from 'wix-bookings.v2';
 import wixSecretsBackend from 'wix-secrets-backend';
 import { checkRateLimit, checkGuardrails, detectHandoff, HANDOFF_REPLY_DEFAULT } from 'backend/aiGuardrails.js';
-import { tagHandoff } from 'backend/manychatService.jsw';
+import { tagHandoff, syncAiResponseFields } from 'backend/manychatService.jsw';
 import { createConversation, createResponse, extractReplyText } from 'backend/openaiService.jsw';
 import { getUserConversation, upsertUserConversation } from 'backend/userConversationsStore.js';
 import { detectSuggestedAction, finalizeRoutedReply } from 'backend/aiRouting.js';
@@ -228,8 +228,8 @@ export async function get_availableDates(request) {
 // Header: X-API-KEY (validated against "manychat_webhook_apiKey" secret)
 //
 // Response: { status, reply, needs_handoff, show_handoff_button,
-//   show_action_button / ai_show_action ("true"|"false"), action_type, action_target, button_label }
-// ManyChat: map ai_show_action (Text) — booleans as strings for reliable field mapping.
+//   show_action_button, ai_show_action (boolean), action_type, action_target, button_label }
+// Booleans are also set via syncAiResponseFields() — External Request mapping is unreliable for Boolean CFs.
 // ============================================================
 
 const AI_DEFAULT_FALLBACK_TEXT = 'מצטערים, לא הצלחנו לענות כרגע 🙏';
@@ -241,9 +241,9 @@ function aiOkBody({ reply, needsHandoff = false, guardrail = false, action = nul
       status: 'ok',
       reply: text,
       needs_handoff: false,
-      show_handoff_button: 'false',
-      show_action_button: 'true',
-      ai_show_action: 'true',
+      show_handoff_button: false,
+      show_action_button: true,
+      ai_show_action: true,
       action_type: action.action_type,
       action_target: action.action_target,
       button_label: action.button_label,
@@ -256,9 +256,9 @@ function aiOkBody({ reply, needsHandoff = false, guardrail = false, action = nul
     status: 'ok',
     reply: text,
     needs_handoff: handoff,
-    show_handoff_button: handoff ? 'true' : 'false',
-    show_action_button: 'false',
-    ai_show_action: 'false',
+    show_handoff_button: handoff,
+    show_action_button: false,
+    ai_show_action: false,
     action_type: '',
     action_target: '',
     button_label: '',
@@ -386,9 +386,11 @@ export async function post_manychatMessage(request) {
     const rate = await checkRateLimit(subscriberId);
     if (!rate.allowed) {
       console.warn('[http-functions] post_manychatMessage rate-limited. subscriberId:', subscriberId);
+      const rateBody = aiOkBody({ reply: '', needsHandoff: false });
+      await syncAiResponseFields(subscriberId, rateBody);
       return ok({
         headers: { 'Content-Type': 'application/json' },
-        body: { status: 'rate_limited', reply: '', needs_handoff: false },
+        body: { status: 'rate_limited', ...rateBody },
       });
     }
 
@@ -398,22 +400,27 @@ export async function post_manychatMessage(request) {
     if (!routingAction) {
       const guard = await checkGuardrails(userMessage);
       if (guard.triggered) {
+        const guardBody = aiOkBody({ reply: guard.fallbackMessage, guardrail: true });
+        await syncAiResponseFields(subscriberId, guardBody);
         return ok({
           headers: { 'Content-Type': 'application/json' },
-          body: aiOkBody({ reply: guard.fallbackMessage, guardrail: true }),
+          body: guardBody,
         });
       }
     }
 
     const result = await handleAiTurn({ subscriberId, userMessage, workshopName, action: routingAction });
 
+    const responseBody = aiOkBody({
+      reply: result.reply,
+      needsHandoff: result.needsHandoff,
+      action: result.action || null,
+    });
+    await syncAiResponseFields(subscriberId, responseBody);
+
     return ok({
       headers: { 'Content-Type': 'application/json' },
-      body: aiOkBody({
-        reply: result.reply,
-        needsHandoff: result.needsHandoff,
-        action: result.action || null,
-      }),
+      body: responseBody,
     });
   } catch (err) {
     console.error('[http-functions] post_manychatMessage failed:', err?.message || err);

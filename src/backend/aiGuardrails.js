@@ -147,16 +147,6 @@ const HANDOFF_UNKNOWN_PHRASES = [
 export const HANDOFF_REPLY_DEFAULT =
     'מצטער/ת, אין לי את המידע המדויק על זה כרגע 🙏\n\nלחץ/י על הכפתור למטה ונציג מהצוות יחזור אליך בהקדם 💬';
 
-export const FOLLOW_UP_QUESTION = 'האם יש לך שאלות נוספות?';
-
-/** Appends the standard follow-up line if not already present. */
-export function appendFollowUpQuestion(text) {
-    const body = String(text || '').trim();
-    if (!body) return FOLLOW_UP_QUESTION;
-    if (normalize(body).includes(normalize(FOLLOW_UP_QUESTION))) return body;
-    return `${body}\n\n${FOLLOW_UP_QUESTION}`;
-}
-
 /**
  * Detects whether this turn needs human handoff, from the model marker,
  * user keywords, or AI reply indicating unknown/missing info.

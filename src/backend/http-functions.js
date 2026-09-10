@@ -6,6 +6,7 @@ import { tagHandoff, syncAiResponseFields } from 'backend/manychatService.jsw';
 import { createConversation, createResponse, extractReplyText } from 'backend/openaiService.jsw';
 import { getUserConversation, upsertUserConversation } from 'backend/userConversationsStore.js';
 import { detectSuggestedAction, finalizeRoutedReply } from 'backend/aiRouting.js';
+import { buildWorkshopPolicyReply, isGeneralWorkshopSelection } from 'backend/policyContent.js';
 
 // ============================================================
 // ManyChat availability endpoint
@@ -424,6 +425,79 @@ export async function post_manychatMessage(request) {
     });
   } catch (err) {
     console.error('[http-functions] post_manychatMessage failed:', err?.message || err);
+    return serverError({ body: { status: 'error', error: String(err?.message || err) } });
+  }
+}
+
+// ============================================================
+// Workshop cancellation policy — CMS collection `policy`
+// GET  https://www.studiohappy.art/_functions/workshopPolicy?current_workshop=...
+// POST https://www.studiohappy.art/_functions/workshopPolicy
+// Body: { "current_workshop": "..." }
+// Header: X-API-KEY (manychat_webhook_apiKey)
+// Response: { status, reply, current_workshop, mode }
+// ============================================================
+
+async function authorizeManyChatWebhook(request) {
+  const apiKeyHeader = getHeader(request, 'X-API-KEY');
+  const expectedApiKey = await wixSecretsBackend.getSecret('manychat_webhook_apiKey').catch(() => null);
+  return !!(expectedApiKey && apiKeyHeader === expectedApiKey);
+}
+
+async function buildWorkshopPolicyResponse(workshopName) {
+  const currentWorkshop = String(workshopName || '').trim() || 'כללי';
+  const reply = await buildWorkshopPolicyReply(currentWorkshop);
+  return {
+    status: 'ok',
+    reply,
+    current_workshop: currentWorkshop,
+    mode: isGeneralWorkshopSelection(currentWorkshop) ? 'all' : 'single',
+  };
+}
+
+export async function get_workshopPolicy(request) {
+  try {
+    if (!(await authorizeManyChatWebhook(request))) {
+      return response({
+        status: 401,
+        headers: { 'Content-Type': 'application/json' },
+        body: { status: 'error', error: 'unauthorized' },
+      });
+    }
+
+    const workshopName = String(request.query?.current_workshop || '').trim() || 'כללי';
+    const body = await buildWorkshopPolicyResponse(workshopName);
+
+    return ok({ headers: { 'Content-Type': 'application/json' }, body });
+  } catch (err) {
+    console.error('[http-functions] get_workshopPolicy failed:', err?.message || err);
+    return serverError({ body: { status: 'error', error: String(err?.message || err) } });
+  }
+}
+
+export async function post_workshopPolicy(request) {
+  try {
+    if (!(await authorizeManyChatWebhook(request))) {
+      return response({
+        status: 401,
+        headers: { 'Content-Type': 'application/json' },
+        body: { status: 'error', error: 'unauthorized' },
+      });
+    }
+
+    let payload = {};
+    try {
+      payload = await request.body.json();
+    } catch (_) {
+      payload = {};
+    }
+
+    const workshopName = String(payload?.current_workshop || '').trim() || 'כללי';
+    const body = await buildWorkshopPolicyResponse(workshopName);
+
+    return ok({ headers: { 'Content-Type': 'application/json' }, body });
+  } catch (err) {
+    console.error('[http-functions] post_workshopPolicy failed:', err?.message || err);
     return serverError({ body: { status: 'error', error: String(err?.message || err) } });
   }
 }

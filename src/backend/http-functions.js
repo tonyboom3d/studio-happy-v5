@@ -432,6 +432,7 @@ export async function post_manychatMessage(request) {
 // ============================================================
 // Workshop cancellation policy — CMS collection `Policys`
 // GET https://www.studiohappy.art/_functions/workshopPolicy?current_workshop=...
+// ManyChat External Request often sends POST → routes to use_workshopPolicy (same logic).
 // Header: X-API-KEY (manychat_webhook_apiKey)
 // Response: { status, ai_reply, current_workshop, mode }
 // ============================================================
@@ -453,7 +454,22 @@ async function buildWorkshopPolicyResponse(workshopName) {
   };
 }
 
-export async function get_workshopPolicy(request) {
+async function resolveWorkshopFromPolicyRequest(request) {
+  const fromQuery = String(request.query?.current_workshop || '').trim();
+  if (fromQuery) return fromQuery;
+
+  try {
+    const payload = await request.body.json();
+    const fromBody = String(payload?.current_workshop || '').trim();
+    if (fromBody) return fromBody;
+  } catch (_) {
+    // GET has no body — expected
+  }
+
+  return 'כללי';
+}
+
+async function runWorkshopPolicyEndpoint(request, label) {
   try {
     if (!(await authorizeManyChatWebhook(request))) {
       return response({
@@ -463,13 +479,23 @@ export async function get_workshopPolicy(request) {
       });
     }
 
-    const workshopName = String(request.query?.current_workshop || '').trim() || 'כללי';
+    const workshopName = await resolveWorkshopFromPolicyRequest(request);
     const body = await buildWorkshopPolicyResponse(workshopName);
 
     return ok({ headers: { 'Content-Type': 'application/json' }, body });
   } catch (err) {
-    console.error('[http-functions] get_workshopPolicy failed:', err?.message || err);
+    console.error(`[http-functions] ${label} failed:`, err?.message || err);
     return serverError({ body: { status: 'error', error: String(err?.message || err) } });
   }
+}
+
+/** GET — browser / ManyChat GET External Request */
+export async function get_workshopPolicy(request) {
+  return runWorkshopPolicyEndpoint(request, 'get_workshopPolicy');
+}
+
+/** POST/PUT/etc. — ManyChat External Request (default method) */
+export async function use_workshopPolicy(request) {
+  return runWorkshopPolicyEndpoint(request, 'use_workshopPolicy');
 }
 

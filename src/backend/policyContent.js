@@ -29,8 +29,8 @@ const WORKSHOP_ALIASES = {
     'סדנת קרמיקה': 'ceramics',
 };
 
-export function stripRichText(richText) {
-    return String(richText || '')
+function stripHtmlText(html) {
+    return String(html || '')
         .replace(/<br\s*\/?>/gi, '\n')
         .replace(/<\/p>/gi, '\n')
         .replace(/<[^>]*>/g, ' ')
@@ -42,6 +42,74 @@ export function stripRichText(richText) {
         .replace(/\n{3,}/g, '\n\n')
         .replace(/[ \t]{2,}/g, ' ')
         .trim();
+}
+
+function extractRicosNodeText(node) {
+    if (!node || typeof node !== 'object') return '';
+
+    if (node.type === 'TEXT') {
+        return String(node.textData?.text || '');
+    }
+
+    const children = node.nodes || [];
+    if (!children.length) return '';
+
+    if (node.type === 'LIST_ITEM') {
+        const text = children.map(extractRicosNodeText).join('').trim();
+        return text ? `• ${text}` : '';
+    }
+
+    if (node.type === 'BULLETED_LIST' || node.type === 'ORDERED_LIST') {
+        return children
+            .map(extractRicosNodeText)
+            .filter(Boolean)
+            .join('\n');
+    }
+
+    if (node.type === 'PARAGRAPH' || node.type === 'HEADING' || node.type === 'BLOCKQUOTE') {
+        const text = children.map(extractRicosNodeText).join('').trim();
+        return text ? `${text}\n` : '';
+    }
+
+    if (node.type === 'DIVIDER') return '\n';
+
+    return children.map(extractRicosNodeText).join('');
+}
+
+function ricosToPlainText(content) {
+    if (!content || typeof content !== 'object') return '';
+    if (!Array.isArray(content.nodes)) return '';
+
+    return content.nodes
+        .map(extractRicosNodeText)
+        .join('')
+        .replace(/\n{3,}/g, '\n\n')
+        .trim();
+}
+
+/** CMS Rich Text (HTML string or Ricos JSON object) → WhatsApp plain text */
+export function stripRichText(richText) {
+    if (richText == null || richText === '') return '';
+
+    if (typeof richText === 'object') {
+        return ricosToPlainText(richText);
+    }
+
+    const raw = String(richText).trim();
+    if (!raw) return '';
+
+    if (raw.startsWith('{') || raw.startsWith('[')) {
+        try {
+            const parsed = JSON.parse(raw);
+            if (parsed && Array.isArray(parsed.nodes)) {
+                return ricosToPlainText(parsed);
+            }
+        } catch (_) {
+            // fall through to HTML strip
+        }
+    }
+
+    return stripHtmlText(raw);
 }
 
 export function isGeneralWorkshopSelection(workshopName) {
@@ -136,6 +204,6 @@ export async function buildWorkshopPolicyReply(workshopName) {
         }
     }
 
-    const sections = [importantBlock, mainBlock].filter(Boolean);
+    const sections = [mainBlock, importantBlock].filter(Boolean);
     return sections.join('\n\n').trim() || 'לא נמצאו תנאי ביטול.';
 }

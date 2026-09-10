@@ -1,12 +1,12 @@
 /**
- * policyContent.js — cancellation policy lookup from CMS collection `policy`.
+ * policyContent.js — cancellation policy lookup from CMS collection `Policys`.
  * Fields: title, policyContent (Rich Text), type ("important" = always appended).
  */
 import wixData from 'wix-data';
 import { normalize } from 'backend/aiGuardrails.js';
 
 const SA = { suppressAuth: true, suppressHooks: true };
-const POLICY_COLLECTION = 'policy';
+const POLICY_COLLECTION = 'Policys';
 const IMPORTANT_TYPE = 'important';
 
 const GENERAL_WORKSHOP_VALUES = new Set(['', 'general', 'כללי', 'כללי.', 'all']);

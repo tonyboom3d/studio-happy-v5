@@ -430,12 +430,10 @@ export async function post_manychatMessage(request) {
 }
 
 // ============================================================
-// Workshop cancellation policy — CMS collection `policy`
-// GET  https://www.studiohappy.art/_functions/workshopPolicy?current_workshop=...
-// POST https://www.studiohappy.art/_functions/workshopPolicy
-// Body: { "current_workshop": "..." }
+// Workshop cancellation policy — CMS collection `Policys`
+// GET https://www.studiohappy.art/_functions/workshopPolicy?current_workshop=...
 // Header: X-API-KEY (manychat_webhook_apiKey)
-// Response: { status, reply, current_workshop, mode }
+// Response: { status, ai_reply, current_workshop, mode }
 // ============================================================
 
 async function authorizeManyChatWebhook(request) {
@@ -446,10 +444,10 @@ async function authorizeManyChatWebhook(request) {
 
 async function buildWorkshopPolicyResponse(workshopName) {
   const currentWorkshop = String(workshopName || '').trim() || 'כללי';
-  const reply = await buildWorkshopPolicyReply(currentWorkshop);
+  const aiReply = await buildWorkshopPolicyReply(currentWorkshop);
   return {
     status: 'ok',
-    reply,
+    ai_reply: aiReply,
     current_workshop: currentWorkshop,
     mode: isGeneralWorkshopSelection(currentWorkshop) ? 'all' : 'single',
   };
@@ -475,29 +473,3 @@ export async function get_workshopPolicy(request) {
   }
 }
 
-export async function post_workshopPolicy(request) {
-  try {
-    if (!(await authorizeManyChatWebhook(request))) {
-      return response({
-        status: 401,
-        headers: { 'Content-Type': 'application/json' },
-        body: { status: 'error', error: 'unauthorized' },
-      });
-    }
-
-    let payload = {};
-    try {
-      payload = await request.body.json();
-    } catch (_) {
-      payload = {};
-    }
-
-    const workshopName = String(payload?.current_workshop || '').trim() || 'כללי';
-    const body = await buildWorkshopPolicyResponse(workshopName);
-
-    return ok({ headers: { 'Content-Type': 'application/json' }, body });
-  } catch (err) {
-    console.error('[http-functions] post_workshopPolicy failed:', err?.message || err);
-    return serverError({ body: { status: 'error', error: String(err?.message || err) } });
-  }
-}

@@ -20,7 +20,7 @@ import {
     FORTY_EIGHT_HOURS_MS,
     isTuftingServiceId,
 } from 'backend/sketchEditingPolicy.js';
-import { normalizeIsraeliPhone, getPhoneLookupVariants, extractBookingIdsFromEcomOrder } from 'backend/orderUtils.js';
+import { normalizeIsraeliPhone, getPhoneLookupVariants, phonesMatch, extractBookingIdsFromEcomOrder } from 'backend/orderUtils.js';
 import * as orderReconciliation from 'backend/orderReconciliation.js';
 
 const WORKSHOP_ACCESS_TOKEN_SECRET_NAME = 'WorkshopAccessTokens';
@@ -2346,17 +2346,6 @@ export const getOrderByCheckoutId = webMethod(Permissions.Anyone, async (checkou
 export const getOrderByEcomOrderId = webMethod(Permissions.Anyone, async (ecomOrderId) => {
     return orderReconciliation.getOrderByEcomOrderId(ecomOrderId);
 });
-
-function phonesMatch(storedPhone, inputPhone) {
-    if (!inputPhone) return true;
-    if (!storedPhone) return true;
-    const storedVariants = new Set(
-        getPhoneLookupVariants(storedPhone).flatMap((v) => [v, normalizeIsraeliPhone(v)].filter(Boolean))
-    );
-    return getPhoneLookupVariants(inputPhone).some(
-        (v) => storedVariants.has(v) || storedVariants.has(normalizeIsraeliPhone(v))
-    );
-}
 
 export const getWorkshopOrderByBookingId = webMethod(Permissions.Anyone, async (bookingId) => {
     return orderReconciliation.getWorkshopOrderByBookingId(bookingId);

@@ -15,7 +15,12 @@
 import { extendedBookings } from '@wix/bookings';
 import { auth } from '@wix/essentials';
 import wixData from 'wix-data';
-import { normalizeIsraeliPhone, getPhoneLookupVariants } from 'backend/orderUtils.js';
+import {
+    getPhoneLookupVariants,
+    getExpandedPhoneLookupVariants,
+    getIsraeliMobileCoreDigits,
+    phonesMatch,
+} from 'backend/orderUtils.js';
 import {
     WORKSHOP_SERVICE_IDS,
     BOOKING_ONLY_WORKSHOP_TYPES,
@@ -44,7 +49,9 @@ function isCancelledBookingStatus(status) {
 /** Every PAID WorkshopOrders record matching any phone-lookup variant. */
 async function queryCmsOrdersByPhone(phone) {
     const byId = new Map();
-    for (const variant of getPhoneLookupVariants(phone)) {
+
+    // Phase 1: exact eq on every known format (052..., +972..., 972..., raw from ManyChat).
+    for (const variant of getExpandedPhoneLookupVariants(phone)) {
         try {
             const result = await wixData.query('WorkshopOrders')
                 .eq('organizerPhone', variant)
@@ -54,9 +61,31 @@ async function queryCmsOrdersByPhone(phone) {
                 .find(SA_CONSISTENT);
             result.items.forEach((item) => byId.set(item._id, item));
         } catch (err) {
-            console.warn('[orderLookupService] queryCmsOrdersByPhone failed for variant:', variant, err?.message || err);
+            console.warn('[orderLookupService] queryCmsOrdersByPhone eq failed for variant:', variant, err?.message || err);
         }
     }
+
+    // Phase 2: contains on 9-digit mobile core — catches stored values with dashes/spaces
+    // (e.g. "052-381-3929") that exact eq cannot hit.
+    if (byId.size === 0) {
+        const coreDigits = getIsraeliMobileCoreDigits(phone);
+        if (coreDigits.length >= 8) {
+            try {
+                const result = await wixData.query('WorkshopOrders')
+                    .contains('organizerPhone', coreDigits)
+                    .eq('status', 'paid')
+                    .descending('_createdDate')
+                    .limit(50)
+                    .find(SA_CONSISTENT);
+                result.items
+                    .filter((item) => phonesMatch(item.organizerPhone, phone))
+                    .forEach((item) => byId.set(item._id, item));
+            } catch (err) {
+                console.warn('[orderLookupService] queryCmsOrdersByPhone contains failed:', err?.message || err);
+            }
+        }
+    }
+
     return [...byId.values()];
 }
 
@@ -162,10 +191,8 @@ async function loadBookingOnlyCandidates() {
     return allBookings;
 }
 
-function bookingMatchesPhone(booking, phoneVariants) {
-    const bookingPhoneNorm = normalizeIsraeliPhone(booking?.contactDetails?.phone);
-    if (!bookingPhoneNorm) return false;
-    return phoneVariants.some((variant) => normalizeIsraeliPhone(variant) === bookingPhoneNorm);
+function bookingMatchesPhone(booking, inputPhone) {
+    return phonesMatch(booking?.contactDetails?.phone, inputPhone);
 }
 
 function mapBookingOnlyOrder(booking) {
@@ -188,13 +215,12 @@ function mapBookingOnlyOrder(booking) {
 }
 
 async function findBookingOnlyOrders(phone) {
-    const phoneVariants = getPhoneLookupVariants(phone);
-    if (!phoneVariants.length) return [];
+    if (!getPhoneLookupVariants(phone).length) return [];
 
     const candidates = await loadBookingOnlyCandidates();
     return candidates
         .filter((b) => !isCancelledBookingStatus(b.status))
-        .filter((b) => bookingMatchesPhone(b, phoneVariants))
+        .filter((b) => bookingMatchesPhone(b, phone))
         .map(mapBookingOnlyOrder);
 }
 

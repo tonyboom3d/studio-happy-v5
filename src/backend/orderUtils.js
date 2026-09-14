@@ -34,7 +34,49 @@ export function getPhoneLookupVariants(phone) {
         variants.add('+972' + digits.slice(1));
         variants.add('972' + digits.slice(1));
     }
+    const normalized = normalizeIsraeliPhone(raw);
+    if (normalized) {
+        variants.add(normalized);
+        variants.add(normalized.replace(/^\+/, ''));
+    }
     return [...variants].filter(Boolean);
+}
+
+/** All string forms worth an exact-match CMS query (organizerPhone eq). */
+export function getExpandedPhoneLookupVariants(phone) {
+    const expanded = new Set();
+    for (const variant of getPhoneLookupVariants(phone)) {
+        expanded.add(variant);
+        const norm = normalizeIsraeliPhone(variant);
+        if (norm) {
+            expanded.add(norm);
+            expanded.add(norm.replace(/^\+/, ''));
+        }
+    }
+    return [...expanded].filter(Boolean);
+}
+
+/** 9-digit Israeli mobile core (5XXXXXXXX) — for contains() fallback when stored with dashes/spaces. */
+export function getIsraeliMobileCoreDigits(phone) {
+    const normalized = normalizeIsraeliPhone(phone);
+    if (!normalized) return '';
+    const digits = normalized.replace(/\D/g, '');
+    if (digits.startsWith('972') && digits.length >= 12) {
+        return digits.slice(3);
+    }
+    return '';
+}
+
+/** True when stored and input phones are the same number in any common Israeli format. */
+export function phonesMatch(storedPhone, inputPhone) {
+    if (!inputPhone) return true;
+    if (!storedPhone) return true;
+    const storedVariants = new Set(
+        getPhoneLookupVariants(storedPhone).flatMap((v) => [v, normalizeIsraeliPhone(v)].filter(Boolean))
+    );
+    return getPhoneLookupVariants(inputPhone).some(
+        (v) => storedVariants.has(v) || storedVariants.has(normalizeIsraeliPhone(v))
+    );
 }
 
 export function orderContainsBookingId(order, bookingId) {

@@ -13,12 +13,17 @@ const CANDLES_SERVICE_IDS = {
 };
 const CANDLES_SERVICE_ID_LIST = Object.values(CANDLES_SERVICE_IDS);
 
+// GitHub Pages caches index.html aggressively — bump v= when bookingflow changes.
+const BOOKINGFLOW_IFRAME_SRC =
+    'https://tonyboom3d.github.io/studio-happy-v5/?v=20260914-candles-min2#/candels';
+
 $w.onReady(function () {
     const mainIframe = $w('#htmlComponent1');
     if (!mainIframe) {
         console.error('[Wix][candels] #htmlComponent1 not found on page!');
         return;
     }
+    mainIframe.src = BOOKINGFLOW_IFRAME_SRC;
     mainIframe.onMessage((event) => handleIframeMessage(event, mainIframe));
 });
 

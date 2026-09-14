@@ -687,7 +687,9 @@ class EmployeePortal extends HTMLElement {
         this._lightboxImage = null;             // full-size sketch image URL shown in the lightbox
         this._sketchGalleryOrderId = null;      // orderId whose full sketch grid is open (overflow view)
         // Batch scheduling mode — queue assign/remove/swap actions and save them all at once.
-        this._batchMode = false;
+        // On by default (draft-first workflow): board edits accumulate as a draft until the
+        // manager explicitly saves. See `_loadBatch()` for the persisted on/off override.
+        this._batchMode = true;
         this._batchQueue = [];                  // [{ id, type, payload, label, at }]
         this._batchExpiresAt = null;            // Date.now() + 30min from the first queued item
         this._batchHistoryOpen = false;
@@ -1662,10 +1664,11 @@ class EmployeePortal extends HTMLElement {
             this._batchQueue = [];
             this._batchExpiresAt = null;
             this._saveBatch();
-            if (hadItems) this._toast('התור הקודם של פעולות אצווה פג תוקף (30 דק׳) ונוקה.', 'error');
+            if (hadItems) this._toast('הטיוטה הקודמת פגה תוקף (30 דק׳) ונוקתה.', 'error');
         }
-        // Off by default; re-enable only when returning with a non-empty pending queue.
-        this._batchMode = this._batchQueue.length > 0;
+        // Draft mode is on by default so board edits always accumulate for an explicit save.
+        // Respect an explicit stored off-choice, but never lose a pending queue silently.
+        this._batchMode = raw?.mode !== false || this._batchQueue.length > 0;
     }
 
     _saveBatch() {

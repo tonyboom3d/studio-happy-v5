@@ -1551,25 +1551,89 @@ export const swapAssignment = webMethod(Permissions.SiteMember, async (dateKey, 
     return result;
 });
 
+const BATCH_ACTION_CAP = 50;
+const BATCH_ACTION_TYPES = new Set(['adminManualAssign', 'adminCancelAssignment', 'adminSwapAssignment']);
+
+/**
+ * Fast, side-effect-free shape check for one queued batch action — mirrors the required
+ * fields each core function validates internally, but runs before any DB write so a
+ * malformed row fails immediately with a clear reason instead of a generic core-thrown error.
+ */
+function validateBatchAction(type, payload) {
+    const p = payload || {};
+    if (!BATCH_ACTION_TYPES.has(type)) return `סוג פעולה לא ידוע: ${type}`;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(p.dateKey || '')) return 'תאריך חסר או לא תקין בפעולה.';
+    if (type === 'adminManualAssign') {
+        if (!p.employeeId) return 'חסר מזהה עובד/ת לשיבוץ.';
+    }
+    if (type === 'adminCancelAssignment') {
+        if (!p.employeeId) return 'חסר מזהה עובד/ת להסרה.';
+    }
+    if (type === 'adminSwapAssignment') {
+        if (!p.workshopTypeId || !p.fromEmployeeId || !p.toEmployeeId) return 'חסרים פרטים להחלפה (סדנה/עובד/ת).';
+        if (p.fromEmployeeId === p.toEmployeeId) return 'יש לבחור עובד/ת אחר/ת להחלפה.';
+    }
+    return null;
+}
+
+/**
+ * Identifies "the same action" for server-side de-duplication — mirrors the frontend queue's
+ * own dedupe key, as a defense-in-depth guard against a stale/duplicated client queue applying
+ * the same effective change twice within one batch.
+ */
+function batchActionDedupeKey(type, payload) {
+    const p = payload || {};
+    if (type === 'adminManualAssign') {
+        const ids = (Array.isArray(p.workshopTypeIds) ? p.workshopTypeIds : []).slice().sort().join(',');
+        return `assign:${p.dateKey}:${p.employeeId}:${ids}`;
+    }
+    if (type === 'adminCancelAssignment') {
+        return `cancel:${p.dateKey}:${p.workshopTypeId || ''}:${p.employeeId}:${p.disposition || 'restore'}`;
+    }
+    if (type === 'adminSwapAssignment') {
+        return `swap:${p.dateKey}:${p.workshopTypeId}:${p.fromEmployeeId}:${p.toEmployeeId}`;
+    }
+    return `${type}:${JSON.stringify(p)}`;
+}
+
 /**
  * Applies a queued batch of scheduling actions (assign / cancel / swap) built by the
- * manager's local "batch mode" queue, in order, as one atomic-ish operation: each action
- * runs through its core helper (so per-action validation/notifications still apply), then
- * the scheduling engine, outbox flush, and update publish happen exactly once for the
- * whole batch. `opts.notify` overrides every per-action notify flag (the queue's global toggle).
+ * manager's local "batch mode" queue (the board's draft-save workflow), in order, as one
+ * atomic-ish operation: each action runs through its core helper (so per-action
+ * validation/notifications still apply), then the scheduling engine, outbox flush, and
+ * update publish happen exactly once for the whole batch. `opts.notify` overrides every
+ * per-action notify flag (the queue's global toggle).
+ *
  * One action failing does not abort the rest — failures are collected and returned so the
- * frontend can prune succeeded items and keep failed ones queued for retry.
+ * frontend can prune succeeded items and keep failed ones queued for retry. Wix Data has no
+ * real multi-record transaction, so this is explicitly best-effort/partial-success semantics,
+ * never all-or-nothing.
  */
 export const applyScheduleBatch = webMethod(Permissions.SiteMember, async (actions, opts = {}) => {
     const { role } = await assertEmployeeAccess('manageScheduling');
-    const list = Array.isArray(actions) ? actions : [];
+    const list = Array.isArray(actions) ? actions.slice(0, BATCH_ACTION_CAP) : [];
     const notify = opts.notify !== false;
     const results = [];
     const affectedDates = new Set();
+    const seenKeys = new Set();
 
     for (let i = 0; i < list.length; i++) {
         const action = list[i] || {};
         const { type, payload = {} } = action;
+
+        const validationError = validateBatchAction(type, payload);
+        if (validationError) {
+            results.push({ index: i, ok: false, reason: validationError });
+            continue;
+        }
+
+        const dedupeKey = batchActionDedupeKey(type, payload);
+        if (seenKeys.has(dedupeKey)) {
+            results.push({ index: i, ok: false, reason: 'פעולה כפולה בתוך אותה אצווה — דולגה.' });
+            continue;
+        }
+        seenKeys.add(dedupeKey);
+
         try {
             if (type === 'adminManualAssign') {
                 const r = await _manualAssignCore(role, payload.dateKey, payload.workshopTypeIds, payload.employeeId, payload.workType, {
@@ -1594,8 +1658,6 @@ export const applyScheduleBatch = webMethod(Permissions.SiteMember, async (actio
                 } else {
                     results.push({ index: i, ok: true, warning: r.warning });
                 }
-            } else {
-                results.push({ index: i, ok: false, reason: `סוג פעולה לא ידוע: ${type}` });
             }
         } catch (err) {
             const message = String(err?.message || err || '');
@@ -1610,8 +1672,9 @@ export const applyScheduleBatch = webMethod(Permissions.SiteMember, async (actio
     await flushOutbox({ force: true }).catch(err => console.error('[staffAdminService] flushOutbox failed:', err?.message || err));
     await publishSchedulingUpdate('batch-apply', { count: list.length, dates: [...affectedDates] });
 
-    console.log(`[staffAdminService] applyScheduleBatch: ${list.length} actions, ${results.filter(r => r.ok).length} ok by ${role._id}`);
-    return { ok: true, results };
+    const savedCount = results.filter(r => r.ok).length;
+    console.log(`[staffAdminService] applyScheduleBatch: ${list.length} actions, ${savedCount} ok by ${role._id}`);
+    return { ok: true, results, savedCount, failedCount: results.length - savedCount };
 });
 
 async function notifyShiftChange(target, actionKey, vars, dateKey) {

@@ -265,24 +265,53 @@ export const NO_ACTIVE_ORDER_MESSAGE = 'לא מצאנו הזמנה פעילה �
 
 export const ORDER_NOT_FOUND_MESSAGE = 'לא מצאנו הזמנה קיימת עם המספר הזה ❌';
 
+export const NO_MORE_ORDERS_MESSAGE = 'אין עוד הזמנות פעילות להצגה ❌';
+
+/** Sorted list: upcoming (nearest first), then recent past, then orders without a date. */
+export function sortOrdersForDisplay(orders, nowMs = Date.now()) {
+    if (!orders?.length) return [];
+
+    const withDate = [];
+    const noDate = [];
+    for (const order of orders) {
+        if (order.workshopStart instanceof Date && !isNaN(order.workshopStart)) withDate.push(order);
+        else noDate.push(order);
+    }
+
+    const upcoming = withDate
+        .filter((o) => o.workshopStart.getTime() >= nowMs)
+        .sort((a, b) => a.workshopStart - b.workshopStart);
+    const past = withDate
+        .filter((o) => o.workshopStart.getTime() < nowMs)
+        .sort((a, b) => b.workshopStart - a.workshopStart);
+
+    return [...upcoming, ...past, ...noDate];
+}
+
 /**
  * Picks the order to lead with: the nearest upcoming workshop; if none are
  * upcoming, the most recent past one. Orders without a known date sort last.
  */
 export function pickPrimaryOrder(orders) {
-    if (!orders?.length) return null;
-    const now = Date.now();
+    return sortOrdersForDisplay(orders)[0] || null;
+}
 
-    const withDate = orders.filter((o) => o.workshopStart instanceof Date && !isNaN(o.workshopStart));
-    const upcoming = withDate
-        .filter((o) => o.workshopStart.getTime() >= now)
-        .sort((a, b) => a.workshopStart - b.workshopStart);
-    if (upcoming.length) return upcoming[0];
-
-    const past = withDate.sort((a, b) => b.workshopStart - a.workshopStart);
-    if (past.length) return past[0];
-
-    return orders[0];
+/**
+ * Picks the next order to show. Pass excludeOrderId = the order already shown
+ * (order_lookup_order_id) so the user can step through multiple active orders.
+ */
+export function selectActiveOrder(activeOrders, excludeOrderId = '') {
+    const exclude = String(excludeOrderId || '').trim();
+    const pool = exclude
+        ? activeOrders.filter((order) => order.id !== exclude)
+        : activeOrders;
+    const sorted = sortOrdersForDisplay(pool);
+    return {
+        primary: sorted[0] || null,
+        hasMore: sorted.length > 1,
+        totalActive: activeOrders.length,
+        remainingAfterExclude: sorted.length,
+    };
 }
 
 function formatDateIL(date) {
@@ -300,7 +329,7 @@ function formatTimeIL(date) {
 }
 
 /** Builds the WhatsApp-friendly Hebrew message for the primary order. */
-export function formatOrderMessage(order, hasMore = false) {
+export function formatOrderMessage(order) {
     if (!order) return ORDER_NOT_FOUND_MESSAGE;
 
     const lines = ['📋 מצאנו את ההזמנה שלך!', ''];
@@ -320,11 +349,6 @@ export function formatOrderMessage(order, hasMore = false) {
     if (order.amount != null) lines.push(`💰 סכום ששולם: ${order.amount} ₪`);
 
     lines.push('✅ סטטוס: מאושר');
-
-    if (hasMore) {
-        lines.push('');
-        lines.push('יש לך עוד הזמנות נוספות עם המספר הזה — רוצה לראות את ההזמנה הבאה?');
-    }
 
     return lines.join('\n');
 }

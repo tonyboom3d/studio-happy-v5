@@ -15,9 +15,11 @@ export const ADMIN_STYLE = `
 .epa-btn.danger { color: #b91c1c; border-color: #fecaca; }
 .epa-btn.active { background: #eff6ff; border-color: #2563eb; color: #1d4ed8; font-weight: 700; }
 .epa-grid7 { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; }
-.epa-day { border: 1px solid #e5e7eb; border-radius: 9px; min-height: 90px; padding: 5px; font-size: 13px; cursor: pointer; background: #fff; position: relative; }
+.epa-day { border: 1px solid #e5e7eb; border-radius: 9px; min-height: 132px; padding: 5px; font-size: 13px; cursor: pointer; background: #fff; position: relative; display: flex; flex-direction: column; }
 .epa-day.other { visibility: hidden; }
 .epa-day.sel { box-shadow: inset 0 0 0 2px #2563eb; }
+.epa-day.has-draft { box-shadow: inset 0 0 0 2px #f59e0b; }
+.epa-day.sel.has-draft { box-shadow: inset 0 0 0 2px #2563eb, inset 0 0 0 4px #f59e0b; }
 .epa-day .num { font-weight: 700; font-size: 14px; }
 .epa-day.cov-none { background: #fef2f2; }
 .epa-day.cov-partial { background: #fffbeb; }
@@ -31,10 +33,24 @@ export const ADMIN_STYLE = `
 .epa-day-cov-fill.full { background: #22c55e; }
 .epa-day-cov-fill.partial { background: #f59e0b; }
 .epa-day-cov-fill.none { background: #ef4444; }
-.epa-flag { position: absolute; top: 3px; inset-inline-start: 4px; font-size: 10px; }
-.epa-day-plus { position: absolute; top: 3px; inset-inline-end: 4px; width: 15px; height: 15px; line-height: 15px; text-align: center; font-size: 11px; font-weight: 700; border-radius: 50%; background: #dbeafe; color: #1d4ed8; cursor: help; }
-.epa-day-staff { position: absolute; top: 3px; inset-inline-end: 22px; width: 15px; height: 15px; line-height: 15px; text-align: center; font-size: 9px; border-radius: 50%; background: #d1fae5; color: #065f46; cursor: help; }
-@media (hover: none) { .epa-day-staff { display: none !important; } }
+.epa-flag { position: absolute; top: 3px; inset-inline-start: 4px; font-size: 10px; z-index: 1; }
+.epa-day-draft-badge { position: absolute; top: 2px; inset-inline-end: 4px; font-size: 11px; z-index: 1; }
+.epa-day-events { display: flex; flex-direction: column; gap: 3px; margin-top: 3px; overflow: hidden; flex: 1; min-height: 0; }
+.epa-event-chip { border-radius: 6px; padding: 2px 5px; font-size: 10px; line-height: 1.3; background: #eff6ff; border: 1px solid #bfdbfe; color: #1e3a8a; overflow: hidden; }
+.epa-event-chip.full { background: #ecfdf5; border-color: #6ee7b7; color: #065f46; }
+.epa-event-chip.partial { background: #fffbeb; border-color: #fde68a; color: #92400e; }
+.epa-event-chip.empty { background: #fef2f2; border-color: #fecaca; color: #991b1b; }
+.epa-event-chip.manual { background: #f5f3ff; border-color: #ddd6fe; color: #5b21b6; }
+.epa-event-top { display: flex; justify-content: space-between; align-items: center; gap: 4px; font-weight: 700; }
+.epa-event-time { white-space: nowrap; }
+.epa-event-frac { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.epa-event-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.epa-event-staff { display: flex; align-items: center; gap: 2px; margin-top: 2px; flex-wrap: wrap; }
+.epa-event-avatar { width: 15px; height: 15px; border-radius: 50%; color: #fff; font-size: 8px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.epa-event-avatar-more { background: #94a3b8 !important; }
+.epa-event-empty-note { font-size: 9.5px; color: #9ca3af; }
+.epa-day-more { font-size: 10px; color: #2563eb; font-weight: 700; text-align: center; margin-top: 1px; }
+.epa-day-empty-note { font-size: 10px; color: #c4c7cc; text-align: center; margin-top: 10px; }
 .epa-page-size { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: #64748b; }
 .epa-page-size select { border: 1px solid #e2e8f0; border-radius: 7px; padding: 4px 7px; font-size: 12px; font-family: inherit; background: #fff; }
 .epa-detail { border: 1px solid #bfdbfe; background: #eff6ff; border-radius: 12px; padding: 12px; margin-top: 12px; font-size: 12.5px; }
@@ -317,6 +333,14 @@ export const ADMIN_STYLE = `
     .epa-shell.collapsed .epa-user-meta,.epa-shell.collapsed .epa-nav-label { display: block; }
     .epa-detail-grid { grid-template-columns: 1fr; }
     .epa-ws-grid { grid-template-columns: 1fr; }
+    /* Month grid on phones: keep every day tappable, but compact chips to fit —
+       full detail (staff names, capacity, notes) is one tap away in the day view. */
+    .epa-day { min-height: 92px; padding: 4px; }
+    .epa-event-chip { padding: 2px 3px; font-size: 8.5px; }
+    .epa-event-top { font-size: 8.5px; }
+    .epa-event-staff { display: none; }
+    .epa-day-events { gap: 2px; }
+    .epa-day-more { font-size: 8.5px; }
 }
 `;
 
@@ -1165,7 +1189,7 @@ function renderBatchToolbar(ce) {
                     <input type="checkbox" data-action="admin-batch-toggle">
                     <span class="epa-switch-slider"></span>
                 </label>
-                <span class="epa-switch-status off">בצע כמה שינויים ואשר יחד</span>
+                <span class="epa-switch-status off">מצב טיוטה כבוי — שינויים נשמרים באופן מיידי</span>
             </div>`;
     }
     const n = ce._batchQueue.length;
@@ -1176,9 +1200,10 @@ function renderBatchToolbar(ce) {
                 <input type="checkbox" data-action="admin-batch-toggle" checked>
                 <span class="epa-switch-slider"></span>
             </label>
-            <span class="epa-switch-status on">איסוף פעולות לאישור</span>
-            <button class="epa-btn" data-action="admin-batch-open-history">היסטוריית פעולות (${n})</button>
-            <button class="epa-btn primary" data-action="admin-batch-save" ${(n && !ce._batchSaving) ? '' : 'disabled'}>${ce._batchSaving ? 'שומר…' : `שמירת הכל (${n})`}</button>
+            <span class="epa-switch-status on">${n ? `${n} שינויים בטיוטה — טרם נשמרו` : 'מצב טיוטה — בצעו שינויים ואשרו יחד'}</span>
+            <button class="epa-btn" data-action="admin-batch-open-history" ${n ? '' : 'disabled'}>היסטוריית שינויים${n ? ` (${n})` : ''}</button>
+            <button class="epa-btn danger" data-action="admin-batch-clear" ${n ? '' : 'disabled'}>ביטול כל הטיוטה</button>
+            <button class="epa-btn primary" data-action="admin-batch-save" ${(n && !ce._batchSaving) ? '' : 'disabled'}>${ce._batchSaving ? 'שומר…' : `שמירת שינויים (${n})`}</button>
             ${n && ce._batchExpiresAt ? `<span class="epa-chip" id="epaBatchClock" data-until="${ce._batchExpiresAt}">⏳ ${ce._formatCountdown(remainMs)}</span>` : ''}
         </div>`;
 }
@@ -1240,47 +1265,65 @@ function fmtTimeHe(iso) {
     return new Intl.DateTimeFormat('he-IL', { timeZone: 'Asia/Jerusalem', hour: '2-digit', minute: '2-digit' }).format(new Date(iso));
 }
 
-/** "+" icon — hover (desktop) / tap (mobile) lists every workshop's start–end time for that day. */
-function renderDayWorkshopsPlus(info) {
-    const types = info?.types || [];
-    const lines = types.flatMap(t => (t.timeRanges || []).map(r => {
-        const start = fmtTimeHe(r.start);
-        const end = fmtTimeHe(r.end);
-        return `${t.name} — ${end ? `${start}–${end}` : start}`;
-    }));
-    if (!lines.length) return '';
-    return `<span class="epa-day-plus ep-tip-trigger" tabindex="0" data-tip="${esc(lines.join('\n'))}" aria-label="פרטי סדנאות היום">+</span>`;
+const DAY_CHIP_VISIBLE_LIMIT = 3;
+
+/** Small colored initials avatar for an employee, used inside month-grid event chips. */
+function renderEventAvatar(emp, fallbackName) {
+    const name = emp?.displayName || fallbackName || 'עובד/ת';
+    const initials = name.trim().split(/\s+/).map(w => w[0]).slice(0, 2).join('');
+    return `<span class="epa-event-avatar" style="background:${esc(emp?.color || '#2563eb')}" title="${esc(name)}">${esc(initials)}</span>`;
 }
 
-/** Staff icon — desktop hover only: per-workshop headcount + assigned (משובץ) / submitted (הוגש) employees. */
-function renderDayStaffTip(info, subs) {
+/** One Wix-Bookings-style event chip for a single workshop session on a day: time, name, staffing fraction and assigned-staff avatars — visible directly on the month grid (no hover required). */
+function renderDayEventChip(empById, t, session) {
+    const required = session.required ?? t.required ?? 0;
+    const filled = Math.min(session.filled ?? t.filled ?? 0, required || (session.filled ?? t.filled ?? 0));
+    const full = required > 0 && filled >= required;
+    const timeText = session.start ? (session.end ? `${fmtTimeHe(session.start)}–${fmtTimeHe(session.end)}` : fmtTimeHe(session.start)) : '';
+    const assignedIds = t.assignedEmployeeIds || [];
+    const shown = assignedIds.slice(0, 4).map(id => renderEventAvatar(empById[id]));
+    const extra = assignedIds.length > 4 ? `<span class="epa-event-avatar epa-event-avatar-more">+${assignedIds.length - 4}</span>` : '';
+    return `<div class="epa-event-chip ${full ? 'full' : filled > 0 ? 'partial' : 'empty'}">
+        <div class="epa-event-top">${timeText ? `<span class="epa-event-time">${esc(timeText)}</span>` : '<span></span>'}${required ? `<span class="epa-event-frac">${filled}/${required}</span>` : ''}</div>
+        <div class="epa-event-name">${esc(t.name)}</div>
+        ${assignedIds.length ? `<div class="epa-event-staff">${shown.join('')}${extra}</div>` : `<div class="epa-event-empty-note">אין עובדים משובצים</div>`}
+    </div>`;
+}
+
+/** Chip for a scheduled employee with no linked workshop (e.g. opening/closing "מתלה" shifts). */
+function renderManualShiftChip(empById, sub) {
+    const emp = empById[sub.employeeId];
+    const timeText = sub.startTime ? (sub.endTime ? `${esc(sub.startTime)}–${esc(sub.endTime)}` : esc(sub.startTime)) : '';
+    const label = WORK_TYPE_LABELS[sub.workType] || 'שיבוץ ידני';
+    return `<div class="epa-event-chip manual">
+        <div class="epa-event-top">${timeText ? `<span class="epa-event-time">${timeText}</span>` : '<span></span>'}</div>
+        <div class="epa-event-name">${esc(label)}</div>
+        <div class="epa-event-staff">${renderEventAvatar(emp, sub.employeeName)}<span>${esc(sub.employeeName)}</span></div>
+    </div>`;
+}
+
+/** Builds the visible event-chip stack for a month-grid day cell — one chip per workshop session plus any no-workshop scheduled shifts, capped with a "+N more" overflow that opens the full day view (same click target as the cell). */
+function renderDayEventChips(d, info, subs) {
+    const empById = Object.fromEntries((d.employees || []).map(e => [e.id, e]));
     const types = info?.types || [];
-    if (!types.length && !subs.length) return '';
-
-    const blocks = types.map(t => {
-        const people = `${t.adults} מבוגרים${t.children ? `, ${t.children} ילדים` : ''}`;
-        const assigned = subs
-            .filter(s => t.assignedEmployeeIds.includes(s.employeeId) && s.status === 'SCHEDULED')
-            .map(s => esc(s.employeeName));
-        const submitted = subs
-            .filter(s => !t.assignedEmployeeIds.includes(s.employeeId) && s.status === 'SUBMITTED')
-            .map(s => esc(s.employeeName));
-        let html = `<div class="ep-tip-line"><b>${esc(t.name)}</b> — ${people}</div>`;
-        if (assigned.length) html += `<div class="ep-tip-line">משובצים: ${assigned.join(', ')}</div>`;
-        if (submitted.length) html += `<div class="ep-tip-line">הוגש: ${submitted.join(', ')}</div>`;
-        if (!assigned.length && !submitted.length) html += `<div class="ep-tip-line" style="opacity:.75">אין עובדים משובצים/הוגשים</div>`;
-        return html;
-    });
-
-    if (!types.length) {
-        const scheduled = subs.filter(s => s.status === 'SCHEDULED').map(s => esc(s.employeeName));
-        const submitted = subs.filter(s => s.status === 'SUBMITTED').map(s => esc(s.employeeName));
-        if (scheduled.length) blocks.push(`<div class="ep-tip-line">משובצים: ${scheduled.join(', ')}</div>`);
-        if (submitted.length) blocks.push(`<div class="ep-tip-line">הוגש: ${submitted.join(', ')}</div>`);
+    const chips = [];
+    for (const t of types) {
+        const sessions = (t.slots && t.slots.length) ? t.slots : [{
+            start: t.timeRanges?.[0]?.start || null,
+            end: t.timeRanges?.[0]?.end || null,
+            required: t.required,
+            filled: t.filled,
+        }];
+        for (const session of sessions) chips.push(renderDayEventChip(empById, t, session));
     }
-
-    if (!blocks.length) return '';
-    return `<span class="epa-day-staff ep-tip-trigger ep-tip-desktop-only" tabindex="0" data-tip-html="${esc(blocks.join(''))}" aria-label="עובדים לפי סדנה">👥</span>`;
+    for (const s of subs) {
+        if (s.workshopTypeId || s.status !== 'SCHEDULED') continue;
+        chips.push(renderManualShiftChip(empById, s));
+    }
+    if (!chips.length) return '';
+    const visible = chips.slice(0, DAY_CHIP_VISIBLE_LIMIT);
+    const hiddenCount = chips.length - visible.length;
+    return `<div class="epa-day-events">${visible.join('')}${hiddenCount > 0 ? `<div class="epa-day-more">+${hiddenCount} נוספות</div>` : ''}</div>`;
 }
 
 function renderHeatmap(ce, d) {
@@ -1301,19 +1344,16 @@ function renderHeatmap(ce, d) {
         const subs = subsByDate[dateKey] || [];
         const holidayEntry = getHolidayEntry(d, dateKey);
         const note = getDayNote(d, dateKey);
-        const cls = ['epa-day', blocked || holidayEntry?.mode === 'CLOSED' ? 'blocked' : coverageClass(info), ce._adminSelectedDay === dateKey ? 'sel' : ''].join(' ');
+        const hasDraft = ce._batchMode && (ce._batchQueue || []).some(item => item.payload?.dateKey === dateKey);
+        const cls = ['epa-day', blocked || holidayEntry?.mode === 'CLOSED' ? 'blocked' : coverageClass(info), ce._adminSelectedDay === dateKey ? 'sel' : '', hasDraft ? 'has-draft' : ''].join(' ');
         const flags = `${promoted ? '⭐' : ''}${blocked ? '🚫' : ''}${note ? ' ✉' : ''}`;
-        // One line per workshop type so every workshop on the day is visible.
-        const summary = info?.hasWorkshops
-            ? (info.types || []).map(t => `<span class="cnt">${esc(t.name)} ${Math.min(t.filled, t.required)}/${t.required}</span>`).join('')
-            : (subs.length ? `<span class="cnt">${subs.length} הגשות</span>` : '');
+        const events = renderDayEventChips(d, info, subs);
         cells += `<div class="${cls}" data-action="admin-select-day" data-date="${dateKey}" ${note ? `title="${esc(note.message)}"` : ''}>
             ${flags ? `<span class="epa-flag">${flags}</span>` : ''}
-            ${renderDayStaffTip(info, subs)}
-            ${renderDayWorkshopsPlus(info)}
+            ${hasDraft ? `<span class="epa-day-draft-badge" title="יש שינויי טיוטה ממתינים לשמירה ביום זה">⏳</span>` : ''}
             <span class="num">${day}</span>
             ${holidays[dateKey] ? `<span class="hol">${esc(holidays[dateKey])}${holidayModeMarker(holidayEntry)}</span>` : ''}
-            ${summary}
+            ${events}
             ${renderDayCoverageBar(info)}
         </div>`;
     }
@@ -1325,6 +1365,7 @@ function renderHeatmap(ce, d) {
             <span><span class="ep-dot" style="background:#fef2f2"></span>אין הגשות</span>
             <span><span class="ep-dot" style="background:#f9fafb"></span>אין סדנאות</span>
             <span><span class="ep-dot" style="background:#e5e7eb"></span>חסום</span>
+            <span><span class="ep-dot" style="background:#fff7ed;box-shadow:inset 0 0 0 2px #f59e0b"></span>שינויי טיוטה</span>
         </div>`;
 }
 

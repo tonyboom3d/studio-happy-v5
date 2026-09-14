@@ -15,11 +15,12 @@ import { buildWorkshopPolicyReply, isGeneralWorkshopSelection } from 'backend/po
 import { WORKSHOP_SERVICE_IDS, resolveWorkshopType } from 'backend/workshopServiceIds.js';
 import {
   findOrdersByPhone,
-  pickPrimaryOrder,
   formatOrderMessage,
   filterActiveOrders,
+  selectActiveOrder,
   NO_ACTIVE_ORDER_MESSAGE,
   ORDER_NOT_FOUND_MESSAGE,
+  NO_MORE_ORDERS_MESSAGE,
 } from 'backend/orderLookupService.js';
 
 // ============================================================
@@ -474,7 +475,8 @@ export async function use_workshopPolicy(request) {
 
 // ============================================================
 // Existing-order identification — ManyChat process 1 (PRD: "זיהוי הזמנה קיימת")
-// GET https://www.studiohappy.art/_functions/identifyOrder?phone=...&subscriber_id=...&attempts={{order_lookup_attempts}}
+// GET .../identifyOrder?phone=...&subscriber_id=...&attempts={{order_lookup_attempts}}
+// Next order: add &exclude_order_id={{order_lookup_order_id}} (does not increment attempts)
 // Header: X-API-KEY (manychat_webhook_apiKey)
 //
 // phone: the ManyChat WhatsApp-ID phone field for the subscriber messaging the bot.
@@ -497,6 +499,8 @@ export async function get_identifyOrder(request) {
     const phone = String(request.query?.phone || '').trim();
     const subscriberId = String(request.query?.subscriber_id || '').trim();
     const passedAttempts = request.query?.attempts;
+    const excludeOrderId = String(request.query?.exclude_order_id || '').trim();
+    const isNextOrderRequest = !!excludeOrderId;
 
     if (!phone) {
       return badRequest({
@@ -512,25 +516,37 @@ export async function get_identifyOrder(request) {
 
     const activeOrders = filterActiveOrders(allOrders);
     const hadExpiredOnly = allOrders.length > 0 && activeOrders.length === 0;
-    const found = activeOrders.length > 0;
-    const hasMore = activeOrders.length > 1;
-    const primary = found ? pickPrimaryOrder(activeOrders) : null;
-    const text = hadExpiredOnly
-      ? NO_ACTIVE_ORDER_MESSAGE
-      : found
-        ? formatOrderMessage(primary, hasMore)
-        : ORDER_NOT_FOUND_MESSAGE;
+    const selection = selectActiveOrder(activeOrders, excludeOrderId);
+    const { primary, hasMore } = selection;
+    const found = !!primary;
+
+    let text;
+    if (hadExpiredOnly && !isNextOrderRequest) {
+      text = NO_ACTIVE_ORDER_MESSAGE;
+    } else if (isNextOrderRequest && !found) {
+      text = activeOrders.length > 0 ? NO_MORE_ORDERS_MESSAGE : ORDER_NOT_FOUND_MESSAGE;
+    } else if (found) {
+      text = formatOrderMessage(primary);
+    } else {
+      text = ORDER_NOT_FOUND_MESSAGE;
+    }
 
     let lookupAttempts = 0;
     let lookupHandoff = false;
 
     if (subscriberId) {
-      const attemptResult = await incrementOrderLookupAttempts(subscriberId, passedAttempts).catch((err) => {
-        console.warn('[http-functions] incrementOrderLookupAttempts failed:', err?.message || err);
-        return { attempts: 0, handoffRecommended: false };
-      });
-      lookupAttempts = attemptResult.attempts;
-      lookupHandoff = attemptResult.handoffRecommended;
+      if (isNextOrderRequest) {
+        const parsed = parseInt(String(passedAttempts ?? '').trim(), 10);
+        lookupAttempts = Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
+        lookupHandoff = lookupAttempts >= 3;
+      } else {
+        const attemptResult = await incrementOrderLookupAttempts(subscriberId, passedAttempts).catch((err) => {
+          console.warn('[http-functions] incrementOrderLookupAttempts failed:', err?.message || err);
+          return { attempts: 0, handoffRecommended: false };
+        });
+        lookupAttempts = attemptResult.attempts;
+        lookupHandoff = attemptResult.handoffRecommended;
+      }
 
       await syncOrderLookupFields(subscriberId, {
         status: found ? 'found' : 'not_found',
@@ -549,6 +565,7 @@ export async function get_identifyOrder(request) {
         status: 'ok',
         found,
         has_more: hasMore,
+        is_next_order: isNextOrderRequest,
         order_id: primary?.id || null,
         order_source: primary?.source || null,
         lookup_attempts: lookupAttempts,

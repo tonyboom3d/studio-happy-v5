@@ -598,7 +598,7 @@ export async function incrementOrderLookupAttempts(subscriberId, passedAttempts)
  * reference the identified order. Never throws — the HTTP response body is
  * still usable even if this fails.
  */
-export async function syncOrderLookupFields(subscriberId, { status, hasMore, orderId, source, attempts } = {}) {
+export async function syncOrderLookupFields(subscriberId, { status, hasMore, orderId, source, orderUrl, attempts } = {}) {
     if (!subscriberId) return { synced: false, reason: 'no-subscriberId' };
     try {
         await setBooleanCustomField(subscriberId, ORDER_LOOKUP_MC_FIELDS.hasMore, hasMore);
@@ -606,6 +606,7 @@ export async function syncOrderLookupFields(subscriberId, { status, hasMore, ord
             { name: ORDER_LOOKUP_MC_FIELDS.status, value: status || 'not_found' },
             { name: ORDER_LOOKUP_MC_FIELDS.orderId, value: orderId || '' },
             { name: ORDER_LOOKUP_MC_FIELDS.source, value: source || '' },
+            { name: MC_FIELDS.orderUrl, value: orderUrl || '' },
         ];
         if (attempts != null) {
             textFields.push({ name: ORDER_LOOKUP_MC_FIELDS.attempts, value: attempts });

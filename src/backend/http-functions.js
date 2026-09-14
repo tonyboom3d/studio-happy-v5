@@ -554,6 +554,7 @@ export async function get_identifyOrder(request) {
         hasMore,
         orderId: primary?.id || '',
         source: primary?.source || '',
+        orderUrl: primary?.orderUrl || '',
         attempts: lookupAttempts,
       }).catch(() => {});
     } else {
@@ -569,6 +570,7 @@ export async function get_identifyOrder(request) {
         is_next_order: isNextOrderRequest,
         order_id: primary?.id || null,
         order_source: primary?.source || null,
+        order_url: primary?.orderUrl || null,
         lookup_attempts: lookupAttempts,
         lookup_handoff: lookupHandoff,
         ai_reply: text,

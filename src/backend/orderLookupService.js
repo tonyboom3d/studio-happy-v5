@@ -39,7 +39,47 @@ const BOOKING_ONLY_LOOKAHEAD_DAYS = 180;
 // Workshop must be upcoming or within this window after start to count as "active".
 const ACTIVE_ORDER_GRACE_MS = 2 * 24 * 60 * 60 * 1000;
 
+// Same post-payment order hub as the Thank You page iframe (organizer view).
+const ORDER_HUB_BASE_URL = 'https://www.studiohappy.art/user-selections';
+
+const BOOKING_ONLY_VIEW_URLS = {
+    jewelry: 'https://www.studiohappy.art/workshops/סדנת-תכשיטים',
+    charms: 'https://www.studiohappy.art/workshops/סדנת-תכשיטים-צ׳ארמים',
+};
+
 const elevatedQueryExtendedBookings = auth.elevate(extendedBookings.queryExtendedBookings);
+
+function parseWorkshopDate(raw) {
+    if (!raw) return null;
+    const date = raw instanceof Date ? raw : new Date(raw);
+    return date instanceof Date && !isNaN(date) ? date : null;
+}
+
+function extractBookingServiceId(booking) {
+    return booking?.bookedEntity?.item?.slot?.serviceId
+        || booking?.bookedEntity?.item?.schedule?.serviceId
+        || booking?.bookedEntity?.slot?.serviceId;
+}
+
+function extractBookingStartDate(booking) {
+    const slot = booking?.bookedEntity?.item?.slot;
+    const raw = booking?.startDate
+        || slot?.startDate
+        || booking?.bookedEntity?.item?.startDate
+        || booking?.bookedEntity?.slot?.startDate;
+    return parseWorkshopDate(raw);
+}
+
+export function buildOrderViewUrl(order) {
+    if (!order) return '';
+    if (order.source === 'cms' && order.id) {
+        return `${ORDER_HUB_BASE_URL}?orderId=${encodeURIComponent(order.id)}`;
+    }
+    if (order.workshopType && BOOKING_ONLY_VIEW_URLS[order.workshopType]) {
+        return BOOKING_ONLY_VIEW_URLS[order.workshopType];
+    }
+    return '';
+}
 
 function isCancelledBookingStatus(status) {
     return status === 'CANCELED' || status === 'CANCELLED' || status === 'DECLINED';
@@ -128,11 +168,15 @@ function mapCmsOrder(order, bookingsById) {
     // If we did find bookings, none of them may be cancelled.
     if (bookings.length && bookings.every((b) => isCancelledBookingStatus(b.status))) return null;
 
-    return {
+    const primaryBooking = bookings[0] || null;
+    const workshopType = order.workshopType || serviceIdToWorkshopType(extractBookingServiceId(primaryBooking));
+    const workshopStart = parseWorkshopDate(order.workshopStart) || extractBookingStartDate(primaryBooking);
+
+    const mapped = {
         source: 'cms',
         id: order._id,
-        workshopType: order.workshopType || null,
-        workshopStart: order.workshopStart ? new Date(order.workshopStart) : null,
+        workshopType: workshopType || null,
+        workshopStart,
         organizerName: order.organizerName || '',
         adults: order.adults || 0,
         children: order.children || 0,
@@ -140,6 +184,8 @@ function mapCmsOrder(order, bookingsById) {
         status: 'confirmed',
         bookingIds,
     };
+    mapped.orderUrl = buildOrderViewUrl(mapped);
+    return mapped;
 }
 
 async function findCmsOrders(phone) {
@@ -199,15 +245,14 @@ function bookingMatchesPhone(booking, inputPhone) {
 }
 
 function mapBookingOnlyOrder(booking) {
-    const serviceId = booking?.bookedEntity?.item?.slot?.serviceId || booking?.bookedEntity?.item?.schedule?.serviceId;
-    const startDate = booking?.bookedEntity?.item?.slot?.startDate || booking?.bookedEntity?.item?.startDate;
+    const serviceId = extractBookingServiceId(booking);
     const contact = booking?.contactDetails || {};
 
-    return {
+    const mapped = {
         source: 'booking',
         id: booking._id,
         workshopType: serviceIdToWorkshopType(serviceId),
-        workshopStart: startDate ? new Date(startDate) : null,
+        workshopStart: extractBookingStartDate(booking),
         organizerName: `${contact.firstName || ''} ${contact.lastName || ''}`.trim(),
         adults: booking.totalParticipants || 1,
         children: 0,
@@ -215,6 +260,8 @@ function mapBookingOnlyOrder(booking) {
         status: 'confirmed',
         bookingIds: [booking._id],
     };
+    mapped.orderUrl = buildOrderViewUrl(mapped);
+    return mapped;
 }
 
 async function findBookingOnlyOrders(phone) {
@@ -349,6 +396,11 @@ export function formatOrderMessage(order) {
     if (order.amount != null) lines.push(`💰 סכום ששולם: ${order.amount} ₪`);
 
     lines.push('✅ סטטוס: מאושר');
+
+    if (order.orderUrl) {
+        lines.push('');
+        lines.push(`🔗 לצפייה בפרטי ההזמנה: ${order.orderUrl}`);
+    }
 
     return lines.join('\n');
 }

@@ -2,13 +2,25 @@ import { ok, badRequest, serverError, response } from 'wix-http-functions';
 import { availabilityCalendar } from 'wix-bookings.v2';
 import wixSecretsBackend from 'wix-secrets-backend';
 import { checkRateLimit, checkGuardrails, detectHandoff, HANDOFF_REPLY_DEFAULT } from 'backend/aiGuardrails.js';
-import { tagHandoff, syncAiResponseFields, syncOrderLookupFields } from 'backend/manychatService.jsw';
+import {
+  tagHandoff,
+  syncAiResponseFields,
+  syncOrderLookupFields,
+  incrementOrderLookupAttempts,
+} from 'backend/manychatService.jsw';
 import { createConversation, createResponse, extractReplyText } from 'backend/openaiService.jsw';
 import { getUserConversation, upsertUserConversation } from 'backend/userConversationsStore.js';
 import { detectSuggestedAction, finalizeRoutedReply } from 'backend/aiRouting.js';
 import { buildWorkshopPolicyReply, isGeneralWorkshopSelection } from 'backend/policyContent.js';
 import { WORKSHOP_SERVICE_IDS, resolveWorkshopType } from 'backend/workshopServiceIds.js';
-import { findOrdersByPhone, pickPrimaryOrder, formatOrderMessage } from 'backend/orderLookupService.js';
+import {
+  findOrdersByPhone,
+  pickPrimaryOrder,
+  formatOrderMessage,
+  filterActiveOrders,
+  NO_ACTIVE_ORDER_MESSAGE,
+  ORDER_NOT_FOUND_MESSAGE,
+} from 'backend/orderLookupService.js';
 
 // ============================================================
 // ManyChat availability endpoint
@@ -462,7 +474,7 @@ export async function use_workshopPolicy(request) {
 
 // ============================================================
 // Existing-order identification — ManyChat process 1 (PRD: "זיהוי הזמנה קיימת")
-// GET https://www.studiohappy.art/_functions/identifyOrder?phone=...&subscriber_id=...
+// GET https://www.studiohappy.art/_functions/identifyOrder?phone=...&subscriber_id=...&attempts={{order_lookup_attempts}}
 // Header: X-API-KEY (manychat_webhook_apiKey)
 //
 // phone: the ManyChat WhatsApp-ID phone field for the subscriber messaging the bot.
@@ -484,6 +496,7 @@ export async function get_identifyOrder(request) {
 
     const phone = String(request.query?.phone || '').trim();
     const subscriberId = String(request.query?.subscriber_id || '').trim();
+    const passedAttempts = request.query?.attempts;
 
     if (!phone) {
       return badRequest({
@@ -492,22 +505,39 @@ export async function get_identifyOrder(request) {
       });
     }
 
-    const orders = await findOrdersByPhone(phone).catch((err) => {
+    const allOrders = await findOrdersByPhone(phone).catch((err) => {
       console.error('[http-functions] get_identifyOrder findOrdersByPhone failed:', err?.message || err);
       return [];
     });
 
-    const found = orders.length > 0;
-    const hasMore = orders.length > 1;
-    const primary = found ? pickPrimaryOrder(orders) : null;
-    const text = formatOrderMessage(primary, hasMore);
+    const activeOrders = filterActiveOrders(allOrders);
+    const hadExpiredOnly = allOrders.length > 0 && activeOrders.length === 0;
+    const found = activeOrders.length > 0;
+    const hasMore = activeOrders.length > 1;
+    const primary = found ? pickPrimaryOrder(activeOrders) : null;
+    const text = hadExpiredOnly
+      ? NO_ACTIVE_ORDER_MESSAGE
+      : found
+        ? formatOrderMessage(primary, hasMore)
+        : ORDER_NOT_FOUND_MESSAGE;
+
+    let lookupAttempts = 0;
+    let lookupHandoff = false;
 
     if (subscriberId) {
+      const attemptResult = await incrementOrderLookupAttempts(subscriberId, passedAttempts).catch((err) => {
+        console.warn('[http-functions] incrementOrderLookupAttempts failed:', err?.message || err);
+        return { attempts: 0, handoffRecommended: false };
+      });
+      lookupAttempts = attemptResult.attempts;
+      lookupHandoff = attemptResult.handoffRecommended;
+
       await syncOrderLookupFields(subscriberId, {
         status: found ? 'found' : 'not_found',
         hasMore,
         orderId: primary?.id || '',
         source: primary?.source || '',
+        attempts: lookupAttempts,
       }).catch(() => {});
     } else {
       console.warn('[http-functions] get_identifyOrder called without subscriber_id — skipping ManyChat field sync. phone:', phone);
@@ -521,6 +551,8 @@ export async function get_identifyOrder(request) {
         has_more: hasMore,
         order_id: primary?.id || null,
         order_source: primary?.source || null,
+        lookup_attempts: lookupAttempts,
+        lookup_handoff: lookupHandoff,
         ai_reply: text,
         content: { messages: [{ type: 'text', text }] },
       },

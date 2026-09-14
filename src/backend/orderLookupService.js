@@ -36,6 +36,9 @@ const ISRAEL_TZ = 'Asia/Jerusalem';
 const BOOKING_ONLY_LOOKBACK_DAYS = 30;
 const BOOKING_ONLY_LOOKAHEAD_DAYS = 180;
 
+// Workshop must be upcoming or within this window after start to count as "active".
+const ACTIVE_ORDER_GRACE_MS = 2 * 24 * 60 * 60 * 1000;
+
 const elevatedQueryExtendedBookings = auth.elevate(extendedBookings.queryExtendedBookings);
 
 function isCancelledBookingStatus(status) {
@@ -246,6 +249,22 @@ export async function findOrdersByPhone(phone) {
     }
 }
 
+/** True when workshop is upcoming or ended less than 2 days ago. */
+export function isActiveOrder(order, nowMs = Date.now()) {
+    if (!order?.workshopStart || !(order.workshopStart instanceof Date) || isNaN(order.workshopStart)) {
+        return true;
+    }
+    return order.workshopStart.getTime() >= nowMs - ACTIVE_ORDER_GRACE_MS;
+}
+
+export function filterActiveOrders(orders, nowMs = Date.now()) {
+    return (orders || []).filter((order) => isActiveOrder(order, nowMs));
+}
+
+export const NO_ACTIVE_ORDER_MESSAGE = 'לא מצאנו הזמנה פעילה — הסדנה שלך כבר התקיימה לפני יותר מ-2 ימים ❌';
+
+export const ORDER_NOT_FOUND_MESSAGE = 'לא מצאנו הזמנה קיימת עם המספר הזה ❌';
+
 /**
  * Picks the order to lead with: the nearest upcoming workshop; if none are
  * upcoming, the most recent past one. Orders without a known date sort last.
@@ -282,7 +301,7 @@ function formatTimeIL(date) {
 
 /** Builds the WhatsApp-friendly Hebrew message for the primary order. */
 export function formatOrderMessage(order, hasMore = false) {
-    if (!order) return 'לא מצאנו הזמנה קיימת עם המספר הזה ❌';
+    if (!order) return ORDER_NOT_FOUND_MESSAGE;
 
     const lines = ['📋 מצאנו את ההזמנה שלך!', ''];
 

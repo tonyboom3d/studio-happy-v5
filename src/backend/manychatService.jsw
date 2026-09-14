@@ -536,13 +536,61 @@ export async function syncAiResponseFields(subscriberId, payload = {}) {
 // --- Existing-order identification (process 1) — sync lookup result fields ---
 // Custom fields created manually in ManyChat (Settings > Custom Fields):
 // order_lookup_status (Text), order_lookup_has_more (Boolean),
-// order_lookup_order_id (Text), order_lookup_source (Text).
+// order_lookup_order_id (Text), order_lookup_source (Text),
+// order_lookup_attempts (Number).
 export const ORDER_LOOKUP_MC_FIELDS = {
     status: 'order_lookup_status',    // 'found' | 'not_found'
     hasMore: 'order_lookup_has_more', // boolean — more than one matching order
     orderId: 'order_lookup_order_id', // WorkshopOrders _id or Wix Booking _id — used by later flow steps
     source: 'order_lookup_source',    // 'cms' | 'booking'
+    attempts: 'order_lookup_attempts', // number — increments each identifyOrder call
 };
+
+const ORDER_LOOKUP_HANDOFF_AFTER = 3;
+
+async function getSubscriberInfo(subscriberId) {
+    const json = await manychatRequest('/fb/subscriber/getInfo', {
+        method: 'GET',
+        query: { subscriber_id: subscriberId },
+    });
+    return json?.data || null;
+}
+
+function readSubscriberNumberField(subscriberInfo, fieldName) {
+    const fields = subscriberInfo?.custom_fields || [];
+    const match = fields.find((f) => f?.name === fieldName);
+    if (match?.value === null || match?.value === undefined || match?.value === '') return 0;
+    const parsed = parseInt(String(match.value), 10);
+    return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
+}
+
+/**
+ * Reads current attempt count (from query param or ManyChat getInfo), adds 1,
+ * writes order_lookup_attempts. Returns { attempts, handoffRecommended }.
+ */
+export async function incrementOrderLookupAttempts(subscriberId, passedAttempts) {
+    if (!subscriberId) return { attempts: 0, handoffRecommended: false };
+
+    let current = 0;
+    const passedRaw = passedAttempts === undefined || passedAttempts === null
+        ? ''
+        : String(passedAttempts).trim();
+
+    if (passedRaw && passedRaw !== 'null' && passedRaw !== 'undefined') {
+        const parsed = parseInt(passedRaw, 10);
+        if (Number.isFinite(parsed) && parsed >= 0) current = parsed;
+    } else {
+        const info = await getSubscriberInfo(subscriberId);
+        current = readSubscriberNumberField(info, ORDER_LOOKUP_MC_FIELDS.attempts);
+    }
+
+    const attempts = current + 1;
+    await setCustomFieldByName(subscriberId, ORDER_LOOKUP_MC_FIELDS.attempts, attempts);
+    return {
+        attempts,
+        handoffRecommended: attempts >= ORDER_LOOKUP_HANDOFF_AFTER,
+    };
+}
 
 /**
  * Writes the existing-order-lookup result onto the subscriber so subsequent
@@ -550,17 +598,22 @@ export const ORDER_LOOKUP_MC_FIELDS = {
  * reference the identified order. Never throws — the HTTP response body is
  * still usable even if this fails.
  */
-export async function syncOrderLookupFields(subscriberId, { status, hasMore, orderId, source } = {}) {
+export async function syncOrderLookupFields(subscriberId, { status, hasMore, orderId, source, attempts } = {}) {
     if (!subscriberId) return { synced: false, reason: 'no-subscriberId' };
     try {
         await setBooleanCustomField(subscriberId, ORDER_LOOKUP_MC_FIELDS.hasMore, hasMore);
-        await setCustomFieldsByName(subscriberId, [
+        const textFields = [
             { name: ORDER_LOOKUP_MC_FIELDS.status, value: status || 'not_found' },
             { name: ORDER_LOOKUP_MC_FIELDS.orderId, value: orderId || '' },
             { name: ORDER_LOOKUP_MC_FIELDS.source, value: source || '' },
-        ]);
+        ];
+        if (attempts != null) {
+            textFields.push({ name: ORDER_LOOKUP_MC_FIELDS.attempts, value: attempts });
+        }
+        await setCustomFieldsByName(subscriberId, textFields);
         console.log('[ManyChat] ✅ syncOrderLookupFields. subscriberId:', subscriberId,
-            'status:', status, 'hasMore:', !!hasMore, 'orderId:', orderId || '(none)');
+            'status:', status, 'hasMore:', !!hasMore, 'orderId:', orderId || '(none)',
+            'attempts:', attempts ?? '(unchanged)');
         return { synced: true };
     } catch (err) {
         console.warn('[ManyChat] syncOrderLookupFields failed. subscriberId:', subscriberId, err?.message || err);

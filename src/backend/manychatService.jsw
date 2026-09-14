@@ -509,6 +509,23 @@ async function setBooleanCustomField(subscriberId, fieldName, value) {
     });
 }
 
+function toManyChatNumber(value, fallback = 0) {
+    const parsed = parseInt(String(value ?? '').trim(), 10);
+    return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
+}
+
+/** Number-type custom fields require integer/float in the API body — not strings. */
+async function setNumberCustomField(subscriberId, fieldName, value) {
+    return manychatRequest('/fb/subscriber/setCustomFieldByName', {
+        method: 'POST',
+        body: {
+            subscriber_id: subscriberId,
+            field_name: fieldName,
+            field_value: toManyChatNumber(value),
+        },
+    });
+}
+
 /**
  * Writes AI routing fields on the subscriber (Boolean + Text).
  * Never throws — flow can still use HTTP response body for ai_reply.
@@ -586,7 +603,7 @@ export async function incrementOrderLookupAttempts(subscriberId, passedAttempts)
     }
 
     const attempts = current + 1;
-    await setCustomFieldByName(subscriberId, ORDER_LOOKUP_MC_FIELDS.attempts, attempts);
+    await setNumberCustomField(subscriberId, ORDER_LOOKUP_MC_FIELDS.attempts, attempts);
     return {
         attempts,
         handoffRecommended: attempts >= ORDER_LOOKUP_HANDOFF_AFTER,
@@ -609,13 +626,13 @@ export async function syncOrderLookupFields(subscriberId, { status, hasMore, ord
             { name: ORDER_LOOKUP_MC_FIELDS.source, value: source || '' },
             { name: MC_FIELDS.orderUrl, value: orderUrl || '' },
         ];
-        if (attempts != null) {
-            textFields.push({ name: ORDER_LOOKUP_MC_FIELDS.attempts, value: attempts });
-        }
         if (verifiedAt != null) {
             textFields.push({ name: ORDER_LOOKUP_MC_FIELDS.verifiedAt, value: verifiedAt || '' });
         }
         await setCustomFieldsByName(subscriberId, textFields);
+        if (attempts != null) {
+            await setNumberCustomField(subscriberId, ORDER_LOOKUP_MC_FIELDS.attempts, attempts);
+        }
         console.log('[ManyChat] ✅ syncOrderLookupFields. subscriberId:', subscriberId,
             'status:', status, 'hasMore:', !!hasMore, 'orderId:', orderId || '(none)',
             'attempts:', attempts ?? '(unchanged)');

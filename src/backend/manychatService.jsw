@@ -533,6 +533,41 @@ export async function syncAiResponseFields(subscriberId, payload = {}) {
     }
 }
 
+// --- Existing-order identification (process 1) — sync lookup result fields ---
+// Custom fields created manually in ManyChat (Settings > Custom Fields):
+// order_lookup_status (Text), order_lookup_has_more (Boolean),
+// order_lookup_order_id (Text), order_lookup_source (Text).
+export const ORDER_LOOKUP_MC_FIELDS = {
+    status: 'order_lookup_status',    // 'found' | 'not_found'
+    hasMore: 'order_lookup_has_more', // boolean — more than one matching order
+    orderId: 'order_lookup_order_id', // WorkshopOrders _id or Wix Booking _id — used by later flow steps
+    source: 'order_lookup_source',    // 'cms' | 'booking'
+};
+
+/**
+ * Writes the existing-order-lookup result onto the subscriber so subsequent
+ * ManyChat flow steps (menu, change/cancel actions) can branch on it and
+ * reference the identified order. Never throws — the HTTP response body is
+ * still usable even if this fails.
+ */
+export async function syncOrderLookupFields(subscriberId, { status, hasMore, orderId, source } = {}) {
+    if (!subscriberId) return { synced: false, reason: 'no-subscriberId' };
+    try {
+        await setBooleanCustomField(subscriberId, ORDER_LOOKUP_MC_FIELDS.hasMore, hasMore);
+        await setCustomFieldsByName(subscriberId, [
+            { name: ORDER_LOOKUP_MC_FIELDS.status, value: status || 'not_found' },
+            { name: ORDER_LOOKUP_MC_FIELDS.orderId, value: orderId || '' },
+            { name: ORDER_LOOKUP_MC_FIELDS.source, value: source || '' },
+        ]);
+        console.log('[ManyChat] ✅ syncOrderLookupFields. subscriberId:', subscriberId,
+            'status:', status, 'hasMore:', !!hasMore, 'orderId:', orderId || '(none)');
+        return { synced: true };
+    } catch (err) {
+        console.warn('[ManyChat] syncOrderLookupFields failed. subscriberId:', subscriberId, err?.message || err);
+        return { synced: false, error: err?.message || String(err) };
+    }
+}
+
 // --- AI Assistant (Workshops) — free-text reply + human handoff ---
 // See http-functions.js post_manychatMessage. subscriberId here is the
 // ManyChat subscriber id passed directly by the External Request step

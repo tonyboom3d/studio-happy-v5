@@ -2,11 +2,13 @@ import { ok, badRequest, serverError, response } from 'wix-http-functions';
 import { availabilityCalendar } from 'wix-bookings.v2';
 import wixSecretsBackend from 'wix-secrets-backend';
 import { checkRateLimit, checkGuardrails, detectHandoff, HANDOFF_REPLY_DEFAULT } from 'backend/aiGuardrails.js';
-import { tagHandoff, syncAiResponseFields } from 'backend/manychatService.jsw';
+import { tagHandoff, syncAiResponseFields, syncOrderLookupFields } from 'backend/manychatService.jsw';
 import { createConversation, createResponse, extractReplyText } from 'backend/openaiService.jsw';
 import { getUserConversation, upsertUserConversation } from 'backend/userConversationsStore.js';
 import { detectSuggestedAction, finalizeRoutedReply } from 'backend/aiRouting.js';
 import { buildWorkshopPolicyReply, isGeneralWorkshopSelection } from 'backend/policyContent.js';
+import { WORKSHOP_SERVICE_IDS, resolveWorkshopType } from 'backend/workshopServiceIds.js';
+import { findOrdersByPhone, pickPrimaryOrder, formatOrderMessage } from 'backend/orderLookupService.js';
 
 // ============================================================
 // ManyChat availability endpoint
@@ -18,48 +20,7 @@ const PAGE_SIZE = 10;
 const QUERY_CHUNK_DAYS = 45;
 const MAX_LOOKAHEAD_DAYS = 365;
 
-const WORKSHOP_SERVICE_IDS = {
-  tufting: [
-    '22e86498-525e-4580-9c83-a4470b0c874d',
-    '3406e74d-949b-44b0-a5cc-064548129c08',
-    'c1c1e799-84a9-4847-adf6-2a34480c5bfe',
-  ],
-  candles: [
-    'eb8fec0e-5d04-48a3-a795-e3e8051d07da',
-    'f0f6e447-02d8-4808-80ba-3c380ce9eae8',
-  ],
-  charms: [
-    '06714046-860f-4f2e-a7cd-2d1c118e5385',
-    '19261a10-2de0-42dd-a241-ed2bdf960fc6',
-  ],
-  jewelry: [
-    '7e695ead-0363-4ede-9519-c2649674d2d4',
-    'e3190974-9abc-4c6f-970f-98dad6032553',
-  ],
-  ceramics: ['ad89914a-1845-48c6-804d-544cd17f179b'],
-};
-
-const WORKSHOP_TYPE_ALIASES = {
-  tufting: 'tufting',
-  'טאפטינג': 'tufting',
-  candles: 'candles',
-  'נרות': 'candles',
-  charms: 'charms',
-  "צ'ארמס": 'charms',
-  'צארמס': 'charms',
-  jewelry: 'jewelry',
-  'תכשיטים': 'jewelry',
-  ceramics: 'ceramics',
-  'קרמיקה': 'ceramics',
-};
-
 const WORKSHOP_TYPE_LABELS_HE = ['טאפטינג', 'נרות', 'תכשיטים', "צ'ארמס", 'קרמיקה'];
-
-function resolveWorkshopType(raw) {
-  const trimmed = String(raw || '').trim();
-  if (!trimmed) return null;
-  return WORKSHOP_TYPE_ALIASES[trimmed] || WORKSHOP_TYPE_ALIASES[trimmed.toLowerCase()] || null;
-}
 
 function israelDateKey(d) {
   const parts = new Intl.DateTimeFormat('en-CA', {
@@ -497,5 +458,76 @@ export async function get_workshopPolicy(request) {
 /** POST/PUT/etc. — ManyChat External Request (default method) */
 export async function use_workshopPolicy(request) {
   return runWorkshopPolicyEndpoint(request, 'use_workshopPolicy');
+}
+
+// ============================================================
+// Existing-order identification — ManyChat process 1 (PRD: "זיהוי הזמנה קיימת")
+// GET https://www.studiohappy.art/_functions/identifyOrder?phone=...&subscriber_id=...
+// Header: X-API-KEY (manychat_webhook_apiKey)
+//
+// phone: the ManyChat WhatsApp-ID phone field for the subscriber messaging the bot.
+// subscriber_id: ManyChat subscriber id — used to write back order_lookup_* custom fields.
+//
+// Response: { status, found, has_more, order_id, ai_reply, content: { messages: [{ type: 'text', text }] } }
+// ai_reply mirrors content.messages[0].text — map to ManyChat ai_reply custom field (same as workshopPolicy).
+// ============================================================
+
+export async function get_identifyOrder(request) {
+  try {
+    if (!(await authorizeManyChatWebhook(request))) {
+      return response({
+        status: 401,
+        headers: { 'Content-Type': 'application/json' },
+        body: { status: 'error', error: 'unauthorized' },
+      });
+    }
+
+    const phone = String(request.query?.phone || '').trim();
+    const subscriberId = String(request.query?.subscriber_id || '').trim();
+
+    if (!phone) {
+      return badRequest({
+        headers: { 'Content-Type': 'application/json' },
+        body: { status: 'error', error: 'missing_phone' },
+      });
+    }
+
+    const orders = await findOrdersByPhone(phone).catch((err) => {
+      console.error('[http-functions] get_identifyOrder findOrdersByPhone failed:', err?.message || err);
+      return [];
+    });
+
+    const found = orders.length > 0;
+    const hasMore = orders.length > 1;
+    const primary = found ? pickPrimaryOrder(orders) : null;
+    const text = formatOrderMessage(primary, hasMore);
+
+    if (subscriberId) {
+      await syncOrderLookupFields(subscriberId, {
+        status: found ? 'found' : 'not_found',
+        hasMore,
+        orderId: primary?.id || '',
+        source: primary?.source || '',
+      }).catch(() => {});
+    } else {
+      console.warn('[http-functions] get_identifyOrder called without subscriber_id — skipping ManyChat field sync. phone:', phone);
+    }
+
+    return ok({
+      headers: { 'Content-Type': 'application/json' },
+      body: {
+        status: 'ok',
+        found,
+        has_more: hasMore,
+        order_id: primary?.id || null,
+        order_source: primary?.source || null,
+        ai_reply: text,
+        content: { messages: [{ type: 'text', text }] },
+      },
+    });
+  } catch (err) {
+    console.error('[http-functions] get_identifyOrder failed:', err?.message || err);
+    return serverError({ body: { status: 'error', error: String(err?.message || err) } });
+  }
 }
 

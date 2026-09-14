@@ -157,7 +157,9 @@ function handleWixMessage(event) {
         case 'BOOKING_ERROR':
             // Booking failed
             notifyListeners({
-                bookingError: data.error === 'FIRST_ORDER_MIN_TICKETS'
+                bookingError: data.error === 'FIRST_ORDER_MIN_CANDLES'
+                    ? 'זוהי ההזמנה הראשונה למועד זה, ולכן נדרשים לפחות 2 נרות כדי לפתוח את הסדנה. אם ברצונכם להזמין נר אחד בלבד, אנא בחרו מועד אחר שכבר נרשמו בו משתתפים, או חפשו תאריך ושעה אחרים.'
+                    : data.error === 'FIRST_ORDER_MIN_TICKETS'
                     ? 'זוהי ההזמנה הראשונה למועד זה, ולכן נדרשים לפחות 2 כרטיסים (מבוגרים) כדי לפתוח את הסדנה. אם ברצונכם להזמין כרטיס אחד בלבד, אנא בחרו מועד אחר שכבר נרשמו בו משתתפים, או חפשו תאריך ושעה אחרים.'
                     : data.error,
             });

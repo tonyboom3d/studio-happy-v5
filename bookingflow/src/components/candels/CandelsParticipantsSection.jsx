@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Minus, Plus, Users, Baby, MessageCircle, AlertTriangle, Flame } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { validateFirstOrderMinimum, FIRST_ORDER_MIN_TICKETS_MESSAGE } from '@/lib/firstOrderMinimum';
+import { validateFirstOrderMinimumCandles, FIRST_ORDER_MIN_CANDLES_MESSAGE } from '@/lib/firstOrderMinimum';
 import {
   MAX_CHILDREN_PER_ADULT,
   computeCandlesCounts,
@@ -122,9 +122,9 @@ export default function CandelsParticipantsSection({
       setValidationError(`נותרו ${maxParticipants} מקומות בלבד בתאריך שנבחר`);
       return;
     }
-    const firstOrderError = validateFirstOrderMinimum(totalCandles, selectedSlot);
+    const firstOrderError = validateFirstOrderMinimumCandles(totalCandles + extraCandles, selectedSlot);
     if (firstOrderError) {
-      setValidationError(FIRST_ORDER_MIN_TICKETS_MESSAGE);
+      setValidationError(FIRST_ORDER_MIN_CANDLES_MESSAGE);
       return;
     }
     setValidationError(null);
@@ -391,7 +391,7 @@ export default function CandelsParticipantsSection({
       )}
 
       {/* הודעת מינימום להזמנה ראשונה במועד */}
-      {validationError === FIRST_ORDER_MIN_TICKETS_MESSAGE && (
+      {validationError === FIRST_ORDER_MIN_CANDLES_MESSAGE && (
         <motion.div
           initial={{ opacity: 0, y: -5 }}
           animate={{ opacity: 1, y: 0 }}
@@ -399,7 +399,7 @@ export default function CandelsParticipantsSection({
           className="w-full max-w-md mb-3 rounded-lg border border-amber-300 bg-amber-50 p-2.5"
         >
           <p className="text-xs text-amber-900 text-center leading-relaxed">
-            {FIRST_ORDER_MIN_TICKETS_MESSAGE}
+            {FIRST_ORDER_MIN_CANDLES_MESSAGE}
           </p>
         </motion.div>
       )}
@@ -415,7 +415,7 @@ export default function CandelsParticipantsSection({
           </Button>
 
           <AnimatePresence>
-            {validationError && validationError !== FIRST_ORDER_MIN_TICKETS_MESSAGE && (
+            {validationError && validationError !== FIRST_ORDER_MIN_CANDLES_MESSAGE && (
               <motion.p
                 initial={{ opacity: 0, y: -5 }}
                 animate={{ opacity: 1, y: 0 }}

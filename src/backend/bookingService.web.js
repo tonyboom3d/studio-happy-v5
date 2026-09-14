@@ -750,11 +750,10 @@ export const createAndCheckout = webMethod(Permissions.Anyone, async (orderData)
 
     const slotStartIso = slot.date || slot.startDate || slot.start?.timestamp || slot.start;
     const bookedParticipants = await getSlotBookedParticipants(sessionId, serviceId, slotStartIso);
-    // מינימום הזמנה ראשונה נשאר לפי נרות בסיס — הורה+ילד לבד עדיין לא פותח סשן,
-    // ונר נוסף לא "עוזר" לעבור את הסף.
-    const firstOrderTicketCount = isCandles ? baseCandles : rugCount;
+    // מינימום הזמנה ראשונה: סדנת נרות — סה"כ נרות (בסיס + נרות נוספים); שאר הסדנות — rugCount.
+    const firstOrderTicketCount = rugCount;
     if (bookedParticipants === 0 && firstOrderTicketCount < FIRST_ORDER_MIN_TICKETS) {
-        throw new Error('FIRST_ORDER_MIN_TICKETS');
+        throw new Error(isCandles ? 'FIRST_ORDER_MIN_CANDLES' : 'FIRST_ORDER_MIN_TICKETS');
     }
 
     // Build participantsChoices when we have variant info, otherwise fall back to totalParticipants

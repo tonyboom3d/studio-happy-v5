@@ -19,10 +19,23 @@ export const FIRST_ORDER_MIN_TICKETS_MESSAGE =
   'זוהי ההזמנה הראשונה למועד זה, ולכן נדרשים לפחות 2 כרטיסים כדי לפתוח את הסדנה. ' +
   'אם ברצונכם להזמין כרטיס אחד בלבד, אנא בחרו מועד אחר שכבר נרשמו בו משתתפים, או חפשו תאריך ושעה אחרים.';
 
+export const FIRST_ORDER_MIN_CANDLES_MESSAGE =
+  'זוהי ההזמנה הראשונה למועד זה, ולכן נדרשים לפחות 2 נרות כדי לפתוח את הסדנה. ' +
+  'אם ברצונכם להזמין נר אחד בלבד, אנא בחרו מועד אחר שכבר נרשמו בו משתתפים, או חפשו תאריך ושעה אחרים.';
+
 export function validateFirstOrderMinimum(ticketCount, selectedSlot) {
   if (!isFirstOrderSlot(selectedSlot)) return null;
   if (ticketCount < FIRST_ORDER_MIN_TICKETS) {
     return FIRST_ORDER_MIN_TICKETS_MESSAGE;
+  }
+  return null;
+}
+
+/** סדנת נרות — סופרים סה"כ נרות (בסיס + נרות נוספים). */
+export function validateFirstOrderMinimumCandles(candleCount, selectedSlot) {
+  if (!isFirstOrderSlot(selectedSlot)) return null;
+  if (candleCount < FIRST_ORDER_MIN_TICKETS) {
+    return FIRST_ORDER_MIN_CANDLES_MESSAGE;
   }
   return null;
 }

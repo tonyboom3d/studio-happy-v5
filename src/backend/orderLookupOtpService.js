@@ -61,7 +61,12 @@ async function resolveActivePrimaryOrder(phone) {
 export async function sendOrderLookupOtp(phone) {
     const phoneNorm = normalizeIsraeliPhone(phone);
     if (!phoneNorm) {
-        return { success: false, reason: 'invalid_phone', incrementAttempts: true };
+        return {
+            success: false,
+            reason: 'invalid_phone',
+            incrementAttempts: false,
+            ai_reply: 'מספר הטלפון שהוזן אינו תקין. נא להזין מספר ישראלי בפורמט 05XXXXXXXX.',
+        };
     }
 
     const { primary, hadExpiredOnly, activeOrders } = await resolveActivePrimaryOrder(phone);

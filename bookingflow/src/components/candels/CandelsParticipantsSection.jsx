@@ -2,13 +2,14 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Minus, Plus, Users, Baby, MessageCircle, AlertTriangle, Flame } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { validateFirstOrderMinimumCandles, FIRST_ORDER_MIN_CANDLES_MESSAGE } from '@/lib/firstOrderMinimum';
+import { FIRST_ORDER_MIN_CANDLES_MESSAGE } from '@/lib/firstOrderMinimum';
 import {
   MAX_CHILDREN_PER_ADULT,
   computeCandlesCounts,
   computeCandlesPrice,
   getMaxExtraCandles,
   computeExtraCandlesPrice,
+  validateCandelsParticipantsStep,
 } from '@/lib/candlesPricing';
 
 // Candles workshop ("סדנת נרות") participants step.
@@ -28,9 +29,12 @@ export default function CandelsParticipantsSection({
   maxParticipants = 10,
   servicePricing,
   selectedSlot,
-  onContinue
+  onContinue,
+  externalValidationError = null,
+  onClearExternalValidationError,
 }) {
   const [validationError, setValidationError] = useState(null);
+  const displayedError = validationError || externalValidationError;
 
   const { soloAdults, parentChildPairs, extraChildren, totalCandles, seatsUsed } = useMemo(
     () => computeCandlesCounts({ adults, children }),
@@ -79,10 +83,18 @@ export default function CandelsParticipantsSection({
   const displayCandleCount = totalCandles + extraCandles;
 
   const handleExtraCandlesDecrease = () => {
-    if (extraCandles > 0) setExtraCandles(extraCandles - 1);
+    if (extraCandles > 0) {
+      setExtraCandles(extraCandles - 1);
+      setValidationError(null);
+      onClearExternalValidationError?.();
+    }
   };
   const handleExtraCandlesIncrease = () => {
-    if (extraCandles < maxExtraCandles) setExtraCandles(extraCandles + 1);
+    if (extraCandles < maxExtraCandles) {
+      setExtraCandles(extraCandles + 1);
+      setValidationError(null);
+      onClearExternalValidationError?.();
+    }
   };
 
   const handleAdultsDecrease = () => {
@@ -94,40 +106,43 @@ export default function CandelsParticipantsSection({
         setChildren(nextMaxChildren);
       }
       setValidationError(null);
+      onClearExternalValidationError?.();
     }
   };
   const handleAdultsIncrease = () => {
     if (seatsUsed >= maxParticipants) return;
     setAdults(adults + 1);
     setValidationError(null);
+    onClearExternalValidationError?.();
   };
   const handleChildrenDecrease = () => {
     if (children > 0) {
       setChildren(children - 1);
       setValidationError(null);
+      onClearExternalValidationError?.();
     }
   };
   const handleChildrenIncrease = () => {
     if (childrenAtMax || childrenIncreaseBlockedBySeats) return;
     setChildren(children + 1);
     setValidationError(null);
+    onClearExternalValidationError?.();
   };
 
   const handleContinue = () => {
-    if (childrenNeedAdult) {
-      setValidationError(`יש להוסיף ${missingAdults} ${missingAdults === 1 ? 'מבוגר מלווה' : 'מבוגרים מלווים'} — כל מבוגר יכול ללוות עד ${MAX_CHILDREN_PER_ADULT} ילדים בגילאי 4-10`);
-      return;
-    }
-    if (spotsExceeded) {
-      setValidationError(`נותרו ${maxParticipants} מקומות בלבד בתאריך שנבחר`);
-      return;
-    }
-    const firstOrderError = validateFirstOrderMinimumCandles(totalCandles + extraCandles, selectedSlot);
-    if (firstOrderError) {
-      setValidationError(FIRST_ORDER_MIN_CANDLES_MESSAGE);
+    const result = validateCandelsParticipantsStep({
+      adults,
+      children,
+      extraCandles,
+      maxParticipants,
+      selectedSlot,
+    });
+    if (!result.ok) {
+      setValidationError(result.error);
       return;
     }
     setValidationError(null);
+    onClearExternalValidationError?.();
     onContinue();
   };
 
@@ -391,7 +406,7 @@ export default function CandelsParticipantsSection({
       )}
 
       {/* הודעת מינימום להזמנה ראשונה במועד */}
-      {validationError === FIRST_ORDER_MIN_CANDLES_MESSAGE && (
+      {displayedError === FIRST_ORDER_MIN_CANDLES_MESSAGE && (
         <motion.div
           initial={{ opacity: 0, y: -5 }}
           animate={{ opacity: 1, y: 0 }}
@@ -415,14 +430,14 @@ export default function CandelsParticipantsSection({
           </Button>
 
           <AnimatePresence>
-            {validationError && validationError !== FIRST_ORDER_MIN_CANDLES_MESSAGE && (
+            {displayedError && displayedError !== FIRST_ORDER_MIN_CANDLES_MESSAGE && (
               <motion.p
                 initial={{ opacity: 0, y: -5 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -5 }}
                 className="text-xs text-red-600 text-center max-w-[300px]"
               >
-                {validationError}
+                {displayedError}
               </motion.p>
             )}
           </AnimatePresence>

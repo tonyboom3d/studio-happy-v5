@@ -1,3 +1,5 @@
+import { validateFirstOrderMinimumCandles } from '@/lib/firstOrderMinimum';
+
 // Shared ticket-count/price logic for the candles ("סדנת נרות") workshop.
 // Keeps CandelsParticipantsSection and CandelsBooking in sync with the
 // backend formula in bookingService.web.js (createAndCheckout).
@@ -85,4 +87,42 @@ export function getMaxExtraCandles(baseCandles) {
 /** @param {number} extraCandlePrice @param {number} extraCandles */
 export function computeExtraCandlesPrice(extraCandlePrice, extraCandles) {
   return (Number(extraCandlePrice) || 0) * (Number(extraCandles) || 0);
+}
+
+/**
+ * Gate for advancing past step 2 — shared by the continue button and accordion navigation.
+ * @returns {{ ok: true } | { ok: false, error: string }}
+ */
+export function validateCandelsParticipantsStep({
+  adults,
+  children,
+  extraCandles,
+  maxParticipants,
+  selectedSlot,
+}) {
+  const { totalCandles, seatsUsed } = computeCandlesCounts({ adults, children });
+  const totalParticipants = adults + children;
+
+  if (totalParticipants > 9) {
+    return { ok: false, error: 'לקבוצות מעל 9 משתתפים יש ליצור קשר בוואטסאפ' };
+  }
+
+  if (children > adults * MAX_CHILDREN_PER_ADULT) {
+    const missingAdults = Math.ceil(children / MAX_CHILDREN_PER_ADULT) - adults;
+    return {
+      ok: false,
+      error: `יש להוסיף ${missingAdults} ${missingAdults === 1 ? 'מבוגר מלווה' : 'מבוגרים מלווים'} — כל מבוגר יכול ללוות עד ${MAX_CHILDREN_PER_ADULT} ילדים בגילאי 4-10`,
+    };
+  }
+
+  if (seatsUsed > maxParticipants) {
+    return { ok: false, error: `נותרו ${maxParticipants} מקומות בלבד בתאריך שנבחר` };
+  }
+
+  const firstOrderError = validateFirstOrderMinimumCandles(totalCandles + extraCandles, selectedSlot);
+  if (firstOrderError) {
+    return { ok: false, error: firstOrderError };
+  }
+
+  return { ok: true };
 }

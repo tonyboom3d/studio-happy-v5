@@ -9,7 +9,13 @@ import CupSelectionSection from '@/components/candels/CupSelectionSection';
 import CandelsOrderSummarySection from '@/components/candels/CandelsOrderSummarySection';
 import { submitBooking, subscribeToWix, notifyProgress, isWixEditorOrPreview } from '@/api/wixBridge';
 import { addLog } from '@/components/VersionLogger';
-import { computeCandlesCounts, computeCandlesPrice, getMaxExtraCandles, computeExtraCandlesPrice } from '@/lib/candlesPricing';
+import {
+  computeCandlesCounts,
+  computeCandlesPrice,
+  getMaxExtraCandles,
+  computeExtraCandlesPrice,
+  validateCandelsParticipantsStep,
+} from '@/lib/candlesPricing';
 
 // Candles workshop ("סדנת נרות") booking flow — same 4-step accordion shape
 // as Tufting's WorkshopBooking, with a cup-selection step instead of the
@@ -49,6 +55,7 @@ export default function CandelsBooking() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [isComplete, setIsComplete] = useState(false);
   const [bookingError, setBookingError] = useState(null);
+  const [participantsGateError, setParticipantsGateError] = useState(null);
   const [minTimeElapsed, setMinTimeElapsed] = useState(false);
 
   // טיימר 8 דקות
@@ -177,6 +184,29 @@ export default function CandelsBooking() {
 
   const orderTotalPreview = ticketPrice + extraCandlesTotal + cupsExtraTotal;
 
+  const maxParticipants = selectedSlot?.openSpots || 10;
+  const participantsStepValidation = useMemo(
+    () => validateCandelsParticipantsStep({
+      adults,
+      children,
+      extraCandles,
+      maxParticipants,
+      selectedSlot,
+    }),
+    [adults, children, extraCandles, maxParticipants, selectedSlot]
+  );
+
+  // אם שינו את כמות המשתתפים/נרות אחרי שכבר התקדמו — מבטלים השלמת שלבים 2–3.
+  useEffect(() => {
+    if (participantsStepValidation.ok) {
+      setParticipantsGateError(null);
+      return;
+    }
+    setCompletedSections((prev) => prev.filter((n) => n < 2));
+    setActiveSection((current) => (current >= 3 ? 2 : current));
+    setSummaryExpanded(false);
+  }, [participantsStepValidation.ok]);
+
   // איפוס בחירת כוסות שחורגת מהמכסה החדשה (למשל אחרי הפחתת נרות נוספים).
   useEffect(() => {
     setCupCart((prevCart) => {
@@ -209,8 +239,18 @@ export default function CandelsBooking() {
     });
   };
 
+  const blockInvalidParticipantsStep = () => {
+    if (participantsStepValidation.ok) return true;
+    setParticipantsGateError(participantsStepValidation.error);
+    setActiveSection(2);
+    setSummaryExpanded(false);
+    addLog('[Candels] Blocked — participants step invalid', 'error');
+    return false;
+  };
+
   // מעבר לסקשן הבא
   const completeSection = (sectionNum) => {
+    if (sectionNum >= 2 && !blockInvalidParticipantsStep()) return;
     if (!completedSections.includes(sectionNum)) {
       setCompletedSections([...completedSections, sectionNum]);
     }
@@ -252,13 +292,15 @@ export default function CandelsBooking() {
   };
 
   const canOpenSection = (sectionNum) => {
-    if (sectionNum === 4) return true;
+    if (sectionNum >= 3 && !participantsStepValidation.ok) return false;
+    if (sectionNum === 4) return participantsStepValidation.ok;
     if (sectionNum <= activeSection) return true;
     if (completedSections.includes(sectionNum - 1)) return true;
     return false;
   };
 
   const openSection = (sectionNum) => {
+    if (sectionNum >= 3 && !blockInvalidParticipantsStep()) return;
     if (!canOpenSection(sectionNum)) return;
     setActiveSection(sectionNum);
   };
@@ -266,6 +308,11 @@ export default function CandelsBooking() {
   // שליחת ההזמנה (כולל הכוסות שנבחרו)
   const handleSubmit = async () => {
     if (submittingRef.current) return;
+
+    if (!blockInvalidParticipantsStep()) {
+      setBookingError(participantsStepValidation.error);
+      return;
+    }
 
     // Defense-in-depth: the pay button is already disabled while cup
     // selection is incomplete, but never allow a submit to reach the
@@ -448,10 +495,13 @@ export default function CandelsBooking() {
           {sections.map((section) => {
             const isLocked = isProcessing
               ? section.id !== 4
-              : section.id === 4
-                ? false
-                : section.id > 1 && !completedSections.includes(section.id - 1);
-            const isCompleted = completedSections.includes(section.id);
+              : section.id >= 3 && !participantsStepValidation.ok
+                ? true
+                : section.id === 4
+                  ? !participantsStepValidation.ok
+                  : section.id > 1 && !completedSections.includes(section.id - 1);
+            const isCompleted = completedSections.includes(section.id)
+              && (section.id < 3 || participantsStepValidation.ok);
             const isActive = section.id === 4 ? summaryExpanded : activeSection === section.id;
 
             const headerRight =
@@ -464,6 +514,7 @@ export default function CandelsBooking() {
 
             const handleSectionClick = () => {
               if (section.id === 4) {
+                if (!blockInvalidParticipantsStep()) return;
                 setSummaryExpanded(!summaryExpanded);
               } else {
                 openSection(section.id);
@@ -501,10 +552,12 @@ export default function CandelsBooking() {
                     setChildren={setChildren}
                     extraCandles={extraCandles}
                     setExtraCandles={setExtraCandles}
-                    maxParticipants={selectedSlot?.openSpots || 10}
+                    maxParticipants={maxParticipants}
                     servicePricing={servicePricing}
                     selectedSlot={selectedSlot}
                     onContinue={() => completeSection(2)}
+                    externalValidationError={participantsGateError}
+                    onClearExternalValidationError={() => setParticipantsGateError(null)}
                   />
                 )}
                 {section.id === 3 && (

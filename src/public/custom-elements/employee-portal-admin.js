@@ -35,7 +35,7 @@ export const ADMIN_STYLE = `
 .epa-day-cov-fill.none { background: #ef4444; }
 .epa-flag { position: absolute; top: 3px; inset-inline-start: 4px; font-size: 10px; z-index: 1; }
 .epa-day-draft-badge { position: absolute; top: 2px; inset-inline-end: 4px; font-size: 11px; z-index: 1; }
-.epa-day-events { display: flex; flex-direction: column; gap: 3px; margin-top: 3px; overflow: hidden; flex: 1; min-height: 0; }
+.epa-day-events { display: flex; flex-direction: column; gap: 3px; margin-top: 3px; flex: 1; min-height: 0; }
 .epa-event-chip { border-radius: 6px; padding: 2px 5px; font-size: 10px; line-height: 1.3; background: #eff6ff; border: 1px solid #bfdbfe; color: #1e3a8a; overflow: hidden; }
 .epa-event-chip.full { background: #ecfdf5; border-color: #6ee7b7; color: #065f46; }
 .epa-event-chip.partial { background: #fffbeb; border-color: #fde68a; color: #92400e; }
@@ -49,8 +49,9 @@ export const ADMIN_STYLE = `
 .epa-event-avatar { width: 15px; height: 15px; border-radius: 50%; color: #fff; font-size: 8px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
 .epa-event-avatar-more { background: #94a3b8 !important; }
 .epa-event-empty-note { font-size: 9.5px; color: #9ca3af; }
-.epa-day-more { font-size: 10px; color: #2563eb; font-weight: 700; text-align: center; margin-top: 1px; }
 .epa-day-empty-note { font-size: 10px; color: #c4c7cc; text-align: center; margin-top: 10px; }
+.epa-row-ws-gap { background: #fff5f5; }
+.epa-row-ws-gap td { color: #991b1b; }
 .epa-page-size { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: #64748b; }
 .epa-page-size select { border: 1px solid #e2e8f0; border-radius: 7px; padding: 4px 7px; font-size: 12px; font-family: inherit; background: #fff; }
 .epa-detail { border: 1px solid #bfdbfe; background: #eff6ff; border-radius: 12px; padding: 12px; margin-top: 12px; font-size: 12.5px; }
@@ -883,6 +884,7 @@ const BOARD_STATUS = {
     VACATION_REJECTED: { label: 'חופשה נדחתה', badge: 'miss' },
     BLOCKED: { label: 'יום חסום', badge: 'mute' },
     HOLIDAY: { label: 'חג / מועד', badge: 'warn' },
+    UNDERSTAFFED: { label: 'חסר שיבוץ', badge: 'miss' },
 };
 
 /**
@@ -893,6 +895,9 @@ const BOARD_STATUS = {
 function rowStatusMeta(row) {
     if (row.pendingBatch) {
         return { label: 'ממתין לשמירה', badge: 'pending' };
+    }
+    if (row.kind === 'workshop-gap') {
+        return { label: `חסר שיבוץ (${row.gapFilled}/${row.gapRequired})`, badge: 'miss' };
     }
     if (row.kind === 'submission' && row.status === 'SCHEDULED' && row.managerOverride && !row.workshopTypeId) {
         return { label: 'הוגש - ידני', badge: 'kind' };
@@ -1023,7 +1028,8 @@ function filteredDayRows(ce, d, dateKey) {
         .filter(r => r.kind === 'submission' || r.kind === 'vacation')
         .map(r => ({ ...r, pendingBatch: pendingBatchOverlayForRow(ce, r) }));
     const synthetic = filterBoardRows(pendingBatchSyntheticRows(ce, d, dateKey), filterOpts, bounds);
-    return [...real, ...synthetic];
+    const gaps = filterBoardRows(buildUnderstaffedWorkshopRows(d, dateKey), filterOpts, bounds);
+    return [...real, ...synthetic, ...gaps];
 }
 
 function applyMsOpt(list, value, checked) {
@@ -1265,7 +1271,63 @@ function fmtTimeHe(iso) {
     return new Intl.DateTimeFormat('he-IL', { timeZone: 'Asia/Jerusalem', hour: '2-digit', minute: '2-digit' }).format(new Date(iso));
 }
 
-const DAY_CHIP_VISIBLE_LIMIT = 3;
+/** Sessions for a workshop type on a day — one entry per Bookings slot or per time-range. */
+function workshopSessionsForType(t) {
+    if (t.slots?.length) {
+        return t.slots.map(slot => ({
+            start: slot.start || null,
+            end: slot.end || null,
+            required: slot.required ?? t.required ?? 0,
+            filled: slot.filled ?? t.filled ?? 0,
+        }));
+    }
+    const ranges = t.timeRanges?.length ? t.timeRanges : [null];
+    return ranges.map(range => ({
+        start: range?.start || null,
+        end: range?.end || null,
+        required: t.required ?? 0,
+        filled: t.filled ?? 0,
+    }));
+}
+
+function formatSessionTimeText(start, end) {
+    if (!start) return '';
+    return end ? `${fmtTimeHe(start)}–${fmtTimeHe(end)}` : fmtTimeHe(start);
+}
+
+/** Virtual rows for workshops/sessions on a day that still need staff (filled < required). */
+function buildUnderstaffedWorkshopRows(d, dateKey) {
+    const info = d.days?.[dateKey];
+    if (!info?.hasWorkshops) return [];
+    const rows = [];
+    for (const t of (info.types || [])) {
+        const sessions = workshopSessionsForType(t);
+        sessions.forEach((session, idx) => {
+            const required = session.required ?? 0;
+            const filled = Math.min(session.filled ?? 0, required || (session.filled ?? 0));
+            if (!required || filled >= required) return;
+            const timeText = formatSessionTimeText(session.start, session.end);
+            const name = sessions.length > 1 ? `${t.name} — מפגש ${idx + 1}` : t.name;
+            rows.push({
+                key: `ws-gap-${dateKey}-${t.typeId}-${session.start || idx}`,
+                kind: 'workshop-gap',
+                date: dateKey,
+                dateEnd: dateKey,
+                employeeId: null,
+                employeeName: name,
+                startTime: timeText,
+                endTime: '',
+                workshopTypeId: t.typeId,
+                workshopName: name,
+                status: 'UNDERSTAFFED',
+                extra: `חסרים ${required - filled} מתוך ${required}`,
+                gapFilled: filled,
+                gapRequired: required,
+            });
+        });
+    }
+    return rows;
+}
 
 /** Small colored initials avatar for an employee, used inside month-grid event chips. */
 function renderEventAvatar(emp, fallbackName) {
@@ -1302,28 +1364,20 @@ function renderManualShiftChip(empById, sub) {
     </div>`;
 }
 
-/** Builds the visible event-chip stack for a month-grid day cell — one chip per workshop session plus any no-workshop scheduled shifts, capped with a "+N more" overflow that opens the full day view (same click target as the cell). */
+/** Builds the visible event-chip stack for a month-grid day cell — one chip per workshop session plus any no-workshop scheduled shifts. */
 function renderDayEventChips(d, info, subs) {
     const empById = Object.fromEntries((d.employees || []).map(e => [e.id, e]));
     const types = info?.types || [];
     const chips = [];
     for (const t of types) {
-        const sessions = (t.slots && t.slots.length) ? t.slots : [{
-            start: t.timeRanges?.[0]?.start || null,
-            end: t.timeRanges?.[0]?.end || null,
-            required: t.required,
-            filled: t.filled,
-        }];
-        for (const session of sessions) chips.push(renderDayEventChip(empById, t, session));
+        for (const session of workshopSessionsForType(t)) chips.push(renderDayEventChip(empById, t, session));
     }
     for (const s of subs) {
         if (s.workshopTypeId || s.status !== 'SCHEDULED') continue;
         chips.push(renderManualShiftChip(empById, s));
     }
     if (!chips.length) return '';
-    const visible = chips.slice(0, DAY_CHIP_VISIBLE_LIMIT);
-    const hiddenCount = chips.length - visible.length;
-    return `<div class="epa-day-events">${visible.join('')}${hiddenCount > 0 ? `<div class="epa-day-more">+${hiddenCount} נוספות</div>` : ''}</div>`;
+    return `<div class="epa-day-events">${chips.join('')}</div>`;
 }
 
 function renderHeatmap(ce, d) {
@@ -1431,6 +1485,15 @@ function renderDayRowMenu(ce, d, row, dateKey) {
 
 function renderDayPeopleRow(ce, d, row, dateKey) {
     const meta = rowStatusMeta(row);
+    if (row.kind === 'workshop-gap') {
+        return `<tr class="epa-row-ws-gap">
+            <td><span class="epa-dot-lg" style="background:#ef4444"></span>${esc(row.workshopName || row.employeeName)}</td>
+            <td>${esc(row.startTime || '—')}</td>
+            <td>${esc(row.extra || '—')}</td>
+            <td><span class="epa-badge ${meta.badge}">${esc(meta.label)}</span></td>
+            <td>${d.permissions.manageScheduling ? `<button type="button" class="epa-btn primary epa-btn-sm" data-action="admin-open-assign-day" data-date="${esc(dateKey)}">שיבוץ לסדנה</button>` : ''}</td>
+        </tr>`;
+    }
     const extra = row.kind === 'submission' && row.extra && !meta.label.includes('ידני') ? ` · ${esc(row.extra)}` : '';
     const employee = (d.employees || []).find(e => e.id === row.employeeId);
     const dot = row.employeeId ? `<span class="epa-dot-lg" style="background:${esc(employee?.color || '#2563eb')}"></span>` : '';

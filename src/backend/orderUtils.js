@@ -21,6 +21,18 @@ export function normalizeIsraeliPhone(phone) {
     return '+' + digits;
 }
 
+/** Israeli local display/storage format — always starts with 0 (e.g. 0523813929). */
+export function formatIsraeliPhoneLocal(phone) {
+    const e164 = normalizeIsraeliPhone(phone);
+    if (!e164) return '';
+    const digits = e164.replace(/\D/g, '');
+    if (digits.startsWith('972') && digits.length > 3) {
+        return '0' + digits.slice(3);
+    }
+    if (digits.startsWith('0')) return digits;
+    return digits ? '0' + digits : '';
+}
+
 export function getPhoneLookupVariants(phone) {
     if (!phone) return [];
     const raw = String(phone).trim();

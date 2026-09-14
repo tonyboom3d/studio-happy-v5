@@ -22,6 +22,7 @@ import {
   ORDER_NOT_FOUND_MESSAGE,
   NO_MORE_ORDERS_MESSAGE,
 } from 'backend/orderLookupService.js';
+import { formatIsraeliPhoneLocal } from 'backend/orderUtils.js';
 
 // ============================================================
 // ManyChat availability endpoint
@@ -576,6 +577,49 @@ export async function get_identifyOrder(request) {
     });
   } catch (err) {
     console.error('[http-functions] get_identifyOrder failed:', err?.message || err);
+    return serverError({ body: { status: 'error', error: String(err?.message || err) } });
+  }
+}
+
+// ============================================================
+// Phone normalization — ManyChat helper
+// GET https://www.studiohappy.art/_functions/normalizePhone?phone=972523813929
+// Header: X-API-KEY (manychat_webhook_apiKey)
+// Response: { status, valid, phone_input, phone_local } — phone_local always 05XXXXXXXX when valid
+// ============================================================
+
+export async function get_normalizePhone(request) {
+  try {
+    if (!(await authorizeManyChatWebhook(request))) {
+      return response({
+        status: 401,
+        headers: { 'Content-Type': 'application/json' },
+        body: { status: 'error', error: 'unauthorized' },
+      });
+    }
+
+    const phoneInput = String(request.query?.phone || '').trim();
+    if (!phoneInput) {
+      return badRequest({
+        headers: { 'Content-Type': 'application/json' },
+        body: { status: 'error', error: 'missing_phone' },
+      });
+    }
+
+    const phoneLocal = formatIsraeliPhoneLocal(phoneInput);
+    const valid = phoneLocal.length >= 9 && phoneLocal.startsWith('0');
+
+    return ok({
+      headers: { 'Content-Type': 'application/json' },
+      body: {
+        status: 'ok',
+        valid,
+        phone_input: phoneInput,
+        phone_local: phoneLocal,
+      },
+    });
+  } catch (err) {
+    console.error('[http-functions] get_normalizePhone failed:', err?.message || err);
     return serverError({ body: { status: 'error', error: String(err?.message || err) } });
   }
 }

@@ -23,6 +23,11 @@ import {
   NO_MORE_ORDERS_MESSAGE,
 } from 'backend/orderLookupService.js';
 import { formatIsraeliPhoneLocal } from 'backend/orderUtils.js';
+import {
+  sendOrderLookupOtp,
+  verifyOrderLookupOtp,
+  buildVerificationCheckResponse,
+} from 'backend/orderLookupOtpService.js';
 
 // ============================================================
 // ManyChat availability endpoint
@@ -579,6 +584,186 @@ export async function get_identifyOrder(request) {
     });
   } catch (err) {
     console.error('[http-functions] get_identifyOrder failed:', err?.message || err);
+    return serverError({ body: { status: 'error', error: String(err?.message || err) } });
+  }
+}
+
+// ============================================================
+// Existing-order identification — ManyChat process 2 (alternate phone + SMS OTP)
+// Header: X-API-KEY (manychat_webhook_apiKey)
+//
+// GET .../checkOrderLookupVerification?verified_at={{order_lookup_verified_at}}
+//   → { verification_valid, skip_otp, verified_at }
+//
+// GET .../sendOrderLookupOtp?phone=...&subscriber_id=...&attempts={{order_lookup_attempts}}
+//   → sends 5-digit SMS; increments order_lookup_attempts on order-not-found / SMS failure
+//
+// GET .../verifyOrderLookupOtp?phone=...&code=...&subscriber_id=...&attempts={{order_lookup_attempts}}
+//   → on success sets order_lookup_verified_at (valid 24h) + order fields
+// ============================================================
+
+async function resolveLookupAttempts(subscriberId, passedAttempts, shouldIncrement) {
+  if (!subscriberId) return { lookupAttempts: 0, lookupHandoff: false };
+  if (!shouldIncrement) {
+    const parsed = parseInt(String(passedAttempts ?? '').trim(), 10);
+    const lookupAttempts = Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
+    return { lookupAttempts, lookupHandoff: lookupAttempts >= 3 };
+  }
+  const attemptResult = await incrementOrderLookupAttempts(subscriberId, passedAttempts).catch((err) => {
+    console.warn('[http-functions] incrementOrderLookupAttempts failed:', err?.message || err);
+    return { attempts: 0, handoffRecommended: false };
+  });
+  return { lookupAttempts: attemptResult.attempts, lookupHandoff: attemptResult.handoffRecommended };
+}
+
+export async function get_checkOrderLookupVerification(request) {
+  try {
+    if (!(await authorizeManyChatWebhook(request))) {
+      return response({
+        status: 401,
+        headers: { 'Content-Type': 'application/json' },
+        body: { status: 'error', error: 'unauthorized' },
+      });
+    }
+
+    const verifiedAtRaw = String(request.query?.verified_at || '').trim();
+    const check = buildVerificationCheckResponse(verifiedAtRaw || null);
+
+    return ok({
+      headers: { 'Content-Type': 'application/json' },
+      body: { status: 'ok', ...check },
+    });
+  } catch (err) {
+    console.error('[http-functions] get_checkOrderLookupVerification failed:', err?.message || err);
+    return serverError({ body: { status: 'error', error: String(err?.message || err) } });
+  }
+}
+
+export async function get_sendOrderLookupOtp(request) {
+  try {
+    if (!(await authorizeManyChatWebhook(request))) {
+      return response({
+        status: 401,
+        headers: { 'Content-Type': 'application/json' },
+        body: { status: 'error', error: 'unauthorized' },
+      });
+    }
+
+    const phone = String(request.query?.phone || '').trim();
+    const subscriberId = String(request.query?.subscriber_id || '').trim();
+    const passedAttempts = request.query?.attempts;
+
+    if (!phone) {
+      return badRequest({
+        headers: { 'Content-Type': 'application/json' },
+        body: { status: 'error', error: 'missing_phone' },
+      });
+    }
+
+    const result = await sendOrderLookupOtp(phone);
+    const { lookupAttempts, lookupHandoff } = await resolveLookupAttempts(
+      subscriberId,
+      passedAttempts,
+      !!result.incrementAttempts,
+    );
+
+    if (subscriberId) {
+      await syncOrderLookupFields(subscriberId, {
+        status: result.success ? 'pending_otp' : 'not_found',
+        hasMore: result.has_more || false,
+        orderId: result.order_id || '',
+        source: result.order_source || '',
+        attempts: lookupAttempts,
+      }).catch(() => {});
+    }
+
+    const text = result.ai_reply || '';
+    return ok({
+      headers: { 'Content-Type': 'application/json' },
+      body: {
+        status: 'ok',
+        success: result.success,
+        reason: result.reason,
+        masked_phone: result.masked_phone || null,
+        order_id: result.order_id || null,
+        order_source: result.order_source || null,
+        has_more: result.has_more || false,
+        lookup_attempts: lookupAttempts,
+        lookup_handoff: lookupHandoff,
+        ai_reply: text,
+        content: { messages: [{ type: 'text', text }] },
+      },
+    });
+  } catch (err) {
+    console.error('[http-functions] get_sendOrderLookupOtp failed:', err?.message || err);
+    return serverError({ body: { status: 'error', error: String(err?.message || err) } });
+  }
+}
+
+export async function get_verifyOrderLookupOtp(request) {
+  try {
+    if (!(await authorizeManyChatWebhook(request))) {
+      return response({
+        status: 401,
+        headers: { 'Content-Type': 'application/json' },
+        body: { status: 'error', error: 'unauthorized' },
+      });
+    }
+
+    const phone = String(request.query?.phone || '').trim();
+    const code = String(request.query?.code || '').trim();
+    const subscriberId = String(request.query?.subscriber_id || '').trim();
+    const passedAttempts = request.query?.attempts;
+
+    if (!phone || !code) {
+      return badRequest({
+        headers: { 'Content-Type': 'application/json' },
+        body: { status: 'error', error: 'missing_phone_or_code' },
+      });
+    }
+
+    const result = await verifyOrderLookupOtp(phone, code);
+    const { lookupAttempts, lookupHandoff } = await resolveLookupAttempts(
+      subscriberId,
+      passedAttempts,
+      !!result.incrementAttempts,
+    );
+
+    if (subscriberId) {
+      await syncOrderLookupFields(subscriberId, {
+        status: result.valid ? 'found' : 'not_found',
+        hasMore: result.has_more || false,
+        orderId: result.order_id || '',
+        source: result.order_source || '',
+        orderUrl: result.order_url || '',
+        attempts: lookupAttempts,
+        verifiedAt: result.valid ? (result.verified_at || '') : undefined,
+      }).catch(() => {});
+    }
+
+    const text = result.ai_reply || '';
+    return ok({
+      headers: { 'Content-Type': 'application/json' },
+      body: {
+        status: 'ok',
+        valid: result.valid,
+        found: result.valid && result.found,
+        reason: result.reason,
+        verified_at: result.verified_at || null,
+        verification_valid: result.verification_valid || false,
+        has_more: result.has_more || false,
+        order_id: result.order_id || null,
+        order_source: result.order_source || null,
+        order_url: result.order_url || null,
+        attempts_remaining: result.attempts_remaining ?? null,
+        lookup_attempts: lookupAttempts,
+        lookup_handoff: lookupHandoff,
+        ai_reply: text,
+        content: text ? { messages: [{ type: 'text', text }] } : undefined,
+      },
+    });
+  } catch (err) {
+    console.error('[http-functions] get_verifyOrderLookupOtp failed:', err?.message || err);
     return serverError({ body: { status: 'error', error: String(err?.message || err) } });
   }
 }

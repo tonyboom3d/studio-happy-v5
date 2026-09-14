@@ -118,3 +118,31 @@ export async function sendAdminOtpSms(phone, code) {
         return { sent: false, reason: 'error', error: err?.message || String(err) };
     }
 }
+
+/** 5-digit OTP for ManyChat alternate-phone order lookup (process 2). */
+export async function sendOrderLookupOtpSms(phone, code) {
+    const cellphone = toSendMsgLocalPhone(phone);
+    if (!cellphone) {
+        console.error('[SendMsg] sendOrderLookupOtpSms: no valid phone', phone);
+        return { sent: false, reason: 'no-phone' };
+    }
+
+    try {
+        await sendMsgRequest('/AddUsersAndSendSMS', {
+            Users: [{ Cellphone: cellphone }],
+            Message: {
+                MessageContent: `קוד האימות שלך לזיהוי ההזמנה בסטודיו: ${code}`,
+                SenderPhone: SENDMSG_SENDER_PHONE,
+                MessageInnerName: 'order_lookup_otp',
+                MessageSubject: '',
+                MessageType: 1,
+                TypeSms: 1,
+            },
+        });
+        console.log(`[SendMsg] ✅ sendOrderLookupOtpSms — sent to ${cellphone}`);
+        return { sent: true };
+    } catch (err) {
+        console.error('[SendMsg] ❌ sendOrderLookupOtpSms failed:', err?.message || err);
+        return { sent: false, reason: 'error', error: err?.message || String(err) };
+    }
+}

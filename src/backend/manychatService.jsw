@@ -537,13 +537,14 @@ export async function syncAiResponseFields(subscriberId, payload = {}) {
 // Custom fields created manually in ManyChat (Settings > Custom Fields):
 // order_lookup_status (Text), order_lookup_has_more (Boolean),
 // order_lookup_order_id (Text), order_lookup_source (Text),
-// order_lookup_attempts (Number).
+// order_lookup_attempts (Number), order_lookup_verified_at (Text/Date).
 export const ORDER_LOOKUP_MC_FIELDS = {
     status: 'order_lookup_status',    // 'found' | 'not_found'
     hasMore: 'order_lookup_has_more', // boolean — more than one matching order
     orderId: 'order_lookup_order_id', // WorkshopOrders _id or Wix Booking _id — used by later flow steps
     source: 'order_lookup_source',    // 'cms' | 'booking'
-    attempts: 'order_lookup_attempts', // number — increments each identifyOrder call
+    attempts: 'order_lookup_attempts', // number — failed lookups / failed OTP sends
+    verifiedAt: 'order_lookup_verified_at', // ISO datetime — valid 24h after OTP success
 };
 
 const ORDER_LOOKUP_HANDOFF_AFTER = 3;
@@ -598,7 +599,7 @@ export async function incrementOrderLookupAttempts(subscriberId, passedAttempts)
  * reference the identified order. Never throws — the HTTP response body is
  * still usable even if this fails.
  */
-export async function syncOrderLookupFields(subscriberId, { status, hasMore, orderId, source, orderUrl, attempts } = {}) {
+export async function syncOrderLookupFields(subscriberId, { status, hasMore, orderId, source, orderUrl, attempts, verifiedAt } = {}) {
     if (!subscriberId) return { synced: false, reason: 'no-subscriberId' };
     try {
         await setBooleanCustomField(subscriberId, ORDER_LOOKUP_MC_FIELDS.hasMore, hasMore);
@@ -610,6 +611,9 @@ export async function syncOrderLookupFields(subscriberId, { status, hasMore, ord
         ];
         if (attempts != null) {
             textFields.push({ name: ORDER_LOOKUP_MC_FIELDS.attempts, value: attempts });
+        }
+        if (verifiedAt != null) {
+            textFields.push({ name: ORDER_LOOKUP_MC_FIELDS.verifiedAt, value: verifiedAt || '' });
         }
         await setCustomFieldsByName(subscriberId, textFields);
         console.log('[ManyChat] ✅ syncOrderLookupFields. subscriberId:', subscriberId,

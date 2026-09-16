@@ -275,6 +275,7 @@ const FAB_ICON = `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/
 const WHATSAPP_ICON = `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" class="bl-faq-wa-icon"><path d="M12 2a10 10 0 00-8.7 14.9L2 22l5.3-1.3A10 10 0 1012 2z" stroke="#fff" stroke-width="2" stroke-linejoin="round"/><path d="M8.5 9.5c.3-.7 1-.7 1.3-.7h.3c.1 0 .3 0 .4.3l.6 1.4c.1.2 0 .5-.2.6l-.5.4c-.1.1-.1.3 0 .4.5.9 1.3 1.7 2.2 2.2.1.1.3.1.4 0l.4-.5c.1-.2.4-.3.6-.2l1.4.6c.3.1.3.3.3.4v.3c0 .3-.1 1-.7 1.3-.5.3-1.2.3-2.1-.1-.9-.4-1.8-1-2.6-1.8-.8-.8-1.4-1.7-1.8-2.6-.4-.9-.4-1.6-.1-2.1z" fill="#fff"/></svg>`;
 const WHATSAPP_SUPPORT_PHONE = '972522272270';
 const FORM_SUCCESS_MESSAGE = 'הפנייה נשלחה בהצלחה! נחזור אליכם טלפונית או בוואטסאפ עם פרטים נוספים בהקדם האפשרי.';
+const CONFETTI_COLORS = ['#00A4FD', '#A56AF0', '#FF5FC0', '#F2AF49', '#35B89A', '#FFFFFF'];
 
 const FEATURE_HIGHLIGHTS = [
     {
@@ -1129,6 +1130,52 @@ const STYLE = `
         max-width: 520px;
         margin: 0;
     }
+
+    /* ---------- Success confetti ---------- */
+    .bl-confetti-layer {
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        z-index: 10001;
+        overflow: hidden;
+    }
+    .bl-confetti-piece {
+        position: absolute;
+        top: var(--bl-confetti-y, 50%);
+        width: 10px;
+        height: 14px;
+        background: var(--bl-confetti-color, #00A4FD);
+        opacity: 0;
+        border-radius: 2px;
+        animation-duration: var(--bl-confetti-duration, 1.6s);
+        animation-delay: var(--bl-confetti-delay, 0s);
+        animation-timing-function: cubic-bezier(0.22, 0.8, 0.32, 1);
+        animation-fill-mode: forwards;
+    }
+    .bl-confetti-piece.is-circle {
+        width: 9px;
+        height: 9px;
+        border-radius: 50%;
+    }
+    .bl-confetti-piece.from-left {
+        left: -16px;
+        animation-name: bl-confetti-from-left;
+    }
+    .bl-confetti-piece.from-right {
+        right: -16px;
+        animation-name: bl-confetti-from-right;
+    }
+    @keyframes bl-confetti-from-left {
+        0% { opacity: 1; transform: translate(0, 0) rotate(0deg) scale(1); }
+        100% { opacity: 0; transform: translate(calc(42vw + var(--bl-confetti-drift, 0px)), -140px) rotate(var(--bl-confetti-rotate, 180deg)) scale(0.65); }
+    }
+    @keyframes bl-confetti-from-right {
+        0% { opacity: 1; transform: translate(0, 0) rotate(0deg) scale(1); }
+        100% { opacity: 0; transform: translate(calc(-42vw + var(--bl-confetti-drift, 0px)), -140px) rotate(var(--bl-confetti-rotate, -180deg)) scale(0.65); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+        .bl-confetti-layer { display: none; }
+    }
     .bl-checkbox-row { display: flex; align-items: flex-start; gap: 10px; }
     .bl-checkbox-row input { margin-top: 3px; width: 18px; height: 18px; }
     .bl-checkbox-row label { font-size: 13px; font-weight: 600; color: #fff; }
@@ -1370,7 +1417,7 @@ class BirthdayLandingElement extends HTMLElement {
             submitError: null,
             submitSuccess: false,
             pendingRequestId: null,
-            form: { workshopTypes: [], childrenCount: 0, adultsCount: 0, termsAccepted: false },
+            form: { workshopTypes: [], childrenCount: 0, adultsCount: 0, termsAccepted: true },
         };
     }
 
@@ -1405,6 +1452,10 @@ class BirthdayLandingElement extends HTMLElement {
 
     disconnectedCallback() {
         if (this._heroTimer) clearInterval(this._heroTimer);
+        if (this._confettiLayer) {
+            this._confettiLayer.remove();
+            this._confettiLayer = null;
+        }
         if (this._boundPopState) window.removeEventListener('popstate', this._boundPopState);
         if (this._revealObserver) {
             this._revealObserver.disconnect();
@@ -1826,7 +1877,7 @@ class BirthdayLandingElement extends HTMLElement {
                     </div>
                     <div class="bl-field bl-span-2">
                         <div class="bl-checkbox-row">
-                            <input type="checkbox" id="blTerms" name="termsAccepted" />
+                            <input type="checkbox" id="blTerms" name="termsAccepted" ${f.termsAccepted ? 'checked' : ''} />
                             <label for="blTerms">קראתי ואני מסכים/ה לתנאי השימוש ולמדיניות הפרטיות של הסטודיו</label>
                         </div>
                     </div>
@@ -2114,6 +2165,37 @@ class BirthdayLandingElement extends HTMLElement {
         }));
     }
 
+    _launchConfetti() {
+        if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+        if (this._confettiLayer) this._confettiLayer.remove();
+
+        const layer = document.createElement('div');
+        layer.className = 'bl-confetti-layer';
+        layer.setAttribute('aria-hidden', 'true');
+
+        for (let i = 0; i < 56; i++) {
+            const piece = document.createElement('span');
+            const fromLeft = i % 2 === 0;
+            piece.className = `bl-confetti-piece ${fromLeft ? 'from-left' : 'from-right'}${Math.random() > 0.45 ? ' is-circle' : ''}`;
+            piece.style.setProperty('--bl-confetti-color', CONFETTI_COLORS[i % CONFETTI_COLORS.length]);
+            piece.style.setProperty('--bl-confetti-delay', `${Math.random() * 0.4}s`);
+            piece.style.setProperty('--bl-confetti-duration', `${1.15 + Math.random() * 0.85}s`);
+            piece.style.setProperty('--bl-confetti-y', `${18 + Math.random() * 64}%`);
+            piece.style.setProperty('--bl-confetti-rotate', `${Math.floor(Math.random() * 720 - 360)}deg`);
+            piece.style.setProperty('--bl-confetti-drift', `${Math.floor((Math.random() - 0.5) * 140)}px`);
+            layer.appendChild(piece);
+        }
+
+        this._root.appendChild(layer);
+        this._confettiLayer = layer;
+        setTimeout(() => {
+            if (this._confettiLayer === layer) {
+                layer.remove();
+                this._confettiLayer = null;
+            }
+        }, 2600);
+    }
+
     _handleLeadResult(result) {
         if (!result || result.requestId !== this._state.pendingRequestId) return;
         this._state.submitting = false;
@@ -2122,12 +2204,13 @@ class BirthdayLandingElement extends HTMLElement {
         const statusEl = this._root.querySelector('#blFormStatus');
         if (result.ok) {
             this._state.submitSuccess = true;
-            this._state.form = { workshopTypes: [], childrenCount: 0, adultsCount: 0, termsAccepted: false };
+            this._state.form = { workshopTypes: [], childrenCount: 0, adultsCount: 0, termsAccepted: true };
             const formSection = this._root.querySelector('#blFormSection');
             if (formSection) {
                 formSection.innerHTML = this._renderFormSuccess(result.message);
                 formSection.scrollIntoView({ behavior: 'smooth', block: 'center' });
             }
+            this._launchConfetti();
         } else {
             if (btn) { btn.disabled = false; btn.textContent = 'שליחת פנייה'; }
             if (statusEl) statusEl.innerHTML = `<div class="bl-form-error">${escapeHtml(result.message || 'אירעה שגיאה בשליחת הפנייה. נסו שוב.')}</div>`;

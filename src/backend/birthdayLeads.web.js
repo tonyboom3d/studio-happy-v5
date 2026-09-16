@@ -96,10 +96,18 @@ function resolveMenuCardImage(item) {
     return gallery[0] || '';
 }
 
+/** CMS field `workshopSlug` (Text) — English URL name, e.g. "Pottery Party". Falls back to _id. */
+function resolveWorkshopSlug(item) {
+    return String(item.workshopSlug || '').trim();
+}
+
 function mapWorkshopItem(item) {
+    const workshopSlug = resolveWorkshopSlug(item);
     return {
         ...item,
         menuCardImage: resolveMenuCardImage(item),
+        workshopSlug,
+        urlRef: workshopSlug || item._id || '',
     };
 }
 

@@ -21,7 +21,7 @@ $w.onReady(function () {
         return;
     }
 
-    syncWorkshopQueryToElement(el, getWorkshopIdFromQuery());
+    syncWorkshopQueryToElement(el, getWorkshopRefFromQuery());
 
     el.on('submitLead', (event) => {
         handleSubmitLead(el, event.detail).catch((err) => {
@@ -34,8 +34,8 @@ $w.onReady(function () {
     });
 
     el.on('birthday-workshop-select', (event) => {
-        const workshopId = event.detail?.workshopId || '';
-        updateWorkshopQuery(el, workshopId);
+        const workshopRef = event.detail?.workshopRef || event.detail?.workshopId || '';
+        updateWorkshopQuery(el, workshopRef);
     });
 
     el.on('birthday-workshop-clear', () => {
@@ -43,8 +43,8 @@ $w.onReady(function () {
     });
 
     el.on('birthday-tab-change', (event) => {
-        const workshopId = event.detail?.workshopId || '';
-        if (workshopId) updateWorkshopQuery(el, workshopId, { replace: true });
+        const workshopRef = event.detail?.workshopRef || event.detail?.workshopId || '';
+        if (workshopRef) updateWorkshopQuery(el, workshopRef, { replace: true });
     });
 
     loadWorkshops(el).catch((err) => {
@@ -53,22 +53,22 @@ $w.onReady(function () {
     });
 });
 
-function getWorkshopIdFromQuery() {
+function getWorkshopRefFromQuery() {
     return String(wixLocation.query?.[WORKSHOP_QUERY_KEY] || '').trim();
 }
 
-function syncWorkshopQueryToElement(el, workshopId) {
-    el.setAttribute('active-workshop-id', workshopId || '');
+function syncWorkshopQueryToElement(el, workshopRef) {
+    el.setAttribute('active-workshop-ref', workshopRef || '');
 }
 
-function updateWorkshopQuery(el, workshopId, options = {}) {
+function updateWorkshopQuery(el, workshopRef, options = {}) {
     const baseUrl = wixLocation.url.split('?')[0];
-    const nextUrl = workshopId
-        ? `${baseUrl}?${WORKSHOP_QUERY_KEY}=${encodeURIComponent(workshopId)}`
+    const nextUrl = workshopRef
+        ? `${baseUrl}?${WORKSHOP_QUERY_KEY}=${encodeURIComponent(workshopRef)}`
         : baseUrl;
     const historyMode = options.replace ? 'replace' : 'push';
     wixLocationFrontend.to(nextUrl, { history: historyMode });
-    syncWorkshopQueryToElement(el, workshopId);
+    syncWorkshopQueryToElement(el, workshopRef);
 }
 
 async function loadWorkshops(el) {

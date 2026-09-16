@@ -11,15 +11,17 @@
  * 4. העלה קובץ זה תחת "Source: Upload a file".
  * 5. הגדירו את רכיב ה-Custom Element ל-Full Width / Stretch, וגובה גמיש (Auto).
  *
- * CMS — birthdayWorkshops: הוסף עמודה `menuCardImage` (סוג Image) לתמונת כרטיסייה בתפריט.
+ * CMS — birthdayWorkshops:
+ *   `menuCardImage` (Image) — תמונת כרטיסייה בתפריט
+ *   `workshopSlug` (Text) — שם באנגלית ל-URL, למשל "Pottery Party" (fallback: _id)
  *
  * תקשורת עם Velo (src/pages/ימי הולדת.ycwo5.js):
  *  - Velo -> CE: setAttribute('workshops-data', ...)
- *              / setAttribute('active-workshop-id', '<id>')  ← מ-query ?workshop=
+ *              / setAttribute('active-workshop-ref', '<slug|id>')  ← מ-query ?workshop=
  *              / setAttribute('lead-result', ...)
- *  - CE -> Velo: dispatchEvent('birthday-workshop-select', { detail: { workshopId } })
+ *  - CE -> Velo: dispatchEvent('birthday-workshop-select', { detail: { workshopRef } })
  *              / dispatchEvent('birthday-workshop-clear')
- *              / dispatchEvent('birthday-tab-change', { detail: { workshopId } })
+ *              / dispatchEvent('birthday-tab-change', { detail: { workshopRef } })
  *              / dispatchEvent('submitLead', { detail: { requestId, payload } })
  */
 
@@ -75,6 +77,29 @@ function optimizeMediaUrl(entry, targetWidth, targetHeight) {
 function mediaAlt(entry, fallback) {
     if (entry && typeof entry === 'object') return entry.title || entry.altText || entry.description || fallback || '';
     return fallback || '';
+}
+
+/** Decodes and normalizes a workshop URL ref (slug or id) for comparison. */
+function normalizeWorkshopRef(ref) {
+    if (ref == null || ref === '') return '';
+    let str = String(ref).trim();
+    try { str = decodeURIComponent(str.replace(/\+/g, ' ')); } catch (e) { /* keep raw */ }
+    return str.trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+function getWorkshopUrlRef(workshop) {
+    const slug = String(workshop?.workshopSlug || workshop?.urlRef || '').trim();
+    return slug || workshop?._id || '';
+}
+
+function workshopRefMatches(workshop, ref) {
+    if (!workshop || ref == null || ref === '') return false;
+    const normalized = normalizeWorkshopRef(ref);
+    if (!normalized) return false;
+    if (workshop._id && normalizeWorkshopRef(workshop._id) === normalized) return true;
+    if (workshop.workshopSlug && normalizeWorkshopRef(workshop.workshopSlug) === normalized) return true;
+    if (workshop.urlRef && normalizeWorkshopRef(workshop.urlRef) === normalized) return true;
+    return false;
 }
 
 /** Plain-text excerpt from workshop description for menu cards (max 3 lines via CSS). */
@@ -1234,7 +1259,7 @@ const BG_BRAND_CIRCLES = [
 const HERO_FADE_MS = 4200;
 class BirthdayLandingElement extends HTMLElement {
     static get observedAttributes() {
-        return ['workshops-data', 'lead-result', 'active-workshop-id'];
+        return ['workshops-data', 'lead-result', 'active-workshop-ref'];
     }
 
     constructor() {
@@ -1245,7 +1270,7 @@ class BirthdayLandingElement extends HTMLElement {
             loading: true,
             dataLoaded: false,
             workshops: [],
-            activeWorkshopId: null,
+            activeWorkshopRef: null,
             activeIndex: 0,
             heroImageIndex: 0,
             faqOpenIndex: null,
@@ -1268,8 +1293,8 @@ class BirthdayLandingElement extends HTMLElement {
     }
 
     _hydrateFromAttribute() {
-        const workshopId = (this.getAttribute('active-workshop-id') || '').trim();
-        if (workshopId) this._state.activeWorkshopId = workshopId;
+        const workshopRef = (this.getAttribute('active-workshop-ref') || '').trim();
+        if (workshopRef) this._state.activeWorkshopRef = workshopRef;
 
         const raw = this.getAttribute('workshops-data');
         if (!raw) return;
@@ -1293,10 +1318,10 @@ class BirthdayLandingElement extends HTMLElement {
     }
 
     attributeChangedCallback(name, oldValue, newValue) {
-        if (name === 'active-workshop-id') {
-            const id = (newValue || '').trim();
-            if (id === (this._state.activeWorkshopId || '')) return;
-            this._state.activeWorkshopId = id || null;
+        if (name === 'active-workshop-ref') {
+            const ref = (newValue || '').trim();
+            if (ref === (this._state.activeWorkshopRef || '')) return;
+            this._state.activeWorkshopRef = ref || null;
             this._state.faqOpenIndex = null;
             this._resolveActiveIndex();
             if (this._root) { this._renderAll(); this._bindEvents(); }
@@ -1334,19 +1359,24 @@ class BirthdayLandingElement extends HTMLElement {
         return this._state.workshops[this._state.activeIndex] || null;
     }
 
+    _findWorkshopIndexByRef(ref) {
+        if (!ref) return -1;
+        return this._state.workshops.findIndex((w) => workshopRefMatches(w, ref));
+    }
+
     _findWorkshopIndex(workshopId) {
         return this._state.workshops.findIndex((w) => w._id === workshopId);
     }
 
     _resolveActiveIndex() {
-        const idx = this._state.activeWorkshopId
-            ? this._findWorkshopIndex(this._state.activeWorkshopId)
+        const idx = this._state.activeWorkshopRef
+            ? this._findWorkshopIndexByRef(this._state.activeWorkshopRef)
             : -1;
         this._state.activeIndex = idx >= 0 ? idx : 0;
     }
 
     _isDetailView() {
-        return !!(this._state.activeWorkshopId && this._findWorkshopIndex(this._state.activeWorkshopId) >= 0);
+        return !!(this._state.activeWorkshopRef && this._findWorkshopIndexByRef(this._state.activeWorkshopRef) >= 0);
     }
 
     _getMenuCardImage(workshop) {
@@ -1768,14 +1798,16 @@ class BirthdayLandingElement extends HTMLElement {
     }
 
     _selectWorkshop(workshopId) {
-        if (!workshopId || this._findWorkshopIndex(workshopId) < 0) return;
-        this._state.activeWorkshopId = workshopId;
+        const workshop = this._state.workshops[this._findWorkshopIndex(workshopId)];
+        if (!workshop) return;
+        const workshopRef = getWorkshopUrlRef(workshop);
+        this._state.activeWorkshopRef = workshopRef;
         this._resolveActiveIndex();
         this._state.faqOpenIndex = null;
         this._renderAll();
         this._bindEvents();
         this.dispatchEvent(new CustomEvent('birthday-workshop-select', {
-            detail: { workshopId },
+            detail: { workshopId: workshop._id, workshopRef },
             bubbles: true,
             composed: true,
         }));
@@ -1783,7 +1815,7 @@ class BirthdayLandingElement extends HTMLElement {
     }
 
     _clearWorkshop() {
-        this._state.activeWorkshopId = null;
+        this._state.activeWorkshopRef = null;
         this._state.faqOpenIndex = null;
         this._renderAll();
         this._bindEvents();
@@ -1798,7 +1830,7 @@ class BirthdayLandingElement extends HTMLElement {
         if (index === this._state.activeIndex) return;
         this._state.activeIndex = index;
         const active = this._activeWorkshop();
-        if (active && active._id) this._state.activeWorkshopId = active._id;
+        if (active) this._state.activeWorkshopRef = getWorkshopUrlRef(active);
         this._state.heroImageIndex = 0;
         this._state.faqOpenIndex = null;
         this._root.querySelectorAll('[data-tab-index]').forEach((btn) => {
@@ -1814,7 +1846,11 @@ class BirthdayLandingElement extends HTMLElement {
         this._startHeroFade();
         this._initRevealAnimations();
         this.dispatchEvent(new CustomEvent('birthday-tab-change', {
-            detail: { workshopId: active._id || null, title: active.title || null },
+            detail: {
+                workshopId: active._id || null,
+                workshopRef: getWorkshopUrlRef(active),
+                title: active.title || null,
+            },
             bubbles: true,
             composed: true,
         }));

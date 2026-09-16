@@ -541,23 +541,77 @@ const STYLE = `
         margin-top: 4px;
     }
     .bl-hero-subtitle { font-size: 18px; color: #525252; font-weight: 600; }
-    .bl-tabs { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 8px; }
-    .bl-tab {
+
+    /* ---------- Top workshop nav (detail view) ---------- */
+    .bl-topnav {
+        position: sticky;
+        top: 0;
+        z-index: 100;
+        background: rgba(249, 251, 253, 0.94);
+        backdrop-filter: blur(12px);
+        border-bottom: 1px solid rgba(165, 106, 240, 0.14);
+        box-shadow: 0 4px 18px rgba(37, 38, 38, 0.04);
+    }
+    .bl-topnav-inner {
+        max-width: 1180px;
+        margin: 0 auto;
+        padding: 10px 20px;
+        display: flex;
+        align-items: center;
+        gap: 14px;
+    }
+    .bl-topnav-logo-btn {
+        flex-shrink: 0;
+        border: none;
+        background: none;
+        padding: 0;
+        cursor: pointer;
+        line-height: 0;
+    }
+    .bl-topnav-logo-btn img {
+        height: 44px;
+        width: auto;
+        max-width: 120px;
+        object-fit: contain;
+        display: block;
+    }
+    .bl-topnav-scroll {
+        flex: 1;
+        min-width: 0;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+    }
+    .bl-topnav-scroll::-webkit-scrollbar { display: none; }
+    .bl-topnav-items {
+        display: flex;
+        flex-wrap: nowrap;
+        gap: 10px;
+        width: max-content;
+        padding: 2px 0;
+    }
+    .bl-topnav-item {
+        flex-shrink: 0;
         border: 2px solid #A56AF0;
         background: #fff;
         color: #262626;
         font-weight: 800;
-        font-size: 14px;
-        padding: 10px 18px;
+        font-size: 13px;
+        padding: 9px 16px;
         border-radius: 999px;
-        transition: transform 0.18s ease, background 0.18s ease, color 0.18s ease;
+        white-space: nowrap;
+        transition: transform 0.18s ease, background 0.18s ease, color 0.18s ease, box-shadow 0.18s ease;
     }
-    .bl-tab:hover { transform: translateY(-2px); }
-    .bl-tab.is-active {
+    .bl-topnav-item:hover { transform: translateY(-1px); }
+    .bl-topnav-item.is-active {
         background: linear-gradient(135deg, #00A4FD, #A56AF0);
         color: #fff;
         border-color: transparent;
-        box-shadow: 0 8px 18px rgba(165, 106, 240, 0.35);
+        box-shadow: 0 6px 16px rgba(165, 106, 240, 0.32);
+    }
+    @media (min-width: 901px) {
+        .bl-topnav-items { flex-wrap: wrap; width: auto; max-width: 100%; }
+        .bl-topnav-item { font-size: 14px; padding: 10px 18px; }
     }
 
     /* ---------- Description card ---------- */
@@ -1217,18 +1271,6 @@ const STYLE = `
         background: linear-gradient(135deg, #00A4FD, #A56AF0);
         pointer-events: none;
     }
-    .bl-back-btn {
-        border: 2px solid #A56AF0;
-        background: #fff;
-        color: #A56AF0;
-        font-weight: 800;
-        font-size: 14px;
-        padding: 8px 16px;
-        border-radius: 999px;
-        margin-bottom: 8px;
-        transition: background 0.18s ease, color 0.18s ease, transform 0.18s ease;
-    }
-    .bl-back-btn:hover { background: #A56AF0; color: #fff; transform: translateY(-1px); }
 `;
 
 const BRAND_CIRCLE_IMG = 'https://static.wixstatic.com/media/6b73e9_6e7c52763bb24ba6812aaac51ecb4296~mv2.png';
@@ -1417,6 +1459,7 @@ class BirthdayLandingElement extends HTMLElement {
         const active = this._activeWorkshop();
         this._root.innerHTML = h`
             ${this._renderBackground()}
+            ${this._renderTopNav()}
             <header class="bl-hero">
                 <div class="bl-hero-gallery-wrap">
                     <div class="bl-hero-card bl-hero-card-1" aria-hidden="true"></div>
@@ -1424,11 +1467,8 @@ class BirthdayLandingElement extends HTMLElement {
                     <div class="bl-hero-gallery" id="blHeroGallery">${this._renderHeroImages(active)}</div>
                 </div>
                 <div class="bl-hero-text">
-                    <button type="button" class="bl-back-btn" id="blBackToMenu">← כל הסדנאות</button>
-                    ${this._renderHeroLogo()}
                     <h1 class="bl-hero-title">חוגגים יום הולדת ב<span class="bl-hero-brand">Studio Happy</span></h1>
                     <p class="bl-hero-subtitle" id="blActiveSubtitle">${escapeHtml(active.subtitle || '')}</p>
-                    <div class="bl-tabs" id="blTabs">${this._renderTabs()}</div>
                 </div>
             </header>
             <div id="blContent">${this._renderContent(active)}</div>
@@ -1564,9 +1604,24 @@ class BirthdayLandingElement extends HTMLElement {
         return `${imgs}<div class="bl-hero-badge">✨ סטודיו Happy</div>`;
     }
 
-    _renderTabs() {
+    _renderTopNav() {
+        return `
+            <nav class="bl-topnav bl-reveal" id="blTopNav" aria-label="ניווט סדנאות">
+                <div class="bl-topnav-inner">
+                    <button type="button" class="bl-topnav-logo-btn" id="blTopNavHome" aria-label="חזרה לכל הסדנאות">
+                        <img src="${BRAND_LOGO_IMG}" alt="Studio Happy" loading="eager" decoding="async" />
+                    </button>
+                    <div class="bl-topnav-scroll">
+                        <div class="bl-topnav-items" id="blTopNavItems">${this._renderWorkshopNavItems()}</div>
+                    </div>
+                </div>
+            </nav>
+        `;
+    }
+
+    _renderWorkshopNavItems() {
         return this._state.workshops.map((w, i) => `
-            <button type="button" class="bl-tab ${i === this._state.activeIndex ? 'is-active' : ''}" data-tab-index="${i}">
+            <button type="button" class="bl-topnav-item ${i === this._state.activeIndex ? 'is-active' : ''}" data-tab-index="${i}">
                 ${escapeHtml(w.title || 'סדנה')}
             </button>
         `).join('');
@@ -1782,7 +1837,7 @@ class BirthdayLandingElement extends HTMLElement {
             return;
         }
 
-        if (e.target.closest('#blBackToMenu')) {
+        if (e.target.closest('#blTopNavHome')) {
             this._clearWorkshop();
             return;
         }
@@ -1880,6 +1935,8 @@ class BirthdayLandingElement extends HTMLElement {
         this._root.querySelectorAll('[data-tab-index]').forEach((btn) => {
             btn.classList.toggle('is-active', Number(btn.dataset.tabIndex) === index);
         });
+        const activeNavBtn = this._root.querySelector('.bl-topnav-item.is-active');
+        if (activeNavBtn) activeNavBtn.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
         const subtitleEl = this._root.querySelector('#blActiveSubtitle');
         if (subtitleEl) subtitleEl.textContent = active.subtitle || '';
         const galleryEl = this._root.querySelector('#blHeroGallery');

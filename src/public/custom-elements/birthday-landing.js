@@ -276,8 +276,9 @@ const WHATSAPP_ICON = `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3
 const WHATSAPP_SUPPORT_PHONE = '972522272270';
 const FORM_SUCCESS_MESSAGE = 'הפנייה נשלחה בהצלחה! נחזור אליכם טלפונית או בוואטסאפ עם פרטים נוספים בהקדם האפשרי.';
 const CONFETTI_COLORS = ['#00A4FD', '#A56AF0', '#FF5FC0', '#F2AF49', '#35B89A', '#FFFFFF'];
-const CONFETTI_SHAPES = ['', 'is-circle', 'is-triangle', 'is-ribbon'];
+const CONFETTI_CDN = 'https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.4/dist/confetti.browser.min.js';
 const MIN_CHILDREN_COUNT = 15;
+const FORM_ERROR_DISPLAY_MS = 5000;
 const COUNTER_LIMITS = {
     childrenCount: { min: MIN_CHILDREN_COUNT, max: 60 },
     adultsCount: { min: 0, max: 50 },
@@ -1139,76 +1140,31 @@ const STYLE = `
         margin: 0;
     }
 
-    /* ---------- Success confetti (realistic arc + tumble + gravity fall) ---------- */
-    .bl-confetti-layer {
-        position: fixed;
-        inset: 0;
-        pointer-events: none;
-        z-index: 10001;
-        overflow: hidden;
-        perspective: 700px;
-    }
-    .bl-confetti-piece {
-        position: absolute;
-        top: var(--bl-confetti-y, 40%);
-        width: var(--bl-confetti-w, 9px);
-        height: var(--bl-confetti-h, 14px);
-        background: var(--bl-confetti-color, #00A4FD);
-        opacity: 0;
-        border-radius: 2px;
-        transform-style: preserve-3d;
-        animation-name: bl-confetti-fly;
-        animation-duration: var(--bl-confetti-duration, 1.9s);
-        animation-delay: var(--bl-confetti-delay, 0s);
-        animation-timing-function: cubic-bezier(0.16, 0.72, 0.4, 1);
-        animation-fill-mode: forwards;
-        will-change: transform, opacity;
-    }
-    .bl-confetti-piece.is-circle { border-radius: 50%; }
-    .bl-confetti-piece.is-triangle {
-        background: transparent !important;
-        border-radius: 0;
-        border-left: calc(var(--bl-confetti-w, 9px) / 2) solid transparent;
-        border-right: calc(var(--bl-confetti-w, 9px) / 2) solid transparent;
-        border-bottom: var(--bl-confetti-h, 14px) solid var(--bl-confetti-color, #00A4FD);
-        width: 0;
-        height: 0;
-    }
-    .bl-confetti-piece.is-ribbon {
-        width: calc(var(--bl-confetti-w, 9px) * 0.55);
-        border-radius: 999px;
-    }
-    .bl-confetti-piece.from-left { left: -18px; }
-    .bl-confetti-piece.from-right { right: -18px; }
-    @keyframes bl-confetti-fly {
-        0% {
-            opacity: 1;
-            transform: translate(0, 0) rotate3d(var(--bl-confetti-axis-x, 0.4), var(--bl-confetti-axis-y, 1), var(--bl-confetti-axis-z, 0.2), 0deg) scale(0.75);
-        }
-        10% { opacity: 1; }
-        52% {
-            opacity: 1;
-            transform: translate(var(--bl-confetti-mid-x, 120px), var(--bl-confetti-mid-y, -160px)) rotate3d(var(--bl-confetti-axis-x, 0.4), var(--bl-confetti-axis-y, 1), var(--bl-confetti-axis-z, 0.2), var(--bl-confetti-mid-rot, 480deg)) scale(1);
-        }
-        85% { opacity: 1; }
-        100% {
-            opacity: 0;
-            transform: translate(var(--bl-confetti-end-x, 260px), var(--bl-confetti-end-y, 240px)) rotate3d(var(--bl-confetti-axis-x, 0.4), var(--bl-confetti-axis-y, 1), var(--bl-confetti-axis-z, 0.2), var(--bl-confetti-end-rot, 960deg)) scale(0.6);
-        }
-    }
-    @media (prefers-reduced-motion: reduce) {
-        .bl-confetti-layer { display: none; }
-    }
     .bl-checkbox-row { display: flex; align-items: flex-start; gap: 10px; }
     .bl-checkbox-row input { margin-top: 3px; width: 18px; height: 18px; }
     .bl-checkbox-row label { font-size: 13px; font-weight: 600; color: #fff; }
-    .bl-form-error { background: rgba(255,255,255,0.9); color: #b3261e; font-weight: 800; padding: 10px 14px; border-radius: 12px; font-size: 14px; }
+    .bl-form-footer {
+        display: flex;
+        flex-direction: column;
+        align-items: stretch;
+        max-width: 780px;
+        margin: 22px auto 0;
+        gap: 14px;
+    }
+    #blFormStatus:empty { display: none; }
+    #blFormStatus:not(:empty) { display: block; }
+    .bl-form-error {
+        background: rgba(255,255,255,0.9);
+        color: #b3261e;
+        font-weight: 800;
+        padding: 10px 14px;
+        border-radius: 12px;
+        font-size: 14px;
+        text-align: center;
+    }
     .bl-form-success { background: rgba(255,255,255,0.95); color: #1a7a4c; font-weight: 800; padding: 14px 18px; border-radius: 14px; font-size: 15px; text-align: center; }
     .bl-submit-btn {
-        margin-top: 22px;
         width: 100%;
-        max-width: 780px;
-        margin-inline: auto;
         border: none;
         border-radius: 999px;
         padding: 16px;
@@ -1428,6 +1384,8 @@ class BirthdayLandingElement extends HTMLElement {
         super();
         this._requestSeq = 0;
         this._heroTimer = null;
+        this._formErrorTimer = null;
+        this._confettiLoadPromise = null;
         this._state = {
             loading: true,
             dataLoaded: false,
@@ -1475,10 +1433,7 @@ class BirthdayLandingElement extends HTMLElement {
 
     disconnectedCallback() {
         if (this._heroTimer) clearInterval(this._heroTimer);
-        if (this._confettiLayer) {
-            this._confettiLayer.remove();
-            this._confettiLayer = null;
-        }
+        this._clearFormErrorTimer();
         if (this._boundPopState) window.removeEventListener('popstate', this._boundPopState);
         if (this._revealObserver) {
             this._revealObserver.disconnect();
@@ -1869,23 +1824,22 @@ class BirthdayLandingElement extends HTMLElement {
             <div class="bl-form-section bl-reveal" style="--bl-delay: 80ms">
                 <h2>רוצים לחגוג אצלנו?</h2>
                 <p class="bl-form-sub">מלאו פרטים ונחזור אליכם עם כל הפרטים לסדנה המושלמת</p>
-                <div id="blFormStatus"></div>
-                <div class="bl-form-grid">
+                <form id="blLeadForm" class="bl-form-grid" novalidate>
                     <div class="bl-field">
                         <label for="blFullName">שם מלא${req}</label>
-                        <input type="text" id="blFullName" name="fullName" required placeholder="שם מלא" />
+                        <input type="text" id="blFullName" name="fullName" placeholder="שם מלא" autocomplete="name" />
                     </div>
                     <div class="bl-field">
                         <label for="blEmail">אימייל${req}</label>
-                        <input type="email" id="blEmail" name="email" required placeholder="name@example.com" />
+                        <input type="email" id="blEmail" name="email" placeholder="name@example.com" autocomplete="email" />
                     </div>
                     <div class="bl-field">
                         <label for="blPhone">טלפון${req}</label>
-                        <input type="tel" id="blPhone" name="phone" inputmode="tel" required placeholder="050-0000000" />
+                        <input type="tel" id="blPhone" name="phone" inputmode="tel" placeholder="050-0000000" autocomplete="tel" />
                     </div>
                     <div class="bl-field">
                         <label for="blDate">תאריך מועדף${req}</label>
-                        <input type="date" id="blDate" name="preferredDate" required />
+                        <input type="date" id="blDate" name="preferredDate" />
                     </div>
                     <div class="bl-field bl-span-2">
                         <label>סוג סדנה מבוקש${req}</label>
@@ -1917,8 +1871,11 @@ class BirthdayLandingElement extends HTMLElement {
                             <label for="blTerms">קראתי ואני מסכים/ה לתנאי השימוש ולמדיניות הפרטיות של הסטודיו</label>
                         </div>
                     </div>
+                </form>
+                <div class="bl-form-footer">
+                    <button type="button" class="bl-submit-btn" id="blSubmitBtn">שליחה</button>
+                    <div id="blFormStatus" role="alert" aria-live="polite"></div>
                 </div>
-                <button type="button" class="bl-submit-btn" id="blSubmitBtn">שליחה</button>
             </div>
         `;
     }
@@ -2186,16 +2143,40 @@ class BirthdayLandingElement extends HTMLElement {
         return null;
     }
 
+    _clearFormErrorTimer() {
+        if (this._formErrorTimer) {
+            clearTimeout(this._formErrorTimer);
+            this._formErrorTimer = null;
+        }
+    }
+
+    _clearFormError() {
+        this._clearFormErrorTimer();
+        const statusEl = this._root && this._root.querySelector('#blFormStatus');
+        if (statusEl) statusEl.innerHTML = '';
+    }
+
+    _showFormError(message) {
+        const statusEl = this._root && this._root.querySelector('#blFormStatus');
+        if (!statusEl) return;
+        this._clearFormErrorTimer();
+        statusEl.innerHTML = `<div class="bl-form-error">${escapeHtml(message)}</div>`;
+        statusEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        this._formErrorTimer = setTimeout(() => {
+            this._formErrorTimer = null;
+            if (statusEl) statusEl.innerHTML = '';
+        }, FORM_ERROR_DISPLAY_MS);
+    }
+
     _onSubmit() {
         if (this._state.submitting) return;
         const values = this._readFormValues();
         const error = this._validate(values);
-        const statusEl = this._root.querySelector('#blFormStatus');
         if (error) {
-            if (statusEl) statusEl.innerHTML = `<div class="bl-form-error">${escapeHtml(error)}</div>`;
+            this._showFormError(error);
             return;
         }
-        if (statusEl) statusEl.innerHTML = '';
+        this._clearFormError();
         this._state.submitting = true;
         this._state.submitError = null;
         this._state.submitSuccess = false;
@@ -2210,59 +2191,74 @@ class BirthdayLandingElement extends HTMLElement {
         }));
     }
 
-    _launchConfetti() {
+    _loadConfettiLib() {
+        if (typeof window.confetti === 'function') return Promise.resolve(window.confetti);
+        if (this._confettiLoadPromise) return this._confettiLoadPromise;
+        this._confettiLoadPromise = new Promise((resolve, reject) => {
+            const script = document.createElement('script');
+            script.src = CONFETTI_CDN;
+            script.async = true;
+            script.onload = () => {
+                if (typeof window.confetti === 'function') resolve(window.confetti);
+                else reject(new Error('canvas-confetti failed to load'));
+            };
+            script.onerror = () => reject(new Error('canvas-confetti script failed'));
+            document.head.appendChild(script);
+        });
+        return this._confettiLoadPromise;
+    }
+
+    _fireConfettiBurst(confetti, opts) {
+        confetti({
+            particleCount: opts.particleCount,
+            angle: opts.angle,
+            spread: opts.spread,
+            startVelocity: opts.startVelocity,
+            decay: 0.91,
+            gravity: 1.05,
+            ticks: 220,
+            origin: opts.origin,
+            colors: CONFETTI_COLORS,
+            zIndex: 10001,
+            disableForReducedMotion: true,
+        });
+    }
+
+    async _launchConfetti() {
         if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-        if (this._confettiLayer) this._confettiLayer.remove();
-
-        const layer = document.createElement('div');
-        layer.className = 'bl-confetti-layer';
-        layer.setAttribute('aria-hidden', 'true');
-
-        const vw = window.innerWidth || 1200;
-        const pieceCount = 70;
-
-        for (let i = 0; i < pieceCount; i++) {
-            const piece = document.createElement('span');
-            const fromLeft = i % 2 === 0;
-            const shape = CONFETTI_SHAPES[Math.floor(Math.random() * CONFETTI_SHAPES.length)];
-            piece.className = `bl-confetti-piece ${fromLeft ? 'from-left' : 'from-right'}${shape ? ` ${shape}` : ''}`;
-
-            const side = fromLeft ? 1 : -1;
-            // Launch arc: travels partway across, rises, then gravity pulls it back down past the start line.
-            const travel = vw * (0.24 + Math.random() * 0.24);
-            const dx = side * travel;
-            const riseHeight = 70 + Math.random() * 150;
-            const fallExtra = 160 + Math.random() * 220;
-            const width = 6 + Math.random() * 6;
-            const height = width * (1.3 + Math.random() * 0.5);
-            const spinBase = 380 + Math.random() * 420;
-
-            piece.style.setProperty('--bl-confetti-color', CONFETTI_COLORS[i % CONFETTI_COLORS.length]);
-            piece.style.setProperty('--bl-confetti-delay', `${Math.random() * 0.35}s`);
-            piece.style.setProperty('--bl-confetti-duration', `${1.5 + Math.random() * 0.9}s`);
-            piece.style.setProperty('--bl-confetti-y', `${16 + Math.random() * 66}%`);
-            piece.style.setProperty('--bl-confetti-w', `${width}px`);
-            piece.style.setProperty('--bl-confetti-h', `${height}px`);
-            piece.style.setProperty('--bl-confetti-mid-x', `${dx * (0.48 + Math.random() * 0.1)}px`);
-            piece.style.setProperty('--bl-confetti-mid-y', `${-riseHeight}px`);
-            piece.style.setProperty('--bl-confetti-end-x', `${dx * (0.92 + Math.random() * 0.16)}px`);
-            piece.style.setProperty('--bl-confetti-end-y', `${fallExtra}px`);
-            piece.style.setProperty('--bl-confetti-mid-rot', `${spinBase * 0.55}deg`);
-            piece.style.setProperty('--bl-confetti-end-rot', `${spinBase}deg`);
-            piece.style.setProperty('--bl-confetti-axis-x', `${(Math.random() * 0.8).toFixed(2)}`);
-            piece.style.setProperty('--bl-confetti-axis-y', `${(0.4 + Math.random() * 0.8).toFixed(2)}`);
-            piece.style.setProperty('--bl-confetti-axis-z', `${(Math.random() * 0.5).toFixed(2)}`);
-            layer.appendChild(piece);
+        try {
+            const confetti = await this._loadConfettiLib();
+            this._fireConfettiBurst(confetti, {
+                particleCount: 90,
+                angle: 62,
+                spread: 58,
+                startVelocity: 52,
+                origin: { x: 0, y: 0.62 },
+            });
+            this._fireConfettiBurst(confetti, {
+                particleCount: 90,
+                angle: 118,
+                spread: 58,
+                startVelocity: 52,
+                origin: { x: 1, y: 0.62 },
+            });
+            setTimeout(() => {
+                confetti({
+                    particleCount: 55,
+                    spread: 72,
+                    startVelocity: 38,
+                    decay: 0.92,
+                    gravity: 1,
+                    ticks: 180,
+                    origin: { y: 0.58 },
+                    colors: CONFETTI_COLORS,
+                    zIndex: 10001,
+                    disableForReducedMotion: true,
+                });
+            }, 180);
+        } catch (err) {
+            console.warn('[birthday-landing] confetti failed:', err);
         }
-
-        this._root.appendChild(layer);
-        this._confettiLayer = layer;
-        setTimeout(() => {
-            if (this._confettiLayer === layer) {
-                layer.remove();
-                this._confettiLayer = null;
-            }
-        }, 2900);
     }
 
     _handleLeadResult(result) {
@@ -2270,8 +2266,8 @@ class BirthdayLandingElement extends HTMLElement {
         this._state.submitting = false;
         this._state.pendingRequestId = null;
         const btn = this._root.querySelector('#blSubmitBtn');
-        const statusEl = this._root.querySelector('#blFormStatus');
         if (result.ok) {
+            this._clearFormError();
             this._state.submitSuccess = true;
             this._state.form = { workshopTypes: [], childrenCount: MIN_CHILDREN_COUNT, adultsCount: 0, termsAccepted: true };
             const formSection = this._root.querySelector('#blFormSection');
@@ -2282,7 +2278,7 @@ class BirthdayLandingElement extends HTMLElement {
             this._launchConfetti();
         } else {
             if (btn) { btn.disabled = false; btn.textContent = 'שליחה'; }
-            if (statusEl) statusEl.innerHTML = `<div class="bl-form-error">${escapeHtml(result.message || 'אירעה שגיאה בשליחת הפנייה. נסו שוב.')}</div>`;
+            this._showFormError(result.message || 'אירעה שגיאה בשליחת הפנייה. נסו שוב.');
         }
     }
 }

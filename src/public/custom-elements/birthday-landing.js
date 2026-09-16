@@ -11,10 +11,15 @@
  * 4. העלה קובץ זה תחת "Source: Upload a file".
  * 5. הגדירו את רכיב ה-Custom Element ל-Full Width / Stretch, וגובה גמיש (Auto).
  *
+ * CMS — birthdayWorkshops: הוסף עמודה `menuCardImage` (סוג Image) לתמונת כרטיסייה בתפריט.
+ *
  * תקשורת עם Velo (src/pages/ימי הולדת.ycwo5.js):
- *  - Velo -> CE: setAttribute('workshops-data', JSON.stringify({ workshops, __ts }))
- *              / setAttribute('lead-result', JSON.stringify({ requestId, ok, message }))
- *  - CE -> Velo: dispatchEvent('birthday-tab-change', { detail: { workshopId } })
+ *  - Velo -> CE: setAttribute('workshops-data', ...)
+ *              / setAttribute('active-workshop-id', '<id>')  ← מ-query ?workshop=
+ *              / setAttribute('lead-result', ...)
+ *  - CE -> Velo: dispatchEvent('birthday-workshop-select', { detail: { workshopId } })
+ *              / dispatchEvent('birthday-workshop-clear')
+ *              / dispatchEvent('birthday-tab-change', { detail: { workshopId } })
  *              / dispatchEvent('submitLead', { detail: { requestId, payload } })
  */
 
@@ -48,9 +53,36 @@ function resolveWixImage(value) {
     return str;
 }
 
+/** Returns a resized wixstatic URL for faster gallery loading. */
+function optimizeMediaUrl(entry, targetWidth, targetHeight) {
+    const url = resolveMediaUrl(entry);
+    if (!url) return '';
+    if (!url.includes('static.wixstatic.com/media/')) return url;
+    if (url.includes('/v1/fill/') || url.includes('/v1/crop/')) return url;
+
+    const match = url.match(/static\.wixstatic\.com\/media\/([^/?#]+)/);
+    if (!match) return url;
+
+    const hash = match[1];
+    const afterHash = url.split(`/media/${hash}`)[1] || '';
+    const filenameMatch = afterHash.match(/\/([^/?#]+)$/);
+    const filename = filenameMatch ? filenameMatch[1] : 'image.jpg';
+    const h = targetHeight || Math.round(targetWidth * 0.75);
+
+    return `https://static.wixstatic.com/media/${hash}/v1/fill/w_${targetWidth},h_${h},al_c,q_80,usm_0.66_1.00_0.01,enc_auto/${filename}`;
+}
+
 function mediaAlt(entry, fallback) {
     if (entry && typeof entry === 'object') return entry.title || entry.altText || entry.description || fallback || '';
     return fallback || '';
+}
+
+/** Plain-text excerpt from workshop description for menu cards (max 3 lines via CSS). */
+function descriptionPreview(text) {
+    if (!text) return '';
+    const lines = String(text).trim().split(/\n+/).map((s) => s.trim()).filter(Boolean);
+    const bodyLines = lines.filter((line) => !/משך\s*(ה)?סדנ[אה]/i.test(line));
+    return bodyLines.join(' ') || String(text).trim();
 }
 
 /** Formats workshop description into readable paragraphs + duration badge. */
@@ -208,6 +240,7 @@ const SPINNER_ICON = `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.
 const FAB_ICON = `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" class="bl-fab-icon"><path d="M12 5v14M5 12h14" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/></svg>`;
 const WHATSAPP_ICON = `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" class="bl-faq-wa-icon"><path d="M12 2a10 10 0 00-8.7 14.9L2 22l5.3-1.3A10 10 0 1012 2z" stroke="#fff" stroke-width="2" stroke-linejoin="round"/><path d="M8.5 9.5c.3-.7 1-.7 1.3-.7h.3c.1 0 .3 0 .4.3l.6 1.4c.1.2 0 .5-.2.6l-.5.4c-.1.1-.1.3 0 .4.5.9 1.3 1.7 2.2 2.2.1.1.3.1.4 0l.4-.5c.1-.2.4-.3.6-.2l1.4.6c.3.1.3.3.3.4v.3c0 .3-.1 1-.7 1.3-.5.3-1.2.3-2.1-.1-.9-.4-1.8-1-2.6-1.8-.8-.8-1.4-1.7-1.8-2.6-.4-.9-.4-1.6-.1-2.1z" fill="#fff"/></svg>`;
 const WHATSAPP_SUPPORT_PHONE = '972522272270';
+const FORM_SUCCESS_MESSAGE = 'הפנייה נשלחה בהצלחה! נחזור אליכם טלפונית או בוואטסאפ עם פרטים נוספים בהקדם האפשרי.';
 
 const FEATURE_HIGHLIGHTS = [
     {
@@ -935,7 +968,52 @@ const STYLE = `
         background: #fff; color: #A56AF0; font-weight: 800; font-size: 18px;
         display: flex; align-items: center; justify-content: center;
     }
-    .bl-counter span { min-width: 28px; text-align: center; font-weight: 800; font-size: 16px; }
+    .bl-counter input[type="number"] {
+        width: 56px;
+        text-align: center;
+        font-weight: 800;
+        font-size: 16px;
+        padding: 6px 4px;
+        border-radius: 10px;
+        border: none;
+        color: #262626;
+        -moz-appearance: textfield;
+    }
+    .bl-counter input[type="number"]::-webkit-outer-spin-button,
+    .bl-counter input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+    .bl-form-success-panel {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 14px;
+        padding: 36px 24px;
+        text-align: center;
+    }
+    .bl-form-success-icon {
+        width: 64px;
+        height: 64px;
+        border-radius: 50%;
+        background: rgba(255,255,255,0.2);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 32px;
+        line-height: 1;
+    }
+    .bl-form-success-title {
+        font-size: 22px;
+        font-weight: 800;
+        color: #fff;
+        margin: 0;
+    }
+    .bl-form-success-text {
+        font-size: 16px;
+        font-weight: 600;
+        color: rgba(255,255,255,0.95);
+        line-height: 1.65;
+        max-width: 520px;
+        margin: 0;
+    }
     .bl-checkbox-row { display: flex; align-items: flex-start; gap: 10px; }
     .bl-checkbox-row input { margin-top: 3px; width: 18px; height: 18px; }
     .bl-checkbox-row label { font-size: 13px; font-weight: 600; color: #fff; }
@@ -1039,7 +1117,84 @@ const STYLE = `
         .bl-fab { right: 16px; bottom: 16px; padding: 12px 16px; font-size: 14px; }
         .bl-hero-logo { height: 69px; margin-bottom: 12px; }
         .bl-hero-text { padding-right: 28px; }
+        .bl-menu-grid { grid-template-columns: 1fr; }
     }
+
+    /* ---------- Menu ( /birthday home ) ---------- */
+    .bl-menu-page { position: relative; z-index: 1; max-width: 1180px; margin: 0 auto; padding: 32px 20px 48px; }
+    .bl-menu-header { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; margin-bottom: 32px; }
+    .bl-menu-title { font-size: clamp(28px, 4vw, 40px); line-height: 1.15; }
+    .bl-menu-subtitle { font-size: 18px; color: #525252; font-weight: 600; margin: 0; max-width: 640px; }
+    .bl-menu-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 24px;
+    }
+    .bl-menu-card {
+        background: #fff;
+        border-radius: 24px;
+        overflow: hidden;
+        box-shadow: 0 10px 28px rgba(37, 38, 38, 0.08);
+        cursor: pointer;
+        transition: transform 0.28s ease, box-shadow 0.28s ease;
+        display: flex;
+        flex-direction: column;
+        text-align: right;
+    }
+    .bl-menu-card:hover {
+        transform: scale(1.03);
+        box-shadow: 0 16px 36px rgba(0, 164, 253, 0.18);
+    }
+    .bl-menu-card-img-wrap {
+        aspect-ratio: 4 / 3;
+        overflow: hidden;
+        background: #e9f4fc;
+    }
+    .bl-menu-card-img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+        transition: transform 0.4s ease;
+    }
+    .bl-menu-card:hover .bl-menu-card-img { transform: scale(1.1); }
+    .bl-menu-card-body { padding: 20px 22px 22px; display: flex; flex-direction: column; gap: 10px; flex: 1; }
+    .bl-menu-card-title { font-size: 20px; color: #262626; margin: 0; }
+    .bl-menu-card-desc {
+        font-size: 15px;
+        line-height: 1.65;
+        color: #525252;
+        font-weight: 600;
+        margin: 0;
+        display: -webkit-box;
+        -webkit-line-clamp: 3;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+    }
+    .bl-menu-card-btn {
+        margin-top: auto;
+        align-self: flex-start;
+        border: none;
+        border-radius: 999px;
+        padding: 10px 18px;
+        font-size: 14px;
+        font-weight: 800;
+        color: #fff;
+        background: linear-gradient(135deg, #00A4FD, #A56AF0);
+        pointer-events: none;
+    }
+    .bl-back-btn {
+        border: 2px solid #A56AF0;
+        background: #fff;
+        color: #A56AF0;
+        font-weight: 800;
+        font-size: 14px;
+        padding: 8px 16px;
+        border-radius: 999px;
+        margin-bottom: 8px;
+        transition: background 0.18s ease, color 0.18s ease, transform 0.18s ease;
+    }
+    .bl-back-btn:hover { background: #A56AF0; color: #fff; transform: translateY(-1px); }
 `;
 
 const BRAND_CIRCLE_IMG = 'https://static.wixstatic.com/media/6b73e9_6e7c52763bb24ba6812aaac51ecb4296~mv2.png';
@@ -1079,7 +1234,7 @@ const BG_BRAND_CIRCLES = [
 const HERO_FADE_MS = 4200;
 class BirthdayLandingElement extends HTMLElement {
     static get observedAttributes() {
-        return ['workshops-data', 'lead-result'];
+        return ['workshops-data', 'lead-result', 'active-workshop-id'];
     }
 
     constructor() {
@@ -1090,6 +1245,7 @@ class BirthdayLandingElement extends HTMLElement {
             loading: true,
             dataLoaded: false,
             workshops: [],
+            activeWorkshopId: null,
             activeIndex: 0,
             heroImageIndex: 0,
             faqOpenIndex: null,
@@ -1112,6 +1268,9 @@ class BirthdayLandingElement extends HTMLElement {
     }
 
     _hydrateFromAttribute() {
+        const workshopId = (this.getAttribute('active-workshop-id') || '').trim();
+        if (workshopId) this._state.activeWorkshopId = workshopId;
+
         const raw = this.getAttribute('workshops-data');
         if (!raw) return;
         try {
@@ -1119,6 +1278,7 @@ class BirthdayLandingElement extends HTMLElement {
             this._state.workshops = Array.isArray(data.workshops) ? data.workshops : [];
             this._state.dataLoaded = true;
             this._state.loading = false;
+            this._resolveActiveIndex();
         } catch (err) {
             console.error('[birthday-landing] failed to parse initial workshops-data:', err);
         }
@@ -1133,6 +1293,15 @@ class BirthdayLandingElement extends HTMLElement {
     }
 
     attributeChangedCallback(name, oldValue, newValue) {
+        if (name === 'active-workshop-id') {
+            const id = (newValue || '').trim();
+            if (id === (this._state.activeWorkshopId || '')) return;
+            this._state.activeWorkshopId = id || null;
+            this._state.faqOpenIndex = null;
+            this._resolveActiveIndex();
+            if (this._root) { this._renderAll(); this._bindEvents(); }
+            return;
+        }
         if (!newValue || newValue === oldValue) return;
         if (name === 'workshops-data') {
             try {
@@ -1140,9 +1309,9 @@ class BirthdayLandingElement extends HTMLElement {
                 this._state.workshops = Array.isArray(data.workshops) ? data.workshops : [];
                 this._state.dataLoaded = true;
                 this._state.loading = false;
-                this._state.activeIndex = 0;
                 this._state.heroImageIndex = 0;
                 this._state.faqOpenIndex = null;
+                this._resolveActiveIndex();
                 if (this._root) { this._renderAll(); this._bindEvents(); }
             } catch (err) {
                 console.error('[birthday-landing] failed to parse workshops-data:', err);
@@ -1165,6 +1334,28 @@ class BirthdayLandingElement extends HTMLElement {
         return this._state.workshops[this._state.activeIndex] || null;
     }
 
+    _findWorkshopIndex(workshopId) {
+        return this._state.workshops.findIndex((w) => w._id === workshopId);
+    }
+
+    _resolveActiveIndex() {
+        const idx = this._state.activeWorkshopId
+            ? this._findWorkshopIndex(this._state.activeWorkshopId)
+            : -1;
+        this._state.activeIndex = idx >= 0 ? idx : 0;
+    }
+
+    _isDetailView() {
+        return !!(this._state.activeWorkshopId && this._findWorkshopIndex(this._state.activeWorkshopId) >= 0);
+    }
+
+    _getMenuCardImage(workshop) {
+        const source = workshop.menuCardImage
+            || (Array.isArray(workshop.gallery) && workshop.gallery[0])
+            || '';
+        return optimizeMediaUrl(source, 640, 480);
+    }
+
     _renderAll() {
         if (this._heroTimer) clearInterval(this._heroTimer);
         const s = this._state;
@@ -1174,6 +1365,11 @@ class BirthdayLandingElement extends HTMLElement {
         }
         if (!s.workshops.length) {
             this._root.innerHTML = `${this._renderBackground()}<div class="bl-empty">אין כרגע סדנאות זמינות להצגה. נשמח לראותכם בקרוב!</div>`;
+            return;
+        }
+        if (!this._isDetailView()) {
+            this._root.innerHTML = `${this._renderBackground()}${this._renderMenu()}`;
+            this._initRevealAnimations();
             return;
         }
         const active = this._activeWorkshop();
@@ -1186,6 +1382,7 @@ class BirthdayLandingElement extends HTMLElement {
                     <div class="bl-hero-gallery" id="blHeroGallery">${this._renderHeroImages(active)}</div>
                 </div>
                 <div class="bl-hero-text">
+                    <button type="button" class="bl-back-btn" id="blBackToMenu">← כל הסדנאות</button>
                     ${this._renderHeroLogo()}
                     <h1 class="bl-hero-title">חוגגים יום הולדת ב<span class="bl-hero-brand">Studio Happy</span></h1>
                     <p class="bl-hero-subtitle" id="blActiveSubtitle">${escapeHtml(active.subtitle || '')}</p>
@@ -1198,6 +1395,37 @@ class BirthdayLandingElement extends HTMLElement {
         `;
         this._startHeroFade();
         this._initRevealAnimations();
+    }
+
+    _renderMenu() {
+        const cards = this._state.workshops.map((workshop, i) => {
+            const imgSrc = this._getMenuCardImage(workshop);
+            const preview = descriptionPreview(workshop.description);
+            const imgHtml = imgSrc
+                ? `<img class="bl-menu-card-img" src="${escapeHtml(imgSrc)}" alt="${escapeHtml(workshop.title || '')}" loading="lazy" decoding="async" />`
+                : '<div class="bl-menu-card-img" style="background:linear-gradient(135deg,#e9f4fc,#f3e8ff);"></div>';
+            return `
+                <article class="bl-menu-card bl-reveal" data-workshop-id="${escapeHtml(workshop._id || '')}" style="--bl-delay:${Math.min(i, 5) * 70}ms" tabindex="0" role="button" aria-label="${escapeHtml(workshop.title || 'סדנה')}">
+                    <div class="bl-menu-card-img-wrap">${imgHtml}</div>
+                    <div class="bl-menu-card-body">
+                        <h3 class="bl-menu-card-title">${escapeHtml(workshop.title || 'סדנה')}</h3>
+                        <p class="bl-menu-card-desc">${escapeHtml(preview || 'פרטי הסדנה יתעדכנו בקרוב.')}</p>
+                        <span class="bl-menu-card-btn">פרטים נוספים</span>
+                    </div>
+                </article>
+            `;
+        }).join('');
+
+        return `
+            <div class="bl-menu-page">
+                <header class="bl-menu-header bl-reveal">
+                    ${this._renderHeroLogo()}
+                    <h1 class="bl-menu-title">חוגגים יום הולדת ב<span class="bl-hero-brand">Studio Happy</span></h1>
+                    <p class="bl-menu-subtitle">בחרו את הסדנה המושלמת ליום ההולדת — לחצו על כרטיסייה לפרטים מלאים והזמנה</p>
+                </header>
+                <div class="bl-menu-grid">${cards}</div>
+            </div>
+        `;
     }
 
     _initRevealAnimations() {
@@ -1286,9 +1514,10 @@ class BirthdayLandingElement extends HTMLElement {
         const gallery = Array.isArray(workshop.gallery) ? workshop.gallery : [];
         if (!gallery.length) return '<div class="bl-hero-badge">✨ סטודיו Happy</div>';
         const imgs = gallery.slice(0, 8).map((entry, i) => {
-            const src = resolveMediaUrl(entry);
+            const src = optimizeMediaUrl(entry, 960, 720);
             if (!src) return '';
-            return `<img src="${escapeHtml(src)}" alt="${escapeHtml(mediaAlt(entry, workshop.title))}" class="${i === 0 ? 'is-active' : ''}" data-hero-img />`;
+            const loading = i === 0 ? 'eager' : 'lazy';
+            return `<img src="${escapeHtml(src)}" alt="${escapeHtml(mediaAlt(entry, workshop.title))}" class="${i === 0 ? 'is-active' : ''}" data-hero-img loading="${loading}" decoding="async" />`;
         }).join('');
         return `${imgs}<div class="bl-hero-badge">✨ סטודיו Happy</div>`;
     }
@@ -1348,10 +1577,10 @@ class BirthdayLandingElement extends HTMLElement {
         const gallery = Array.isArray(workshop.stripGallery) ? workshop.stripGallery : [];
         if (!gallery.length) return '';
         const tiles = gallery
-            .map((entry) => ({ src: resolveMediaUrl(entry), alt: mediaAlt(entry, workshop.title) }))
+            .map((entry) => ({ src: optimizeMediaUrl(entry, 560, 380), alt: mediaAlt(entry, workshop.title) }))
             .filter((t) => t.src);
         if (!tiles.length) return '';
-        const renderTile = (t) => `<img src="${escapeHtml(t.src)}" alt="${escapeHtml(t.alt)}" loading="lazy" />`;
+        const renderTile = (t) => `<img src="${escapeHtml(t.src)}" alt="${escapeHtml(t.alt)}" loading="lazy" decoding="async" />`;
         const oneSet = tiles.map(renderTile).join('');
         return `<div class="bl-marquee-wrap bl-reveal"><div class="bl-marquee-track">${oneSet}${oneSet}</div></div>`;
     }
@@ -1428,19 +1657,19 @@ class BirthdayLandingElement extends HTMLElement {
                         </div>
                     </div>
                     <div class="bl-field">
-                        <label>מספר ילדים</label>
+                        <label for="blChildrenCount">מספר ילדים</label>
                         <div class="bl-counter" data-counter="childrenCount">
-                            <button type="button" data-counter-delta="-1">−</button>
-                            <span data-counter-value>${f.childrenCount}</span>
-                            <button type="button" data-counter-delta="1">+</button>
+                            <button type="button" data-counter-delta="-1" aria-label="הפחתת מספר ילדים">−</button>
+                            <input type="number" id="blChildrenCount" min="0" max="50" value="${f.childrenCount}" data-counter-input inputmode="numeric" aria-label="מספר ילדים" />
+                            <button type="button" data-counter-delta="1" aria-label="הוספת מספר ילדים">+</button>
                         </div>
                     </div>
                     <div class="bl-field">
-                        <label>מספר מבוגרים/מלווים</label>
+                        <label for="blAdultsCount">מספר מבוגרים/מלווים</label>
                         <div class="bl-counter" data-counter="adultsCount">
-                            <button type="button" data-counter-delta="-1">−</button>
-                            <span data-counter-value>${f.adultsCount}</span>
-                            <button type="button" data-counter-delta="1">+</button>
+                            <button type="button" data-counter-delta="-1" aria-label="הפחתת מספר מלווים">−</button>
+                            <input type="number" id="blAdultsCount" min="0" max="50" value="${f.adultsCount}" data-counter-input inputmode="numeric" aria-label="מספר מלווים" />
+                            <button type="button" data-counter-delta="1" aria-label="הוספת מספר מלווים">+</button>
                         </div>
                     </div>
                     <div class="bl-field bl-span-2">
@@ -1455,6 +1684,19 @@ class BirthdayLandingElement extends HTMLElement {
                     </div>
                 </div>
                 <button type="button" class="bl-submit-btn" id="blSubmitBtn">שליחת פנייה</button>
+            </div>
+        `;
+    }
+
+    _renderFormSuccess(message) {
+        const text = message || FORM_SUCCESS_MESSAGE;
+        return `
+            <div class="bl-form-section bl-reveal is-visible">
+                <div class="bl-form-success-panel" role="status" aria-live="polite">
+                    <div class="bl-form-success-icon" aria-hidden="true">✓</div>
+                    <h2 class="bl-form-success-title">תודה על הפנייה!</h2>
+                    <p class="bl-form-success-text">${escapeHtml(text)}</p>
+                </div>
             </div>
         `;
     }
@@ -1481,11 +1723,28 @@ class BirthdayLandingElement extends HTMLElement {
 
     _bindEvents() {
         if (this._boundClick) this._root.removeEventListener('click', this._boundClick);
+        if (this._boundInput) this._root.removeEventListener('input', this._boundInput);
+        if (this._boundChange) this._root.removeEventListener('change', this._boundChange);
         this._boundClick = (e) => this._onClick(e);
+        this._boundInput = (e) => this._onCounterInput(e);
+        this._boundChange = (e) => this._onCounterInput(e);
         this._root.addEventListener('click', this._boundClick);
+        this._root.addEventListener('input', this._boundInput);
+        this._root.addEventListener('change', this._boundChange);
     }
 
     _onClick(e) {
+        const menuCard = e.target.closest('[data-workshop-id]');
+        if (menuCard && menuCard.dataset.workshopId) {
+            this._selectWorkshop(menuCard.dataset.workshopId);
+            return;
+        }
+
+        if (e.target.closest('#blBackToMenu')) {
+            this._clearWorkshop();
+            return;
+        }
+
         const tabBtn = e.target.closest('[data-tab-index]');
         if (tabBtn) { this._onTabClick(Number(tabBtn.dataset.tabIndex)); return; }
 
@@ -1508,15 +1767,43 @@ class BirthdayLandingElement extends HTMLElement {
         if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
 
+    _selectWorkshop(workshopId) {
+        if (!workshopId || this._findWorkshopIndex(workshopId) < 0) return;
+        this._state.activeWorkshopId = workshopId;
+        this._resolveActiveIndex();
+        this._state.faqOpenIndex = null;
+        this._renderAll();
+        this._bindEvents();
+        this.dispatchEvent(new CustomEvent('birthday-workshop-select', {
+            detail: { workshopId },
+            bubbles: true,
+            composed: true,
+        }));
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    _clearWorkshop() {
+        this._state.activeWorkshopId = null;
+        this._state.faqOpenIndex = null;
+        this._renderAll();
+        this._bindEvents();
+        this.dispatchEvent(new CustomEvent('birthday-workshop-clear', {
+            bubbles: true,
+            composed: true,
+        }));
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
     _onTabClick(index) {
         if (index === this._state.activeIndex) return;
         this._state.activeIndex = index;
+        const active = this._activeWorkshop();
+        if (active && active._id) this._state.activeWorkshopId = active._id;
         this._state.heroImageIndex = 0;
         this._state.faqOpenIndex = null;
         this._root.querySelectorAll('[data-tab-index]').forEach((btn) => {
             btn.classList.toggle('is-active', Number(btn.dataset.tabIndex) === index);
         });
-        const active = this._activeWorkshop();
         const subtitleEl = this._root.querySelector('#blActiveSubtitle');
         if (subtitleEl) subtitleEl.textContent = active.subtitle || '';
         const galleryEl = this._root.querySelector('#blHeroGallery');
@@ -1559,7 +1846,30 @@ class BirthdayLandingElement extends HTMLElement {
         const delta = Number(btn.dataset.counterDelta);
         const next = Math.max(0, Math.min(50, (this._state.form[key] || 0) + delta));
         this._state.form[key] = next;
-        wrap.querySelector('[data-counter-value]').textContent = String(next);
+        const input = wrap.querySelector('[data-counter-input]');
+        if (input) input.value = String(next);
+    }
+
+    _onCounterInput(e) {
+        const input = e.target.closest('[data-counter-input]');
+        if (!input) return;
+        const wrap = input.closest('[data-counter]');
+        const key = wrap.dataset.counter;
+        let val = parseInt(input.value, 10);
+        if (Number.isNaN(val) || input.value === '') val = 0;
+        val = Math.max(0, Math.min(50, val));
+        this._state.form[key] = val;
+        if (String(val) !== input.value) input.value = String(val);
+    }
+
+    _getCounterValue(key) {
+        const wrap = this._root.querySelector(`[data-counter="${key}"]`);
+        const input = wrap && wrap.querySelector('[data-counter-input]');
+        if (input) {
+            const val = parseInt(input.value, 10);
+            return Math.max(0, Math.min(50, Number.isNaN(val) ? 0 : val));
+        }
+        return this._state.form[key] || 0;
     }
 
     // ---------------------------------------------------------------------
@@ -1576,8 +1886,8 @@ class BirthdayLandingElement extends HTMLElement {
             notes: (root.querySelector('#blNotes').value || '').trim(),
             termsAccepted: !!root.querySelector('#blTerms').checked,
             workshopTypes: this._state.form.workshopTypes.slice(),
-            childrenCount: this._state.form.childrenCount || 0,
-            adultsCount: this._state.form.adultsCount || 0,
+            childrenCount: this._getCounterValue('childrenCount'),
+            adultsCount: this._getCounterValue('adultsCount'),
         };
     }
 
@@ -1622,13 +1932,11 @@ class BirthdayLandingElement extends HTMLElement {
         const statusEl = this._root.querySelector('#blFormStatus');
         if (result.ok) {
             this._state.submitSuccess = true;
-            if (statusEl) statusEl.innerHTML = `<div class="bl-form-success">${escapeHtml(result.message || 'תודה! הפנייה שלכם התקבלה ונחזור אליכם בהקדם.')}</div>`;
+            this._state.form = { workshopTypes: [], childrenCount: 0, adultsCount: 0, termsAccepted: false };
             const formSection = this._root.querySelector('#blFormSection');
             if (formSection) {
-                this._state.form = { workshopTypes: [], childrenCount: 0, adultsCount: 0, termsAccepted: false };
-                formSection.innerHTML = this._renderForm();
-                const newStatus = this._root.querySelector('#blFormStatus');
-                if (newStatus) newStatus.innerHTML = `<div class="bl-form-success">${escapeHtml(result.message || 'תודה! הפנייה שלכם התקבלה ונחזור אליכם בהקדם.')}</div>`;
+                formSection.innerHTML = this._renderFormSuccess(result.message);
+                formSection.scrollIntoView({ behavior: 'smooth', block: 'center' });
             }
         } else {
             if (btn) { btn.disabled = false; btn.textContent = 'שליחת פנייה'; }

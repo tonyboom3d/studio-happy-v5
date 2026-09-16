@@ -1,8 +1,11 @@
 // "ימי הולדת" landing page — wires the birthday-landing Custom Element
 // birthdayLeads.web.js backend module for data fetch and lead submissions.
 import { getBirthdayWorkshops, submitBirthdayLead } from 'backend/birthdayLeads.web.js';
+import wixLocation from 'wix-location';
+import wixLocationFrontend from 'wix-location-frontend';
 
 const ELEMENT_ID = '#customElement2';
+const WORKSHOP_QUERY_KEY = 'workshop';
 
 $w.onReady(function () {
     const el = $w(ELEMENT_ID);
@@ -18,6 +21,8 @@ $w.onReady(function () {
         return;
     }
 
+    syncWorkshopQueryToElement(el, getWorkshopIdFromQuery());
+
     el.on('submitLead', (event) => {
         handleSubmitLead(el, event.detail).catch((err) => {
             console.error('[birthday-landing][velo] submitLead error:', err?.message || err);
@@ -28,8 +33,18 @@ $w.onReady(function () {
         });
     });
 
+    el.on('birthday-workshop-select', (event) => {
+        const workshopId = event.detail?.workshopId || '';
+        updateWorkshopQuery(el, workshopId);
+    });
+
+    el.on('birthday-workshop-clear', () => {
+        updateWorkshopQuery(el, '');
+    });
+
     el.on('birthday-tab-change', (event) => {
-        console.log('[birthday-landing][velo] active workshop changed:', event.detail);
+        const workshopId = event.detail?.workshopId || '';
+        if (workshopId) updateWorkshopQuery(el, workshopId, { replace: true });
     });
 
     loadWorkshops(el).catch((err) => {
@@ -37,6 +52,24 @@ $w.onReady(function () {
         el.setAttribute('workshops-data', JSON.stringify({ workshops: [], __ts: Date.now() }));
     });
 });
+
+function getWorkshopIdFromQuery() {
+    return String(wixLocation.query?.[WORKSHOP_QUERY_KEY] || '').trim();
+}
+
+function syncWorkshopQueryToElement(el, workshopId) {
+    el.setAttribute('active-workshop-id', workshopId || '');
+}
+
+function updateWorkshopQuery(el, workshopId, options = {}) {
+    const baseUrl = wixLocation.url.split('?')[0];
+    const nextUrl = workshopId
+        ? `${baseUrl}?${WORKSHOP_QUERY_KEY}=${encodeURIComponent(workshopId)}`
+        : baseUrl;
+    const historyMode = options.replace ? 'replace' : 'push';
+    wixLocationFrontend.to(nextUrl, { history: historyMode });
+    syncWorkshopQueryToElement(el, workshopId);
+}
 
 async function loadWorkshops(el) {
     const { workshops } = await getBirthdayWorkshops();

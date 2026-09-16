@@ -85,11 +85,29 @@ async function submitToWixForm(row) {
     });
 }
 
+/**
+ * CMS field `menuCardImage` (Image) — card thumbnail on /birthday menu.
+ * Falls back to the first gallery image when empty.
+ */
+function resolveMenuCardImage(item) {
+    const menuImage = item.menuCardImage || item.menuCardImageUrl || '';
+    if (menuImage) return menuImage;
+    const gallery = Array.isArray(item.gallery) ? item.gallery : [];
+    return gallery[0] || '';
+}
+
+function mapWorkshopItem(item) {
+    return {
+        ...item,
+        menuCardImage: resolveMenuCardImage(item),
+    };
+}
+
 /** Returns all birthday workshop items for the landing page Custom Element. */
 export const getBirthdayWorkshops = webMethod(Permissions.Anyone, async () => {
     try {
         const result = await wixData.query('birthdayWorkshops').ascending('order').limit(50).find(SA);
-        return { workshops: result.items || [] };
+        return { workshops: (result.items || []).map(mapWorkshopItem) };
     } catch (err) {
         console.error('[birthdayLeads.web] getBirthdayWorkshops failed:', err?.message || err);
         return { workshops: [] };
@@ -103,7 +121,7 @@ export const submitBirthdayLead = webMethod(Permissions.Anyone, async (payload) 
 
     try {
         await submitToWixForm(row);
-        return { ok: true, message: 'תודה! הפנייה שלכם התקבלה ונחזור אליכם בהקדם.' };
+        return { ok: true, message: 'הפנייה נשלחה בהצלחה! נחזור אליכם טלפונית או בוואטסאפ עם פרטים נוספים בהקדם האפשרי.' };
     } catch (err) {
         console.error('[birthdayLeads.web] Wix form submission failed:', err?.message || err, err?.details || '');
         return { ok: false, message: 'אירעה שגיאה בשליחת הפנייה. נסו שוב מאוחר יותר.' };

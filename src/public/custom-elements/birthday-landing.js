@@ -758,7 +758,13 @@ const STYLE = `
         }
         .bl-marquee-section { margin: 28px auto 0; }
         .bl-marquee-wrap { transform: rotate(-1.5deg); }
-        .bl-marquee-edge { width: min(30%, 120px); }
+        .bl-marquee-edge { width: min(18%, 72px); }
+        .bl-marquee-edge-start {
+            background: linear-gradient(to right, #F9FBFD 0%, rgba(249, 251, 253, 0.9) 55%, transparent 100%);
+        }
+        .bl-marquee-edge-end {
+            background: linear-gradient(to left, #F9FBFD 0%, rgba(249, 251, 253, 0.9) 55%, transparent 100%);
+        }
         .bl-marquee-track {
             gap: 16px;
             animation-duration: 34s;
@@ -1218,8 +1224,22 @@ const STYLE = `
         .bl-form-grid { grid-template-columns: 1fr; }
         .bl-highlights-grid { grid-template-columns: repeat(3, 1fr); }
         .bl-price-tiers, .bl-price-body .bl-rich-ul { grid-template-columns: 1fr; }
+        .bl-topnav-inner { padding: 6px 12px; gap: 8px; }
+        .bl-topnav-logo-btn img { height: 32px; max-width: 88px; }
+        .bl-topnav-items { gap: 6px; }
+        .bl-topnav-item {
+            font-size: 11px;
+            padding: 6px 10px;
+            border-width: 1.5px;
+            font-weight: 700;
+        }
+        .bl-topnav-item.is-active { box-shadow: 0 4px 10px rgba(165, 106, 240, 0.22); }
     }
     @media (max-width: 600px) {
+        .bl-topnav-inner { padding: 5px 10px; gap: 6px; }
+        .bl-topnav-logo-btn img { height: 28px; max-width: 72px; }
+        .bl-topnav-item { font-size: 10px; padding: 5px 8px; }
+        .bl-marquee-edge { width: min(14%, 52px); }
         .bl-marquee-track img { height: 210px; width: 306px; }
         .bl-desc-card, .bl-card, .bl-form-section { padding: 20px; }
         .bl-highlights-grid { grid-template-columns: repeat(2, 1fr); }

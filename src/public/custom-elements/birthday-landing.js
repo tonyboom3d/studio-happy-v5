@@ -716,8 +716,8 @@ const STYLE = `
         .bl-marquee-track { animation: none; }
     }
     .bl-marquee-track img {
-        height: 150px;
-        width: 220px;
+        height: 180px;
+        width: 264px;
         object-fit: cover;
         border-radius: 20px;
         border: 4px solid #fff;
@@ -769,8 +769,8 @@ const STYLE = `
             animation-duration: 34s;
         }
         .bl-marquee-track img {
-            height: 190px;
-            width: 280px;
+            height: 228px;
+            width: 336px;
             border-radius: 22px;
             border-width: 5px;
             box-shadow: 0 10px 24px rgba(0, 0, 0, 0.14);
@@ -1225,7 +1225,7 @@ const STYLE = `
         .bl-price-tiers, .bl-price-body .bl-rich-ul { grid-template-columns: 1fr; }
     }
     @media (max-width: 600px) {
-        .bl-marquee-track img { height: 175px; width: 255px; }
+        .bl-marquee-track img { height: 210px; width: 306px; }
         .bl-desc-card, .bl-card, .bl-form-section { padding: 20px; }
         .bl-highlights-grid { grid-template-columns: repeat(2, 1fr); }
         .bl-fab { right: 16px; bottom: 16px; padding: 12px 16px; font-size: 14px; }
@@ -1700,7 +1700,7 @@ class BirthdayLandingElement extends HTMLElement {
         const gallery = Array.isArray(workshop.stripGallery) ? workshop.stripGallery : [];
         if (!gallery.length) return '';
         const tiles = gallery
-            .map((entry) => ({ src: optimizeMediaUrl(entry, 560, 380), alt: mediaAlt(entry, workshop.title) }))
+            .map((entry) => ({ src: optimizeMediaUrl(entry, 672, 456), alt: mediaAlt(entry, workshop.title) }))
             .filter((t) => t.src);
         if (!tiles.length) return '';
         const renderTile = (t) => `<img src="${escapeHtml(t.src)}" alt="${escapeHtml(t.alt)}" loading="lazy" decoding="async" />`;

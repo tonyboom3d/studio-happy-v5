@@ -2,7 +2,6 @@
 // birthdayLeads.web.js backend module for data fetch and lead submissions.
 import { getBirthdayWorkshops, submitBirthdayLead } from 'backend/birthdayLeads.web.js';
 import wixLocation from 'wix-location';
-import wixLocationFrontend from 'wix-location-frontend';
 
 const ELEMENT_ID = '#customElement2';
 const WORKSHOP_QUERY_KEY = 'workshop';
@@ -21,7 +20,8 @@ $w.onReady(function () {
         return;
     }
 
-    syncWorkshopQueryToElement(el, getWorkshopRefFromQuery());
+    // Initial deep-link only — in-page URL updates use history API inside the CE (no reload).
+    el.setAttribute('active-workshop-ref', getWorkshopRefFromQuery());
 
     el.on('submitLead', (event) => {
         handleSubmitLead(el, event.detail).catch((err) => {
@@ -33,20 +33,6 @@ $w.onReady(function () {
         });
     });
 
-    el.on('birthday-workshop-select', (event) => {
-        const workshopRef = event.detail?.workshopRef || event.detail?.workshopId || '';
-        updateWorkshopQuery(el, workshopRef);
-    });
-
-    el.on('birthday-workshop-clear', () => {
-        updateWorkshopQuery(el, '');
-    });
-
-    el.on('birthday-tab-change', (event) => {
-        const workshopRef = event.detail?.workshopRef || event.detail?.workshopId || '';
-        if (workshopRef) updateWorkshopQuery(el, workshopRef, { replace: true });
-    });
-
     loadWorkshops(el).catch((err) => {
         console.error('[birthday-landing][velo] initial load error:', err?.message || err);
         el.setAttribute('workshops-data', JSON.stringify({ workshops: [], __ts: Date.now() }));
@@ -55,20 +41,6 @@ $w.onReady(function () {
 
 function getWorkshopRefFromQuery() {
     return String(wixLocation.query?.[WORKSHOP_QUERY_KEY] || '').trim();
-}
-
-function syncWorkshopQueryToElement(el, workshopRef) {
-    el.setAttribute('active-workshop-ref', workshopRef || '');
-}
-
-function updateWorkshopQuery(el, workshopRef, options = {}) {
-    const baseUrl = wixLocation.url.split('?')[0];
-    const nextUrl = workshopRef
-        ? `${baseUrl}?${WORKSHOP_QUERY_KEY}=${encodeURIComponent(workshopRef)}`
-        : baseUrl;
-    const historyMode = options.replace ? 'replace' : 'push';
-    wixLocationFrontend.to(nextUrl, { history: historyMode });
-    syncWorkshopQueryToElement(el, workshopRef);
 }
 
 async function loadWorkshops(el) {

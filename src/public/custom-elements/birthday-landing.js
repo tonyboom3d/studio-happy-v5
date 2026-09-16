@@ -26,6 +26,7 @@
  */
 
 const TAG_NAME = 'birthday-landing';
+const WORKSHOP_QUERY_KEY = 'workshop';
 
 function h(strings, ...values) {
     return strings.reduce((out, s, i) => out + s + (values[i] !== undefined ? values[i] : ''), '');
@@ -90,6 +91,14 @@ function normalizeWorkshopRef(ref) {
 function getWorkshopUrlRef(workshop) {
     const slug = String(workshop?.workshopSlug || workshop?.urlRef || '').trim();
     return slug || workshop?._id || '';
+}
+
+function readWorkshopRefFromUrl() {
+    try {
+        return new URL(window.location.href).searchParams.get(WORKSHOP_QUERY_KEY) || '';
+    } catch (e) {
+        return '';
+    }
 }
 
 function workshopRefMatches(workshop, ref) {
@@ -1287,6 +1296,8 @@ class BirthdayLandingElement extends HTMLElement {
         this.setAttribute('lang', 'he');
         this.innerHTML = `<style>${STYLE}</style><div class="bl-root" id="blRoot"></div>`;
         this._root = this.querySelector('#blRoot');
+        this._boundPopState = () => this._onPopState();
+        window.addEventListener('popstate', this._boundPopState);
         this._hydrateFromAttribute();
         this._renderAll();
         this._bindEvents();
@@ -1311,6 +1322,7 @@ class BirthdayLandingElement extends HTMLElement {
 
     disconnectedCallback() {
         if (this._heroTimer) clearInterval(this._heroTimer);
+        if (this._boundPopState) window.removeEventListener('popstate', this._boundPopState);
         if (this._revealObserver) {
             this._revealObserver.disconnect();
             this._revealObserver = null;
@@ -1797,6 +1809,36 @@ class BirthdayLandingElement extends HTMLElement {
         if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
 
+    _updateBrowserUrl(workshopRef, replace = false) {
+        try {
+            const url = new URL(window.location.href);
+            if (workshopRef) url.searchParams.set(WORKSHOP_QUERY_KEY, workshopRef);
+            else url.searchParams.delete(WORKSHOP_QUERY_KEY);
+            const next = `${url.pathname}${url.search}${url.hash}`;
+            const current = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+            if (next === current) return;
+            const state = { workshopRef: workshopRef || '' };
+            if (replace) window.history.replaceState(state, '', next);
+            else window.history.pushState(state, '', next);
+        } catch (err) {
+            console.warn('[birthday-landing] failed to update browser URL:', err);
+        }
+    }
+
+    _applyWorkshopRef(ref) {
+        const nextRef = (ref || '').trim() || null;
+        if (nextRef === (this._state.activeWorkshopRef || null)) return;
+        this._state.activeWorkshopRef = nextRef;
+        this._state.faqOpenIndex = null;
+        this._resolveActiveIndex();
+        this._renderAll();
+        this._bindEvents();
+    }
+
+    _onPopState() {
+        this._applyWorkshopRef(readWorkshopRefFromUrl());
+    }
+
     _selectWorkshop(workshopId) {
         const workshop = this._state.workshops[this._findWorkshopIndex(workshopId)];
         if (!workshop) return;
@@ -1806,6 +1848,7 @@ class BirthdayLandingElement extends HTMLElement {
         this._state.faqOpenIndex = null;
         this._renderAll();
         this._bindEvents();
+        this._updateBrowserUrl(workshopRef, false);
         this.dispatchEvent(new CustomEvent('birthday-workshop-select', {
             detail: { workshopId: workshop._id, workshopRef },
             bubbles: true,
@@ -1819,6 +1862,7 @@ class BirthdayLandingElement extends HTMLElement {
         this._state.faqOpenIndex = null;
         this._renderAll();
         this._bindEvents();
+        this._updateBrowserUrl('', false);
         this.dispatchEvent(new CustomEvent('birthday-workshop-clear', {
             bubbles: true,
             composed: true,
@@ -1845,10 +1889,12 @@ class BirthdayLandingElement extends HTMLElement {
         if (this._heroTimer) clearInterval(this._heroTimer);
         this._startHeroFade();
         this._initRevealAnimations();
+        const workshopRef = getWorkshopUrlRef(active);
+        this._updateBrowserUrl(workshopRef, true);
         this.dispatchEvent(new CustomEvent('birthday-tab-change', {
             detail: {
                 workshopId: active._id || null,
-                workshopRef: getWorkshopUrlRef(active),
+                workshopRef,
                 title: active.title || null,
             },
             bubbles: true,

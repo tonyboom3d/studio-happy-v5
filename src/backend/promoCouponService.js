@@ -15,18 +15,10 @@
  *  5) events.js calls cancelPromoCouponsForOrder() / reschedulePromoCouponsForOrder()
  *     when the originating tufting booking is cancelled/rescheduled.
  *
- * CMS collections used (create manually in the Wix Editor's Content Manager —
- * this is a classic Velo/Git-Integration site, collections aren't defined in code):
+ * Campaign settings (enabled, copy, preview token) live in
+ * backend/promoCampaignConfig.js — not in CMS.
  *
- *   PromoCampaign (single row, key `settingKey` = 'default'):
- *     - settingKey (Text)       — always 'default', used to look up the row
- *     - enabled (Boolean)       — master on/off switch. OFF by default.
- *     - previewToken (Text)     — secret token for the `?promo=<token>` test link
- *     - title (Text)
- *     - subtitle (Text)
- *     - ctaText (Text)
- *     - ctaUrl (Text)           — e.g. https://www.studiohappy.art/booking-flow-tufting
- *     - termsText (Text, multiline) — shown in the popup's accordion
+ * CMS collection used (create manually in the Wix Editor's Content Manager):
  *
  *   PromoCoupons (one row per issued coupon):
  *     - code (Text)             — human-readable code, e.g. SH-A1B2C3
@@ -46,6 +38,9 @@
  *     - lastSentAt (Date and Time) — last time WhatsApp/email were (re)sent
  */
 import wixData from 'wix-data';
+import { getPromoCampaign } from 'backend/promoCampaignConfig.js';
+
+export { getPromoCampaign } from 'backend/promoCampaignConfig.js';
 
 const SA = { suppressAuth: true };
 const ISRAEL_TZ = 'Asia/Jerusalem';
@@ -92,26 +87,6 @@ const WEEKDAY_CERAMICS_SERVICE_ID_IS_PLACEHOLDER = true; // flip to false once t
 
 const COUPON_VALIDITY_MONTHS = 6;
 const COUPON_CODE_PREFIX = 'SH-';
-
-function loadCampaignRow() {
-    return wixData.query('PromoCampaign').eq('settingKey', 'default').limit(1).find(SA)
-        .then((r) => r.items?.[0] || null);
-}
-
-/** Public shape used by the popup (backend/promoCampaignService.web.js) and by issuance gating. */
-export async function getPromoCampaign() {
-    const row = await loadCampaignRow();
-    if (!row) return null;
-    return {
-        enabled: !!row.enabled,
-        previewToken: row.previewToken || '',
-        title: row.title || '',
-        subtitle: row.subtitle || '',
-        ctaText: row.ctaText || '',
-        ctaUrl: row.ctaUrl || '',
-        termsText: row.termsText || '',
-    };
-}
 
 function randomCode() {
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no 0/O/1/I ambiguity

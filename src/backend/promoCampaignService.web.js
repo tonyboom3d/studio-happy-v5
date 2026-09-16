@@ -8,11 +8,10 @@
  * itself — so it can't be guessed by inspecting network responses.
  */
 import { Permissions, webMethod } from 'wix-web-module';
-import { getPromoCampaign } from 'backend/promoCouponService.js';
+import { getPromoCampaign } from 'backend/promoCampaignConfig.js';
 
 export const getActivePromoCampaign = webMethod(Permissions.Anyone, async (previewTokenFromUrl) => {
-    const campaign = await getPromoCampaign();
-    if (!campaign) return { show: false };
+    const campaign = getPromoCampaign();
 
     const content = {
         title: campaign.title,

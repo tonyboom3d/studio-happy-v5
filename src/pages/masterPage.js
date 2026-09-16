@@ -6,8 +6,8 @@ import { getActivePromoCampaign } from 'backend/promoCampaignService.web.js';
 // the install instructions at the top of promo-popup.js.
 const PROMO_POPUP_ELEMENT_ID = '#promoPopup1';
 
-// Test/preview link (only usable while the campaign is OFF in the CMS):
-//   https://www.studiohappy.art/?promo=<PromoCampaign.previewToken>
+// Test/preview link (only usable while enabled=false in promoCampaignConfig.js):
+//   https://www.studiohappy.art/?promo=<previewToken>
 const PROMO_QUERY_PARAM = 'promo';
 
 $w.onReady(function () {

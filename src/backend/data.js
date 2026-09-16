@@ -42,7 +42,7 @@ export function WorkshopOrders_afterUpdate(item, context) {
 
         // "טאפטינג + קרמיקה במתנה" promo (see promoCouponService.js) — issues a
         // one-time Wix coupon and sends it via WhatsApp + email. No-ops when the
-        // promo campaign (PromoCampaign CMS row) is off, or the order isn't tufting.
+        // promo campaign (promoCampaignConfig.js enabled=false) is off, or the order isn't tufting.
         if (item.workshopType === 'tufting') {
             issuePromoCouponForOrder(item)
                 .then(result => {

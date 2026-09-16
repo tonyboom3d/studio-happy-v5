@@ -685,13 +685,13 @@ const STYLE = `
         box-shadow: 0 4px 14px rgba(242, 175, 73, 0.15);
     }
     .bl-desc-duration-icon { font-size: 16px; line-height: 1; }
-    /* ---------- Marquee strip ---------- */
+    /* ---------- Marquee strip (width aligned with .bl-desc-card) ---------- */
     .bl-marquee-section {
         position: relative;
         z-index: 1;
-        max-width: 920px;
-        margin: 40px auto;
-        padding: 0 24px;
+        max-width: 1140px;
+        width: 100%;
+        margin: 36px auto 0;
     }
     .bl-marquee-wrap {
         position: relative;
@@ -699,8 +699,6 @@ const STYLE = `
         transform: rotate(-2deg);
         direction: ltr;
         border-radius: 24px;
-        -webkit-mask-image: linear-gradient(to right, transparent 0%, #000 14%, #000 86%, transparent 100%);
-        mask-image: linear-gradient(to right, transparent 0%, #000 14%, #000 86%, transparent 100%);
     }
     .bl-marquee-track {
         display: flex;
@@ -728,27 +726,24 @@ const STYLE = `
     }
     .bl-marquee-edge {
         position: absolute;
-        top: -8px;
-        bottom: -8px;
-        width: min(32%, 200px);
+        top: 0;
+        bottom: 0;
+        width: min(26%, 150px);
         z-index: 2;
         pointer-events: none;
+        backdrop-filter: blur(18px);
+        -webkit-backdrop-filter: blur(18px);
+        background: rgba(249, 251, 253, 0.08);
     }
     .bl-marquee-edge-start {
         left: 0;
-        background:
-            radial-gradient(ellipse 95% 115% at 0% 50%, #F9FBFD 0%, rgba(249, 251, 253, 0.92) 38%, rgba(249, 251, 253, 0.45) 62%, transparent 82%),
-            linear-gradient(to right, #F9FBFD 0%, rgba(249, 251, 253, 0.75) 45%, transparent 100%);
-        backdrop-filter: blur(14px);
-        -webkit-backdrop-filter: blur(14px);
+        -webkit-mask-image: linear-gradient(to right, #000 0%, #000 30%, transparent 100%);
+        mask-image: linear-gradient(to right, #000 0%, #000 30%, transparent 100%);
     }
     .bl-marquee-edge-end {
         right: 0;
-        background:
-            radial-gradient(ellipse 95% 115% at 100% 50%, #F9FBFD 0%, rgba(249, 251, 253, 0.92) 38%, rgba(249, 251, 253, 0.45) 62%, transparent 82%),
-            linear-gradient(to left, #F9FBFD 0%, rgba(249, 251, 253, 0.75) 45%, transparent 100%);
-        backdrop-filter: blur(14px);
-        -webkit-backdrop-filter: blur(14px);
+        -webkit-mask-image: linear-gradient(to left, #000 0%, #000 30%, transparent 100%);
+        mask-image: linear-gradient(to left, #000 0%, #000 30%, transparent 100%);
     }
 
     /* ---------- Scroll-reveal (mobile) ---------- */
@@ -766,8 +761,9 @@ const STYLE = `
             opacity: 1;
             transform: translateY(0);
         }
-        .bl-marquee-section { margin: 34px auto; padding: 0 16px; }
+        .bl-marquee-section { margin: 28px auto 0; }
         .bl-marquee-wrap { transform: rotate(-1.5deg); }
+        .bl-marquee-edge { width: min(30%, 120px); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
         .bl-marquee-track {
             gap: 16px;
             animation-duration: 34s;
@@ -779,7 +775,6 @@ const STYLE = `
             border-width: 5px;
             box-shadow: 0 10px 24px rgba(0, 0, 0, 0.14);
         }
-        .bl-marquee-edge { width: min(36%, 140px); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
     }
     @media (prefers-reduced-motion: reduce) {
         .bl-reveal {
@@ -1711,11 +1706,13 @@ class BirthdayLandingElement extends HTMLElement {
         const renderTile = (t) => `<img src="${escapeHtml(t.src)}" alt="${escapeHtml(t.alt)}" loading="lazy" decoding="async" />`;
         const oneSet = tiles.map(renderTile).join('');
         return `
-            <div class="bl-marquee-section bl-reveal">
-                <div class="bl-marquee-wrap">
-                    <div class="bl-marquee-track">${oneSet}${oneSet}</div>
-                    <div class="bl-marquee-edge bl-marquee-edge-start" aria-hidden="true"></div>
-                    <div class="bl-marquee-edge bl-marquee-edge-end" aria-hidden="true"></div>
+            <div class="bl-section">
+                <div class="bl-marquee-section bl-reveal">
+                    <div class="bl-marquee-wrap">
+                        <div class="bl-marquee-track">${oneSet}${oneSet}</div>
+                        <div class="bl-marquee-edge bl-marquee-edge-start" aria-hidden="true"></div>
+                        <div class="bl-marquee-edge bl-marquee-edge-end" aria-hidden="true"></div>
+                    </div>
                 </div>
             </div>
         `;

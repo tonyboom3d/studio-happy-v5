@@ -276,6 +276,12 @@ const WHATSAPP_ICON = `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3
 const WHATSAPP_SUPPORT_PHONE = '972522272270';
 const FORM_SUCCESS_MESSAGE = 'הפנייה נשלחה בהצלחה! נחזור אליכם טלפונית או בוואטסאפ עם פרטים נוספים בהקדם האפשרי.';
 const CONFETTI_COLORS = ['#00A4FD', '#A56AF0', '#FF5FC0', '#F2AF49', '#35B89A', '#FFFFFF'];
+const CONFETTI_SHAPES = ['', 'is-circle', 'is-triangle', 'is-ribbon'];
+const MIN_CHILDREN_COUNT = 15;
+const COUNTER_LIMITS = {
+    childrenCount: { min: MIN_CHILDREN_COUNT, max: 60 },
+    adultsCount: { min: 0, max: 50 },
+};
 
 const FEATURE_HIGHLIGHTS = [
     {
@@ -1053,6 +1059,8 @@ const STYLE = `
     .bl-field { display: flex; flex-direction: column; gap: 6px; }
     .bl-field.bl-span-2 { grid-column: 1 / -1; }
     .bl-field label { font-size: 13px; font-weight: 800; color: #fff; }
+    .bl-req-mark { color: #F2AF49; margin-right: 3px; }
+    .bl-field-hint { font-weight: 600; opacity: 0.75; font-size: 12px; }
     .bl-field input[type="text"], .bl-field input[type="email"], .bl-field input[type="tel"],
     .bl-field input[type="number"], .bl-field input[type="date"], .bl-field textarea, .bl-field select {
         border: none;
@@ -1131,47 +1139,62 @@ const STYLE = `
         margin: 0;
     }
 
-    /* ---------- Success confetti ---------- */
+    /* ---------- Success confetti (realistic arc + tumble + gravity fall) ---------- */
     .bl-confetti-layer {
         position: fixed;
         inset: 0;
         pointer-events: none;
         z-index: 10001;
         overflow: hidden;
+        perspective: 700px;
     }
     .bl-confetti-piece {
         position: absolute;
-        top: var(--bl-confetti-y, 50%);
-        width: 10px;
-        height: 14px;
+        top: var(--bl-confetti-y, 40%);
+        width: var(--bl-confetti-w, 9px);
+        height: var(--bl-confetti-h, 14px);
         background: var(--bl-confetti-color, #00A4FD);
         opacity: 0;
         border-radius: 2px;
-        animation-duration: var(--bl-confetti-duration, 1.6s);
+        transform-style: preserve-3d;
+        animation-name: bl-confetti-fly;
+        animation-duration: var(--bl-confetti-duration, 1.9s);
         animation-delay: var(--bl-confetti-delay, 0s);
-        animation-timing-function: cubic-bezier(0.22, 0.8, 0.32, 1);
+        animation-timing-function: cubic-bezier(0.16, 0.72, 0.4, 1);
         animation-fill-mode: forwards;
+        will-change: transform, opacity;
     }
-    .bl-confetti-piece.is-circle {
-        width: 9px;
-        height: 9px;
-        border-radius: 50%;
+    .bl-confetti-piece.is-circle { border-radius: 50%; }
+    .bl-confetti-piece.is-triangle {
+        background: transparent !important;
+        border-radius: 0;
+        border-left: calc(var(--bl-confetti-w, 9px) / 2) solid transparent;
+        border-right: calc(var(--bl-confetti-w, 9px) / 2) solid transparent;
+        border-bottom: var(--bl-confetti-h, 14px) solid var(--bl-confetti-color, #00A4FD);
+        width: 0;
+        height: 0;
     }
-    .bl-confetti-piece.from-left {
-        left: -16px;
-        animation-name: bl-confetti-from-left;
+    .bl-confetti-piece.is-ribbon {
+        width: calc(var(--bl-confetti-w, 9px) * 0.55);
+        border-radius: 999px;
     }
-    .bl-confetti-piece.from-right {
-        right: -16px;
-        animation-name: bl-confetti-from-right;
-    }
-    @keyframes bl-confetti-from-left {
-        0% { opacity: 1; transform: translate(0, 0) rotate(0deg) scale(1); }
-        100% { opacity: 0; transform: translate(calc(42vw + var(--bl-confetti-drift, 0px)), -140px) rotate(var(--bl-confetti-rotate, 180deg)) scale(0.65); }
-    }
-    @keyframes bl-confetti-from-right {
-        0% { opacity: 1; transform: translate(0, 0) rotate(0deg) scale(1); }
-        100% { opacity: 0; transform: translate(calc(-42vw + var(--bl-confetti-drift, 0px)), -140px) rotate(var(--bl-confetti-rotate, -180deg)) scale(0.65); }
+    .bl-confetti-piece.from-left { left: -18px; }
+    .bl-confetti-piece.from-right { right: -18px; }
+    @keyframes bl-confetti-fly {
+        0% {
+            opacity: 1;
+            transform: translate(0, 0) rotate3d(var(--bl-confetti-axis-x, 0.4), var(--bl-confetti-axis-y, 1), var(--bl-confetti-axis-z, 0.2), 0deg) scale(0.75);
+        }
+        10% { opacity: 1; }
+        52% {
+            opacity: 1;
+            transform: translate(var(--bl-confetti-mid-x, 120px), var(--bl-confetti-mid-y, -160px)) rotate3d(var(--bl-confetti-axis-x, 0.4), var(--bl-confetti-axis-y, 1), var(--bl-confetti-axis-z, 0.2), var(--bl-confetti-mid-rot, 480deg)) scale(1);
+        }
+        85% { opacity: 1; }
+        100% {
+            opacity: 0;
+            transform: translate(var(--bl-confetti-end-x, 260px), var(--bl-confetti-end-y, 240px)) rotate3d(var(--bl-confetti-axis-x, 0.4), var(--bl-confetti-axis-y, 1), var(--bl-confetti-axis-z, 0.2), var(--bl-confetti-end-rot, 960deg)) scale(0.6);
+        }
     }
     @media (prefers-reduced-motion: reduce) {
         .bl-confetti-layer { display: none; }
@@ -1417,7 +1440,7 @@ class BirthdayLandingElement extends HTMLElement {
             submitError: null,
             submitSuccess: false,
             pendingRequestId: null,
-            form: { workshopTypes: [], childrenCount: 0, adultsCount: 0, termsAccepted: true },
+            form: { workshopTypes: [], childrenCount: MIN_CHILDREN_COUNT, adultsCount: 0, termsAccepted: true },
         };
     }
 
@@ -1549,6 +1572,7 @@ class BirthdayLandingElement extends HTMLElement {
             return;
         }
         const active = this._activeWorkshop();
+        this._ensureActiveWorkshopTypeSelected();
         this._root.innerHTML = h`
             ${this._renderBackground()}
             ${this._renderTopNav()}
@@ -1822,9 +1846,25 @@ class BirthdayLandingElement extends HTMLElement {
         `;
     }
 
-    _renderForm() {
+    _renderWorkshopTypeChips() {
         const workshopOptions = this._state.workshops.map((w) => w.title).filter(Boolean);
         const f = this._state.form;
+        return workshopOptions.map((title) => `
+            <button type="button" class="bl-chip-option ${f.workshopTypes.includes(title) ? 'is-selected' : ''}" data-workshop-type="${escapeHtml(title)}">${escapeHtml(title)}</button>
+        `).join('');
+    }
+
+    _ensureActiveWorkshopTypeSelected() {
+        const active = this._activeWorkshop();
+        if (!active || !active.title) return;
+        if (!this._state.form.workshopTypes.includes(active.title)) {
+            this._state.form.workshopTypes.push(active.title);
+        }
+    }
+
+    _renderForm() {
+        const f = this._state.form;
+        const req = '<span class="bl-req-mark" aria-hidden="true">*</span>';
         return h`
             <div class="bl-form-section bl-reveal" style="--bl-delay: 80ms">
                 <h2>רוצים לחגוג אצלנו?</h2>
@@ -1832,34 +1872,30 @@ class BirthdayLandingElement extends HTMLElement {
                 <div id="blFormStatus"></div>
                 <div class="bl-form-grid">
                     <div class="bl-field">
-                        <label for="blFullName">שם מלא</label>
+                        <label for="blFullName">שם מלא${req}</label>
                         <input type="text" id="blFullName" name="fullName" required placeholder="שם מלא" />
                     </div>
                     <div class="bl-field">
-                        <label for="blEmail">אימייל</label>
+                        <label for="blEmail">אימייל${req}</label>
                         <input type="email" id="blEmail" name="email" required placeholder="name@example.com" />
                     </div>
                     <div class="bl-field">
-                        <label for="blPhone">טלפון</label>
+                        <label for="blPhone">טלפון${req}</label>
                         <input type="tel" id="blPhone" name="phone" inputmode="tel" required placeholder="050-0000000" />
                     </div>
                     <div class="bl-field">
-                        <label for="blDate">תאריך מועדף</label>
-                        <input type="date" id="blDate" name="preferredDate" />
+                        <label for="blDate">תאריך מועדף${req}</label>
+                        <input type="date" id="blDate" name="preferredDate" required />
                     </div>
                     <div class="bl-field bl-span-2">
-                        <label>סוג סדנה מבוקש</label>
-                        <div class="bl-multiselect" id="blWorkshopTypes">
-                            ${workshopOptions.map((title) => `
-                                <button type="button" class="bl-chip-option ${f.workshopTypes.includes(title) ? 'is-selected' : ''}" data-workshop-type="${escapeHtml(title)}">${escapeHtml(title)}</button>
-                            `).join('')}
-                        </div>
+                        <label>סוג סדנה מבוקש${req}</label>
+                        <div class="bl-multiselect" id="blWorkshopTypes">${this._renderWorkshopTypeChips()}</div>
                     </div>
                     <div class="bl-field">
-                        <label for="blChildrenCount">מספר ילדים</label>
+                        <label for="blChildrenCount">מספר ילדים${req} <span class="bl-field-hint">(מינימום ${MIN_CHILDREN_COUNT})</span></label>
                         <div class="bl-counter" data-counter="childrenCount">
                             <button type="button" data-counter-delta="-1" aria-label="הפחתת מספר ילדים">−</button>
-                            <input type="number" id="blChildrenCount" min="0" max="50" value="${f.childrenCount}" data-counter-input inputmode="numeric" aria-label="מספר ילדים" />
+                            <input type="number" id="blChildrenCount" min="${MIN_CHILDREN_COUNT}" max="${COUNTER_LIMITS.childrenCount.max}" value="${f.childrenCount}" data-counter-input inputmode="numeric" aria-label="מספר ילדים" />
                             <button type="button" data-counter-delta="1" aria-label="הוספת מספר ילדים">+</button>
                         </div>
                     </div>
@@ -1867,7 +1903,7 @@ class BirthdayLandingElement extends HTMLElement {
                         <label for="blAdultsCount">מספר מבוגרים/מלווים</label>
                         <div class="bl-counter" data-counter="adultsCount">
                             <button type="button" data-counter-delta="-1" aria-label="הפחתת מספר מלווים">−</button>
-                            <input type="number" id="blAdultsCount" min="0" max="50" value="${f.adultsCount}" data-counter-input inputmode="numeric" aria-label="מספר מלווים" />
+                            <input type="number" id="blAdultsCount" min="${COUNTER_LIMITS.adultsCount.min}" max="${COUNTER_LIMITS.adultsCount.max}" value="${f.adultsCount}" data-counter-input inputmode="numeric" aria-label="מספר מלווים" />
                             <button type="button" data-counter-delta="1" aria-label="הוספת מספר מלווים">+</button>
                         </div>
                     </div>
@@ -1882,7 +1918,7 @@ class BirthdayLandingElement extends HTMLElement {
                         </div>
                     </div>
                 </div>
-                <button type="button" class="bl-submit-btn" id="blSubmitBtn">שליחת פנייה</button>
+                <button type="button" class="bl-submit-btn" id="blSubmitBtn">שליחה</button>
             </div>
         `;
     }
@@ -2045,6 +2081,9 @@ class BirthdayLandingElement extends HTMLElement {
         if (galleryEl) galleryEl.innerHTML = this._renderHeroImages(active);
         const contentEl = this._root.querySelector('#blContent');
         if (contentEl) contentEl.innerHTML = this._renderContent(active);
+        this._ensureActiveWorkshopTypeSelected();
+        const chipsEl = this._root.querySelector('#blWorkshopTypes');
+        if (chipsEl) chipsEl.innerHTML = this._renderWorkshopTypeChips();
         if (this._heroTimer) clearInterval(this._heroTimer);
         this._startHeroFade();
         this._initRevealAnimations();
@@ -2084,8 +2123,9 @@ class BirthdayLandingElement extends HTMLElement {
     _onCounterChange(btn) {
         const wrap = btn.closest('[data-counter]');
         const key = wrap.dataset.counter;
+        const limits = COUNTER_LIMITS[key] || { min: 0, max: 50 };
         const delta = Number(btn.dataset.counterDelta);
-        const next = Math.max(0, Math.min(50, (this._state.form[key] || 0) + delta));
+        const next = Math.max(limits.min, Math.min(limits.max, (this._state.form[key] || limits.min) + delta));
         this._state.form[key] = next;
         const input = wrap.querySelector('[data-counter-input]');
         if (input) input.value = String(next);
@@ -2096,21 +2136,23 @@ class BirthdayLandingElement extends HTMLElement {
         if (!input) return;
         const wrap = input.closest('[data-counter]');
         const key = wrap.dataset.counter;
+        const limits = COUNTER_LIMITS[key] || { min: 0, max: 50 };
         let val = parseInt(input.value, 10);
-        if (Number.isNaN(val) || input.value === '') val = 0;
-        val = Math.max(0, Math.min(50, val));
+        if (Number.isNaN(val) || input.value === '') val = limits.min;
+        val = Math.max(limits.min, Math.min(limits.max, val));
         this._state.form[key] = val;
         if (String(val) !== input.value) input.value = String(val);
     }
 
     _getCounterValue(key) {
+        const limits = COUNTER_LIMITS[key] || { min: 0, max: 50 };
         const wrap = this._root.querySelector(`[data-counter="${key}"]`);
         const input = wrap && wrap.querySelector('[data-counter-input]');
         if (input) {
             const val = parseInt(input.value, 10);
-            return Math.max(0, Math.min(50, Number.isNaN(val) ? 0 : val));
+            return Math.max(limits.min, Math.min(limits.max, Number.isNaN(val) ? limits.min : val));
         }
-        return this._state.form[key] || 0;
+        return this._state.form[key] || limits.min;
     }
 
     // ---------------------------------------------------------------------
@@ -2137,6 +2179,9 @@ class BirthdayLandingElement extends HTMLElement {
         if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(values.email)) return 'נא להזין כתובת אימייל תקינה.';
         const phoneDigits = values.phone.replace(/\D/g, '');
         if (phoneDigits.length < 9 || phoneDigits.length > 10) return 'נא להזין מספר טלפון תקין.';
+        if (!values.preferredDate) return 'נא לבחור תאריך מועדף.';
+        if (!values.workshopTypes || !values.workshopTypes.length) return 'נא לבחור סוג סדנה מבוקש.';
+        if (!values.childrenCount || values.childrenCount < MIN_CHILDREN_COUNT) return `מספר הילדים המינימלי הוא ${MIN_CHILDREN_COUNT}.`;
         if (!values.termsAccepted) return 'יש לאשר את תנאי השימוש כדי להמשיך.';
         return null;
     }
@@ -2173,16 +2218,40 @@ class BirthdayLandingElement extends HTMLElement {
         layer.className = 'bl-confetti-layer';
         layer.setAttribute('aria-hidden', 'true');
 
-        for (let i = 0; i < 56; i++) {
+        const vw = window.innerWidth || 1200;
+        const pieceCount = 70;
+
+        for (let i = 0; i < pieceCount; i++) {
             const piece = document.createElement('span');
             const fromLeft = i % 2 === 0;
-            piece.className = `bl-confetti-piece ${fromLeft ? 'from-left' : 'from-right'}${Math.random() > 0.45 ? ' is-circle' : ''}`;
+            const shape = CONFETTI_SHAPES[Math.floor(Math.random() * CONFETTI_SHAPES.length)];
+            piece.className = `bl-confetti-piece ${fromLeft ? 'from-left' : 'from-right'}${shape ? ` ${shape}` : ''}`;
+
+            const side = fromLeft ? 1 : -1;
+            // Launch arc: travels partway across, rises, then gravity pulls it back down past the start line.
+            const travel = vw * (0.24 + Math.random() * 0.24);
+            const dx = side * travel;
+            const riseHeight = 70 + Math.random() * 150;
+            const fallExtra = 160 + Math.random() * 220;
+            const width = 6 + Math.random() * 6;
+            const height = width * (1.3 + Math.random() * 0.5);
+            const spinBase = 380 + Math.random() * 420;
+
             piece.style.setProperty('--bl-confetti-color', CONFETTI_COLORS[i % CONFETTI_COLORS.length]);
-            piece.style.setProperty('--bl-confetti-delay', `${Math.random() * 0.4}s`);
-            piece.style.setProperty('--bl-confetti-duration', `${1.15 + Math.random() * 0.85}s`);
-            piece.style.setProperty('--bl-confetti-y', `${18 + Math.random() * 64}%`);
-            piece.style.setProperty('--bl-confetti-rotate', `${Math.floor(Math.random() * 720 - 360)}deg`);
-            piece.style.setProperty('--bl-confetti-drift', `${Math.floor((Math.random() - 0.5) * 140)}px`);
+            piece.style.setProperty('--bl-confetti-delay', `${Math.random() * 0.35}s`);
+            piece.style.setProperty('--bl-confetti-duration', `${1.5 + Math.random() * 0.9}s`);
+            piece.style.setProperty('--bl-confetti-y', `${16 + Math.random() * 66}%`);
+            piece.style.setProperty('--bl-confetti-w', `${width}px`);
+            piece.style.setProperty('--bl-confetti-h', `${height}px`);
+            piece.style.setProperty('--bl-confetti-mid-x', `${dx * (0.48 + Math.random() * 0.1)}px`);
+            piece.style.setProperty('--bl-confetti-mid-y', `${-riseHeight}px`);
+            piece.style.setProperty('--bl-confetti-end-x', `${dx * (0.92 + Math.random() * 0.16)}px`);
+            piece.style.setProperty('--bl-confetti-end-y', `${fallExtra}px`);
+            piece.style.setProperty('--bl-confetti-mid-rot', `${spinBase * 0.55}deg`);
+            piece.style.setProperty('--bl-confetti-end-rot', `${spinBase}deg`);
+            piece.style.setProperty('--bl-confetti-axis-x', `${(Math.random() * 0.8).toFixed(2)}`);
+            piece.style.setProperty('--bl-confetti-axis-y', `${(0.4 + Math.random() * 0.8).toFixed(2)}`);
+            piece.style.setProperty('--bl-confetti-axis-z', `${(Math.random() * 0.5).toFixed(2)}`);
             layer.appendChild(piece);
         }
 
@@ -2193,7 +2262,7 @@ class BirthdayLandingElement extends HTMLElement {
                 layer.remove();
                 this._confettiLayer = null;
             }
-        }, 2600);
+        }, 2900);
     }
 
     _handleLeadResult(result) {
@@ -2204,7 +2273,7 @@ class BirthdayLandingElement extends HTMLElement {
         const statusEl = this._root.querySelector('#blFormStatus');
         if (result.ok) {
             this._state.submitSuccess = true;
-            this._state.form = { workshopTypes: [], childrenCount: 0, adultsCount: 0, termsAccepted: true };
+            this._state.form = { workshopTypes: [], childrenCount: MIN_CHILDREN_COUNT, adultsCount: 0, termsAccepted: true };
             const formSection = this._root.querySelector('#blFormSection');
             if (formSection) {
                 formSection.innerHTML = this._renderFormSuccess(result.message);
@@ -2212,7 +2281,7 @@ class BirthdayLandingElement extends HTMLElement {
             }
             this._launchConfetti();
         } else {
-            if (btn) { btn.disabled = false; btn.textContent = 'שליחת פנייה'; }
+            if (btn) { btn.disabled = false; btn.textContent = 'שליחה'; }
             if (statusEl) statusEl.innerHTML = `<div class="bl-form-error">${escapeHtml(result.message || 'אירעה שגיאה בשליחת הפנייה. נסו שוב.')}</div>`;
         }
     }

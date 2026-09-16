@@ -686,14 +686,21 @@ const STYLE = `
     }
     .bl-desc-duration-icon { font-size: 16px; line-height: 1; }
     /* ---------- Marquee strip ---------- */
-    .bl-marquee-wrap {
-        margin: 40px 0;
-        overflow: hidden;
-        transform: rotate(-2deg) scale(1.06);
+    .bl-marquee-section {
         position: relative;
         z-index: 1;
+        max-width: 920px;
+        margin: 40px auto;
+        padding: 0 24px;
+    }
+    .bl-marquee-wrap {
+        position: relative;
+        overflow: hidden;
+        transform: rotate(-2deg);
         direction: ltr;
-        width: 100%;
+        border-radius: 24px;
+        -webkit-mask-image: linear-gradient(to right, transparent 0%, #000 14%, #000 86%, transparent 100%);
+        mask-image: linear-gradient(to right, transparent 0%, #000 14%, #000 86%, transparent 100%);
     }
     .bl-marquee-track {
         display: flex;
@@ -701,6 +708,7 @@ const STYLE = `
         width: max-content;
         animation: bl-infinite-scroll 40s linear infinite;
         will-change: transform;
+        padding: 8px 0;
     }
     @keyframes bl-infinite-scroll {
         from { transform: translate3d(0, 0, 0); }
@@ -718,6 +726,30 @@ const STYLE = `
         box-shadow: 0 8px 18px rgba(0,0,0,0.12);
         flex-shrink: 0;
     }
+    .bl-marquee-edge {
+        position: absolute;
+        top: -8px;
+        bottom: -8px;
+        width: min(32%, 200px);
+        z-index: 2;
+        pointer-events: none;
+    }
+    .bl-marquee-edge-start {
+        left: 0;
+        background:
+            radial-gradient(ellipse 95% 115% at 0% 50%, #F9FBFD 0%, rgba(249, 251, 253, 0.92) 38%, rgba(249, 251, 253, 0.45) 62%, transparent 82%),
+            linear-gradient(to right, #F9FBFD 0%, rgba(249, 251, 253, 0.75) 45%, transparent 100%);
+        backdrop-filter: blur(14px);
+        -webkit-backdrop-filter: blur(14px);
+    }
+    .bl-marquee-edge-end {
+        right: 0;
+        background:
+            radial-gradient(ellipse 95% 115% at 100% 50%, #F9FBFD 0%, rgba(249, 251, 253, 0.92) 38%, rgba(249, 251, 253, 0.45) 62%, transparent 82%),
+            linear-gradient(to left, #F9FBFD 0%, rgba(249, 251, 253, 0.75) 45%, transparent 100%);
+        backdrop-filter: blur(14px);
+        -webkit-backdrop-filter: blur(14px);
+    }
 
     /* ---------- Scroll-reveal (mobile) ---------- */
     @media (max-width: 900px) {
@@ -734,10 +766,8 @@ const STYLE = `
             opacity: 1;
             transform: translateY(0);
         }
-        .bl-marquee-wrap {
-            transform: rotate(-1.5deg) scale(1.03);
-            margin: 34px 0;
-        }
+        .bl-marquee-section { margin: 34px auto; padding: 0 16px; }
+        .bl-marquee-wrap { transform: rotate(-1.5deg); }
         .bl-marquee-track {
             gap: 16px;
             animation-duration: 34s;
@@ -749,6 +779,7 @@ const STYLE = `
             border-width: 5px;
             box-shadow: 0 10px 24px rgba(0, 0, 0, 0.14);
         }
+        .bl-marquee-edge { width: min(36%, 140px); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
     }
     @media (prefers-reduced-motion: reduce) {
         .bl-reveal {
@@ -1679,7 +1710,15 @@ class BirthdayLandingElement extends HTMLElement {
         if (!tiles.length) return '';
         const renderTile = (t) => `<img src="${escapeHtml(t.src)}" alt="${escapeHtml(t.alt)}" loading="lazy" decoding="async" />`;
         const oneSet = tiles.map(renderTile).join('');
-        return `<div class="bl-marquee-wrap bl-reveal"><div class="bl-marquee-track">${oneSet}${oneSet}</div></div>`;
+        return `
+            <div class="bl-marquee-section bl-reveal">
+                <div class="bl-marquee-wrap">
+                    <div class="bl-marquee-track">${oneSet}${oneSet}</div>
+                    <div class="bl-marquee-edge bl-marquee-edge-start" aria-hidden="true"></div>
+                    <div class="bl-marquee-edge bl-marquee-edge-end" aria-hidden="true"></div>
+                </div>
+            </div>
+        `;
     }
 
     _renderImportantInfo(list) {

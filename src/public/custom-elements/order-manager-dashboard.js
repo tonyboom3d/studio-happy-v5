@@ -2117,6 +2117,73 @@ function __wdInjectGlobalAssets() {
             return html;
         }
 
+        const PROMO_COUPON_STATUS_LABELS = {
+            issued: 'הונפק — טרם מומש',
+            redeemed: 'מומש',
+            cancelled: 'בוטל',
+        };
+        const PROMO_COUPON_STATUS_CLASSES = {
+            issued: 'bg-amber-50 text-amber-700 border-amber-200',
+            redeemed: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+            cancelled: 'bg-gray-100 text-gray-500 border-gray-200',
+        };
+
+        function formatShortDate(dateStr) {
+            if (!dateStr) return '';
+            const d = new Date(dateStr);
+            if (Number.isNaN(d.getTime())) return '';
+            return d.toLocaleDateString('he-IL', { day: '2-digit', month: '2-digit', year: 'numeric' });
+        }
+
+        /** "טאפטינג + קרמיקה במתנה" promo coupon block — tufting orders only. */
+        function buildPromoCouponHtml(order) {
+            const coupon = order.promoCoupon;
+            if (!coupon || !hasDashboardPermission('manageOrdersSystem')) return '';
+            const statusLabel = PROMO_COUPON_STATUS_LABELS[coupon.status] || coupon.status;
+            const statusClass = PROMO_COUPON_STATUS_CLASSES[coupon.status] || 'bg-gray-100 text-gray-600 border-gray-200';
+            const canAct = coupon.status === 'issued' && !order.isLegacyOrder;
+            const notSentYet = coupon.status === 'issued' && !coupon.lastSentAt;
+
+            return `
+                <div class="px-8 pb-2 pt-0 w-full">
+                    <div class="bg-orange-50 border border-orange-100 rounded-lg p-3 text-sm">
+                        <div class="flex items-center justify-between gap-2 flex-wrap">
+                            <strong class="flex items-center gap-1.5 text-xs text-orange-700"><i class="ph-fill ph-gift"></i> קופון קרמיקה במתנה</strong>
+                            <span class="text-[10px] font-bold px-1.5 py-0.5 rounded border ${statusClass}">${statusLabel}</span>
+                        </div>
+                        <div class="mt-1.5 flex flex-wrap items-center gap-1.5 text-[11px] text-gray-700">
+                            <span class="font-mono font-bold bg-white border border-orange-200 px-1.5 py-0.5 rounded">${coupon.code}</span>
+                            <span>${coupon.giftPieces} כלי/ם</span>
+                            ${coupon.redeemFrom ? `<span>ניתן לממש מ-${formatShortDate(coupon.redeemFrom)}</span>` : ''}
+                            ${coupon.expiresAt ? `<span>עד ${formatShortDate(coupon.expiresAt)}</span>` : ''}
+                            ${coupon.redeemedAt ? `<span class="text-emerald-700 font-bold">מומש ב-${formatShortDate(coupon.redeemedAt)}</span>` : ''}
+                        </div>
+                        ${notSentYet ? `<div class="mt-1.5 text-[11px] text-red-600 font-bold flex items-center gap-1"><i class="ph-fill ph-warning-circle"></i> לא נשלח אוטומטית — כנראה שהלקוח/ה לא אישר/ה דיוור בצ'ק-אאוט. אפשר למסור את הקוד ידנית או ללחוץ "שלח שוב".</div>` : ''}
+                        ${canAct ? `
+                        <div class="mt-2 flex items-center gap-2">
+                            <button onclick="resendPromoCoupon('${order.id}', event)" class="text-[11px] font-bold px-2 py-1 rounded bg-white border border-orange-200 text-orange-700 hover:bg-orange-100 transition-colors ${!hasDashboardPermission('sendWhatsApp')?'pointer-events-none opacity-40':''}">שלח שוב</button>
+                            <button onclick="cancelPromoCouponNoShow('${order.id}', event)" class="text-[11px] font-bold px-2 py-1 rounded bg-white border border-red-200 text-red-600 hover:bg-red-50 transition-colors ${!hasDashboardPermission('sendWhatsApp')?'pointer-events-none opacity-40':''}">לא הגיע — בטל קופון</button>
+                        </div>` : ''}
+                    </div>
+                </div>`;
+        }
+
+        function resendPromoCoupon(orderId, event) {
+            event?.stopPropagation();
+            if (!hasDashboardPermission('sendWhatsApp')) return;
+            if (!confirm('לשלוח שוב את קופון המבצע ללקוח (WhatsApp + מייל)?')) return;
+            addLog(orderId, 'קופון המבצע נשלח שוב.');
+            dispatchDashboardAction('resendPromoCoupon', { orderId });
+        }
+
+        function cancelPromoCouponNoShow(orderId, event) {
+            event?.stopPropagation();
+            if (!hasDashboardPermission('sendWhatsApp')) return;
+            if (!confirm('לבטל את קופון המבצע עבור הזמנה זו (אי-הגעה לסדנת הטאפטינג)?')) return;
+            addLog(orderId, 'קופון המבצע בוטל — אי-הגעה.');
+            dispatchDashboardAction('cancelPromoCouponNoShow', { orderId });
+        }
+
         /** In-person QR add-on purchases linked to this order (backend/studioUpsellService.web.js). */
         function buildAddOnsHtml(order) {
             const addOns = Array.isArray(order.addOns) ? order.addOns : [];
@@ -2997,6 +3064,9 @@ function __wdInjectGlobalAssets() {
 
                 // 1b. In-person QR add-on purchases linked to this order
                 innerContent += buildAddOnsHtml(o);
+
+                // 1c. "טאפטינג + קרמיקה במתנה" promo coupon (tufting orders only)
+                innerContent += buildPromoCouponHtml(o);
 
                 // 2. Customer notes (from checkout, read-only)
                 if (o.customerNotes) {
@@ -4084,6 +4154,8 @@ window.onDateRangeFilterChange = onDateRangeFilterChange;
 window.toggleAlertFilter = toggleAlertFilter;
 window.toggleInlineLogs = toggleInlineLogs;
 window.updateSketchStatus = updateSketchStatus;
+window.resendPromoCoupon = resendPromoCoupon;
+window.cancelPromoCouponNoShow = cancelPromoCouponNoShow;
 
 
 // ============================================================

@@ -3,6 +3,7 @@ import { staffMembers } from '@wix/bookings';
 import { computeSketchEditingDeadline } from 'backend/sketchEditingPolicy.js';
 import { reconcileEcomOrder } from 'backend/orderReconciliation.js';
 import { reconcileAddOnEcomOrder, getAddOnOrderByCheckoutId, getAddOnOrderByEcomOrderId } from 'backend/studioUpsell/reconcile.js';
+import { cancelPromoCouponsForOrder, reschedulePromoCouponsForOrder } from 'backend/promoCouponService.js';
 
 const SA = { suppressAuth: true, suppressHooks: true };
 
@@ -266,6 +267,14 @@ export function wixBookingsV2_onBookingCanceled(event) {
             }, SA);
             await appendOrderActionLog(updatedOrder, 'ההזמנה בוטלה דרך Wix Bookings');
 
+            // "טאפטינג + קרמיקה במתנה" promo — a cancelled tufting booking voids
+            // any promo coupon issued for it (never throws).
+            if (order.workshopType === 'tufting') {
+                cancelPromoCouponsForOrder(order._id, 'tufting_cancelled').catch((err) => {
+                    console.error('[events] cancelPromoCouponsForOrder failed. orderId:', order._id, 'error:', err?.message || err);
+                });
+            }
+
             const [participants, sketches] = await Promise.all([
                 wixData.query('WorkshopParticipants').eq('orderId', order._id).find(SA),
                 wixData.query('SketchSelections').eq('orderId', order._id).find(SA),
@@ -341,6 +350,14 @@ export function wixBookings_onBookingRescheduled(event) {
             const prevLabel = formatJerusalemDateTime(previousStart || order.workshopStart);
             const newLabel = formatJerusalemDateTime(newStartDate);
             await appendOrderActionLog(updatedOrder, `תאריך הסדנה עודכן דרך Wix Bookings: ${prevLabel} → ${newLabel}`);
+
+            // "טאפטינג + קרמיקה במתנה" promo — the coupon's redeem-from date
+            // follows the tufting booking's new date (never throws).
+            if (order.workshopType === 'tufting') {
+                reschedulePromoCouponsForOrder(order._id, newStartDate).catch((err) => {
+                    console.error('[events] reschedulePromoCouponsForOrder failed. orderId:', order._id, 'error:', err?.message || err);
+                });
+            }
 
             console.log(`[events] wixBookings_onBookingRescheduled: order ${order._id} rescheduled to ${newStartDate.toISOString()} (sessionId=${newSessionId || order.sessionId}).`);
         })

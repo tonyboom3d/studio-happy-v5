@@ -34,6 +34,7 @@ import {
     getPhoneLookupVariants,
     isEcomOrderPaid,
 } from 'backend/orderUtils.js';
+import { markPromoCouponRedeemedIfApplicable } from 'backend/promoCouponService.js';
 
 const SA = { suppressAuth: true };
 const SA_CONSISTENT = { suppressAuth: true, consistentRead: true };
@@ -240,7 +241,17 @@ export async function linkWorkshopOrderToEcom(workshopOrder, ecomOrderInput) {
         }
     }
 
-    return wixData.update('WorkshopOrders', updates, SA);
+    const updatedOrder = await wixData.update('WorkshopOrders', updates, SA);
+
+    // "טאפטינג + קרמיקה במתנה" promo — if this is a paid ceramics order that
+    // used a promo coupon code, mark the coupon redeemed. Never blocks/throws.
+    if (updatedOrder.workshopType === 'ceramics' && coupon?.code) {
+        markPromoCouponRedeemedIfApplicable(coupon.code, updatedOrder._id).catch((err) => {
+            console.error('[orderReconciliation] markPromoCouponRedeemedIfApplicable failed. orderId:', updatedOrder._id, 'error:', err?.message || err);
+        });
+    }
+
+    return updatedOrder;
 }
 
 /**

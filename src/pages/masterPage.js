@@ -1,10 +1,30 @@
-// API Reference: https://www.wix.com/velo/reference/api-overview/introduction
-// “Hello, World!” Example: https://learn-code.wix.com/en/article/hello-world
+import wixLocation from 'wix-location';
+import { getActivePromoCampaign } from 'backend/promoCampaignService.web.js';
+
+// "טאפטינג + קרמיקה במתנה" promo popup (src/public/custom-elements/promo-popup.js).
+// Must be added to masterPage as a Custom Element with this exact ID — see
+// the install instructions at the top of promo-popup.js.
+const PROMO_POPUP_ELEMENT_ID = '#promoPopup1';
+
+// Test/preview link (only usable while the campaign is OFF in the CMS):
+//   https://www.studiohappy.art/?promo=<PromoCampaign.previewToken>
+const PROMO_QUERY_PARAM = 'promo';
 
 $w.onReady(function () {
-    // Write your JavaScript here
+    const popupEl = $w(PROMO_POPUP_ELEMENT_ID);
+    if (!popupEl) {
+        // Not every page needs to log this loudly — the element only exists
+        // once it's added to masterPage per the install instructions.
+        return;
+    }
 
-    // To select an element by ID use: $w('#elementID')
+    const previewToken = wixLocation.query?.[PROMO_QUERY_PARAM] || '';
 
-    // Click 'Preview' to run your code
+    getActivePromoCampaign(previewToken)
+        .then((campaign) => {
+            popupEl.setAttribute('campaign-data', JSON.stringify(campaign || { show: false }));
+        })
+        .catch((err) => {
+            console.error('[masterPage] getActivePromoCampaign failed:', err?.message || err);
+        });
 });

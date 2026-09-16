@@ -6,7 +6,14 @@ import wixData from 'wix-data';
 import { Permissions, webMethod } from 'wix-web-module';
 import { mediaManager } from 'wix-media-backend';
 import { currentMember } from 'wix-members-backend';
-import { sendOrderConfirmationManyChat } from 'backend/manychatService.jsw';
+import { sendOrderConfirmationManyChat, sendTuftingPromoCouponManyChat } from 'backend/manychatService.jsw';
+import {
+    getPromoCouponsByOrderIds,
+    getPromoCouponForOrder,
+    cancelPromoCouponsForOrder,
+    markPromoCouponSent,
+} from 'backend/promoCouponService.js';
+import { sendTuftingPromoCouponEmail } from 'backend/promoEmailService.js';
 import { SKETCH_STATUS, SKETCH_STATUSES, normalizeSketchStatus, isLockedStatus } from 'backend/sketchStatus.js';
 import { PERMISSION_KEYS, PERMISSION_DEFAULTS, refId } from 'backend/staffRoles.js';
 import { getItemWithRetry } from 'backend/wixDataRetry.js';
@@ -66,6 +73,21 @@ const CERAMICS_SERVICE_ID_SET = new Set([
 function isCeramicsOrder(order) {
     if (order?.workshopType) return order.workshopType === 'ceramics';
     return !!order?.serviceId && CERAMICS_SERVICE_ID_SET.has(order.serviceId);
+}
+
+/** "טאפטینג + קרמיקה במתנה" promo — shape sent to the dashboard for a tufting order's coupon (if any). */
+function mapPromoCouponForDashboard(row) {
+    if (!row) return null;
+    return {
+        id: row._id,
+        code: row.code,
+        status: row.status,
+        giftPieces: row.giftPieces || 0,
+        redeemFrom: row.redeemFrom || null,
+        expiresAt: row.expiresAt || null,
+        redeemedAt: row.redeemedAt || null,
+        lastSentAt: row.lastSentAt || null,
+    };
 }
 
 /** Convert Wix media URLs to browser-displayable HTTPS URLs. */
@@ -997,11 +1019,12 @@ export const getInitialDashboardData = webMethod(Permissions.SiteMember, async (
     if (!refreshOnly) console.warn('📦 [dashboardService] Raw WorkshopOrders from CMS:', orders);
 
     const orderIds = orders.map(o => o._id);
-    const [sketchesByOrderId, participantsByOrderId, templatesResult, currentUser] = await Promise.all([
+    const [sketchesByOrderId, participantsByOrderId, templatesResult, currentUser, promoCouponsByOrderId] = await Promise.all([
         loadSketchesForOrders(orderIds),
         loadParticipantsForOrders(orderIds),
         refreshOnly ? Promise.resolve(null) : wixData.query('WhatsApp_Templates').find(SA),
         refreshOnly ? Promise.resolve(null) : resolveCurrentDashboardUser(),
+        getPromoCouponsByOrderIds(orderIds),
     ]);
     const totalSketches = Object.values(sketchesByOrderId).reduce((sum, arr) => sum + arr.length, 0);
     console.log(`[dashboardService] Loaded ${totalSketches} SketchSelections record(s) across ${Object.keys(sketchesByOrderId).length} order(s).`);
@@ -1168,6 +1191,7 @@ export const getInitialDashboardData = webMethod(Permissions.SiteMember, async (
                 paidDiscount: order.paidDiscount || 0,
                 couponCode: order.couponCode || null,
                 couponName: order.couponName || null,
+                promoCoupon: mapPromoCouponForDashboard(promoCouponsByOrderId[order._id]),
                 addOns: (addOnsByWorkshopOrderId[order._id] || []).map(mapAddOnOrderForDashboard),
                 addOnsTotal: (addOnsByWorkshopOrderId[order._id] || []).reduce((sum, r) => sum + (Number(r.total) || 0), 0),
             });
@@ -1293,7 +1317,7 @@ export const getInitialDashboardData = webMethod(Permissions.SiteMember, async (
         ? dashboardOrders
         : dashboardOrders.filter(o => scopedWorkshopIds.has(o.workshopId));
     if (!canManageOrdersSystem) {
-        scopedOrders = scopedOrders.map(({ paidTotal, paidDiscount, couponCode, couponName, ecomOrderId, addOns, addOnsTotal, ...rest }) => rest);
+        scopedOrders = scopedOrders.map(({ paidTotal, paidDiscount, couponCode, couponName, promoCoupon, ecomOrderId, addOns, addOnsTotal, ...rest }) => rest);
         for (const w of scopedWorkshopRows) delete w.unlinkedAddOns;
     }
 
@@ -1715,6 +1739,60 @@ export const sendDashboardWhatsApp = webMethod(Permissions.SiteMember, async (or
 
     await logOrderAction(orderId, `הודעת WhatsApp (${DASHBOARD_SENDABLE_TEMPLATE_LABEL}) נשלחה ל-${targetPhone}`, options?.user);
     return { success: true };
+});
+
+// --- "טאפטינג + קרמיקה במתנה" promo coupon actions ---------------------
+
+/** Resends the existing promo coupon's WhatsApp + email notifications for a tufting order. */
+export const resendPromoCoupon = webMethod(Permissions.SiteMember, async (orderId, options) => {
+    await assertPermission('sendWhatsApp');
+
+    const coupon = await getPromoCouponForOrder(orderId);
+    if (!coupon) throw new Error('לא נמצא קופון מבצע עבור הזמנה זו');
+    if (coupon.status !== 'issued') throw new Error(`לא ניתן לשלוח שוב — סטטוס הקופון: ${coupon.status}`);
+
+    const [waResult, emailResult] = await Promise.all([
+        sendTuftingPromoCouponManyChat(coupon),
+        sendTuftingPromoCouponEmail(coupon),
+    ]);
+
+    const ok = !!waResult?.sent || !!emailResult?.sent;
+    if (ok) await markPromoCouponSent(coupon._id);
+
+    // Both legs return { sent: false, reason: 'no-marketing-consent' } when the
+    // customer never opted in via the checkout "subscribe to marketing"
+    // checkbox (see marketingConsentService.js) — surfaced distinctly since
+    // it's an expected/legal-compliance outcome, not a delivery failure.
+    const noConsent = !ok && waResult?.reason === 'no-marketing-consent' && emailResult?.reason === 'no-marketing-consent';
+
+    await logOrderAction(
+        orderId,
+        ok
+            ? `קופון המבצע (${coupon.code}) נשלח שוב ${waResult?.sent ? 'ב-WhatsApp' : ''}${waResult?.sent && emailResult?.sent ? ' + ' : ''}${emailResult?.sent ? 'במייל' : ''}`
+            : noConsent
+                ? `⚠️ קופון המבצע (${coupon.code}) לא נשלח — הלקוח/ה לא אישר/ה דיוור בצ'ק-אאוט`
+                : `❌ שליחה חוזרת של קופון המבצע (${coupon.code}) נכשלה`,
+        options?.user,
+    );
+    if (!ok) {
+        throw new Error(noConsent
+            ? 'הלקוח/ה לא אישר/ה קבלת דיוור בצ׳ק-אאוט — לא ניתן לשלוח את הקופון אוטומטית. אפשר למסור לו/ה את הקוד ישירות.'
+            : 'שליחת הקופון נכשלה בוואטסאפ ובמייל');
+    }
+    return { success: true, whatsapp: !!waResult?.sent, email: !!emailResult?.sent };
+});
+
+/** Cancels the promo coupon issued for a tufting order — e.g. after a no-show. */
+export const cancelPromoCouponNoShow = webMethod(Permissions.SiteMember, async (orderId, options) => {
+    await assertPermission('sendWhatsApp');
+
+    const coupon = await getPromoCouponForOrder(orderId);
+    if (!coupon) throw new Error('לא נמצא קופון מבצע עבור הזמנה זו');
+    if (coupon.status !== 'issued') throw new Error(`הקופון כבר במצב: ${coupon.status}`);
+
+    const result = await cancelPromoCouponsForOrder(orderId, 'no_show');
+    await logOrderAction(orderId, `קופון המבצע (${coupon.code}) בוטל — אי-הגעה לסדנת הטאפטינג`, options?.user);
+    return { success: true, cancelled: result.cancelled };
 });
 
 export const getTemplates = webMethod(Permissions.SiteMember, async () => {

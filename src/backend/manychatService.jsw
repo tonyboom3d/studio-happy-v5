@@ -12,6 +12,7 @@
 import wixSecretsBackend from 'wix-secrets-backend';
 import { fetch } from 'wix-fetch';
 import { normalizeIsraeliPhone } from 'backend/orderUtils.js';
+import { hasPhoneMarketingConsent } from 'backend/marketingConsentService.js';
 
 const MANYCHAT_BASE_URL = 'https://api.manychat.com';
 const ISRAEL_TZ = 'Asia/Jerusalem';
@@ -34,6 +35,12 @@ export const MC_FIELDS = {
     orderNumber: 'order_number',
     participantName: 'participant_name',
     otpCode: 'otp_code',
+    // "טאפטינג + קרמיקה במתנה" promo (see promoCouponService.js)
+    couponCode: 'coupon_code',
+    giftPieces: 'gift_pieces',
+    couponExpires: 'coupon_expires',
+    couponRedeemFrom: 'coupon_redeem_from',
+    ceramicsBookUrl: 'ceramics_book_url',
 };
 
 // Custom field created manually in ManyChat (Settings > Custom Fields, type "Text")
@@ -378,6 +385,21 @@ function formatWorkshopTime(dateObj) {
     }).formatToParts(d);
     const get = (t) => parts.find(p => p.type === t)?.value || '';
     return `${get('hour')}:${get('minute')}`;
+}
+
+/** Numeric d.m.yyyy date (Israel local) — used for coupon redeem/expiry dates. */
+function formatDateNumericIL(dateInput) {
+    if (!dateInput) return '';
+    const d = new Date(dateInput);
+    if (Number.isNaN(d.getTime())) return '';
+    const parts = new Intl.DateTimeFormat('en-GB', {
+        timeZone: ISRAEL_TZ,
+        day: 'numeric',
+        month: 'numeric',
+        year: 'numeric',
+    }).formatToParts(d);
+    const get = (t) => parts.find(p => p.type === t)?.value || '';
+    return `${get('day')}.${get('month')}.${get('year')}`;
 }
 
 function workshopTypeLabel(workshopType) {
@@ -821,6 +843,65 @@ export async function sendSketchSelectedManyChat(order, participantName) {
         return { sent: true, subscriberId: subscriber.id };
     } catch (err) {
         logManyChatSendError('sendSketchSelectedManyChat', { order, error: err?.message || String(err) });
+        return { sent: false, reason: 'error', error: err?.message || String(err) };
+    }
+}
+
+const CERAMICS_BOOK_URL = 'https://www.studiohappy.art/booking-flow-ceramic';
+
+/**
+ * Sends the "קרמיקה במתנה" promo-coupon WhatsApp message for a just-issued
+ * PromoCoupons row (see promoCouponService.js). Reuses the order-confirmation
+ * subscriber/flow with notification_type 'tufting_promo_coupon' — requires a
+ * matching branch + template in the ManyChat flow (content20260826091942_789880).
+ * Never throws — same contract as sendOrderConfirmationManyChat.
+ */
+export async function sendTuftingPromoCouponManyChat(couponRow) {
+    try {
+        const phone = normalizeIsraeliPhone(couponRow?.organizerPhone);
+        const email = couponRow?.organizerEmail || '';
+        if (!phone) {
+            logManyChatSendError('sendTuftingPromoCouponManyChat', { order: { _id: couponRow?.orderId }, reason: 'no-phone' });
+            return { sent: false, reason: 'no-phone' };
+        }
+
+        // This is a MARKETING message (unlike the plain order-confirmation
+        // template) — Israel's anti-spam law (חוק הספאם) requires prior opt-in.
+        // See marketingConsentService.js — gated on the site's checkout
+        // "subscribe to marketing" checkbox, not the order-confirmation consent.
+        const consented = await hasPhoneMarketingConsent(phone);
+        if (!consented) {
+            console.log('[ManyChat] sendTuftingPromoCouponManyChat: skipped — no marketing consent for phone. orderId:', couponRow?.orderId);
+            return { sent: false, reason: 'no-marketing-consent' };
+        }
+
+        const { firstName, lastName } = splitName(couponRow?.organizerName);
+        const subscriber = await findOrCreateSubscriber({ email, phone, firstName, lastName });
+        if (!subscriber?.id) {
+            logManyChatSendError('sendTuftingPromoCouponManyChat', { order: { _id: couponRow?.orderId }, phone, reason: 'subscriber-not-found' });
+            return { sent: false, reason: 'subscriber-not-found' };
+        }
+
+        const fields = [
+            { name: NOTIFICATION_TYPE_FIELD, value: 'tufting_promo_coupon' },
+            { name: MC_FIELDS.organizerName, value: couponRow?.organizerName },
+            { name: MC_FIELDS.couponCode, value: couponRow?.code },
+            { name: MC_FIELDS.giftPieces, value: couponRow?.giftPieces },
+            { name: MC_FIELDS.couponRedeemFrom, value: formatDateNumericIL(couponRow?.redeemFrom) },
+            { name: MC_FIELDS.couponExpires, value: formatDateNumericIL(couponRow?.expiresAt) },
+            { name: MC_FIELDS.ceramicsBookUrl, value: CERAMICS_BOOK_URL },
+        ];
+        const sending = fields.filter(f => hasManyChatFieldValue(f.value));
+        await setCustomFieldsByName(subscriber.id, sending);
+        await sendFlow(subscriber.id, ORDER_CONFIRMATION_FLOW_NS);
+
+        logManyChatSendSuccess('sendTuftingPromoCouponManyChat', {
+            order: { _id: couponRow?.orderId }, phone, subscriberId: subscriber.id,
+            notificationType: 'tufting_promo_coupon', fields: sending,
+        });
+        return { sent: true, subscriberId: subscriber.id };
+    } catch (err) {
+        logManyChatSendError('sendTuftingPromoCouponManyChat', { order: { _id: couponRow?.orderId }, error: err?.message || String(err) });
         return { sent: false, reason: 'error', error: err?.message || String(err) };
     }
 }

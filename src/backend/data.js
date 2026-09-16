@@ -1,7 +1,9 @@
 import wixData from 'wix-data';
-import { sendOrderConfirmationManyChat } from 'backend/manychatService.jsw';
+import { sendOrderConfirmationManyChat, sendTuftingPromoCouponManyChat } from 'backend/manychatService.jsw';
 import { processBookingPaid } from 'backend/schedulingEngine.js';
 import { uploadFile, attachToVectorStore, deleteFile, detachFromVectorStore } from 'backend/openaiService.jsw';
+import { issuePromoCouponForOrder, markPromoCouponSent } from 'backend/promoCouponService.js';
+import { sendTuftingPromoCouponEmail } from 'backend/promoEmailService.js';
 
 const SA = { suppressAuth: true, suppressHooks: true };
 
@@ -37,6 +39,38 @@ export function WorkshopOrders_afterUpdate(item, context) {
             .catch(err => {
                 console.error('[data.js hook] processBookingPaid failed. orderId:', item._id, 'error:', err?.message || err);
             });
+
+        // "טאפטינג + קרמיקה במתנה" promo (see promoCouponService.js) — issues a
+        // one-time Wix coupon and sends it via WhatsApp + email. No-ops when the
+        // promo campaign (PromoCampaign CMS row) is off, or the order isn't tufting.
+        if (item.workshopType === 'tufting') {
+            issuePromoCouponForOrder(item)
+                .then(result => {
+                    if (!result?.issued) return;
+                    return Promise.all([
+                        sendTuftingPromoCouponManyChat(result.coupon).catch(err => {
+                            console.error('[data.js hook] sendTuftingPromoCouponManyChat failed. couponId:', result.coupon?._id, 'error:', err?.message || err);
+                            return { sent: false };
+                        }),
+                        sendTuftingPromoCouponEmail(result.coupon).catch(err => {
+                            console.error('[data.js hook] sendTuftingPromoCouponEmail failed. couponId:', result.coupon?._id, 'error:', err?.message || err);
+                            return { sent: false };
+                        }),
+                    ]).then(([waResult, emailResult]) => {
+                        // Only stamp lastSentAt if something actually went out — both
+                        // legs return { sent: false, reason: 'no-marketing-consent' }
+                        // when the customer didn't opt in via the checkout "subscribe
+                        // to marketing" checkbox (see marketingConsentService.js).
+                        if (waResult?.sent || emailResult?.sent) {
+                            return markPromoCouponSent(result.coupon._id);
+                        }
+                        console.warn('[data.js hook] Promo coupon issued but NOT sent (no marketing consent). orderId:', item._id, 'couponId:', result.coupon._id);
+                    });
+                })
+                .catch(err => {
+                    console.error('[data.js hook] issuePromoCouponForOrder failed. orderId:', item._id, 'error:', err?.message || err);
+                });
+        }
     }
 
     if (!item.organizerPhone) {

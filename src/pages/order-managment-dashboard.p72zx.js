@@ -9,6 +9,8 @@ import {
     deleteTemplate,
     getSketchDownloadUrl,
     debugOrderMatch,
+    resendPromoCoupon,
+    cancelPromoCouponNoShow,
 } from 'backend/dashboardService.web.js';
 
 import {
@@ -374,6 +376,18 @@ async function handleDashboardAction(dashboardEl, detail) {
             await sendDashboardWhatsApp(payload.orderId, payload.phone, { template: payload.template });
 
         }
+
+        break;
+
+    case 'resendPromoCoupon':
+
+        await resendPromoCoupon(payload.orderId);
+
+        break;
+
+    case 'cancelPromoCouponNoShow':
+
+        await cancelPromoCouponNoShow(payload.orderId);
 
         break;
 

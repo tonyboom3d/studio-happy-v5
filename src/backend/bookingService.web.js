@@ -110,6 +110,37 @@ function applyCeramicsExtraItemAddonPricing(byDay) {
 
 const _addOnGroupIdCache = new Map();
 
+/** Normalize listAddOnGroupsByServiceId responses across SDK/REST shapes. */
+function normalizeAddOnGroupDetails(groupsResult) {
+    if (!groupsResult) return [];
+    if (Array.isArray(groupsResult)) return groupsResult;
+    return groupsResult.addOnGroupsDetails
+        || groupsResult.addOnGroups
+        || groupsResult.groups
+        || [];
+}
+
+function extractAddOnGroupId(groupDetail) {
+    return groupDetail?.groupId
+        || groupDetail?._id
+        || groupDetail?.id
+        || groupDetail?.addOnGroup?._id
+        || groupDetail?.addOnGroup?.id
+        || null;
+}
+
+function extractAddOnIdsFromGroupDetail(groupDetail) {
+    const ids = new Set();
+    for (const rawId of groupDetail?.addOnIds || []) {
+        if (rawId) ids.add(rawId);
+    }
+    for (const addOn of groupDetail?.addOns || []) {
+        const id = addOn?.addOnId || addOn?._id || addOn?.id;
+        if (id) ids.add(id);
+    }
+    return [...ids];
+}
+
 /** Resolve Wix add-on groupId for a service/add-on pair (required for bookedAddOns). */
 async function resolveAddOnGroupIdForService(serviceId, addOnId) {
     if (!serviceId || !addOnId) return null;
@@ -120,16 +151,21 @@ async function resolveAddOnGroupIdForService(serviceId, addOnId) {
     try {
         const elevatedListGroups = auth.elevate(services.listAddOnGroupsByServiceId);
         const groupsResult = await elevatedListGroups(serviceId);
-        const groups = groupsResult?.addOnGroups || [];
+        const groups = normalizeAddOnGroupDetails(groupsResult);
         for (const g of groups) {
-            const groupId = g._id || g.id;
-            const addOnIds = g.addOnIds
-                || (g.addOns || []).map(a => a._id || a.id).filter(Boolean);
+            const groupId = extractAddOnGroupId(g);
+            const addOnIds = extractAddOnIdsFromGroupDetail(g);
             if (groupId && addOnIds.includes(addOnId)) {
                 _addOnGroupIdCache.set(cacheKey, groupId);
                 return groupId;
             }
         }
+        console.warn('[resolveAddOnGroupIdForService] No group found for add-on', {
+            serviceId,
+            addOnId,
+            groupCount: groups.length,
+            responseKeys: groupsResult && typeof groupsResult === 'object' ? Object.keys(groupsResult) : [],
+        });
     } catch (err) {
         console.warn('[resolveAddOnGroupIdForService] Failed:', err?.message || err);
     }
@@ -855,18 +891,27 @@ export const createAndCheckout = webMethod(Permissions.Anyone, async (orderData)
     };
 
     // "נר נוסף" / "כלי קרמיקה נוסף" — add-on בלבד, בלי מושב נוסף.
-    // Wix requires a valid groupId on every bookedAddOn (same as candles flow).
+    // Wix requires a valid groupId on every bookedAddOn. Candles always have
+    // hardcoded groupIds. Ceramics falls back to checkout price-only when the
+    // add-on is not attached to the service in Wix (addOnGroupsCount was 0).
     if ((isCandles || isCeramics) && extraCandles > 0 && extraCandleAddOnId) {
         let resolvedGroupId = extraCandleGroupId
             || await resolveAddOnGroupIdForService(serviceId, extraCandleAddOnId);
-        if (!resolvedGroupId) {
+        if (resolvedGroupId) {
+            bookingPayload.bookedAddOns = [{
+                _id: extraCandleAddOnId,
+                groupId: resolvedGroupId,
+                quantity: extraCandles,
+            }];
+        } else if (isCandles) {
             throw new Error('ADDON_GROUP_ID_MISSING');
+        } else {
+            console.warn('[createAndCheckout] Ceramics extra item without bookedAddOns — groupId missing; charging via booking line price only.', {
+                serviceId,
+                addOnId: extraCandleAddOnId,
+                quantity: extraCandles,
+            });
         }
-        bookingPayload.bookedAddOns = [{
-            _id: extraCandleAddOnId,
-            groupId: resolvedGroupId,
-            quantity: extraCandles,
-        }];
     }
 
     console.log('[createAndCheckout] createBooking payload:', JSON.stringify(bookingPayload, null, 2));

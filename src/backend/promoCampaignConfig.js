@@ -7,13 +7,18 @@
  * Preview URL (while enabled=false):
  *   https://www.studiohappy.art/?promo=<previewToken>
  *
+ * Share URL (popup + terms open):
+ *   https://www.studiohappy.art/?promo=<previewToken>&terms=1
+ *
  * Popup UI: wix/custom-code/promo-popup-standalone.html (Wix Custom Code — keep
  * CONFIG in sync when you edit copy/enabled/previewToken here).
  */
 
-/** @type {{ enabled: boolean, previewToken: string, title: string, subtitle: string, ctaText: string, ctaUrl: string, termsText: string }} */
+/** @type {{ enabled: boolean, endsAt: string, previewToken: string, title: string, subtitle: string, ctaText: string, ctaUrl: string, termsText: string }} */
 export const PROMO_CAMPAIGN = {
     enabled: false,
+    /** Israel time — promo stops at Nov 1 00:00 (end of Oct 31). */
+    endsAt: '2026-11-01T00:00:00+03:00',
     previewToken: 'studio-happy-tufting-promo',
     title: 'מבצע מיוחד 🎁 מזמינים סדנת טאפטינג – ומקבלים סדנת צביעת קרמיקה במתנה!',
     subtitle: 'עבור כל שטיח שמוזמן במסגרת סדנת הטאפטינג, מקבלים כלי קרמיקה אחד לצביעה במתנה.',
@@ -34,7 +39,17 @@ export const PROMO_CAMPAIGN = {
     ].join('\n'),
 };
 
-/** Returns a shallow copy so callers can't mutate the shared config object. */
+function isPromoExpired(endsAt) {
+    if (!endsAt) return false;
+    return Date.now() >= new Date(endsAt).getTime();
+}
+
+/** Returns a shallow copy; `enabled` is false after `endsAt`. */
 export function getPromoCampaign() {
-    return { ...PROMO_CAMPAIGN };
+    const expired = isPromoExpired(PROMO_CAMPAIGN.endsAt);
+    return {
+        ...PROMO_CAMPAIGN,
+        enabled: PROMO_CAMPAIGN.enabled && !expired,
+        expired,
+    };
 }

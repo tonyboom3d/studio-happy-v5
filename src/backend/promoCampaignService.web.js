@@ -21,6 +21,10 @@ export const getActivePromoCampaign = webMethod(Permissions.Anyone, async (previ
         termsText: campaign.termsText,
     };
 
+    if (campaign.expired) {
+        return { show: false };
+    }
+
     if (campaign.enabled) {
         return { show: true, ...content };
     }

@@ -21,22 +21,21 @@
  * NOT send) — that's the safe default for a consent gate.
  */
 import { normalizeIsraeliPhone } from 'backend/orderUtils.js';
+import { marketingConsent } from 'wix-marketing.v2';
+import { elevate } from 'wix-auth';
 
-// Loaded/elevated lazily (never at module top-level): this is a
+// NOTE: import moved to top of file per request. `wix-marketing.v2` is a
 // preview/rollout-gated Wix API ("subject to change") and may not be
-// available on every site yet. A top-level `elevate(marketingConsent.xxx)`
-// would throw synchronously if the export is missing, crashing THIS WHOLE
-// MODULE on import — which previously broke bookingService.web.js and every
-// other file that transitively imports this one. Resolving it lazily inside
-// a try/catch keeps a missing/broken API fully isolated to "fail closed"
-// (no consent -> don't send) instead of taking down unrelated bookings.
+// available on every site yet — if the module/export is missing, this
+// top-level import can throw and crash THIS WHOLE MODULE on load, which
+// breaks every other file that transitively imports this one (e.g.
+// bookingService.web.js). Kept the try/catch around `elevate(...)` below so
+// a missing export still fails closed instead of crashing.
 /** @type {Promise<Function> | null} */
 let elevatedGetMarketingConsentByIdentifierPromise = null;
 async function getElevatedGetMarketingConsentByIdentifier() {
     if (!elevatedGetMarketingConsentByIdentifierPromise) {
         elevatedGetMarketingConsentByIdentifierPromise = (async () => {
-            const { marketingConsent } = await import('wix-marketing.v2');
-            const { elevate } = await import('wix-auth');
             if (!marketingConsent?.getMarketingConsentByIdentifier) {
                 throw new Error('wix-marketing.v2 marketingConsent.getMarketingConsentByIdentifier is unavailable on this site');
             }

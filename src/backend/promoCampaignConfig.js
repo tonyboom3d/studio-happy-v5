@@ -6,6 +6,9 @@
  *
  * Preview URL (while enabled=false):
  *   https://www.studiohappy.art/?promo=<previewToken>
+ *
+ * Popup UI: wix/custom-code/promo-popup-standalone.html (Wix Custom Code — keep
+ * CONFIG in sync when you edit copy/enabled/previewToken here).
  */
 
 /** @type {{ enabled: boolean, previewToken: string, title: string, subtitle: string, ctaText: string, ctaUrl: string, termsText: string }} */

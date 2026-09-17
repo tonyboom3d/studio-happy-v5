@@ -12,7 +12,7 @@
  * from being issued or sent via WhatsApp.
  */
 import { contacts, triggeredEmails } from 'wix-crm-backend';
-import { hasEmailMarketingConsent } from 'backend/marketingConsentService.js';
+import { hasEmailMarketingConsent, waitForEmailMarketingConsent } from 'backend/marketingConsentService.js';
 
 const TRIGGERED_EMAIL_ID = 'VVOZq7E';
 const ISRAEL_TZ = 'Asia/Jerusalem';
@@ -51,7 +51,7 @@ async function upsertContact({ email, phone, name }) {
  * Sends the promo-coupon email for a just-issued PromoCoupons row. Never
  * throws — logs and returns { sent: false, reason } on any failure.
  */
-export async function sendTuftingPromoCouponEmail(couponRow) {
+export async function sendTuftingPromoCouponEmail(couponRow, { waitForConsent = false } = {}) {
     console.log(`🎟️[PROMO] sendTuftingPromoCouponEmail called. couponId=${couponRow?._id} code=${couponRow?.code}`);
     try {
         if (!couponRow?.organizerEmail) {
@@ -63,7 +63,9 @@ export async function sendTuftingPromoCouponEmail(couponRow) {
         // receipt) — Israel's anti-spam law (חוק הספאם) requires prior
         // opt-in. See marketingConsentService.js — gated on the site's
         // checkout "subscribe to marketing" checkbox.
-        const consented = await hasEmailMarketingConsent(couponRow.organizerEmail);
+        const consented = waitForConsent
+            ? await waitForEmailMarketingConsent(couponRow.organizerEmail)
+            : await hasEmailMarketingConsent(couponRow.organizerEmail);
         if (!consented) {
             console.log('🎟️[PROMO] Email skipped — no marketing consent. couponId:', couponRow._id);
             return { sent: false, reason: 'no-marketing-consent' };

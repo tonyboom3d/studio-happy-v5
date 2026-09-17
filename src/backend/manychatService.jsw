@@ -12,7 +12,7 @@
 import wixSecretsBackend from 'wix-secrets-backend';
 import { fetch } from 'wix-fetch';
 import { normalizeIsraeliPhone } from 'backend/orderUtils.js';
-import { hasPhoneMarketingConsent } from 'backend/marketingConsentService.js';
+import { hasPhoneMarketingConsent, waitForPhoneMarketingConsent } from 'backend/marketingConsentService.js';
 
 const MANYCHAT_BASE_URL = 'https://api.manychat.com';
 const ISRAEL_TZ = 'Asia/Jerusalem';
@@ -856,7 +856,7 @@ const CERAMICS_BOOK_URL = 'https://www.studiohappy.art/booking-flow-ceramic';
  * matching branch + template in the ManyChat flow (content20260826091942_789880).
  * Never throws — same contract as sendOrderConfirmationManyChat.
  */
-export async function sendTuftingPromoCouponManyChat(couponRow) {
+export async function sendTuftingPromoCouponManyChat(couponRow, { waitForConsent = false } = {}) {
     console.log(`🎟️[PROMO] sendTuftingPromoCouponManyChat called. couponId=${couponRow?._id} code=${couponRow?.code} orderId=${couponRow?.orderId}`);
     try {
         const phone = normalizeIsraeliPhone(couponRow?.organizerPhone);
@@ -871,7 +871,9 @@ export async function sendTuftingPromoCouponManyChat(couponRow) {
         // template) — Israel's anti-spam law (חוק הספאם) requires prior opt-in.
         // See marketingConsentService.js — gated on the site's checkout
         // "subscribe to marketing" checkbox, not the order-confirmation consent.
-        const consented = await hasPhoneMarketingConsent(phone);
+        const consented = waitForConsent
+            ? await waitForPhoneMarketingConsent(phone)
+            : await hasPhoneMarketingConsent(phone);
         if (!consented) {
             console.log('🎟️[PROMO] WhatsApp skipped — no marketing consent for phone. orderId:', couponRow?.orderId);
             return { sent: false, reason: 'no-marketing-consent' };

@@ -6,6 +6,7 @@ import { fetchEcomOrderByCheckoutId, reconcileEcomOrder } from 'backend/orderRec
 import { ensureHolidaysSynced } from 'backend/holidayService.js';
 import { flushOutbox } from 'backend/notificationOutbox.js';
 import { retryPendingPrintJobs } from 'backend/studioUpsell/printDispatch.js';
+import { retryUnsentPromoCoupons } from 'backend/promoSendDispatch.js';
 import { deleteConversation } from 'backend/openaiService.jsw';
 
 const SA = { suppressAuth: true, suppressHooks: true };
@@ -82,8 +83,13 @@ export async function processAlertsHourly() {
         return { sent: 0, merged: 0, skipped: 0 };
     });
 
-    console.log('[jobs] processAlertsHourly:', JSON.stringify({ holidays, reminders, confirmations, staleEntries, outbox }));
-    return { holidays, reminders, confirmations, staleEntries, outbox };
+    const promoRetries = await retryUnsentPromoCoupons().catch(err => {
+        console.error('[jobs] retryUnsentPromoCoupons failed:', err?.message || err);
+        return { retried: 0, sent: 0 };
+    });
+
+    console.log('[jobs] processAlertsHourly:', JSON.stringify({ holidays, reminders, confirmations, staleEntries, outbox, promoRetries }));
+    return { holidays, reminders, confirmations, staleEntries, outbox, promoRetries };
 }
 
 /** Closes TimeEntries left open longer than TIME_ENTRY_MAX_OPEN_HOURS. */

@@ -108,6 +108,34 @@ function applyCeramicsExtraItemAddonPricing(byDay) {
     }
 }
 
+const _addOnGroupIdCache = new Map();
+
+/** Resolve Wix add-on groupId for a service/add-on pair (required for bookedAddOns). */
+async function resolveAddOnGroupIdForService(serviceId, addOnId) {
+    if (!serviceId || !addOnId) return null;
+    const cacheKey = `${serviceId}:${addOnId}`;
+    if (_addOnGroupIdCache.has(cacheKey)) {
+        return _addOnGroupIdCache.get(cacheKey);
+    }
+    try {
+        const elevatedListGroups = auth.elevate(services.listAddOnGroupsByServiceId);
+        const groupsResult = await elevatedListGroups(serviceId);
+        const groups = groupsResult?.addOnGroups || [];
+        for (const g of groups) {
+            const groupId = g._id || g.id;
+            const addOnIds = g.addOnIds
+                || (g.addOns || []).map(a => a._id || a.id).filter(Boolean);
+            if (groupId && addOnIds.includes(addOnId)) {
+                _addOnGroupIdCache.set(cacheKey, groupId);
+                return groupId;
+            }
+        }
+    } catch (err) {
+        console.warn('[resolveAddOnGroupIdForService] Failed:', err?.message || err);
+    }
+    return null;
+}
+
 const FIRST_ORDER_MIN_TICKETS = 2;
 
 /** Booked headcount for a specific session (0 = no prior orders on this slot). */
@@ -670,7 +698,7 @@ export const createAndCheckout = webMethod(Permissions.Anyone, async (orderData)
         const ceramicsExtraAddOn = getCeramicsExtraItemAddOnForDay(ceramicsDayEnum);
         extraCandlePrice = ceramicsExtraAddOn.price || 0;
         extraCandleAddOnId = ceramicsExtraAddOn.addOnId || null;
-        extraCandleGroupId = null;
+        extraCandleGroupId = ceramicsExtraAddOn.groupId || null;
         const ceramicsParentChildPrice = ceramicsDayPricing.parentChild || ceramicsDayPricing.solo || 0;
         basePrice = (soloAdults * (ceramicsDayPricing.solo || 0))
             + (parentChildPairs * ceramicsParentChildPrice)
@@ -827,10 +855,16 @@ export const createAndCheckout = webMethod(Permissions.Anyone, async (orderData)
     };
 
     // "נר נוסף" / "כלי קרמיקה נוסף" — add-on בלבד, בלי מושב נוסף.
+    // Wix requires a valid groupId on every bookedAddOn (same as candles flow).
     if ((isCandles || isCeramics) && extraCandles > 0 && extraCandleAddOnId) {
+        let resolvedGroupId = extraCandleGroupId
+            || await resolveAddOnGroupIdForService(serviceId, extraCandleAddOnId);
+        if (!resolvedGroupId) {
+            throw new Error('ADDON_GROUP_ID_MISSING');
+        }
         bookingPayload.bookedAddOns = [{
             _id: extraCandleAddOnId,
-            ...(extraCandleGroupId ? { groupId: extraCandleGroupId } : {}),
+            groupId: resolvedGroupId,
             quantity: extraCandles,
         }];
     }

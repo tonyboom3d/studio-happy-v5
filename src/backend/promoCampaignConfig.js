@@ -16,7 +16,7 @@
 
 /** @type {{ enabled: boolean, endsAt: string, previewToken: string, title: string, subtitle: string, ctaText: string, ctaUrl: string, termsText: string }} */
 export const PROMO_CAMPAIGN = {
-    enabled: false,
+    enabled: true,
     /** Israel time — promo stops at Nov 1 00:00 (end of Oct 31). */
     endsAt: '2026-11-01T00:00:00+03:00',
     previewToken: 'studio-happy-tufting-promo',

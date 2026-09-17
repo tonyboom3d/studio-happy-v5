@@ -44,16 +44,21 @@ export function WorkshopOrders_afterUpdate(item, context) {
         // one-time Wix coupon and sends it via WhatsApp + email. No-ops when the
         // promo campaign (promoCampaignConfig.js enabled=false) is off, or the order isn't tufting.
         if (item.workshopType === 'tufting') {
+            console.log(`🎟️[PROMO] Tufting order paid — starting promo flow. orderId=${item._id}`);
             issuePromoCouponForOrder(item)
                 .then(result => {
-                    if (!result?.issued) return;
+                    if (!result?.issued) {
+                        console.log(`🎟️[PROMO] No coupon issued (reason=${result?.reason}). orderId=${item._id}`);
+                        return;
+                    }
+                    console.log(`🎟️[PROMO] Coupon issued — sending WhatsApp + email. orderId=${item._id} code=${result.coupon?.code}`);
                     return Promise.all([
                         sendTuftingPromoCouponManyChat(result.coupon).catch(err => {
-                            console.error('[data.js hook] sendTuftingPromoCouponManyChat failed. couponId:', result.coupon?._id, 'error:', err?.message || err);
+                            console.error(`🎟️[PROMO] ❌ sendTuftingPromoCouponManyChat failed. couponId:`, result.coupon?._id, 'error:', err?.message || err);
                             return { sent: false };
                         }),
                         sendTuftingPromoCouponEmail(result.coupon).catch(err => {
-                            console.error('[data.js hook] sendTuftingPromoCouponEmail failed. couponId:', result.coupon?._id, 'error:', err?.message || err);
+                            console.error(`🎟️[PROMO] ❌ sendTuftingPromoCouponEmail failed. couponId:`, result.coupon?._id, 'error:', err?.message || err);
                             return { sent: false };
                         }),
                     ]).then(([waResult, emailResult]) => {
@@ -61,14 +66,15 @@ export function WorkshopOrders_afterUpdate(item, context) {
                         // legs return { sent: false, reason: 'no-marketing-consent' }
                         // when the customer didn't opt in via the checkout "subscribe
                         // to marketing" checkbox (see marketingConsentService.js).
+                        console.log(`🎟️[PROMO] Send results. orderId=${item._id} code=${result.coupon?.code} whatsapp=${JSON.stringify(waResult)} email=${JSON.stringify(emailResult)}`);
                         if (waResult?.sent || emailResult?.sent) {
                             return markPromoCouponSent(result.coupon._id);
                         }
-                        console.warn('[data.js hook] Promo coupon issued but NOT sent (no marketing consent). orderId:', item._id, 'couponId:', result.coupon._id);
+                        console.warn(`🎟️[PROMO] ⚠️ Coupon issued but NOT sent (no marketing consent). orderId:`, item._id, 'couponId:', result.coupon._id);
                     });
                 })
                 .catch(err => {
-                    console.error('[data.js hook] issuePromoCouponForOrder failed. orderId:', item._id, 'error:', err?.message || err);
+                    console.error(`🎟️[PROMO] ❌ issuePromoCouponForOrder failed. orderId:`, item._id, 'error:', err?.message || err);
                 });
         }
     }

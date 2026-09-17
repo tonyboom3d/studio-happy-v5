@@ -857,10 +857,12 @@ const CERAMICS_BOOK_URL = 'https://www.studiohappy.art/booking-flow-ceramic';
  * Never throws — same contract as sendOrderConfirmationManyChat.
  */
 export async function sendTuftingPromoCouponManyChat(couponRow) {
+    console.log(`🎟️[PROMO] sendTuftingPromoCouponManyChat called. couponId=${couponRow?._id} code=${couponRow?.code} orderId=${couponRow?.orderId}`);
     try {
         const phone = normalizeIsraeliPhone(couponRow?.organizerPhone);
         const email = couponRow?.organizerEmail || '';
         if (!phone) {
+            console.warn('🎟️[PROMO] WhatsApp skipped — no phone. orderId:', couponRow?.orderId);
             logManyChatSendError('sendTuftingPromoCouponManyChat', { order: { _id: couponRow?.orderId }, reason: 'no-phone' });
             return { sent: false, reason: 'no-phone' };
         }
@@ -871,13 +873,14 @@ export async function sendTuftingPromoCouponManyChat(couponRow) {
         // "subscribe to marketing" checkbox, not the order-confirmation consent.
         const consented = await hasPhoneMarketingConsent(phone);
         if (!consented) {
-            console.log('[ManyChat] sendTuftingPromoCouponManyChat: skipped — no marketing consent for phone. orderId:', couponRow?.orderId);
+            console.log('🎟️[PROMO] WhatsApp skipped — no marketing consent for phone. orderId:', couponRow?.orderId);
             return { sent: false, reason: 'no-marketing-consent' };
         }
 
         const { firstName, lastName } = splitName(couponRow?.organizerName);
         const subscriber = await findOrCreateSubscriber({ email, phone, firstName, lastName });
         if (!subscriber?.id) {
+            console.warn('🎟️[PROMO] WhatsApp skipped — subscriber not found. orderId:', couponRow?.orderId);
             logManyChatSendError('sendTuftingPromoCouponManyChat', { order: { _id: couponRow?.orderId }, phone, reason: 'subscriber-not-found' });
             return { sent: false, reason: 'subscriber-not-found' };
         }
@@ -895,12 +898,14 @@ export async function sendTuftingPromoCouponManyChat(couponRow) {
         await setCustomFieldsByName(subscriber.id, sending);
         await sendFlow(subscriber.id, ORDER_CONFIRMATION_FLOW_NS);
 
+        console.log(`🎟️[PROMO] ✅ WhatsApp sent (ManyChat flow ${ORDER_CONFIRMATION_FLOW_NS}). orderId=${couponRow?.orderId} code=${couponRow?.code} subscriberId=${subscriber.id}`);
         logManyChatSendSuccess('sendTuftingPromoCouponManyChat', {
             order: { _id: couponRow?.orderId }, phone, subscriberId: subscriber.id,
             notificationType: 'tufting_promo_coupon', fields: sending,
         });
         return { sent: true, subscriberId: subscriber.id };
     } catch (err) {
+        console.error('🎟️[PROMO] ❌ sendTuftingPromoCouponManyChat failed. orderId:', couponRow?.orderId, 'error:', err?.message || err);
         logManyChatSendError('sendTuftingPromoCouponManyChat', { order: { _id: couponRow?.orderId }, error: err?.message || String(err) });
         return { sent: false, reason: 'error', error: err?.message || String(err) };
     }

@@ -45,6 +45,10 @@ export { getPromoCampaign } from 'backend/promoCampaignConfig.js';
 const SA = { suppressAuth: true };
 const ISRAEL_TZ = 'Asia/Jerusalem';
 
+// Fixed marker prefix for every log line in the promo-coupon flow — filter
+// Site Monitoring / logs by "🎟️[PROMO]" to see the whole journey in order.
+const TAG = '🎟️[PROMO]';
+
 // Resolved lazily (never at module top-level) so that if this API is ever
 // unavailable/renamed, the failure is isolated to promo-coupon calls instead
 // of crashing this whole module on import — which previously broke
@@ -131,27 +135,31 @@ function addMonths(dateInput, months) {
  * Never throws — a promo failure must never affect the underlying order.
  */
 export async function issuePromoCouponForOrder(order, { force = false } = {}) {
+    console.log(`${TAG} issuePromoCouponForOrder called. orderId=${order?._id} workshopType=${order?.workshopType} force=${force}`);
     try {
         if (!order?._id) return { issued: false, reason: 'no-order' };
-        if (order.workshopType !== 'tufting') return { issued: false, reason: 'not-tufting' };
+        if (order.workshopType !== 'tufting') {
+            console.log(`${TAG} Skipping — not a tufting order. orderId=${order._id} workshopType=${order.workshopType}`);
+            return { issued: false, reason: 'not-tufting' };
+        }
 
         if (!force) {
             const campaign = await getPromoCampaign();
             if (!campaign?.enabled) {
-                console.log('[promoCouponService] Campaign disabled — skipping issuance. orderId:', order._id);
+                console.log(`${TAG} Campaign disabled — skipping issuance. orderId=${order._id} expired=${campaign?.expired}`);
                 return { issued: false, reason: 'campaign-disabled' };
             }
         }
 
         const existing = await wixData.query('PromoCoupons').eq('orderId', order._id).limit(1).find(SA);
         if (existing.items.length) {
-            console.log('[promoCouponService] Coupon already issued for order — skipping. orderId:', order._id);
+            console.log(`${TAG} Coupon already issued for order — skipping. orderId=${order._id} code=${existing.items[0]?.code}`);
             return { issued: false, reason: 'already-issued', coupon: existing.items[0] };
         }
 
         if (WEEKDAY_CERAMICS_SERVICE_ID_IS_PLACEHOLDER) {
             console.warn(
-                '[promoCouponService] ⚠️ WEEKDAY_CERAMICS_SERVICE_ID is still the placeholder (consolidated ceramics ' +
+                `${TAG} ⚠️ WEEKDAY_CERAMICS_SERVICE_ID is still the placeholder (consolidated ceramics ` +
                 'service, includes Fri/Sat) — the "weekdays only" restriction is NOT enforced by Wix yet. ' +
                 'Split out a weekday-only ceramics Bookings service and update the constant. orderId:', order._id,
             );
@@ -159,7 +167,7 @@ export async function issuePromoCouponForOrder(order, { force = false } = {}) {
 
         const giftPieces = Number(order.rugCount) || 0;
         if (giftPieces <= 0) {
-            console.warn('[promoCouponService] Order has no rugCount — skipping issuance. orderId:', order._id);
+            console.warn(`${TAG} Order has no rugCount — skipping issuance. orderId=${order._id}`);
             return { issued: false, reason: 'no-rug-count' };
         }
 
@@ -185,10 +193,12 @@ export async function issuePromoCouponForOrder(order, { force = false } = {}) {
             percentOffRate: 100,
         };
 
+        console.log(`${TAG} Creating Wix coupon via wix-marketing.v2. orderId=${order._id} code=${code} scope=bookings/service/${WEEKDAY_CERAMICS_SERVICE_ID}`);
         const { createCoupon: elevatedCreateCoupon } = await getElevatedCoupons();
         const created = await elevatedCreateCoupon(specification);
         const wixCouponId = created?._id || created?.id;
         if (!wixCouponId) throw new Error('createCoupon returned no id');
+        console.log(`${TAG} Wix coupon created. orderId=${order._id} code=${code} wixCouponId=${wixCouponId}`);
 
         const couponRow = await wixData.insert('PromoCoupons', {
             code,
@@ -209,13 +219,13 @@ export async function issuePromoCouponForOrder(order, { force = false } = {}) {
         }, SA);
 
         console.log(
-            `[promoCouponService] ✅ Coupon issued. orderId=${order._id} code=${code} wixCouponId=${wixCouponId} ` +
-            `giftPieces=${giftPieces} redeemFrom=${redeemFrom.toISOString()} expiresAt=${expiresAt.toISOString()}`,
+            `${TAG} ✅ Coupon issued + saved to PromoCoupons CMS. orderId=${order._id} code=${code} wixCouponId=${wixCouponId} ` +
+            `couponRowId=${couponRow?._id} giftPieces=${giftPieces} redeemFrom=${redeemFrom.toISOString()} expiresAt=${expiresAt.toISOString()}`,
         );
 
         return { issued: true, coupon: couponRow };
     } catch (err) {
-        console.error('[promoCouponService] issuePromoCouponForOrder failed. orderId:', order?._id, 'error:', err?.message || err);
+        console.error(`${TAG} ❌ issuePromoCouponForOrder failed. orderId:`, order?._id, 'error:', err?.message || err);
         return { issued: false, reason: 'error', error: err?.message || String(err) };
     }
 }

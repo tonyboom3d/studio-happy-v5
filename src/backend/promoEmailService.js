@@ -52,9 +52,10 @@ async function upsertContact({ email, phone, name }) {
  * throws — logs and returns { sent: false, reason } on any failure.
  */
 export async function sendTuftingPromoCouponEmail(couponRow) {
+    console.log(`🎟️[PROMO] sendTuftingPromoCouponEmail called. couponId=${couponRow?._id} code=${couponRow?.code}`);
     try {
         if (!couponRow?.organizerEmail) {
-            console.warn('[promoEmailService] Skipping — no organizerEmail. couponId:', couponRow?._id);
+            console.warn('🎟️[PROMO] Skipping email — no organizerEmail. couponId:', couponRow?._id);
             return { sent: false, reason: 'no-email' };
         }
 
@@ -64,7 +65,7 @@ export async function sendTuftingPromoCouponEmail(couponRow) {
         // checkout "subscribe to marketing" checkbox.
         const consented = await hasEmailMarketingConsent(couponRow.organizerEmail);
         if (!consented) {
-            console.log('[promoEmailService] Skipped — no marketing consent for email. couponId:', couponRow._id);
+            console.log('🎟️[PROMO] Email skipped — no marketing consent. couponId:', couponRow._id);
             return { sent: false, reason: 'no-marketing-consent' };
         }
 
@@ -74,7 +75,7 @@ export async function sendTuftingPromoCouponEmail(couponRow) {
             name: couponRow.organizerName,
         });
         if (!contactId) {
-            console.warn('[promoEmailService] appendOrCreateContact returned no contactId. couponId:', couponRow._id);
+            console.warn('🎟️[PROMO] appendOrCreateContact returned no contactId. couponId:', couponRow._id);
             return { sent: false, reason: 'no-contact-id' };
         }
 
@@ -87,12 +88,13 @@ export async function sendTuftingPromoCouponEmail(couponRow) {
             expiresAt: formatDateHe(couponRow.expiresAt),
         };
 
+        console.log(`🎟️[PROMO] Calling triggeredEmails.emailContact(VVOZq7E). couponId=${couponRow._id} contactId=${contactId} variables=${JSON.stringify(variables)}`);
         await triggeredEmails.emailContact(TRIGGERED_EMAIL_ID, contactId, { variables });
 
-        console.log(`[promoEmailService] ✅ VVOZq7E email sent. couponId=${couponRow._id} contactId=${contactId} code=${couponRow.code}`);
+        console.log(`🎟️[PROMO] ✅ Email sent (VVOZq7E). couponId=${couponRow._id} contactId=${contactId} code=${couponRow.code}`);
         return { sent: true, contactId };
     } catch (err) {
-        console.error('[promoEmailService] sendTuftingPromoCouponEmail failed. couponId:', couponRow?._id, 'error:', err?.message || err);
+        console.error('🎟️[PROMO] ❌ sendTuftingPromoCouponEmail failed. couponId:', couponRow?._id, 'error:', err?.message || err);
         return { sent: false, reason: 'error', error: err?.message || String(err) };
     }
 }

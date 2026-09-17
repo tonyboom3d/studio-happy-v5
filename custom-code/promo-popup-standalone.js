@@ -1,6 +1,7 @@
 /**
- * @deprecated Use promo-popup-standalone.html for Wix Custom Code (HTML + script).
- * This .js file is kept as a readable source copy only.
+ * Readable source copy for the promo popup.
+ * Wix Custom Code limit: 15,000 chars — paste promo-popup-standalone.html (minified, ~10k).
+ * Edit CONFIG here, then sync changes into the minified .html before pasting into Wix.
  */
 (function () {
     'use strict';
@@ -10,6 +11,7 @@
         enabled: false,
         endsAt: '2026-11-01T00:00:00+03:00',
         previewToken: 'studio-happy-tufting-promo',
+        logoUrl: 'https://static.wixstatic.com/media/6b73e9_6e7c52763bb24ba6812aaac51ecb4296~mv2.png',
         title: 'מבצע מיוחד 🎁 מזמינים סדנת טאפטינג – ומקבלים סדנת צביעת קרמיקה במתנה!',
         subtitle: 'עבור כל שטיח שמוזמן במסגרת סדנת הטאפטינג, מקבלים כלי קרמיקה אחד לצביעה במתנה.',
         ctaText: 'להזמנת סדנת טאפטינג',
@@ -179,41 +181,67 @@
             '}',
             '#sh-promo-popup-root .pp-overlay {',
             '  position: fixed; inset: 0; z-index: 99999;',
-            '  background: rgba(20, 12, 8, 0.55);',
+            '  background: rgba(15, 25, 40, 0.45); backdrop-filter: blur(4px);',
             '  display: flex; align-items: center; justify-content: center;',
             '  padding: 20px;',
-            '  animation: sh-pp-fade-in .25s ease-out;',
+            '  animation: sh-pp-overlay-in .45s cubic-bezier(.22, 1, .36, 1) both;',
             '}',
-            '@keyframes sh-pp-fade-in { from { opacity: 0; } to { opacity: 1; } }',
+            '#sh-promo-popup-root .pp-overlay-exit { animation: sh-pp-overlay-out .38s cubic-bezier(.4, 0, .2, 1) forwards; }',
+            '@keyframes sh-pp-overlay-in { from { opacity: 0; backdrop-filter: blur(0); } to { opacity: 1; backdrop-filter: blur(4px); } }',
+            '@keyframes sh-pp-overlay-out { from { opacity: 1; backdrop-filter: blur(4px); } to { opacity: 0; backdrop-filter: blur(0); } }',
             '#sh-promo-popup-root .pp-card {',
-            '  position: relative; background: #fffaf3; border-radius: 20px;',
+            '  position: relative;',
+            '  background: linear-gradient(165deg, #ffffff 0%, #ffffff 62%, #eef9fd 100%);',
+            '  border: 1px solid rgba(120, 200, 230, 0.22); border-radius: 20px;',
             '  max-width: 440px; width: 100%; max-height: 90vh; overflow-y: auto;',
-            '  padding: 32px 28px 26px; box-shadow: 0 24px 60px rgba(0,0,0,.35);',
+            '  padding: 32px 28px 26px; box-shadow: 0 24px 60px rgba(30, 80, 120, .18);',
             '  text-align: center; direction: rtl;',
-            '  animation: sh-pp-pop-in .3s cubic-bezier(.2,.9,.3,1.2);',
+            '  animation: sh-pp-card-in .55s cubic-bezier(.22, 1.15, .36, 1) both;',
             '}',
-            '@keyframes sh-pp-pop-in { from { transform: scale(.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }',
+            '#sh-promo-popup-root .pp-card-exit { animation: sh-pp-card-out .38s cubic-bezier(.4, 0, .2, 1) forwards; }',
+            '@keyframes sh-pp-card-in {',
+            '  from { opacity: 0; transform: translateY(48px) scale(0.82) rotate(-2deg); }',
+            '  70% { transform: translateY(-6px) scale(1.02) rotate(0.5deg); }',
+            '  to { opacity: 1; transform: translateY(0) scale(1) rotate(0); }',
+            '}',
+            '@keyframes sh-pp-card-out {',
+            '  from { opacity: 1; transform: translateY(0) scale(1); }',
+            '  to { opacity: 0; transform: translateY(-36px) scale(0.88); }',
+            '}',
             '#sh-promo-popup-root .pp-close {',
             '  position: absolute; top: 12px; inset-inline-end: 12px;',
             '  width: 34px; height: 34px; border-radius: 50%; border: none;',
             '  background: rgba(0,0,0,.06); color: #6b5b4d; font-size: 18px; line-height: 1; cursor: pointer;',
             '}',
             '#sh-promo-popup-root .pp-close:hover { background: rgba(0,0,0,.12); }',
-            '#sh-promo-popup-root .pp-emoji { font-size: 40px; margin-bottom: 6px; }',
+            '#sh-promo-popup-root .pp-logo { width: 72px; height: 72px; margin: 0 auto 10px; display: block; object-fit: contain; }',
             '#sh-promo-popup-root .pp-title { font-size: 22px; font-weight: 800; color: #3d2b1f; margin: 0 0 8px; line-height: 1.3; }',
             '#sh-promo-popup-root .pp-subtitle { font-size: 15px; color: #6b5b4d; margin: 0 0 18px; line-height: 1.6; white-space: pre-wrap; }',
             '#sh-promo-popup-root .pp-countdown-wrap { margin: 0 0 20px; }',
             '#sh-promo-popup-root .pp-countdown-label { font-size: 13px; color: #8a7462; margin: 0 0 10px; font-weight: 600; letter-spacing: .02em; }',
             '#sh-promo-popup-root .pp-countdown { display: flex; justify-content: center; gap: 8px; direction: ltr; }',
-            '#sh-promo-popup-root .pp-countdown-unit { background: linear-gradient(180deg, #fff 0%, #f5ebe0 100%); border: 1px solid rgba(198, 93, 46, .18); border-radius: 12px; min-width: 56px; padding: 10px 6px 8px; box-shadow: 0 2px 10px rgba(198, 93, 46, .1); }',
-            '#sh-promo-popup-root .pp-countdown-num { display: block; font-size: 22px; font-weight: 800; color: #c65d2e; line-height: 1.1; font-variant-numeric: tabular-nums; }',
+            '#sh-promo-popup-root .pp-countdown-unit { background: linear-gradient(180deg, #fff 0%, #f4fcff 100%); border: 1px solid rgba(120, 200, 230, .25); border-radius: 12px; min-width: 56px; padding: 10px 6px 8px; box-shadow: 0 2px 10px rgba(120, 200, 230, .12); }',
+            '#sh-promo-popup-root .pp-countdown-num { display: block; font-size: 22px; font-weight: 800; color: #e84393; line-height: 1.1; font-variant-numeric: tabular-nums; }',
             '#sh-promo-popup-root .pp-countdown-cap { display: block; font-size: 11px; color: #8a7462; margin-top: 4px; font-weight: 600; }',
             '#sh-promo-popup-root .pp-cta {',
-            '  display: inline-block; width: 100%; box-sizing: border-box;',
-            '  background: #c65d2e; color: #fff; font-weight: 700; font-size: 16px;',
+            '  position: relative; display: inline-flex; align-items: center; justify-content: center;',
+            '  width: 100%; box-sizing: border-box; min-height: 50px;',
+            '  background: linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%);',
+            '  color: #fff; font-weight: 700; font-size: 16px;',
             '  border: none; border-radius: 12px; padding: 14px 20px; cursor: pointer; text-decoration: none;',
+            '  transition: transform .2s ease, box-shadow .2s ease, opacity .2s ease;',
+            '  box-shadow: 0 8px 22px rgba(109, 40, 217, .28);',
             '}',
-            '#sh-promo-popup-root .pp-cta:hover { background: #b04f24; }',
+            '#sh-promo-popup-root .pp-cta:hover { transform: translateY(-1px); box-shadow: 0 10px 26px rgba(109, 40, 217, .34); }',
+            '#sh-promo-popup-root .pp-cta-loading { pointer-events: none; opacity: .92; transform: none; }',
+            '#sh-promo-popup-root .pp-cta-label { transition: opacity .2s ease; }',
+            '#sh-promo-popup-root .pp-cta-loading .pp-cta-label { opacity: 0; }',
+            '#sh-promo-popup-root .pp-cta-spinner {',
+            '  position: absolute; width: 24px; height: 24px;',
+            '  border: 3px solid rgba(255,255,255,.35); border-top-color: #fff;',
+            '  border-radius: 50%; animation: sh-pp-spin .75s linear infinite;',
+            '}',
+            '@keyframes sh-pp-spin { to { transform: rotate(360deg); } }',
             '#sh-promo-popup-root .pp-terms-toggle {',
             '  margin-top: 16px; background: none; border: none; color: #8a7462;',
             '  font-size: 13px; text-decoration: underline; cursor: pointer; padding: 4px;',
@@ -238,12 +266,34 @@
         return root;
     }
 
+    function closePopup(root, onDone) {
+        var overlay = root.querySelector('.pp-overlay');
+        if (!overlay) {
+            stopCountdownTimer();
+            root.innerHTML = '';
+            if (onDone) onDone();
+            return;
+        }
+        overlay.classList.add('pp-overlay-exit');
+        var card = overlay.querySelector('.pp-card');
+        if (card) card.classList.add('pp-card-exit');
+        var finished = false;
+        function finish() {
+            if (finished) return;
+            finished = true;
+            stopCountdownTimer();
+            root.innerHTML = '';
+            if (onDone) onDone();
+        }
+        overlay.addEventListener('animationend', finish, { once: true });
+        setTimeout(finish, 450);
+    }
+
     function render(state) {
         var root = ensureRoot();
         var c = state.content;
         if (!state.show || (!state.forceShow && wasShownThisVisit(c))) {
-            stopCountdownTimer();
-            root.innerHTML = '';
+            closePopup(root);
             return;
         }
 
@@ -268,12 +318,14 @@
             '<div class="pp-overlay" data-action="overlay">' +
             '  <div class="pp-card" role="dialog" aria-modal="true">' +
             '    <button type="button" class="pp-close" data-action="close" aria-label="סגירה">×</button>' +
-            '    <div class="pp-emoji">🎁</div>' +
+            '    <img class="pp-logo" src="' + escapeHtml(CONFIG.logoUrl) + '" alt="Studio Happy">' +
             '    <h2 class="pp-title">' + escapeHtml(c.title || 'מבצע מיוחד') + '</h2>' +
             '    <p class="pp-subtitle">' + escapeHtml(c.subtitle || '') + '</p>' +
             countdownHtml +
             '    <a href="' + escapeHtml(c.ctaUrl || '#') + '" class="pp-cta" data-action="cta">' +
-            escapeHtml(c.ctaText || 'להזמנה') + '</a>' +
+            '      <span class="pp-cta-label">' + escapeHtml(c.ctaText || 'להזמנה') + '</span>' +
+            '      <span class="pp-cta-spinner pp-hidden" aria-hidden="true"></span>' +
+            '    </a>' +
             termsHtml +
             '  </div>' +
             '</div>';
@@ -281,16 +333,31 @@
         markShownThisVisit(c);
 
         root.querySelector('[data-action="close"]')?.addEventListener('click', function () {
-            render({ show: false, content: c });
+            closePopup(root);
         });
         root.querySelector('[data-action="overlay"]')?.addEventListener('click', function (e) {
-            if (e.target === e.currentTarget) {
-                render({ show: false, content: c });
-            }
+            if (e.target === e.currentTarget) closePopup(root);
+        });
+        root.querySelector('[data-action="cta"]')?.addEventListener('click', function (e) {
+            e.preventDefault();
+            var cta = root.querySelector('[data-action="cta"]');
+            if (!cta || cta.classList.contains('pp-cta-loading')) return;
+            cta.classList.add('pp-cta-loading');
+            cta.querySelector('.pp-cta-spinner')?.classList.remove('pp-hidden');
+            var url = c.ctaUrl || '#';
+            setTimeout(function () {
+                closePopup(root, function () {
+                    if (url && url !== '#') window.location.href = url;
+                });
+            }, 3000);
         });
         root.querySelector('[data-action="terms"]')?.addEventListener('click', function () {
-            state.termsOpen = !termsOpen;
-            render(state);
+            var termsEl = root.querySelector('.pp-terms');
+            var btn = root.querySelector('[data-action="terms"]');
+            if (!termsEl || !btn) return;
+            var open = termsEl.classList.contains('pp-hidden');
+            termsEl.classList.toggle('pp-hidden', !open);
+            btn.textContent = open ? 'הסתרת תנאי המבצע' : 'תנאי המבצע';
         });
 
         startCountdownTimer(root, state);

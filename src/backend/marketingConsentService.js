@@ -56,12 +56,12 @@ export async function hasEmailMarketingConsent(/** @type {string} */ email) {
         const fn = await getElevatedGetMarketingConsentByIdentifier();
         const result = await fn('EMAIL', { email: trimmed });
         const granted = !!result?.communicationEligibility?.granted;
-        console.log(`[marketingConsentService] email consent check: ${trimmed} -> granted=${granted} state=${result?.marketingConsent?.state}`);
+        console.log(`🎟️[PROMO] email consent check: ${trimmed} -> granted=${granted} state=${result?.marketingConsent?.state}`);
         return granted;
     } catch (err) {
         // A 404/"not found" here just means the visitor never opted in — not an error.
         const message = err instanceof Error ? err.message : String(err);
-        console.log(`[marketingConsentService] email consent check: ${trimmed} -> no consent record (${message})`);
+        console.log(`🎟️[PROMO] email consent check: ${trimmed} -> no consent record (${message})`);
         return false;
     }
 }
@@ -77,11 +77,11 @@ export async function hasPhoneMarketingConsent(/** @type {string} */ phone) {
         const fn = await getElevatedGetMarketingConsentByIdentifier();
         const result = await fn('PHONE', { phone: e164 });
         const granted = !!result?.communicationEligibility?.granted;
-        console.log(`[marketingConsentService] phone consent check: ${e164} -> granted=${granted} state=${result?.marketingConsent?.state}`);
+        console.log(`🎟️[PROMO] phone consent check: ${e164} -> granted=${granted} state=${result?.marketingConsent?.state}`);
         return granted;
     } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
-        console.log(`[marketingConsentService] phone consent check: ${e164} -> no consent record (${message})`);
+        console.log(`🎟️[PROMO] phone consent check: ${e164} -> no consent record (${message})`);
         return false;
     }
 }

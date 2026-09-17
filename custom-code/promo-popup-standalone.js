@@ -12,9 +12,10 @@
         endsAt: '2026-11-01T00:00:00+03:00',
         previewToken: 'studio-happy-tufting-promo',
         logoUrl: 'https://static.wixstatic.com/media/6b73e9_6e7c52763bb24ba6812aaac51ecb4296~mv2.png',
-        title: 'מבצע מיוחד 🎁 מזמינים סדנת טאפטינג – ומקבלים סדנת צביעת קרמיקה במתנה!',
-        subtitle: 'עבור כל שטיח שמוזמן במסגרת סדנת הטאפטינג, מקבלים כלי קרמיקה אחד לצביעה במתנה.',
-        ctaText: 'להזמנת סדנת טאפטינג',
+        title: '🔥 מבצע חד פעמי - לזמן מוגבל!',
+        subtitle: 'על כל שטיח שקונים בסדנת הטאפטינג — מקבלים סדנת צביעת קרמיקה בחינם! המבצע מסתיים בסוף אוקטובר ומספר המקומות מוגבל.',
+        ctaText: '← להזמנה עכשיו לפני שייגמר!',
+        cdLabel: '⏰ המבצע נסגר בסוף השבוע — נותרו:',
         ctaUrl: 'https://www.studiohappy.art/booking-flow-tufting',
         termsText: [
             '• סדנת צביעת הקרמיקה במתנה הינה באורך של עד שעה.',
@@ -65,16 +66,53 @@
         return n < 10 ? '0' + n : String(n);
     }
 
+    var ISRAEL_TZ = 'Asia/Jerusalem';
+    var DOW_MAP = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+
+    function getIsraelParts(ms) {
+        var d = new Date(ms);
+        var wd = new Intl.DateTimeFormat('en-US', { timeZone: ISRAEL_TZ, weekday: 'short' }).format(d);
+        var time = new Intl.DateTimeFormat('en-GB', {
+            timeZone: ISRAEL_TZ, hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+        }).format(d).split(':');
+        return { dow: DOW_MAP[wd], hour: +time[0], minute: +time[1] };
+    }
+
+    /** Next Sunday 00:00 Israel — weekly reset anchor. */
+    function getNextSundayMidnightIsraelMs(fromMs) {
+        var now = fromMs || Date.now();
+        var parts = getIsraelParts(now);
+        var daysToAdd = parts.dow ? 7 - parts.dow : 7;
+        var ymd = new Intl.DateTimeFormat('en-CA', {
+            timeZone: ISRAEL_TZ, year: 'numeric', month: '2-digit', day: '2-digit',
+        }).format(new Date(now)).split('-');
+        var guess = Date.UTC(+ymd[0], +ymd[1] - 1, +ymd[2] + daysToAdd, 21, 0, 0);
+        for (var offset = -6; offset <= 6; offset++) {
+            var cand = guess + offset * 3600000;
+            var p = getIsraelParts(cand);
+            if (p.dow === 0 && p.hour === 0 && p.minute === 0) return cand;
+        }
+        return guess;
+    }
+
+    /** Countdown target = earlier of campaign end or next Sunday 00:00 Israel. */
+    function getCountdownTargetMs() {
+        var campEnd = new Date(CONFIG.endsAt).getTime();
+        var now = Date.now();
+        if (now >= campEnd) return campEnd;
+        var weekEnd = getNextSundayMidnightIsraelMs(now);
+        if (weekEnd <= now) weekEnd = getNextSundayMidnightIsraelMs(now + 3600000);
+        return Math.min(campEnd, weekEnd);
+    }
+
     function getCountdownParts() {
-        var end = new Date(CONFIG.endsAt).getTime();
-        var diff = Math.max(0, end - Date.now());
+        var diff = Math.max(0, getCountdownTargetMs() - Date.now());
         var totalSec = Math.floor(diff / 1000);
         return {
             days: Math.floor(totalSec / 86400),
             hours: Math.floor((totalSec % 86400) / 3600),
             minutes: Math.floor((totalSec % 3600) / 60),
             seconds: totalSec % 60,
-            expired: diff <= 0,
         };
     }
 
@@ -92,7 +130,6 @@
             var el = root.querySelector('[data-countdown="' + unit + '"]');
             if (el) el.textContent = pad2(map[unit]);
         });
-        return parts.expired;
     }
 
     function startCountdownTimer(root, state) {
@@ -100,10 +137,12 @@
         if (!CONFIG.endsAt || isCampaignExpired()) return;
         updateCountdownDom(root);
         countdownTimer = setInterval(function () {
-            if (updateCountdownDom(root)) {
+            if (isCampaignExpired()) {
                 stopCountdownTimer();
-                render({ show: false, content: state.content });
+                closePopup(root);
+                return;
             }
+            updateCountdownDom(root);
         }, 1000);
     }
 
@@ -215,6 +254,7 @@
             '}',
             '#sh-promo-popup-root .pp-close:hover { background: rgba(0,0,0,.12); }',
             '#sh-promo-popup-root .pp-logo { width: 72px; height: 72px; margin: 0 auto 10px; display: block; object-fit: contain; }',
+            '#sh-promo-popup-root .pp-fomo-badge { display: inline-block; background: linear-gradient(90deg, #e84393, #ff6b6b); color: #fff; font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 20px; margin-bottom: 10px; letter-spacing: .03em; }',
             '#sh-promo-popup-root .pp-title { font-size: 22px; font-weight: 800; color: #3d2b1f; margin: 0 0 8px; line-height: 1.3; }',
             '#sh-promo-popup-root .pp-subtitle { font-size: 15px; color: #6b5b4d; margin: 0 0 18px; line-height: 1.6; white-space: pre-wrap; }',
             '#sh-promo-popup-root .pp-countdown-wrap { margin: 0 0 20px; }',
@@ -229,11 +269,15 @@
             '  background: linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%);',
             '  color: #fff; font-weight: 700; font-size: 16px;',
             '  border: none; border-radius: 12px; padding: 14px 20px; cursor: pointer; text-decoration: none;',
-            '  transition: transform .2s ease, box-shadow .2s ease, opacity .2s ease;',
             '  box-shadow: 0 8px 22px rgba(109, 40, 217, .28);',
+            '  animation: sh-pp-cta-pulse 2s ease-in-out infinite;',
             '}',
-            '#sh-promo-popup-root .pp-cta:hover { transform: translateY(-1px); box-shadow: 0 10px 26px rgba(109, 40, 217, .34); }',
-            '#sh-promo-popup-root .pp-cta-loading { pointer-events: none; opacity: .92; transform: none; }',
+            '@keyframes sh-pp-cta-pulse {',
+            '  0%, 100% { box-shadow: 0 8px 22px rgba(109, 40, 217, .28); transform: scale(1); }',
+            '  50% { box-shadow: 0 10px 32px rgba(109, 40, 217, .45), 0 0 0 5px rgba(109, 40, 217, .12); transform: scale(1.02); }',
+            '}',
+            '#sh-promo-popup-root .pp-cta:hover { transform: translateY(-1px) scale(1.02); }',
+            '#sh-promo-popup-root .pp-cta-loading { pointer-events: none; opacity: .92; transform: none; animation: none !important; }',
             '#sh-promo-popup-root .pp-cta-label { transition: opacity .2s ease; }',
             '#sh-promo-popup-root .pp-cta-loading .pp-cta-label { opacity: 0; }',
             '#sh-promo-popup-root .pp-cta-spinner {',
@@ -299,7 +343,7 @@
 
         var termsOpen = !!state.termsOpen;
         var countdownHtml = CONFIG.endsAt && !isCampaignExpired()
-            ? '<div class="pp-countdown-wrap"><p class="pp-countdown-label">⏳ המבצע מסתיים בעוד</p><div class="pp-countdown" aria-live="polite">' +
+            ? '<div class="pp-countdown-wrap"><p class="pp-countdown-label">' + escapeHtml(CONFIG.cdLabel || '⏰ נותרו:') + '</p><div class="pp-countdown" aria-live="polite">' +
               '<div class="pp-countdown-unit"><span class="pp-countdown-num" data-countdown="days">00</span><span class="pp-countdown-cap">ימים</span></div>' +
               '<div class="pp-countdown-unit"><span class="pp-countdown-num" data-countdown="hours">00</span><span class="pp-countdown-cap">שעות</span></div>' +
               '<div class="pp-countdown-unit"><span class="pp-countdown-num" data-countdown="minutes">00</span><span class="pp-countdown-cap">דקות</span></div>' +
@@ -319,6 +363,7 @@
             '  <div class="pp-card" role="dialog" aria-modal="true">' +
             '    <button type="button" class="pp-close" data-action="close" aria-label="סגירה">×</button>' +
             '    <img class="pp-logo" src="' + escapeHtml(CONFIG.logoUrl) + '" alt="Studio Happy">' +
+            '    <span class="pp-fomo-badge">מוגבל בזמן · מקומות אחרונים</span>' +
             '    <h2 class="pp-title">' + escapeHtml(c.title || 'מבצע מיוחד') + '</h2>' +
             '    <p class="pp-subtitle">' + escapeHtml(c.subtitle || '') + '</p>' +
             countdownHtml +

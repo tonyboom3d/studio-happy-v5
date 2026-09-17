@@ -8,6 +8,8 @@
   "dependencies": {
     "@wix/bookings": "1.0.1393",
     "@wix/ecom": "1.0.2072",
+    "@wix/email-subscriptions": "1.0.44",
+    "@wix/marketing": "1.0.157",
     "@wix/embeds": "1.0.15",
     "@wix/essentials": "1.0.6",
     "@wix/faq": "1.0.50",

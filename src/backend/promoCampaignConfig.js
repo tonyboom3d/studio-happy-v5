@@ -20,9 +20,9 @@ export const PROMO_CAMPAIGN = {
     /** Israel time — promo stops at Nov 1 00:00 (end of Oct 31). */
     endsAt: '2026-11-01T00:00:00+03:00',
     previewToken: 'studio-happy-tufting-promo',
-    title: 'מבצע מיוחד 🎁 מזמינים סדנת טאפטינג – ומקבלים סדנת צביעת קרמיקה במתנה!',
-    subtitle: 'עבור כל שטיח שמוזמן במסגרת סדנת הטאפטינג, מקבלים כלי קרמיקה אחד לצביעה במתנה.',
-    ctaText: 'להזמנת סדנת טאפטינג',
+    title: '🔥 מבצע חד פעמי - לזמן מוגבל!',
+    subtitle: 'על כל שטיח שקונים בסדנת הטאפטינג — מקבלים סדנת צביעת קרמיקה בחינם! המבצע מסתיים בסוף אוקטובר ומספר המקומות מוגבל.',
+    ctaText: '← להזמנה עכשיו לפני שייגמר!',
     ctaUrl: 'https://www.studiohappy.art/booking-flow-tufting',
     termsText: [
         '• סדנת צביעת הקרמיקה במתנה הינה באורך של עד שעה.',

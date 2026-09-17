@@ -70,7 +70,7 @@ export function WorkshopOrders_afterUpdate(item, context) {
                         if (waResult?.sent || emailResult?.sent) {
                             return markPromoCouponSent(result.coupon._id);
                         }
-                        console.warn(`🎟️[PROMO] ⚠️ Coupon issued but NOT sent (no marketing consent). orderId:`, item._id, 'couponId:', result.coupon._id);
+                        console.warn(`🎟️[PROMO] ⚠️ Coupon issued but NOT sent. orderId:`, item._id, 'couponId:', result.coupon._id, 'whatsapp:', waResult?.reason || 'unknown', 'email:', emailResult?.reason || 'unknown');
                     });
                 })
                 .catch(err => {

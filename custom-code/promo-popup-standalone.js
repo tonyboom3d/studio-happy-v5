@@ -8,7 +8,7 @@
 
     // --- CONFIG (edit here in Custom Code, or mirror promoCampaignConfig.js) ---
     var CONFIG = {
-        enabled: false,
+        enabled: true,
         endsAt: '2026-11-01T00:00:00+03:00',
         previewToken: 'studio-happy-tufting-promo',
         logoUrl: 'https://static.wixstatic.com/media/6b73e9_6e7c52763bb24ba6812aaac51ecb4296~mv2.png',

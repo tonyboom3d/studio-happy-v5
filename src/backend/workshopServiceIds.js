@@ -29,6 +29,53 @@ export const WORKSHOP_SERVICE_IDS = {
   ceramics: ['ad89914a-1845-48c6-804d-544cd17f179b'],
 };
 
+/** Extra candles service — its slots are offered only through 2026-10-29 (Israel). */
+export const CANDLES_LIMITED_SERVICE_ID = '925f55fc-521d-43e7-a679-53d243e65268';
+export const CANDLES_LIMITED_UNTIL_DATE = '2026-10-29';
+
+export const ALL_CANDLES_SERVICE_IDS = [
+  ...WORKSHOP_SERVICE_IDS.candles,
+  CANDLES_LIMITED_SERVICE_ID,
+];
+
+function israelDateKey(d) {
+  const date = d instanceof Date ? d : new Date(d);
+  if (Number.isNaN(date.getTime())) return '';
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Jerusalem', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).formatToParts(date);
+  const get = (t) => parts.find((p) => p.type === t)?.value;
+  return `${get('year')}-${get('month')}-${get('day')}`;
+}
+
+export function isCandlesLimitedSlotAllowed(startDate) {
+  const key = israelDateKey(startDate);
+  return !!key && key <= CANDLES_LIMITED_UNTIL_DATE;
+}
+
+/** True when a date range still overlaps the limited-service window. */
+export function shouldIncludeCandlesLimitedService(rangeStart) {
+  const startKey = israelDateKey(rangeStart || new Date());
+  return !!startKey && startKey <= CANDLES_LIMITED_UNTIL_DATE;
+}
+
+export function expandCandlesServiceIds(serviceIds, rangeStart) {
+  const ids = (Array.isArray(serviceIds) ? [...serviceIds] : [])
+    .filter((id) => id !== CANDLES_LIMITED_SERVICE_ID);
+  if (!shouldIncludeCandlesLimitedService(rangeStart)) return ids;
+  ids.push(CANDLES_LIMITED_SERVICE_ID);
+  return ids;
+}
+
+export function filterCandlesLimitedSlots(slots) {
+  return (slots || []).filter((slot) => {
+    const sid = slot.serviceId || slot.originalSlot?.serviceId;
+    if (sid !== CANDLES_LIMITED_SERVICE_ID) return true;
+    const start = slot.start?.timestamp || slot.startDate || slot.originalSlot?.startDate;
+    return isCandlesLimitedSlotAllowed(start);
+  });
+}
+
 /** Primary Wix Bookings service id for סדנת קרמיקה (promo coupons scope here). */
 export const CERAMICS_SERVICE_ID = WORKSHOP_SERVICE_IDS.ceramics[0];
 
@@ -68,6 +115,7 @@ export function resolveWorkshopType(raw) {
 }
 
 export function serviceIdToWorkshopType(serviceId) {
+  if (ALL_CANDLES_SERVICE_IDS.includes(serviceId)) return 'candles';
   for (const [type, ids] of Object.entries(WORKSHOP_SERVICE_IDS)) {
     if (ids.includes(serviceId)) return type;
   }

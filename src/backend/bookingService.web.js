@@ -22,6 +22,12 @@ import {
 } from 'backend/sketchEditingPolicy.js';
 import { normalizeIsraeliPhone, getPhoneLookupVariants, phonesMatch, extractBookingIdsFromEcomOrder } from 'backend/orderUtils.js';
 import * as orderReconciliation from 'backend/orderReconciliation.js';
+import {
+    ALL_CANDLES_SERVICE_IDS,
+    CANDLES_LIMITED_SERVICE_ID,
+    expandCandlesServiceIds,
+    filterCandlesLimitedSlots,
+} from 'backend/workshopServiceIds.js';
 
 const WORKSHOP_ACCESS_TOKEN_SECRET_NAME = 'WorkshopAccessTokens';
 
@@ -39,8 +45,9 @@ const TUFTING_SERVICE_IDS = {
 const CANDLES_SERVICE_IDS = {
     a: 'eb8fec0e-5d04-48a3-a795-e3e8051d07da',
     b: 'f0f6e447-02d8-4808-80ba-3c380ce9eae8',
+    limited: CANDLES_LIMITED_SERVICE_ID, // slots only through 2026-10-29
 };
-const CANDLES_ID_SET = new Set(Object.values(CANDLES_SERVICE_IDS));
+const CANDLES_ID_SET = new Set(ALL_CANDLES_SERVICE_IDS);
 
 /** True if serviceId belongs to the candles ("סדנת נרות") workshop. */
 function isCandlesServiceId(serviceId) {
@@ -63,7 +70,7 @@ function isCeramicsServiceId(serviceId) {
 
 /** Resolve the full sibling-service-id group (used for multi-service availability/pricing) for a given serviceId. */
 function getServiceIdsGroupFor(serviceId) {
-    if (isCandlesServiceId(serviceId)) return Object.values(CANDLES_SERVICE_IDS);
+    if (isCandlesServiceId(serviceId)) return [...ALL_CANDLES_SERVICE_IDS];
     if (isCeramicsServiceId(serviceId)) return [CERAMICS_SERVICE_ID];
     return Object.values(TUFTING_SERVICE_IDS);
 }
@@ -2090,9 +2097,12 @@ export const getCourseSessions = webMethod(Permissions.Anyone, async (dateRangeS
         };
 
         // קריאה לכל השירותים הרלוונטיים במקביל (טאפטינג כברירת מחדל, או serviceIds חלופי כמו נרות)
-        const targetServiceIds = Array.isArray(serviceIds) && serviceIds.length > 0 ?
+        let targetServiceIds = Array.isArray(serviceIds) && serviceIds.length > 0 ?
             serviceIds :
             Object.values(TUFTING_SERVICE_IDS);
+        if (targetServiceIds.some((id) => CANDLES_ID_SET.has(id))) {
+            targetServiceIds = expandCandlesServiceIds(targetServiceIds, startDate);
+        }
         const allResults = await Promise.all(
             targetServiceIds.map(async (serviceId) => {
                 try {
@@ -2169,7 +2179,7 @@ export const getCourseSessions = webMethod(Permissions.Anyone, async (dateRangeS
             };
         });
 
-        return availableSlots;
+        return filterCandlesLimitedSlots(availableSlots);
     } catch (error) {
         console.error("Error fetching class availability:", error);
         return [];
@@ -2337,9 +2347,12 @@ async function _fetchCeramicsPricingInternal(serviceId) {
 
 /** Internal: get cached or fresh pricing for a given group of serviceIds (defaults to Tufting). */
 async function getServicePricingCached(serviceIds) {
-    const targetServiceIds = Array.isArray(serviceIds) && serviceIds.length > 0 ?
+    let targetServiceIds = Array.isArray(serviceIds) && serviceIds.length > 0 ?
         serviceIds :
         Object.values(TUFTING_SERVICE_IDS);
+    if (targetServiceIds.some((id) => CANDLES_ID_SET.has(id))) {
+        targetServiceIds = expandCandlesServiceIds(targetServiceIds, new Date());
+    }
 
     // Ceramics: pricing comes dynamically from the single consolidated
     // service's ticket variants (per day-of-week), never from the generic

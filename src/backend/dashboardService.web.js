@@ -57,6 +57,7 @@ const FALLBACK_SERVICE_IDS = [
 const CANDLES_SERVICE_ID_SET = new Set([
     'eb8fec0e-5d04-48a3-a795-e3e8051d07da',
     'f0f6e447-02d8-4808-80ba-3c380ce9eae8',
+    '925f55fc-521d-43e7-a679-53d243e65268',
 ]);
 
 function isCandlesOrder(order) {

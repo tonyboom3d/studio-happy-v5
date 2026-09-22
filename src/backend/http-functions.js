@@ -12,7 +12,13 @@ import { createConversation, createResponse, extractReplyText } from 'backend/op
 import { getUserConversation, upsertUserConversation } from 'backend/userConversationsStore.js';
 import { detectSuggestedAction, finalizeRoutedReply } from 'backend/aiRouting.js';
 import { buildWorkshopPolicyReply, isGeneralWorkshopSelection } from 'backend/policyContent.js';
-import { WORKSHOP_SERVICE_IDS, resolveWorkshopType } from 'backend/workshopServiceIds.js';
+import {
+  WORKSHOP_SERVICE_IDS,
+  resolveWorkshopType,
+  expandCandlesServiceIds,
+  isCandlesLimitedSlotAllowed,
+  CANDLES_LIMITED_SERVICE_ID,
+} from 'backend/workshopServiceIds.js';
 import {
   findOrdersByPhone,
   formatOrderMessage,
@@ -108,6 +114,8 @@ async function collectAvailableDates(serviceIds, neededCount) {
     for (const entry of entries) {
       if (!isBookableEntry(entry, now)) continue;
       const startDateObj = new Date(entry.slot.startDate);
+      const entryServiceId = entry.slot?.serviceId;
+      if (entryServiceId === CANDLES_LIMITED_SERVICE_ID && !isCandlesLimitedSlotAllowed(startDateObj)) continue;
       const dateKey = israelDateKey(startDateObj);
 
       if (!byDate.has(dateKey)) byDate.set(dateKey, { dateObj: startDateObj, times: new Set() });
@@ -146,7 +154,11 @@ export async function get_availableDates(request) {
   try {
     const workshopTypeRaw = String(request.query.workshopType || '').trim();
     const workshopKey = resolveWorkshopType(workshopTypeRaw);
-    const serviceIds = workshopKey ? WORKSHOP_SERVICE_IDS[workshopKey] : null;
+    const serviceIds = workshopKey
+      ? (workshopKey === 'candles'
+        ? expandCandlesServiceIds(WORKSHOP_SERVICE_IDS.candles, new Date())
+        : WORKSHOP_SERVICE_IDS[workshopKey])
+      : null;
 
     if (!serviceIds) {
       return badRequest({

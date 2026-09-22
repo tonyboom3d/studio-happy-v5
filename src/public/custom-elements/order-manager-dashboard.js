@@ -2153,7 +2153,7 @@ function __wdInjectGlobalAssets() {
                         </div>
                         <div class="mt-1.5 flex flex-wrap items-center gap-1.5 text-[11px] text-gray-700">
                             <span class="font-mono font-bold bg-white border border-orange-200 px-1.5 py-0.5 rounded">${coupon.code}</span>
-                            <span>${coupon.giftPieces} כלי/ם</span>
+                            <span>${coupon.giftPieces} שטיח/ים · ₪${coupon.discountAmountNis || (coupon.giftPieces || 0) * 170} הנחה</span>
                             ${coupon.redeemFrom ? `<span>ניתן לממש מ-${formatShortDate(coupon.redeemFrom)}</span>` : ''}
                             ${coupon.expiresAt ? `<span>עד ${formatShortDate(coupon.expiresAt)}</span>` : ''}
                             ${coupon.redeemedAt ? `<span class="text-emerald-700 font-bold">מומש ב-${formatShortDate(coupon.redeemedAt)}</span>` : ''}

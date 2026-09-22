@@ -265,6 +265,12 @@ function getIsraelWeekdayEnum(dateInput) {
     return weekday.toUpperCase();
 }
 
+/** Fri/Sat (Israel) — promo gift coupons cannot be applied on ceramics checkout. */
+function isIsraelFriOrSat(dateInput) {
+    const day = getIsraelWeekdayEnum(dateInput);
+    return day === 'FRIDAY' || day === 'SATURDAY';
+}
+
 /**
  * המרת wix:image:// לכתובת CDN ציבורית (https) לשימוש חיצוני (OpenAI וכו')
  */
@@ -694,8 +700,9 @@ export const createAndCheckout = webMethod(Permissions.Anyone, async (orderData)
     // מאוחד עם ticket variants לפי יום). נפתור את יום השבוע כאן, לפני חישוב basePrice.
     let ceramicsDayPricing = null;
     let ceramicsDayEnum = null;
+    let ceramicsSlotStartIso = null;
     if (isCeramics) {
-        const ceramicsSlotStartIso = slotsList[0].date || slotsList[0].startDate || slotsList[0].start?.timestamp || slotsList[0].start;
+        ceramicsSlotStartIso = slotsList[0].date || slotsList[0].startDate || slotsList[0].start?.timestamp || slotsList[0].start;
         ceramicsDayEnum = getIsraelWeekdayEnum(ceramicsSlotStartIso);
         ceramicsDayPricing = servicePricing?.byDay?.[ceramicsDayEnum];
         if (!ceramicsDayEnum || !ceramicsDayPricing || typeof ceramicsDayPricing.solo !== 'number') {
@@ -1067,11 +1074,17 @@ export const createAndCheckout = webMethod(Permissions.Anyone, async (orderData)
 
     const customLineItems = cupCustomLineItems.map(({ _productId, _price, _product, ...item }) => item);
 
+    const lockCeramicsPromoCoupon = isCeramics && isIsraelFriOrSat(ceramicsSlotStartIso);
     const checkoutOptions = {
         lineItems,
         ...(customLineItems.length > 0 ? { customLineItems } : {}),
         channelType: 'WEB',
+        ...(lockCeramicsPromoCoupon ? { customSettings: { lockCouponCode: true } } : {}),
     };
+
+    if (lockCeramicsPromoCoupon) {
+        console.log('[createAndCheckout] Ceramics Fri/Sat session — coupon code field locked on checkout.', { ceramicsSlotStartIso, ceramicsDayEnum });
+    }
 
     console.log('[createAndCheckout] Creating eCommerce checkout...', checkoutOptions);
     const elevatedCreateCheckout = auth.elevate(checkout.createCheckout);

@@ -29,6 +29,9 @@ export const WORKSHOP_SERVICE_IDS = {
   ceramics: ['ad89914a-1845-48c6-804d-544cd17f179b'],
 };
 
+/** Primary Wix Bookings service id for סדנת קרמיקה (promo coupons scope here). */
+export const CERAMICS_SERVICE_ID = WORKSHOP_SERVICE_IDS.ceramics[0];
+
 // Workshop types with no WorkshopOrders CMS record — booking-only lookup path.
 export const BOOKING_ONLY_WORKSHOP_TYPES = ['charms', 'jewelry'];
 

@@ -3,9 +3,9 @@
  *
  * Flow:
  *  1) Tufting order gets marked 'paid' (see data.js hook) -> if the promo
- *     campaign is enabled, issuePromoCouponForOrder() creates a one-time,
- *     100%-off Wix coupon scoped to the weekday-only ceramics service, and
- *     records it in the `PromoCoupons` CMS collection.
+ *     campaign is enabled, issuePromoCouponForOrder() creates a one-time
+ *     fixed-NIS Wix coupon (rugCount × discountPerRugNis) scoped to the
+ *     ceramics Bookings service, and records it in `PromoCoupons` CMS.
  *  2) manychatService.jsw / promoEmailService.js send the code to the
  *     customer (WhatsApp + email).
  *  3) The customer redeems the code in Wix's built-in checkout when booking
@@ -27,7 +27,8 @@
  *     - organizerName (Text)
  *     - organizerPhone (Text)
  *     - organizerEmail (Text)
- *     - giftPieces (Number)     — number of ceramics pieces gifted (= rugCount)
+ *     - giftPieces (Number)     — tufting rug count (= discount units)
+ *     - discountAmountNis (Number) — total fixed discount (giftPieces × 170)
  *     - workshopStart (Date and Time) — tufting workshop date
  *     - redeemFrom (Date and Time)    — earliest the coupon can be used (after the tufting workshop)
  *     - expiresAt (Date and Time)     — 6 months from the tufting order date
@@ -39,6 +40,7 @@
  */
 import wixData from 'wix-data';
 import { getPromoCampaign } from 'backend/promoCampaignConfig.js';
+import { CERAMICS_SERVICE_ID } from 'backend/workshopServiceIds.js';
 
 export { getPromoCampaign } from 'backend/promoCampaignConfig.js';
 
@@ -71,23 +73,6 @@ async function getElevatedCoupons() {
     }
     return elevatedCouponsPromise;
 }
-
-// --- Weekday-only ceramics service scope --------------------------------
-// The promo must only apply to ceramics sessions that run Sun–Thu (including
-// Chol HaMoed Sukkot) — this is enforced by scoping the Wix coupon to a
-// DEDICATED weekday-only ceramics Bookings service, not by custom day-of-week
-// filtering in this codebase.
-//
-// ⚠️ MANUAL SETUP REQUIRED: today `workshopServiceIds.js` only has ONE
-// consolidated ceramics service (used for every day of the week, including
-// Fri/Sat). Until the studio splits out a weekday-only ceramics service in
-// Wix Bookings and this constant is updated with its real serviceId, coupons
-// will be scoped to the existing consolidated service — which also runs on
-// Fri/Sat, so the "weekdays only" restriction will NOT actually be enforced
-// by Wix at checkout. A loud warning is logged on every issuance until this
-// is fixed.
-const WEEKDAY_CERAMICS_SERVICE_ID = 'ad89914a-1845-48c6-804d-544cd17f179b'; // TODO: replace with the weekday-only ceramics serviceId
-const WEEKDAY_CERAMICS_SERVICE_ID_IS_PLACEHOLDER = true; // flip to false once the real weekday-only serviceId is set above
 
 const COUPON_VALIDITY_MONTHS = 6;
 const COUPON_CODE_PREFIX = 'SH-';
@@ -128,6 +113,19 @@ function addMonths(dateInput, months) {
     return d;
 }
 
+function getIsraelWeekdayEnum(dateInput) {
+    const d = dateInput instanceof Date ? dateInput : new Date(dateInput);
+    if (Number.isNaN(d.getTime())) return null;
+    const weekday = new Intl.DateTimeFormat('en-US', { timeZone: ISRAEL_TZ, weekday: 'long' }).format(d);
+    return weekday.toUpperCase();
+}
+
+/** Promo ceramics coupons must not be redeemed on Fri/Sat sessions (checkout locks coupon field too). */
+export function isPromoCeramicsCouponBlockedDay(dateInput) {
+    const day = getIsraelWeekdayEnum(dateInput);
+    return day === 'FRIDAY' || day === 'SATURDAY';
+}
+
 /**
  * Issues a personal, one-time promo coupon for a just-paid tufting order.
  * No-ops (returns { issued: false, reason }) when the campaign is off, the
@@ -143,12 +141,10 @@ export async function issuePromoCouponForOrder(order, { force = false } = {}) {
             return { issued: false, reason: 'not-tufting' };
         }
 
-        if (!force) {
-            const campaign = await getPromoCampaign();
-            if (!campaign?.enabled) {
-                console.log(`${TAG} Campaign disabled — skipping issuance. orderId=${order._id} expired=${campaign?.expired}`);
-                return { issued: false, reason: 'campaign-disabled' };
-            }
+        const campaign = await getPromoCampaign();
+        if (!force && !campaign?.enabled) {
+            console.log(`${TAG} Campaign disabled — skipping issuance. orderId=${order._id} expired=${campaign?.expired}`);
+            return { issued: false, reason: 'campaign-disabled' };
         }
 
         const existing = await wixData.query('PromoCoupons').eq('orderId', order._id).limit(1).find(SA);
@@ -157,18 +153,15 @@ export async function issuePromoCouponForOrder(order, { force = false } = {}) {
             return { issued: false, reason: 'already-issued', coupon: existing.items[0] };
         }
 
-        if (WEEKDAY_CERAMICS_SERVICE_ID_IS_PLACEHOLDER) {
-            console.warn(
-                `${TAG} ⚠️ WEEKDAY_CERAMICS_SERVICE_ID is still the placeholder (consolidated ceramics ` +
-                'service, includes Fri/Sat) — the "weekdays only" restriction is NOT enforced by Wix yet. ' +
-                'Split out a weekday-only ceramics Bookings service and update the constant. orderId:', order._id,
-            );
-        }
-
         const giftPieces = Number(order.rugCount) || 0;
         if (giftPieces <= 0) {
             console.warn(`${TAG} Order has no rugCount — skipping issuance. orderId=${order._id}`);
             return { issued: false, reason: 'no-rug-count' };
+        }
+        const perRug = Number(campaign.discountPerRugNis) || 170;
+        const discountAmountNis = giftPieces * perRug;
+        if (discountAmountNis <= 0) {
+            return { issued: false, reason: 'no-discount-amount' };
         }
 
         const code = await generateUniqueCode();
@@ -188,12 +181,12 @@ export async function issuePromoCouponForOrder(order, { force = false } = {}) {
             active: true,
             scope: {
                 namespace: 'bookings',
-                group: { name: 'service', entityId: WEEKDAY_CERAMICS_SERVICE_ID },
+                group: { name: 'service', entityId: CERAMICS_SERVICE_ID },
             },
-            percentOffRate: 100,
+            moneyOffAmount: discountAmountNis,
         };
 
-        console.log(`${TAG} Creating Wix coupon via wix-marketing.v2. orderId=${order._id} code=${code} scope=bookings/service/${WEEKDAY_CERAMICS_SERVICE_ID}`);
+        console.log(`${TAG} Creating Wix coupon via wix-marketing.v2. orderId=${order._id} code=${code} moneyOff=${discountAmountNis} scope=bookings/service/${CERAMICS_SERVICE_ID}`);
         const { createCoupon: elevatedCreateCoupon } = await getElevatedCoupons();
         const created = await elevatedCreateCoupon(specification);
         const wixCouponId = created?._id || created?.id;
@@ -208,6 +201,7 @@ export async function issuePromoCouponForOrder(order, { force = false } = {}) {
             organizerPhone: order.organizerPhone || '',
             organizerEmail: order.organizerEmail || '',
             giftPieces,
+            discountAmountNis,
             workshopStart,
             redeemFrom,
             expiresAt,
@@ -220,7 +214,7 @@ export async function issuePromoCouponForOrder(order, { force = false } = {}) {
 
         console.log(
             `${TAG} ✅ Coupon issued + saved to PromoCoupons CMS. orderId=${order._id} code=${code} wixCouponId=${wixCouponId} ` +
-            `couponRowId=${couponRow?._id} giftPieces=${giftPieces} redeemFrom=${redeemFrom.toISOString()} expiresAt=${expiresAt.toISOString()}`,
+            `couponRowId=${couponRow?._id} giftPieces=${giftPieces} discountAmountNis=${discountAmountNis} redeemFrom=${redeemFrom.toISOString()} expiresAt=${expiresAt.toISOString()}`,
         );
 
         return { issued: true, coupon: couponRow };
@@ -323,6 +317,12 @@ export async function markPromoCouponRedeemedIfApplicable(couponCode, ceramicsOr
         const row = result.items[0];
         if (!row) return { redeemed: false, reason: 'not-a-promo-coupon' };
         if (row.status !== 'issued') return { redeemed: false, reason: `already-${row.status}` };
+
+        const ceramicsOrder = await wixData.get('WorkshopOrders', ceramicsOrderId, SA).catch(() => null);
+        if (ceramicsOrder?.workshopStart && isPromoCeramicsCouponBlockedDay(ceramicsOrder.workshopStart)) {
+            console.warn(`${TAG} Redemption blocked — ceramics session is Fri/Sat. code=${couponCode} ceramicsOrderId=${ceramicsOrderId}`);
+            return { redeemed: false, reason: 'weekend-ceramics-session' };
+        }
 
         await wixData.update('PromoCoupons', {
             ...row,

@@ -14,9 +14,11 @@
  * CONFIG in sync when you edit copy/enabled/previewToken here).
  */
 
-/** @type {{ enabled: boolean, endsAt: string, previewToken: string, title: string, subtitle: string, ctaText: string, ctaUrl: string, termsText: string }} */
+/** @type {{ enabled: boolean, endsAt: string, previewToken: string, discountPerRugNis: number, title: string, subtitle: string, ctaText: string, ctaUrl: string, termsText: string }} */
 export const PROMO_CAMPAIGN = {
     enabled: true,
+    /** Fixed NIS discount per tufting rug — total coupon = rugCount × discountPerRugNis. */
+    discountPerRugNis: 170,
     /** Israel time — promo stops at Nov 1 00:00 (end of Oct 31). */
     endsAt: '2026-11-01T00:00:00+03:00',
     previewToken: 'studio-happy-tufting-promo',

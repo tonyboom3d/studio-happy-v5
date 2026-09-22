@@ -83,6 +83,7 @@ function mapPromoCouponForDashboard(row) {
         code: row.code,
         status: row.status,
         giftPieces: row.giftPieces || 0,
+        discountAmountNis: row.discountAmountNis || (row.giftPieces || 0) * 170,
         redeemFrom: row.redeemFrom || null,
         expiresAt: row.expiresAt || null,
         redeemedAt: row.redeemedAt || null,

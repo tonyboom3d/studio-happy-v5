@@ -1,5 +1,6 @@
 import { ok, badRequest, serverError, response } from 'wix-http-functions';
 import { availabilityCalendar } from 'wix-bookings.v2';
+import { auth } from '@wix/essentials';
 import wixSecretsBackend from 'wix-secrets-backend';
 import { checkRateLimit, checkGuardrails, detectHandoff, HANDOFF_REPLY_DEFAULT } from 'backend/aiGuardrails.js';
 import {
@@ -79,11 +80,13 @@ function formatTimeIL(d) {
   }).format(d);
 }
 
+const elevatedQueryAvailability = auth.elevate(availabilityCalendar.queryAvailability);
+
 async function fetchAvailabilityChunk(serviceIds, startDate, endDate) {
   const options = { slotsPerDay: 100 };
   const results = await Promise.all(serviceIds.map(async (serviceId) => {
     try {
-      const availability = await availabilityCalendar.queryAvailability({
+      const availability = await elevatedQueryAvailability({
         filter: {
           serviceId,
           startDate: startDate.toISOString(),

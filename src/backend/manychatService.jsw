@@ -28,6 +28,9 @@ export const MC_FIELDS = {
     workshopTime: 'workshop_time',
     participantsLine: 'participants_line',
     itemCount: 'item_count',
+    // Pre-workshop reminder (see jobs.js processCustomerWorkshopReminders) —
+    // ready-to-print line, e.g. "שטיחים: 2" / "נרות: 4" / "כלי קרמיקה: 3".
+    itemsLine: 'items_line',
     cupsCount: 'cups_count',
     extraItems: 'extra_items',
     amount: 'amount',
@@ -67,6 +70,9 @@ const STAFF_NOTIFICATION_FLOW_NS = 'content20260826132939_659401';
 // Reschedule-workshop summary flow — shown after the customer picks a new date
 // on the "עדכון מועד סדנה" page. Branches to confirm/edit buttons internally.
 const RESCHEDULE_SUMMARY_FLOW_NS = 'content20260923100948_424304';
+
+// Pre-workshop reminder (~48h) — dedicated flow with approved Utility template.
+const WORKSHOP_REMINDER_FLOW_NS = 'content20260923104716_620983';
 
 // Custom fields used by the staff/manager flow's routing conditions.
 const STAFF_ACTION_KEY_FIELD = 'action_key';
@@ -422,6 +428,19 @@ function buildParticipantsLine(order, workshopType) {
     return `${adults} מבוגרים${children > 0 ? ` + ${children} ילדים` : ''}`;
 }
 
+/**
+ * Ready-to-print "items" line for the pre-workshop reminder template —
+ * mirrors rugCount's per-workshop meaning (see createAndCheckout in
+ * bookingService.web.js): total candles for candles, total ceramics units
+ * (base + extra) for ceramics, rugs for tufting.
+ */
+function buildItemsLine(order, workshopType) {
+    const count = order?.rugCount || 0;
+    if (workshopType === 'candles') return `נרות: ${count}`;
+    if (workshopType === 'ceramics') return `כלי קרמיקה: ${count}`;
+    return `שטיחים: ${count}`;
+}
+
 function buildOrderCustomFields(order, notificationType = 'order_confirmed') {
     const workshopType = order?.workshopType || 'tufting';
     const total = order?.paidTotal || order?.basePrice || 0;
@@ -443,6 +462,10 @@ function buildOrderCustomFields(order, notificationType = 'order_confirmed') {
         { name: MC_FIELDS.itemCount, value: order?.rugCount ?? 0 },
         { name: MC_FIELDS.amount, value: total },
     ];
+
+    if (notificationType === 'workshop_reminder') {
+        fields.push({ name: MC_FIELDS.itemsLine, value: buildItemsLine(order, workshopType) });
+    }
 
     if (order?.ecomOrderNumber) {
         fields.push({ name: MC_FIELDS.orderNumber, value: order.ecomOrderNumber });
@@ -867,6 +890,46 @@ export async function sendOrderConfirmationManyChat(order) {
         return { sent: true, subscriberId };
     } catch (err) {
         logManyChatSendError('sendOrderConfirmationManyChat', { order, error: err?.message || String(err) });
+        return { sent: false, reason: 'error', error: err?.message || String(err) };
+    }
+}
+
+// --- Pre-workshop reminder (~48h before) ---
+
+/**
+ * Sends the pre-workshop reminder (address, arrival video, items, customer
+ * service button) — a WhatsApp Utility template, since it fires outside the
+ * 24h customer-service window. Sets order custom fields (incl. items_line) and
+ * triggers WORKSHOP_REMINDER_FLOW_NS (approved WhatsApp template in ManyChat).
+ * See jobs.js processCustomerWorkshopReminders for the scheduling/idempotency
+ * logic that calls this. Never throws — same contract as
+ * sendOrderConfirmationManyChat. Does not gate on marketing consent: this is
+ * a transactional reminder for an existing paid order, not a promo.
+ */
+export async function sendWorkshopReminderManyChat(order) {
+    try {
+        const phone = normalizeIsraeliPhone(order?.organizerPhone);
+        const email = order?.organizerEmail || '';
+        if (!phone) {
+            logManyChatSendError('sendWorkshopReminderManyChat', { order, reason: 'no-phone' });
+            return { sent: false, reason: 'no-phone' };
+        }
+
+        const subscriber = await findSubscriber({ email, phone });
+        if (!subscriber?.id) {
+            logManyChatSendError('sendWorkshopReminderManyChat', { order, phone, reason: 'subscriber-not-found' });
+            return { sent: false, reason: 'subscriber-not-found' };
+        }
+
+        const sentFields = await setOrderCustomFields(subscriber.id, order, 'workshop_reminder');
+        await sendFlow(subscriber.id, WORKSHOP_REMINDER_FLOW_NS);
+
+        logManyChatSendSuccess('sendWorkshopReminderManyChat', {
+            order, phone, subscriberId: subscriber.id, notificationType: 'workshop_reminder', fields: sentFields,
+        });
+        return { sent: true, subscriberId: subscriber.id };
+    } catch (err) {
+        logManyChatSendError('sendWorkshopReminderManyChat', { order, error: err?.message || String(err) });
         return { sent: false, reason: 'error', error: err?.message || String(err) };
     }
 }

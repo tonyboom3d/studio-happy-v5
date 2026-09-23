@@ -2,6 +2,7 @@ import wixData from 'wix-data';
 import { toDateKey } from 'backend/availabilityRules.js';
 import { runScheduling, processOfferEscalation } from 'backend/schedulingEngine.js';
 import { processDeadlineReminders, processConfirmations } from 'backend/shiftConfirmations.js';
+import { processCustomerWorkshopReminders } from 'backend/workshopReminders.js';
 import { fetchEcomOrderByCheckoutId, reconcileEcomOrder } from 'backend/orderReconciliation.js';
 import { ensureHolidaysSynced } from 'backend/holidayService.js';
 import { flushOutbox } from 'backend/notificationOutbox.js';
@@ -52,8 +53,10 @@ export async function processSchedulingHourly() {
  * 1) availability-deadline WhatsApp reminders (fires only at the configured
  *    Israel hour on the configured days before the deadline),
  * 2) 2-stage pre-workshop confirmation loop + escalation to managers,
- * 3) auto-close time entries whose clock-out was forgotten (>12h open),
- * 4) notification outbox flush — safety net for any queued messages that
+ * 3) customer-facing pre-workshop reminder (~48h before) for paid
+ *    tufting/candles/ceramics orders,
+ * 4) auto-close time entries whose clock-out was forgotten (>12h open),
+ * 5) notification outbox flush — safety net for any queued messages that
  *    weren't force-flushed inline by the action that created them (e.g.
  *    rate-limited/deferred-past-quiet-hours rows from earlier in the hour).
  */
@@ -73,6 +76,11 @@ export async function processAlertsHourly() {
         return { stage1: 0, stage2: 0, escalated: 0 };
     });
 
+    const customerWorkshopReminders = await processCustomerWorkshopReminders().catch(err => {
+        console.error('[jobs] processCustomerWorkshopReminders failed:', err?.message || err);
+        return { sent: 0, skipped: 0, scanned: 0 };
+    });
+
     const staleEntries = await autoCloseStaleTimeEntries().catch(err => {
         console.error('[jobs] autoCloseStaleTimeEntries failed:', err?.message || err);
         return { closed: 0 };
@@ -88,8 +96,8 @@ export async function processAlertsHourly() {
         return { retried: 0, sent: 0 };
     });
 
-    // console.log('[jobs] processAlertsHourly:', JSON.stringify({ holidays, reminders, confirmations, staleEntries, outbox, promoRetries }));
-    return { holidays, reminders, confirmations, staleEntries, outbox, promoRetries };
+    // console.log('[jobs] processAlertsHourly:', JSON.stringify({ holidays, reminders, confirmations, customerWorkshopReminders, staleEntries, outbox, promoRetries }));
+    return { holidays, reminders, confirmations, customerWorkshopReminders, staleEntries, outbox, promoRetries };
 }
 
 /** Closes TimeEntries left open longer than TIME_ENTRY_MAX_OPEN_HOURS. */

@@ -896,7 +896,9 @@ export const createAndCheckout = webMethod(Permissions.Anyone, async (orderData)
             phone,
         },
         ...participantField,
-        sendSmsReminder: true,
+        // Wix's own pre-workshop SMS reminder is disabled — replaced by the
+        // ManyChat WhatsApp reminder (see jobs.js processCustomerWorkshopReminders).
+        sendSmsReminder: false,
         participantNotification: {
             notifyParticipants: true,
             message: notificationMessage,

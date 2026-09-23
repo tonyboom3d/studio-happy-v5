@@ -169,7 +169,11 @@ function mapCmsOrder(order, bookingsById) {
     if (bookings.length && bookings.every((b) => isCancelledBookingStatus(b.status))) return null;
 
     const primaryBooking = bookings[0] || null;
-    const workshopType = order.workshopType || serviceIdToWorkshopType(extractBookingServiceId(primaryBooking));
+    // order.workshopType is never actually written at checkout — the record only stores
+    // serviceId. Resolve via serviceId first, then fall back to the booking's service id.
+    const workshopType = order.workshopType
+        || serviceIdToWorkshopType(order.serviceId)
+        || serviceIdToWorkshopType(extractBookingServiceId(primaryBooking));
     const workshopStart = parseWorkshopDate(order.workshopStart) || extractBookingStartDate(primaryBooking);
 
     const mapped = {
@@ -397,7 +401,8 @@ export function formatOrderMessage(order) {
 
     lines.push('✅ סטטוס: מאושר');
 
-    if (order.orderUrl) {
+    // Order link only makes sense to send for tufting today — CMS hub page.
+    if (order.orderUrl && order.workshopType === 'tufting') {
         lines.push('');
         lines.push(`🔗 לצפייה בפרטי ההזמנה: ${order.orderUrl}`);
     }

@@ -12,7 +12,7 @@
 import wixSecretsBackend from 'wix-secrets-backend';
 import { fetch } from 'wix-fetch';
 import { normalizeIsraeliPhone } from 'backend/orderUtils.js';
-import { hasPhoneMarketingConsent, waitForPhoneMarketingConsent } from 'backend/marketingConsentService.js';
+import { hasPhoneMarketingConsent, waitForPhoneMarketingConsent } from 'backend/marketingConsentService.web.js';
 
 const MANYCHAT_BASE_URL = 'https://api.manychat.com';
 const ISRAEL_TZ = 'Asia/Jerusalem';
@@ -874,7 +874,7 @@ export async function sendTuftingPromoCouponManyChat(couponRow, { waitForConsent
 
         // This is a MARKETING message (unlike the plain order-confirmation
         // template) — Israel's anti-spam law (חוק הספאם) requires prior opt-in.
-        // See marketingConsentService.js — gated on the site's checkout
+        // See marketingConsentService.web.js — gated on the site's checkout
         // "subscribe to marketing" checkbox, not the order-confirmation consent.
         const consented = waitForConsent
             ? await waitForPhoneMarketingConsent(phone)

@@ -1,5 +1,5 @@
 /**
- * marketingConsentService.js — gate for sending MARKETING content (not
+ * marketingConsentService.web.js — gate for sending MARKETING content (not
  * transactional/order messages) by email/WhatsApp.
  *
  * Checkout "subscribe to marketing" records consent asynchronously — the paid
@@ -10,6 +10,9 @@
  * email-subscriptions API → CRM info.emails / primaryInfo.
  */
 import { contacts } from 'wix-crm-backend';
+import { emailSubscriptions } from '@wix/email-subscriptions';
+import { marketingConsent } from '@wix/marketing';
+import { auth } from '@wix/essentials';
 import { normalizeIsraeliPhone, getPhoneLookupVariants, phonesMatch } from 'backend/orderUtils.js';
 
 /** Delays between consent poll attempts after checkout (ms). First try is immediate. */
@@ -17,37 +20,8 @@ const CHECKOUT_CONSENT_POLL_DELAYS_MS = [3000, 5000, 10000, 15000];
 
 const EXT_EMAIL_SUB_STATUS = 'emailSubscriptions.subscriptionStatus';
 
-/** @type {Promise<Function> | null} */
-let elevatedQueryEmailSubscriptionsPromise = null;
-async function getElevatedQueryEmailSubscriptions() {
-    if (!elevatedQueryEmailSubscriptionsPromise) {
-        elevatedQueryEmailSubscriptionsPromise = (async () => {
-            const { emailSubscriptions } = await import('@wix/email-subscriptions');
-            const { auth } = await import('@wix/essentials');
-            if (!emailSubscriptions?.queryEmailSubscriptions) {
-                throw new Error('@wix/email-subscriptions queryEmailSubscriptions is unavailable on this site');
-            }
-            return auth.elevate(emailSubscriptions.queryEmailSubscriptions);
-        })();
-    }
-    return elevatedQueryEmailSubscriptionsPromise;
-}
-
-/** @type {Promise<Function> | null} */
-let elevatedQueryMarketingConsentPromise = null;
-async function getElevatedQueryMarketingConsent() {
-    if (!elevatedQueryMarketingConsentPromise) {
-        elevatedQueryMarketingConsentPromise = (async () => {
-            const { marketingConsent } = await import('@wix/marketing');
-            const { auth } = await import('@wix/essentials');
-            if (!marketingConsent?.queryMarketingConsent) {
-                throw new Error('@wix/marketing queryMarketingConsent is unavailable on this site');
-            }
-            return auth.elevate(marketingConsent.queryMarketingConsent);
-        })();
-    }
-    return elevatedQueryMarketingConsentPromise;
-}
+const elevatedQueryEmailSubscriptions = auth.elevate(emailSubscriptions.queryEmailSubscriptions);
+const elevatedQueryMarketingConsent = auth.elevate(marketingConsent.queryMarketingConsent);
 
 function sleep(ms) {
     return new Promise((resolve) => setTimeout(resolve, ms));
@@ -113,8 +87,7 @@ async function checkEmailViaContactExtendedFields(email) {
 /** Checkout marketing opt-in — same API as phone, filtered by email. */
 async function checkEmailViaMarketingConsent(email) {
     const queryEmail = normalizeEmailForQuery(email);
-    const queryFn = await getElevatedQueryMarketingConsent();
-    const response = await queryFn({
+    const response = await elevatedQueryMarketingConsent({
         filter: {
             'details.email': { $eq: queryEmail },
             state: { $eq: 'CONFIRMED' },
@@ -130,8 +103,7 @@ async function checkEmailViaMarketingConsent(email) {
 
 async function checkEmailViaSubscriptions(email) {
     const queryEmail = normalizeEmailForQuery(email);
-    const queryFn = await getElevatedQueryEmailSubscriptions();
-    const response = await queryFn(
+    const response = await elevatedQueryEmailSubscriptions(
         { email: { $in: [queryEmail] } },
         { paging: { limit: 1, offset: 0 } },
     );
@@ -168,8 +140,7 @@ async function checkEmailViaContacts(email) {
 }
 
 async function checkPhoneViaMarketingConsent(e164) {
-    const queryFn = await getElevatedQueryMarketingConsent();
-    const response = await queryFn({
+    const response = await elevatedQueryMarketingConsent({
         filter: {
             'details.phone': { $eq: e164 },
             state: { $eq: 'CONFIRMED' },

@@ -12,7 +12,7 @@
  * from being issued or sent via WhatsApp.
  */
 import { contacts, triggeredEmails } from 'wix-crm-backend';
-import { hasEmailMarketingConsent, waitForEmailMarketingConsent } from 'backend/marketingConsentService.js';
+import { hasEmailMarketingConsent, waitForEmailMarketingConsent } from 'backend/marketingConsentService.web.js';
 
 const TRIGGERED_EMAIL_ID = 'VVOZq7E';
 const ISRAEL_TZ = 'Asia/Jerusalem';
@@ -61,7 +61,7 @@ export async function sendTuftingPromoCouponEmail(couponRow, { waitForConsent = 
 
         // This is a MARKETING email (unlike a plain order-confirmation
         // receipt) — Israel's anti-spam law (חוק הספאם) requires prior
-        // opt-in. See marketingConsentService.js — gated on the site's
+        // opt-in. See marketingConsentService.web.js — gated on the site's
         // checkout "subscribe to marketing" checkbox.
         const consented = waitForConsent
             ? await waitForEmailMarketingConsent(couponRow.organizerEmail)

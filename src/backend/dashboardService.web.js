@@ -1763,7 +1763,7 @@ export const resendPromoCoupon = webMethod(Permissions.SiteMember, async (orderI
 
     // Both legs return { sent: false, reason: 'no-marketing-consent' } when the
     // customer never opted in via the checkout "subscribe to marketing"
-    // checkbox (see marketingConsentService.js) — surfaced distinctly since
+    // checkbox (see marketingConsentService.web.js) — surfaced distinctly since
     // it's an expected/legal-compliance outcome, not a delivery failure.
     const noConsent = !ok && waResult?.reason === 'no-marketing-consent' && emailResult?.reason === 'no-marketing-consent';
 

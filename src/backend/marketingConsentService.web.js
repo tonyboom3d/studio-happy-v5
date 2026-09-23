@@ -10,9 +10,6 @@
  * email-subscriptions API → CRM info.emails / primaryInfo.
  */
 import { contacts } from 'wix-crm-backend';
-import { emailSubscriptions } from '@wix/email-subscriptions';
-import { marketingConsent } from '@wix/marketing';
-import { auth } from '@wix/essentials';
 import { normalizeIsraeliPhone, getPhoneLookupVariants, phonesMatch } from 'backend/orderUtils.js';
 
 /** Delays between consent poll attempts after checkout (ms). First try is immediate. */
@@ -20,8 +17,37 @@ const CHECKOUT_CONSENT_POLL_DELAYS_MS = [3000, 5000, 10000, 15000];
 
 const EXT_EMAIL_SUB_STATUS = 'emailSubscriptions.subscriptionStatus';
 
-const elevatedQueryEmailSubscriptions = auth.elevate(emailSubscriptions.queryEmailSubscriptions);
-const elevatedQueryMarketingConsent = auth.elevate(marketingConsent.queryMarketingConsent);
+/** @type {Promise<Function> | null} */
+let elevatedQueryEmailSubscriptionsPromise = null;
+async function getElevatedQueryEmailSubscriptions() {
+    if (!elevatedQueryEmailSubscriptionsPromise) {
+        elevatedQueryEmailSubscriptionsPromise = (async () => {
+            const { emailSubscriptions } = await import('@wix/email-subscriptions');
+            const { auth } = await import('@wix/essentials');
+            if (!emailSubscriptions?.queryEmailSubscriptions) {
+                throw new Error('@wix/email-subscriptions queryEmailSubscriptions is unavailable on this site');
+            }
+            return auth.elevate(emailSubscriptions.queryEmailSubscriptions);
+        })();
+    }
+    return elevatedQueryEmailSubscriptionsPromise;
+}
+
+/** @type {Promise<Function> | null} */
+let elevatedQueryMarketingConsentPromise = null;
+async function getElevatedQueryMarketingConsent() {
+    if (!elevatedQueryMarketingConsentPromise) {
+        elevatedQueryMarketingConsentPromise = (async () => {
+            const { marketingConsent } = await import('@wix/marketing');
+            const { auth } = await import('@wix/essentials');
+            if (!marketingConsent?.queryMarketingConsent) {
+                throw new Error('@wix/marketing queryMarketingConsent is unavailable on this site');
+            }
+            return auth.elevate(marketingConsent.queryMarketingConsent);
+        })();
+    }
+    return elevatedQueryMarketingConsentPromise;
+}
 
 function sleep(ms) {
     return new Promise((resolve) => setTimeout(resolve, ms));
@@ -87,7 +113,8 @@ async function checkEmailViaContactExtendedFields(email) {
 /** Checkout marketing opt-in — same API as phone, filtered by email. */
 async function checkEmailViaMarketingConsent(email) {
     const queryEmail = normalizeEmailForQuery(email);
-    const response = await elevatedQueryMarketingConsent({
+    const queryFn = await getElevatedQueryMarketingConsent();
+    const response = await queryFn({
         filter: {
             'details.email': { $eq: queryEmail },
             state: { $eq: 'CONFIRMED' },
@@ -103,7 +130,8 @@ async function checkEmailViaMarketingConsent(email) {
 
 async function checkEmailViaSubscriptions(email) {
     const queryEmail = normalizeEmailForQuery(email);
-    const response = await elevatedQueryEmailSubscriptions(
+    const queryFn = await getElevatedQueryEmailSubscriptions();
+    const response = await queryFn(
         { email: { $in: [queryEmail] } },
         { paging: { limit: 1, offset: 0 } },
     );
@@ -140,7 +168,8 @@ async function checkEmailViaContacts(email) {
 }
 
 async function checkPhoneViaMarketingConsent(e164) {
-    const response = await elevatedQueryMarketingConsent({
+    const queryFn = await getElevatedQueryMarketingConsent();
+    const response = await queryFn({
         filter: {
             'details.phone': { $eq: e164 },
             state: { $eq: 'CONFIRMED' },

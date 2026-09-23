@@ -25,6 +25,7 @@ import {
     WORKSHOP_SERVICE_IDS,
     BOOKING_ONLY_WORKSHOP_TYPES,
     WORKSHOP_TYPE_LABELS_HE,
+    resolveWorkshopType,
     serviceIdToWorkshopType,
 } from 'backend/workshopServiceIds.js';
 
@@ -49,6 +50,14 @@ const BOOKING_ONLY_VIEW_URLS = {
 
 const elevatedQueryExtendedBookings = auth.elevate(extendedBookings.queryExtendedBookings);
 
+/** queryExtendedBookings returns `{ booking: Booking, ... }` — not a flat Booking. */
+function unwrapExtendedBooking(entry) {
+    if (!entry) return null;
+    if (entry.booking?._id) return entry.booking;
+    if (entry._id && entry.contactDetails) return entry;
+    return null;
+}
+
 function parseWorkshopDate(raw) {
     if (!raw) return null;
     const date = raw instanceof Date ? raw : new Date(raw);
@@ -56,18 +65,27 @@ function parseWorkshopDate(raw) {
 }
 
 function extractBookingServiceId(booking) {
-    return booking?.bookedEntity?.item?.slot?.serviceId
-        || booking?.bookedEntity?.item?.schedule?.serviceId
-        || booking?.bookedEntity?.slot?.serviceId;
+    const slot = booking?.bookedEntity?.slot || booking?.bookedEntity?.item?.slot;
+    return slot?.serviceId
+        || booking?.bookedEntity?.item?.schedule?.serviceId;
 }
 
 function extractBookingStartDate(booking) {
-    const slot = booking?.bookedEntity?.item?.slot;
+    const slot = booking?.bookedEntity?.slot || booking?.bookedEntity?.item?.slot;
     const raw = booking?.startDate
         || slot?.startDate
-        || booking?.bookedEntity?.item?.startDate
-        || booking?.bookedEntity?.slot?.startDate;
+        || booking?.bookedEntity?.item?.startDate;
     return parseWorkshopDate(raw);
+}
+
+/** Canonical workshop key (tufting/candles/…) — ignores CMS placeholders like "סדנה". */
+function resolveCanonicalWorkshopType(rawType, serviceId, booking) {
+    const trimmed = String(rawType || '').trim();
+    if (trimmed && WORKSHOP_TYPE_LABELS_HE[trimmed]) return trimmed;
+    const fromAlias = resolveWorkshopType(trimmed);
+    if (fromAlias && WORKSHOP_TYPE_LABELS_HE[fromAlias]) return fromAlias;
+    return serviceIdToWorkshopType(serviceId)
+        || serviceIdToWorkshopType(extractBookingServiceId(booking));
 }
 
 export function buildOrderViewUrl(order) {
@@ -141,8 +159,9 @@ async function fetchBookingsByIds(bookingIds) {
             filter: { _id: { $in: ids } },
         });
         const byId = new Map();
-        (response?.extendedBookings || []).forEach((b) => {
-            if (b?._id) byId.set(b._id, b);
+        (response?.extendedBookings || []).forEach((entry) => {
+            const booking = unwrapExtendedBooking(entry);
+            if (booking?._id) byId.set(booking._id, booking);
         });
         return byId;
     } catch (err) {
@@ -163,17 +182,15 @@ function mapCmsOrder(order, bookingsById) {
     const bookingIds = extractBookingIds(order);
     const bookings = bookingIds.map((id) => bookingsById.get(id)).filter(Boolean);
 
-    // No matching booking found at all for this order → treat as invalid/stale.
-    if (bookingIds.length && !bookings.length) return null;
-    // If we did find bookings, none of them may be cancelled.
+    // Drop only when we loaded bookings and every linked one is cancelled.
     if (bookings.length && bookings.every((b) => isCancelledBookingStatus(b.status))) return null;
 
     const primaryBooking = bookings[0] || null;
-    // order.workshopType is never actually written at checkout — the record only stores
-    // serviceId. Resolve via serviceId first, then fall back to the booking's service id.
-    const workshopType = order.workshopType
-        || serviceIdToWorkshopType(order.serviceId)
-        || serviceIdToWorkshopType(extractBookingServiceId(primaryBooking));
+    const workshopType = resolveCanonicalWorkshopType(
+        order.workshopType,
+        order.serviceId,
+        primaryBooking,
+    );
     const workshopStart = parseWorkshopDate(order.workshopStart) || extractBookingStartDate(primaryBooking);
 
     const mapped = {
@@ -273,6 +290,8 @@ async function findBookingOnlyOrders(phone) {
 
     const candidates = await loadBookingOnlyCandidates();
     return candidates
+        .map(unwrapExtendedBooking)
+        .filter(Boolean)
         .filter((b) => !isCancelledBookingStatus(b.status))
         .filter((b) => bookingMatchesPhone(b, phone))
         .map(mapBookingOnlyOrder);

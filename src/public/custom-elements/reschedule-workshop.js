@@ -192,29 +192,22 @@ class RescheduleWorkshop extends HTMLElement {
         this._remainingMs = null;
         this._timerHandle = null;
         this._bootstrapMessage = 'טוענים את עמוד שינוי המועד…';
-        this._paintBootstrap();
+        this._clickBound = false;
     }
 
-    _paintBootstrap(message) {
-        const text = message || this._bootstrapMessage || 'טוענים…';
-        this._bootstrapMessage = text;
+    _ensureStyles() {
         if (!document.getElementById('rw-critical-style')) {
-            const s = document.createElement('style');
-            s.id = 'rw-critical-style';
-            s.textContent = RW_CRITICAL_STYLE;
-            document.head.appendChild(s);
+            const critical = document.createElement('style');
+            critical.id = 'rw-critical-style';
+            critical.textContent = RW_CRITICAL_STYLE;
+            document.head.appendChild(critical);
         }
-        this.innerHTML = `
-            <div style="max-width:560px;margin:0 auto;padding:28px 16px 60px;">
-                <div style="text-align:center;margin-bottom:20px;">
-                    <h1 style="margin:0 0 4px;font-size:19px;color:#581E83;">עדכון מועד סדנה</h1>
-                    <div style="color:#6b7280;font-size:13.5px;">בחרו תאריך ושעה חדשים לסדנה</div>
-                </div>
-                <div style="text-align:center;padding:24px 12px;">
-                    <div style="width:34px;height:34px;border:3px solid #e5e7eb;border-top-color:#5E2F88;border-radius:50%;margin:0 auto;animation:rw-spin .8s linear infinite;"></div>
-                    <div style="color:#6b7280;font-size:14px;line-height:1.5;margin-top:12px;">${rwEsc(text)}</div>
-                </div>
-            </div>`;
+        if (!document.getElementById('rw-style')) {
+            const style = document.createElement('style');
+            style.id = 'rw-style';
+            style.textContent = RW_STYLE;
+            document.head.appendChild(style);
+        }
     }
 
     _renderBootstrapPanel(message) {
@@ -233,13 +226,11 @@ class RescheduleWorkshop extends HTMLElement {
     }
 
     connectedCallback() {
-        if (!document.getElementById('rw-style')) {
-            const style = document.createElement('style');
-            style.id = 'rw-style';
-            style.textContent = RW_STYLE;
-            document.head.appendChild(style);
-        }
+        this._ensureStyles();
         this.render();
+
+        if (this._clickBound) return;
+        this._clickBound = true;
 
         this.addEventListener('click', (e) => {
             if (this._expired || this._sending || this._submitResult?.ok) return;
@@ -328,7 +319,7 @@ class RescheduleWorkshop extends HTMLElement {
             console.error('[reschedule-workshop] bad JSON attribute:', err);
             return;
         }
-        this.render();
+        if (this.isConnected) this.render();
     }
 
     _startTimer(expiresAtIso) {

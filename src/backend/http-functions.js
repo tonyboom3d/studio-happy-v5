@@ -15,7 +15,7 @@ import { detectSuggestedAction, finalizeRoutedReply } from 'backend/aiRouting.js
 import { buildWorkshopPolicyReply, isGeneralWorkshopSelection } from 'backend/policyContent.js';
 import {
   WORKSHOP_SERVICE_IDS,
-  WORKSHOP_TYPE_LABELS_HE,
+  WORKSHOP_TYPE_LABELS_HE as WORKSHOP_TYPE_LABELS_MAP,
   resolveWorkshopType,
   expandCandlesServiceIds,
   isCandlesLimitedSlotAllowed,
@@ -912,7 +912,7 @@ export async function get_startReschedule(request) {
 
     const { token, expiresAt } = await issueRescheduleToken(orderId);
     const workshopTypeKey = await resolveCmsOrderWorkshopTypeKey(order);
-    const datesWorkshop = workshopTypeKey ? (WORKSHOP_TYPE_LABELS_HE[workshopTypeKey] || workshopTypeKey) : '';
+    const datesWorkshop = workshopTypeKey ? (WORKSHOP_TYPE_LABELS_MAP[workshopTypeKey] || workshopTypeKey) : '';
     let link = `${RESCHEDULE_PAGE_URL}?orderId=${encodeURIComponent(orderId)}&token=${encodeURIComponent(token)}&sid=${encodeURIComponent(subscriberId)}`;
     if (datesWorkshop) {
       link += `&datesWorkshop=${encodeURIComponent(datesWorkshop)}`;

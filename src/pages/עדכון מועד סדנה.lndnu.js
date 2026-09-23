@@ -38,17 +38,21 @@ $w.onReady(async function () {
         const { chosenDateIso } = event.detail || {};
         try {
             const result = await submitRescheduleRequest(orderId, token, chosenDateIso);
-            el.setAttribute('submit-result', JSON.stringify({ ok: true, ...result, __ts: Date.now() }));
+            el.setAttribute('submit-result', JSON.stringify({ ...result, __ts: Date.now() }));
         } catch (err) {
             const message = err?.message || String(err);
             console.error('[reschedule-workshop] submitRescheduleRequest failed:', message);
-            el.setAttribute('submit-result', JSON.stringify({ ok: false, message, __ts: Date.now() }));
+            el.setAttribute('submit-result', JSON.stringify({ ok: false, code: 'ERROR', message, __ts: Date.now() }));
         }
     });
 
     async function loadContext() {
         try {
             const context = await getRescheduleContext(orderId, token);
+            if (context?.error) {
+                el.setAttribute('context-data', JSON.stringify({ ...context, __ts: Date.now() }));
+                return;
+            }
             const workshopTypeForDates = context.workshopTypeForDates || datesWorkshopFromUrl || null;
             el.setAttribute('available-slots', JSON.stringify(context.slots || []));
             el.setAttribute('context-data', JSON.stringify({
@@ -61,8 +65,12 @@ $w.onReady(async function () {
         } catch (err) {
             const message = err?.message || String(err);
             console.error('[reschedule-workshop] getRescheduleContext failed:', message);
-            const code = message.split(':')[0]?.trim() || 'ERROR';
-            el.setAttribute('context-data', JSON.stringify({ error: true, code, message, __ts: Date.now() }));
+            el.setAttribute('context-data', JSON.stringify({
+                error: true,
+                code: 'ERROR',
+                message: 'לא הצלחנו לטעון את העמוד. נסו לרענן, או בקשו קישור חדש דרך הבוט בוואטסאפ.',
+                __ts: Date.now(),
+            }));
         }
     }
 

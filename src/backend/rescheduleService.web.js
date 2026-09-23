@@ -120,9 +120,28 @@ async function loadEligibleOrder(orderId, token) {
     return order;
 }
 
+/** webMethod must not throw for expected failures — Wix shows a generic error to the page. */
+function toClientError(err) {
+    const raw = err?.message || String(err);
+    const sep = raw.indexOf(':');
+    if (sep > 0) {
+        return {
+            error: true,
+            code: raw.slice(0, sep).trim(),
+            message: raw.slice(sep + 1).trim() || raw,
+        };
+    }
+    return { error: true, code: 'ERROR', message: raw };
+}
+
 /** Page/CE load — validates the link and returns everything needed to render the calendar. */
 export const getRescheduleContext = webMethod(Permissions.Anyone, async (orderId, token) => {
-    const order = await loadEligibleOrder(orderId, token);
+    let order;
+    try {
+        order = await loadEligibleOrder(orderId, token);
+    } catch (err) {
+        return toClientError(err);
+    }
     const workshopType = await resolveCmsOrderWorkshopTypeKey(order);
     let workshopTypeForDates = workshopType ? (WORKSHOP_TYPE_LABELS_HE[workshopType] || workshopType) : null;
     if (!workshopTypeForDates && order.rescheduleDatesWorkshopQuery) {
@@ -148,10 +167,17 @@ export const getRescheduleContext = webMethod(Permissions.Anyone, async (orderId
 });
 
 export const submitRescheduleRequest = webMethod(Permissions.Anyone, async (orderId, token, chosenDateIso) => {
-    const order = await loadEligibleOrder(orderId, token);
+    let order;
+    try {
+        order = await loadEligibleOrder(orderId, token);
+    } catch (err) {
+        return { ok: false, ...toClientError(err) };
+    }
 
     const chosenDate = new Date(chosenDateIso);
-    if (isNaN(chosenDate.getTime())) throw new Error('BAD_REQUEST: תאריך לא תקין.');
+    if (isNaN(chosenDate.getTime())) {
+        return { ok: false, error: true, code: 'BAD_REQUEST', message: 'תאריך לא תקין.' };
+    }
 
     await mergePatchWorkshopOrder(orderId, {
         pendingRescheduleDate: chosenDate,

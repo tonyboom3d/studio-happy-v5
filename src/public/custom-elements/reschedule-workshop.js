@@ -65,8 +65,8 @@ reschedule-workshop * { box-sizing: border-box; font-family: inherit; }
 `;
 
 const ERROR_MESSAGES = {
-    NOT_FOUND: 'הקישור לא תקין. אנא בקש/י קישור חדש דרך הוואטסאפ.',
-    EXPIRED: 'הקישור פג תוקף (תקף ל-10 דקות בלבד). אנא בקש/י קישור חדש דרך הוואטסאפ.',
+    NOT_FOUND: 'הקישור לא תקין או שכבר נוצל. לקבלת קישור חדש — חזרו לשיחה עם הבוט בוואטסאפ ובקשו שוב לשינוי מועד.',
+    EXPIRED: 'הקישור פג תוקף (תקף ל-10 דקות בלבד). לקבלת קישור חדש — חזרו לשיחה עם הבוט בוואטסאפ ובקשו שוב לשינוי מועד.',
     BLOCKED_48H: 'הסדנה שלך מתקיימת בעוד פחות מ-48 שעות, ולכן לא ניתן לדחות אותה באופן עצמאי. אנא פני/ה לשירות הלקוחות שלנו.',
     ALREADY_USED: 'כבר נעשה שינוי מועד חד-פעמי להזמנה הזו בעבר. אנא פני/ה לשירות הלקוחות שלנו.',
     ALREADY_PENDING: 'יש כבר בקשת שינוי מועד ממתינה לטיפול הצוות שלנו.',
@@ -505,7 +505,8 @@ class RescheduleWorkshop extends HTMLElement {
         }
 
         if (this._submitResult && this._submitResult.ok === false) {
-            this.innerHTML = `<div class="rw-wrap"><div class="rw-msg rw-bad">${rwEsc(this._submitResult.message || 'שליחת הבקשה נכשלה. נסו שוב.')}</div></div>`;
+            const submitMsg = ERROR_MESSAGES[this._submitResult.code] || this._submitResult.message || 'שליחת הבקשה נכשלה. נסו שוב.';
+            this.innerHTML = `<div class="rw-wrap"><div class="rw-msg rw-bad">${rwEsc(submitMsg)}</div></div>`;
             return;
         }
 

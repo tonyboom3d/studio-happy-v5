@@ -71,7 +71,10 @@ function parseWorkshopDate(raw) {
 function extractBookingServiceId(booking) {
     const slot = booking?.bookedEntity?.slot || booking?.bookedEntity?.item?.slot;
     return slot?.serviceId
-        || booking?.bookedEntity?.item?.schedule?.serviceId;
+        || booking?.bookedEntity?.item?.schedule?.serviceId
+        || booking?.bookedEntity?.serviceId
+        || booking?.bookedEntity?.item?.serviceId
+        || booking?.serviceId;
 }
 
 function extractBookingStartDate(booking) {
@@ -223,6 +226,17 @@ function mapCmsOrder(order, bookingsById) {
     return mapped;
 }
 
+/** Heuristic when CMS workshopType/serviceId are missing (e.g. partial CMS row). */
+function inferWorkshopTypeKeyFromOrderHints(order) {
+    if (!order) return null;
+    const wt = String(order.workshopType || '').trim();
+    if (wt === 'tufting' || wt === 'candles' || wt === 'ceramics') return wt;
+    if (Number(order.extraCandleCount) > 0) return 'candles';
+    if (Number(order.rugCount) > 0) return 'tufting';
+    if (Array.isArray(order.selectedProducts) && order.selectedProducts.length > 0) return 'ceramics';
+    return null;
+}
+
 /** Resolves tufting/candles/… for a WorkshopOrders row — CMS fields, then linked booking(s). */
 export async function resolveCmsOrderWorkshopTypeKey(order) {
     if (!order) return null;
@@ -230,15 +244,17 @@ export async function resolveCmsOrderWorkshopTypeKey(order) {
     if (key) return key;
 
     const bookingIds = extractBookingIds(order);
-    if (!bookingIds.length) return null;
-    const bookingsById = await fetchBookingsByIds(bookingIds);
-    for (const id of bookingIds) {
-        const booking = bookingsById.get(id);
-        if (!booking) continue;
-        const fromBooking = serviceIdToWorkshopType(extractBookingServiceId(booking));
-        if (fromBooking) return fromBooking;
+    if (bookingIds.length) {
+        const bookingsById = await fetchBookingsByIds(bookingIds);
+        for (const id of bookingIds) {
+            const booking = bookingsById.get(id);
+            if (!booking) continue;
+            const fromBooking = serviceIdToWorkshopType(extractBookingServiceId(booking));
+            if (fromBooking) return fromBooking;
+        }
     }
-    return null;
+
+    return inferWorkshopTypeKeyFromOrderHints(order);
 }
 
 async function findCmsOrders(phone) {

@@ -21,6 +21,7 @@
  *   pendingRescheduleRequestedAt  Date
  *   rescheduleToken           Text
  *   rescheduleTokenExpiresAt  Date
+ *   rescheduleDatesWorkshopQuery  Text  (optional — cached Hebrew label for availableDates)
  * ------------------------------------------------------------------
  */
 import { randomBytes } from 'crypto';
@@ -95,7 +96,10 @@ async function loadEligibleOrder(orderId, token) {
 export const getRescheduleContext = webMethod(Permissions.Anyone, async (orderId, token) => {
     const order = await loadEligibleOrder(orderId, token);
     const workshopType = await resolveCmsOrderWorkshopTypeKey(order);
-    const workshopTypeForDates = workshopType ? (WORKSHOP_TYPE_LABELS_HE[workshopType] || workshopType) : null;
+    let workshopTypeForDates = workshopType ? (WORKSHOP_TYPE_LABELS_HE[workshopType] || workshopType) : null;
+    if (!workshopTypeForDates && order.rescheduleDatesWorkshopQuery) {
+        workshopTypeForDates = String(order.rescheduleDatesWorkshopQuery).trim() || null;
+    }
     if (!workshopTypeForDates) {
         console.warn('[rescheduleService] getRescheduleContext: unresolved workshop type', {
             orderId: order._id,
@@ -167,15 +171,25 @@ export const cancelRescheduleRequest = webMethod(Permissions.SiteMember, async (
     return { ok: true };
 });
 
-/** Called by http-functions.js get_startReschedule to (re)issue the one-time link. */
-export async function issueRescheduleToken(orderId) {
+/**
+ * Called by http-functions.js get_startReschedule to (re)issue the one-time link.
+ * Must spread the full CMS row — a partial update object can wipe other fields.
+ */
+export async function issueRescheduleToken(orderId, { datesWorkshopQuery } = {}) {
+    const order = await wixData.get('WorkshopOrders', orderId, SA).catch(() => null);
+    if (!order) throw new Error('NOT_FOUND: ההזמנה לא נמצאה.');
+
     const token = randomBytes(24).toString('hex');
     const expiresAt = new Date(Date.now() + RESCHEDULE_TOKEN_TTL_MS);
-    await wixData.update('WorkshopOrders', {
-        _id: orderId,
+    const patch = {
+        ...order,
         rescheduleToken: token,
         rescheduleTokenExpiresAt: expiresAt,
-    }, SA);
+    };
+    if (datesWorkshopQuery) {
+        patch.rescheduleDatesWorkshopQuery = datesWorkshopQuery;
+    }
+    await wixData.update('WorkshopOrders', patch, SA);
     return { token, expiresAt };
 }
 

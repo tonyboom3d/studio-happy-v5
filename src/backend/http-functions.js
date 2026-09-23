@@ -17,6 +17,7 @@ import {
   WORKSHOP_SERVICE_IDS,
   WORKSHOP_TYPE_LABELS_HE as WORKSHOP_TYPE_LABELS_MAP,
   resolveWorkshopType,
+  resolveWorkshopTypeKey,
   expandCandlesServiceIds,
   isCandlesLimitedSlotAllowed,
   CANDLES_LIMITED_SERVICE_ID,
@@ -910,9 +911,26 @@ export async function get_startReschedule(request) {
       });
     }
 
-    const { token, expiresAt } = await issueRescheduleToken(orderId);
-    const workshopTypeKey = await resolveCmsOrderWorkshopTypeKey(order);
-    const datesWorkshop = workshopTypeKey ? (WORKSHOP_TYPE_LABELS_MAP[workshopTypeKey] || workshopTypeKey) : '';
+    let workshopTypeKey = await resolveCmsOrderWorkshopTypeKey(order);
+    const mcWorkshopType = String(request.query?.workshop_type || '').trim();
+    const mcWorkshopName = String(request.query?.workshop_name || '').trim();
+    if (!workshopTypeKey) {
+      workshopTypeKey = resolveWorkshopTypeKey(mcWorkshopType, null)
+        || resolveWorkshopTypeKey(mcWorkshopName, null)
+        || resolveWorkshopType(mcWorkshopType)
+        || resolveWorkshopType(mcWorkshopName);
+    }
+    let datesWorkshop = workshopTypeKey ? (WORKSHOP_TYPE_LABELS_MAP[workshopTypeKey] || workshopTypeKey) : '';
+    if (!datesWorkshop) {
+      const mcRaw = mcWorkshopType || mcWorkshopName;
+      if (mcRaw && Object.values(WORKSHOP_TYPE_LABELS_MAP).includes(mcRaw)) {
+        datesWorkshop = mcRaw;
+      }
+    }
+
+    const { token, expiresAt } = await issueRescheduleToken(orderId, {
+      datesWorkshopQuery: datesWorkshop || undefined,
+    });
     let link = `${RESCHEDULE_PAGE_URL}?orderId=${encodeURIComponent(orderId)}&token=${encodeURIComponent(token)}&sid=${encodeURIComponent(subscriberId)}`;
     if (datesWorkshop) {
       link += `&datesWorkshop=${encodeURIComponent(datesWorkshop)}`;

@@ -28,12 +28,23 @@ reschedule-workshop * { box-sizing: border-box; }
 .rw-timer { text-align: center; font-weight: 700; font-size: 14px; color: #b45309; background: #fffbeb; border: 1px solid #fde68a; border-radius: 10px; padding: 8px; margin-bottom: 16px; }
 .rw-timer.rw-timer-low { color: #b91c1c; background: #fef2f2; border-color: #fecaca; }
 .rw-current { background: #eef2ff; border: 1px solid #c7d2fe; border-radius: 12px; padding: 10px 14px; margin-bottom: 16px; font-size: 13.5px; }
-.rw-day { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 12px 14px; margin-bottom: 8px; cursor: pointer; }
-.rw-day.rw-selected { border-color: #4f46e5; box-shadow: 0 0 0 2px rgba(79,70,229,.15); }
-.rw-day.rw-locked { opacity: .55; cursor: default; background: #f9fafb; }
-.rw-day-label { font-weight: 700; font-size: 14.5px; display: flex; justify-content: space-between; align-items: center; }
-.rw-day-lock-badge { font-size: 12px; color: #6b7280; font-weight: 500; }
-.rw-times { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.rw-restriction-note { background: #fffbeb; border: 1px solid #fde68a; color: #92400e; border-radius: 10px; padding: 8px 12px; margin-bottom: 14px; font-size: 12.5px; text-align: center; }
+.rw-cal-card { background: #fff; border: 1px solid #e5e7eb; border-radius: 14px; padding: 12px; margin-bottom: 10px; }
+.rw-cal-month-title { text-align: center; font-weight: 700; font-size: 14px; color: #4f46e5; margin-bottom: 8px; }
+.rw-cal-weekdays { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin-bottom: 4px; }
+.rw-cal-wd { text-align: center; font-size: 11px; font-weight: 600; color: #6b7280; padding: 2px 0; }
+.rw-cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.rw-cal-cell { height: 40px; border-radius: 9px; border: 1px solid transparent; background: transparent; font-size: 13.5px; font-family: inherit; color: #d1d5db; padding: 0; }
+.rw-cal-empty { visibility: hidden; }
+.rw-cal-bookable { border-color: #c7d2fe; background: #eef2ff; color: #3730a3; font-weight: 700; cursor: pointer; }
+.rw-cal-bookable:hover { background: #e0e7ff; }
+.rw-cal-current { position: relative; }
+.rw-cal-current::after { content: ''; position: absolute; bottom: 4px; left: 50%; transform: translateX(-50%); width: 5px; height: 5px; border-radius: 50%; background: #f59e0b; }
+.rw-cal-selected { background: #4f46e5 !important; color: #fff !important; border-color: #4f46e5 !important; }
+.rw-cal-selected.rw-cal-current::after { background: #fff; }
+.rw-times-panel { margin-top: 12px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 12px; padding: 12px; }
+.rw-times-panel-title { font-size: 13px; font-weight: 700; color: #374151; margin-bottom: 8px; }
+.rw-times { display: flex; flex-wrap: wrap; gap: 8px; }
 .rw-time-chip { border: 1px solid #c7d2fe; background: #eef2ff; color: #3730a3; border-radius: 999px; padding: 6px 14px; font-size: 13.5px; cursor: pointer; font-family: inherit; }
 .rw-time-chip.rw-selected { background: #4f46e5; color: #fff; border-color: #4f46e5; }
 .rw-empty { text-align: center; color: #6b7280; font-size: 14.5px; padding: 30px 10px; }
@@ -117,6 +128,15 @@ function readUrlQueryParam(name) {
     }
 }
 
+const HE_WEEKDAY_LETTERS = ['א', 'ב', 'ג', 'ד', 'ה', 'ו', 'ש']; // Sun..Sat
+const HE_MONTH_NAMES = ['ינואר', 'פברואר', 'מרץ', 'אפריל', 'מאי', 'יוני', 'יולי', 'אוגוסט', 'ספטמבר', 'אוקטובר', 'נובמבר', 'דצמבר'];
+
+/** JS day-of-week (0=Sun..6=Sat) for a "dd/mm/yyyy" label — day itself is already the Israel calendar date. */
+function dayOfWeekFromLabel(dayLabel) {
+    const [d, m, y] = dayLabel.split('/').map(Number);
+    return new Date(y, m - 1, d).getDay();
+}
+
 /** Parses "23/09/2026: 10:00 | 14:00" lines from get_availableDates into { day, times[] }. */
 function parseDatesText(lines) {
     return (lines || []).map((line) => {
@@ -137,6 +157,7 @@ class RescheduleWorkshop extends HTMLElement {
         this._context = null;
         this._contextError = null;
         this._days = [];
+        this._originIsSaturday = false;
         this._loadingDates = false;
         this._datesLoadFailed = false;
         this._selectedDay = null;
@@ -161,7 +182,7 @@ class RescheduleWorkshop extends HTMLElement {
             if (this._expired || this._sending || this._submitResult?.ok) return;
 
             const dayBtn = e.target.closest('[data-day]');
-            if (dayBtn && !dayBtn.classList.contains('rw-locked')) {
+            if (dayBtn && !dayBtn.disabled) {
                 const day = dayBtn.dataset.day;
                 this._selectedDay = this._selectedDay === day ? null : day;
                 this._selectedTime = null;
@@ -281,6 +302,9 @@ class RescheduleWorkshop extends HTMLElement {
         }
 
         const currentDayKey = currentWorkshopStartIso ? ilDateKey(new Date(currentWorkshopStartIso)) : null;
+        // Reschedule day-type policy: a Saturday booking may move to ANY day of the week;
+        // a weekday (Sun-Thu) or Friday booking may only move within Sun-Thu (no upgrade to Fri/Sat).
+        this._originIsSaturday = currentDayKey ? dayOfWeekFromLabel(currentDayKey) === 6 : false;
         const byDay = new Map();
 
         // Backend re-scans availability from scratch on every page (cost grows with offset),
@@ -290,7 +314,12 @@ class RescheduleWorkshop extends HTMLElement {
         const applyDays = () => {
             this._days = [...byDay.entries()]
                 .map(([day, times]) => ({ day, times, isCurrent: day === currentDayKey }))
-                .filter((entry) => entry.times.length > 0)
+                .filter((entry) => {
+                    if (!entry.times.length) return false;
+                    if (this._originIsSaturday) return true;
+                    const dow = dayOfWeekFromLabel(entry.day);
+                    return dow >= 0 && dow <= 4; // Sun-Thu only
+                })
                 .sort((a, b) => {
                     const [ad, am, ay] = a.day.split('/').map(Number);
                     const [bd, bm, by] = b.day.split('/').map(Number);
@@ -339,18 +368,63 @@ class RescheduleWorkshop extends HTMLElement {
         return `<div class="rw-timer ${low ? 'rw-timer-low' : ''}">⏱️ הקישור בתוקף עוד ${mm}:${ss}</div>`;
     }
 
-    _renderDay(entry) {
-        const isSelected = this._selectedDay === entry.day;
+    /** Groups this._days into per-month buckets, keyed by { year, month, byDate: Map<dayNum, entry> }. */
+    _groupDaysByMonth() {
+        const map = new Map();
+        for (const entry of this._days) {
+            const [d, m, y] = entry.day.split('/').map(Number);
+            const key = `${y}-${m}`;
+            if (!map.has(key)) map.set(key, { year: y, month: m, byDate: new Map() });
+            map.get(key).byDate.set(d, entry);
+        }
+        return [...map.values()].sort((a, b) => (a.year - b.year) || (a.month - b.month));
+    }
+
+    _renderMonthCalendar({ year, month, byDate }) {
+        const firstOfMonth = new Date(year, month - 1, 1);
+        const startDow = firstOfMonth.getDay(); // 0=Sun
+        const daysInMonth = new Date(year, month, 0).getDate();
+
+        const cells = [];
+        for (let i = 0; i < startDow; i++) cells.push(null);
+        for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+        while (cells.length % 7 !== 0) cells.push(null);
+
+        const cellsHtml = cells.map((d) => {
+            if (d == null) return `<div class="rw-cal-cell rw-cal-empty"></div>`;
+            const label = `${String(d).padStart(2, '0')}/${String(month).padStart(2, '0')}/${year}`;
+            const entry = byDate.get(d);
+            const isSelected = this._selectedDay === label;
+            const classes = ['rw-cal-cell'];
+            if (entry) classes.push('rw-cal-bookable');
+            if (entry?.isCurrent) classes.push('rw-cal-current');
+            if (isSelected) classes.push('rw-cal-selected');
+            const attrs = entry ? `data-day="${rwEsc(label)}"` : 'disabled';
+            return `<button type="button" class="${classes.join(' ')}" ${attrs}>${d}</button>`;
+        }).join('');
+
         return `
-            <div class="rw-day ${isSelected ? 'rw-selected' : ''}" data-day="${rwEsc(entry.day)}">
-                <div class="rw-day-label">
-                    <span>${rwEsc(entry.day)}${entry.isCurrent ? ' (היום — ניתן לבחור שעה אחרת)' : ''}</span>
-                </div>
-                ${isSelected && entry.times.length ? `
-                    <div class="rw-times">
-                        ${entry.times.map((t) => `<button type="button" class="rw-time-chip ${this._selectedTime === t ? 'rw-selected' : ''}" data-time="${rwEsc(t)}">${rwEsc(t)}</button>`).join('')}
-                    </div>` : ''}
+            <div class="rw-cal-card">
+                <div class="rw-cal-month-title">${HE_MONTH_NAMES[month - 1]} ${year}</div>
+                <div class="rw-cal-weekdays">${HE_WEEKDAY_LETTERS.map((l) => `<div class="rw-cal-wd">${l}</div>`).join('')}</div>
+                <div class="rw-cal-grid">${cellsHtml}</div>
             </div>`;
+    }
+
+    _renderCalendar() {
+        const months = this._groupDaysByMonth();
+        const calendarHtml = months.map((m) => this._renderMonthCalendar(m)).join('');
+
+        const selectedEntry = this._days.find((d) => d.day === this._selectedDay);
+        const timesPanel = selectedEntry ? `
+            <div class="rw-times-panel">
+                <div class="rw-times-panel-title">בחרי שעה ל-${rwEsc(selectedEntry.day)}:</div>
+                <div class="rw-times">
+                    ${selectedEntry.times.map((t) => `<button type="button" class="rw-time-chip ${this._selectedTime === t ? 'rw-selected' : ''}" data-time="${rwEsc(t)}">${rwEsc(t)}</button>`).join('')}
+                </div>
+            </div>` : '';
+
+        return calendarHtml + timesPanel;
     }
 
     render() {
@@ -388,14 +462,17 @@ class RescheduleWorkshop extends HTMLElement {
             : null;
 
         let daysBody;
-        if (this._loadingDates) {
+        if (this._loadingDates && !this._days.length) {
             daysBody = `<div class="rw-spinner"></div><div class="rw-sub" style="text-align:center;">טוען תאריכים פנויים…</div>`;
         } else if (this._datesLoadFailed) {
             daysBody = `<div class="rw-empty">לא הצלחנו לטעון תאריכים פנויים כרגע. נסו לרענן את הדף.</div>`;
         } else if (!this._days.length) {
             daysBody = `<div class="rw-empty">לא נמצאו תאריכים פנויים לבחירה כרגע. נסו לרענן את הדף, או פנו לשירות הלקוחות.</div>`;
         } else {
-            daysBody = `<p class="rw-sub" style="margin:0 0 10px;">בחרי תאריך מהרשימה ולאחר מכן שעה:</p>${this._days.map((d) => this._renderDay(d)).join('')}`;
+            const restrictionNote = this._originIsSaturday
+                ? '📅 ניתן לבחור כל יום בשבוע למועד החדש.'
+                : '📅 ניתן לבחור מועד חדש בין ימי א׳-ה׳ בלבד (בהתאם למועד המקורי).';
+            daysBody = `<div class="rw-restriction-note">${restrictionNote}</div>${this._renderCalendar()}`;
         }
 
         const canSubmit = !!(this._selectedDay && this._selectedTime) && !this._sending;

@@ -59,6 +59,16 @@ function rwEsc(str) {
 }
 
 const IL_TZ = 'Asia/Jerusalem';
+const AVAILABLE_DATES_URL = 'https://www.studiohappy.art/_functions/availableDates';
+
+/** Fallback when context lacks workshopTypeForDates (older cached responses). */
+const WORKSHOP_KEY_TO_DATES_QUERY = {
+    tufting: 'טאפטינג',
+    candles: 'נרות',
+    ceramics: 'קרמיקה',
+    charms: "צ'ארמס",
+    jewelry: 'תכשיטים',
+};
 
 function ilDateKey(date) {
     const parts = new Intl.DateTimeFormat('en-GB', {
@@ -174,7 +184,7 @@ class RescheduleWorkshop extends HTMLElement {
                     this._context = data;
                     this._contextError = null;
                     this._startTimer(data.expiresAt);
-                    this._loadDates(data.workshopType, data.currentWorkshopStart);
+                    this._loadDates(data, data.currentWorkshopStart);
                 }
             }
             if (name === 'submit-result') {
@@ -204,10 +214,28 @@ class RescheduleWorkshop extends HTMLElement {
         this._timerHandle = setInterval(tick, 1000);
     }
 
-    async _loadDates(workshopType, currentWorkshopStartIso) {
+    _resolveDatesQuery(context) {
+        if (!context || typeof context === 'string') {
+            return WORKSHOP_KEY_TO_DATES_QUERY[context] || context || '';
+        }
+        if (context.workshopTypeForDates) return context.workshopTypeForDates;
+        const key = context.workshopType;
+        return WORKSHOP_KEY_TO_DATES_QUERY[key] || key || '';
+    }
+
+    async _loadDates(context, currentWorkshopStartIso) {
         this._loadingDates = true;
         this._datesLoadFailed = false;
         this.render();
+
+        const datesQuery = this._resolveDatesQuery(context);
+        if (!datesQuery) {
+            console.error('[reschedule-workshop] missing workshopTypeForDates');
+            this._loadingDates = false;
+            this._datesLoadFailed = true;
+            this.render();
+            return;
+        }
 
         const currentDayKey = currentWorkshopStartIso ? ilDateKey(new Date(currentWorkshopStartIso)) : null;
         const byDay = new Map();
@@ -217,7 +245,7 @@ class RescheduleWorkshop extends HTMLElement {
             let hasMore = true;
             let pagesLoaded = 0;
             while (hasMore && pagesLoaded < 6) {
-                const res = await fetch(`/_functions/availableDates?workshopType=${encodeURIComponent(workshopType || '')}&offset=${offset}`);
+                const res = await fetch(`${AVAILABLE_DATES_URL}?workshopType=${encodeURIComponent(datesQuery)}&offset=${offset}`);
                 if (!res.ok) throw new Error(`HTTP ${res.status}`);
                 const json = await res.json();
                 for (const parsed of parseDatesText(json.dates)) {
@@ -289,7 +317,7 @@ class RescheduleWorkshop extends HTMLElement {
         }
 
         if (this._submitResult && this._submitResult.ok === false) {
-            this.innerHTML = `<div class="rw-wrap"><div class="rw-msg rw-bad">${rwEsc(this._submitResult.message || 'שליחת הבקשה נכשלה. נסי שוב.')}</div></div>`;
+            this.innerHTML = `<div class="rw-wrap"><div class="rw-msg rw-bad">${rwEsc(this._submitResult.message || 'שליחת הבקשה נכשלה. נסו שוב.')}</div></div>`;
             return;
         }
 
@@ -311,7 +339,7 @@ class RescheduleWorkshop extends HTMLElement {
         if (this._loadingDates) {
             daysBody = `<div class="rw-spinner"></div><div class="rw-sub" style="text-align:center;">טוען תאריכים פנויים…</div>`;
         } else if (this._datesLoadFailed) {
-            daysBody = `<div class="rw-empty">לא הצלחנו לטעון תאריכים פנויים כרגע. נסי לרענן את הדף.</div>`;
+            daysBody = `<div class="rw-empty">לא הצלחנו לטעון תאריכים פנויים כרגע. נסו לרענן את הדף.</div>`;
         } else if (!this._days.length) {
             daysBody = `<div class="rw-empty">לא נמצאו תאריכים פנויים כרגע.</div>`;
         } else {

@@ -114,6 +114,22 @@ export function resolveWorkshopType(raw) {
   return WORKSHOP_TYPE_ALIASES[trimmed] || WORKSHOP_TYPE_ALIASES[trimmed.toLowerCase()] || null;
 }
 
+/** Canonical key (tufting, candles, …) — prefers serviceId over CMS text like "סדנה". */
+export function resolveWorkshopTypeKey(rawType, serviceId) {
+  const fromService = serviceId ? serviceIdToWorkshopType(serviceId) : null;
+  if (fromService) return fromService;
+  const trimmed = String(rawType || '').trim();
+  if (!trimmed || trimmed === 'סדנה') return null;
+  return resolveWorkshopType(trimmed);
+}
+
+/** Query value for GET /_functions/availableDates (Hebrew label, same as ManyChat). */
+export function toAvailableDatesWorkshopQuery(rawType, serviceId) {
+  const key = resolveWorkshopTypeKey(rawType, serviceId);
+  if (!key) return null;
+  return WORKSHOP_TYPE_LABELS_HE[key] || key;
+}
+
 export function serviceIdToWorkshopType(serviceId) {
   if (ALL_CANDLES_SERVICE_IDS.includes(serviceId)) return 'candles';
   for (const [type, ids] of Object.entries(WORKSHOP_SERVICE_IDS)) {

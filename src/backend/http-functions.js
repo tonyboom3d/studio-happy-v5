@@ -862,7 +862,7 @@ export async function get_verifyOrderLookupOtp(request) {
 // Header: X-API-KEY (manychat_webhook_apiKey)
 // ============================================================
 
-const RESCHEDULE_PAGE_URL = 'https://www.studiohappy.art/עדכון-מועד-סדנה';
+const RESCHEDULE_PAGE_URL = 'https://www.studiohappy.art/change-date';
 
 export async function get_startReschedule(request) {
   try {

@@ -19,6 +19,7 @@
  */
 
 const RW_STYLE = `
+@import url('https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;600;700;800&display=swap');
 reschedule-workshop { display: block; direction: rtl; font-family: 'Rubik', 'Heebo', 'Segoe UI', Arial, sans-serif; background: #f4f4f6; min-height: 100vh; color: #1f2937; }
 reschedule-workshop * { box-sizing: border-box; font-family: inherit; }
 .rw-wrap { max-width: 560px; margin: 0 auto; padding: 28px 16px 60px; }

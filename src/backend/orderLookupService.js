@@ -100,7 +100,8 @@ export function buildOrderViewUrl(order) {
 }
 
 function isCancelledBookingStatus(status) {
-    return status === 'CANCELED' || status === 'CANCELLED' || status === 'DECLINED';
+    const s = String(status || '').toUpperCase();
+    return s === 'CANCELED' || s === 'CANCELLED' || s === 'DECLINED';
 }
 
 // ------------------------------------------------------------------
@@ -182,8 +183,11 @@ function mapCmsOrder(order, bookingsById) {
     const bookingIds = extractBookingIds(order);
     const bookings = bookingIds.map((id) => bookingsById.get(id)).filter(Boolean);
 
-    // Drop only when we loaded bookings and every linked one is cancelled.
-    if (bookings.length && bookings.every((b) => isCancelledBookingStatus(b.status))) return null;
+    // Paid WorkshopOrders are the source of truth for ManyChat lookup — do not
+    // hide them when Wix Bookings marks a linked row cancelled (sync lag / edge cases).
+    const allLinkedCancelled = bookings.length > 0
+        && bookings.every((b) => isCancelledBookingStatus(b.status));
+    if (allLinkedCancelled && order.status !== 'paid') return null;
 
     const primaryBooking = bookings[0] || null;
     const workshopType = resolveCanonicalWorkshopType(

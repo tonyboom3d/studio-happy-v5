@@ -824,14 +824,14 @@ export async function get_confirmReschedule(request) {
       headers: { 'Content-Type': 'application/json' },
       body: {
         status: 'ok',
-        reschedule_confirmed: rescheduleConfirmed,
+        ai_reply: rescheduleConfirmed ? 'ok' : 'false',
       },
     });
   } catch (err) {
     console.error('[http-functions] get_confirmReschedule failed:', err?.message || err);
     return ok({
       headers: { 'Content-Type': 'application/json' },
-      body: { status: 'ok', reschedule_confirmed: false },
+      body: { status: 'ok', ai_reply: 'false' },
     });
   }
 }

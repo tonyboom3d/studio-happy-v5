@@ -47,8 +47,6 @@ export const MC_FIELDS = {
     // Reschedule-workshop flow (see rescheduleService.web.js / http-functions.js)
     rescheduleLink: 'reschedule_link',
     rescheduleChosenDateLabel: 'reschedule_chosen_date_label',
-    /** Boolean — mapped from confirmReschedule External Request (reschedule_confirmed). */
-    rescheduleConfirmed: 'reschedule_confirmed',
 };
 
 // Custom field created manually in ManyChat (Settings > Custom Fields, type "Text")

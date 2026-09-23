@@ -283,11 +283,26 @@ class RescheduleWorkshop extends HTMLElement {
         const currentDayKey = currentWorkshopStartIso ? ilDateKey(new Date(currentWorkshopStartIso)) : null;
         const byDay = new Map();
 
+        // Backend re-scans availability from scratch on every page (cost grows with offset),
+        // so cap pages tightly and render after EACH page — first page (~2-4s) already gives
+        // the customer plenty of choice instead of blocking on a slow multi-page fetch chain.
+        const MAX_PAGES = 3;
+        const applyDays = () => {
+            this._days = [...byDay.entries()]
+                .map(([day, times]) => ({ day, times, isCurrent: day === currentDayKey }))
+                .filter((entry) => entry.times.length > 0)
+                .sort((a, b) => {
+                    const [ad, am, ay] = a.day.split('/').map(Number);
+                    const [bd, bm, by] = b.day.split('/').map(Number);
+                    return new Date(ay, am - 1, ad) - new Date(by, bm - 1, bd);
+                });
+        };
+
         try {
             let offset = 0;
             let hasMore = true;
             let pagesLoaded = 0;
-            while (hasMore && pagesLoaded < 12) {
+            while (hasMore && pagesLoaded < MAX_PAGES) {
                 const json = await this._fetchAvailableDatesPage(datesQuery, offset);
                 const lines = extractDatesLines(json);
                 for (const parsed of parseDatesText(lines)) {
@@ -296,25 +311,21 @@ class RescheduleWorkshop extends HTMLElement {
                 hasMore = !!json.hasMore;
                 offset = json.nextOffset ?? offset + 10;
                 pagesLoaded += 1;
+
+                // Render as soon as the first page lands so the customer isn't stuck on a spinner.
+                applyDays();
+                this._loadingDates = false;
+                this.render();
             }
             if (!byDay.size) {
                 console.warn('[reschedule-workshop] availableDates returned no bookable days. query:', datesQuery);
             }
         } catch (err) {
             console.error('[reschedule-workshop] _loadDates failed:', err?.message || err);
-            this._datesLoadFailed = true;
+            if (!byDay.size) this._datesLoadFailed = true; // keep already-rendered days on later-page failures
         }
 
-        // Selectable rows only — current workshop date is shown in the blue banner above.
-        this._days = [...byDay.entries()]
-            .map(([day, times]) => ({ day, times, isCurrent: day === currentDayKey }))
-            .filter((entry) => entry.times.length > 0)
-            .sort((a, b) => {
-                const [ad, am, ay] = a.day.split('/').map(Number);
-                const [bd, bm, by] = b.day.split('/').map(Number);
-                return new Date(ay, am - 1, ad) - new Date(by, bm - 1, bd);
-            });
-
+        applyDays();
         this._loadingDates = false;
         this.render();
     }

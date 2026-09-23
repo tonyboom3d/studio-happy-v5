@@ -1,7 +1,15 @@
 /**
- * Safe WorkshopOrders CMS updates — reschedule + actionLog paths must never
- * replace a full row with a partial object (wixData.update return values are
- * not guaranteed to include every field).
+ * Safe WorkshopOrders CMS updates.
+ *
+ * CRITICAL: wixData.update() FULLY REPLACES the row — per Wix's own SDK docs,
+ * "If the existing item had properties with values and those properties were
+ * not included in the specified item, the values in those properties are
+ * lost." Sending `{ _id, ...fields }` with just a couple of fields WIPES
+ * every other column (organizerName, organizerPhone, workshopType, status,
+ * paidTotal, bookingIds, ...) down to just `_id` + those fields.
+ *
+ * Every write in this file therefore does a full read → merge → write, never
+ * a bare partial payload.
  */
 import wixData from 'wix-data';
 import { getItemWithRetry } from 'backend/wixDataRetry.js';
@@ -19,13 +27,12 @@ const GUARDED_FIELDS = [
 ];
 
 /**
- * Updates only the listed top-level fields on an existing row (_id required).
- * Use for rescheduleToken / expiresAt — never load-spread-write the whole item.
+ * Back-compat wrapper — same signature as before, but now safely merges onto
+ * the full current row instead of sending a bare partial payload to
+ * wixData.update() (which would wipe every other field on the row).
  */
 export async function patchWorkshopOrderFields(orderId, fields, callerLabel = 'patchWorkshopOrderFields') {
-    if (!orderId) throw new Error('BAD_REQUEST: missing orderId');
-    const payload = { _id: orderId, ...fields };
-    return wixData.update('WorkshopOrders', payload, SA);
+    return mergePatchWorkshopOrder(orderId, fields, callerLabel);
 }
 
 /**

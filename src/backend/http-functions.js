@@ -24,7 +24,6 @@ import {
   formatOrderMessage,
   filterActiveOrders,
   selectActiveOrder,
-  pickPrimaryOrder,
   NO_ACTIVE_ORDER_MESSAGE,
   ORDER_NOT_FOUND_MESSAGE,
   NO_MORE_ORDERS_MESSAGE,
@@ -534,26 +533,22 @@ export async function get_identifyOrder(request) {
     });
 
     const activeOrders = filterActiveOrders(allOrders);
-    const hadExpiredOnly = allOrders.length > 0 && activeOrders.length === 0;
-    const expiredPrimary = hadExpiredOnly ? pickPrimaryOrder(allOrders) : null;
+    const hadUnavailableOnly = allOrders.length > 0 && activeOrders.length === 0;
+    const orderLookupUnavailable = hadUnavailableOnly && !isNextOrderRequest;
     const selection = selectActiveOrder(activeOrders, excludeOrderId);
     const { primary, hasMore } = selection;
-    const found = !!primary || (!!expiredPrimary && hadExpiredOnly && !isNextOrderRequest);
+    const found = !!primary;
 
     let text;
-    if (hadExpiredOnly && !isNextOrderRequest && expiredPrimary) {
-      text = `${formatOrderMessage(expiredPrimary)}\n\n⚠️ הסדנה כבר התקיימה (עברו יותר מ-2 ימים ממועד הסדנה).`;
-    } else if (hadExpiredOnly && !isNextOrderRequest) {
+    if (orderLookupUnavailable) {
       text = NO_ACTIVE_ORDER_MESSAGE;
     } else if (isNextOrderRequest && !found) {
       text = activeOrders.length > 0 ? NO_MORE_ORDERS_MESSAGE : ORDER_NOT_FOUND_MESSAGE;
-    } else if (found && primary) {
+    } else if (found) {
       text = formatOrderMessage(primary);
     } else {
       text = ORDER_NOT_FOUND_MESSAGE;
     }
-
-    const orderForSync = primary || expiredPrimary || null;
 
     let lookupAttempts = 0;
     let lookupHandoff = false;
@@ -575,9 +570,10 @@ export async function get_identifyOrder(request) {
       await syncOrderLookupFields(subscriberId, {
         status: found ? 'found' : 'not_found',
         hasMore,
-        orderId: orderForSync?.id || '',
-        source: orderForSync?.source || '',
-        orderUrl: orderForSync?.orderUrl || '',
+        unavailable: orderLookupUnavailable ? true : false,
+        orderId: found ? (primary?.id || '') : '',
+        source: found ? (primary?.source || '') : '',
+        orderUrl: found ? (primary?.orderUrl || '') : '',
         attempts: lookupAttempts,
       }).catch(() => {});
     } else {
@@ -591,10 +587,10 @@ export async function get_identifyOrder(request) {
         found,
         has_more: hasMore,
         is_next_order: isNextOrderRequest,
-        order_id: orderForSync?.id || null,
-        order_source: orderForSync?.source || null,
-        order_url: orderForSync?.orderUrl || null,
-        order_expired: hadExpiredOnly && !!expiredPrimary,
+        order_id: found ? (primary?.id || null) : null,
+        order_source: found ? (primary?.source || null) : null,
+        order_url: found ? (primary?.orderUrl || null) : null,
+        order_lookup_unavailable: orderLookupUnavailable,
         lookup_attempts: lookupAttempts,
         lookup_handoff: lookupHandoff,
         ai_reply: text,
@@ -690,6 +686,7 @@ export async function get_sendOrderLookupOtp(request) {
       await syncOrderLookupFields(subscriberId, {
         status: result.success ? 'pending_otp' : 'not_found',
         hasMore: result.has_more || false,
+        unavailable: result.order_lookup_unavailable || false,
         orderId: result.order_id || '',
         source: result.order_source || '',
         attempts: lookupAttempts,
@@ -707,6 +704,7 @@ export async function get_sendOrderLookupOtp(request) {
         order_id: result.order_id || null,
         order_source: result.order_source || null,
         has_more: result.has_more || false,
+        order_lookup_unavailable: result.order_lookup_unavailable || false,
         lookup_attempts: lookupAttempts,
         lookup_handoff: lookupHandoff,
         ai_reply: text,
@@ -752,6 +750,7 @@ export async function get_verifyOrderLookupOtp(request) {
       await syncOrderLookupFields(subscriberId, {
         status: result.valid ? 'found' : 'not_found',
         hasMore: result.has_more || false,
+        unavailable: result.order_lookup_unavailable || false,
         orderId: result.order_id || '',
         source: result.order_source || '',
         orderUrl: result.order_url || '',
@@ -774,6 +773,7 @@ export async function get_verifyOrderLookupOtp(request) {
         order_id: result.order_id || null,
         order_source: result.order_source || null,
         order_url: result.order_url || null,
+        order_lookup_unavailable: result.order_lookup_unavailable || false,
         attempts_remaining: result.attempts_remaining ?? null,
         lookup_attempts: lookupAttempts,
         lookup_handoff: lookupHandoff,

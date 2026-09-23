@@ -50,9 +50,9 @@ async function clearOtpRows(orderId, phoneNorm) {
 async function resolveActivePrimaryOrder(phone) {
     const allOrders = await findOrdersByPhone(phone);
     const activeOrders = filterActiveOrders(allOrders);
-    const hadExpiredOnly = allOrders.length > 0 && activeOrders.length === 0;
+    const hadUnavailableOnly = allOrders.length > 0 && activeOrders.length === 0;
     const selection = selectActiveOrder(activeOrders, '');
-    return { allOrders, activeOrders, hadExpiredOnly, ...selection };
+    return { allOrders, activeOrders, hadUnavailableOnly, ...selection };
 }
 
 /**
@@ -69,9 +69,15 @@ export async function sendOrderLookupOtp(phone) {
         };
     }
 
-    const { primary, hadExpiredOnly, activeOrders } = await resolveActivePrimaryOrder(phone);
-    if (hadExpiredOnly) {
-        return { success: false, reason: 'no_active_order', incrementAttempts: true, ai_reply: NO_ACTIVE_ORDER_MESSAGE };
+    const { primary, hadUnavailableOnly, activeOrders } = await resolveActivePrimaryOrder(phone);
+    if (hadUnavailableOnly) {
+        return {
+            success: false,
+            reason: 'no_active_order',
+            incrementAttempts: true,
+            order_lookup_unavailable: true,
+            ai_reply: NO_ACTIVE_ORDER_MESSAGE,
+        };
     }
     if (!primary) {
         return {
@@ -180,14 +186,15 @@ export async function verifyOrderLookupOtp(phone, code) {
 
     await wixData.remove('AdminOtpCodes', entry._id, SA);
 
-    const { activeOrders, hadExpiredOnly } = await resolveActivePrimaryOrder(phone);
+    const { activeOrders, hadUnavailableOnly } = await resolveActivePrimaryOrder(phone);
     const order = activeOrders.find((o) => o.id === entry.orderId);
     if (!order) {
         return {
             valid: false,
-            reason: hadExpiredOnly ? 'no_active_order' : 'order_not_found',
+            reason: hadUnavailableOnly ? 'no_active_order' : 'order_not_found',
             incrementAttempts: true,
-            ai_reply: hadExpiredOnly ? NO_ACTIVE_ORDER_MESSAGE : ORDER_NOT_FOUND_MESSAGE,
+            order_lookup_unavailable: !!hadUnavailableOnly,
+            ai_reply: hadUnavailableOnly ? NO_ACTIVE_ORDER_MESSAGE : ORDER_NOT_FOUND_MESSAGE,
         };
     }
 
@@ -202,6 +209,7 @@ export async function verifyOrderLookupOtp(phone, code) {
         order_id: order.id,
         order_source: order.source,
         order_url: order.orderUrl || '',
+        order_lookup_unavailable: false,
         ai_reply: formatOrderMessage(order),
         incrementAttempts: false,
     };

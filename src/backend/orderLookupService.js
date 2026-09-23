@@ -210,6 +210,8 @@ function mapCmsOrder(order, bookingsById) {
         amount: order.paidTotal ?? order.basePrice ?? null,
         status: 'confirmed',
         bookingIds,
+        cancelledAt: order.cancelledAt ? parseWorkshopDate(order.cancelledAt) : null,
+        bookingsCancelled: allLinkedCancelled,
     };
     mapped.orderUrl = buildOrderViewUrl(mapped);
     return mapped;
@@ -333,8 +335,21 @@ export function isActiveOrder(order, nowMs = Date.now()) {
     return order.workshopStart.getTime() >= nowMs - ACTIVE_ORDER_GRACE_MS;
 }
 
+export function isCancelledOrder(order) {
+    if (!order) return false;
+    if (order.cancelledAt) return true;
+    if (order.bookingsCancelled) return true;
+    return false;
+}
+
+/** Expired (past grace window) or cancelled — not shown as a valid lookup result. */
+export function isUnavailableOrder(order, nowMs = Date.now()) {
+    if (isCancelledOrder(order)) return true;
+    return !isActiveOrder(order, nowMs);
+}
+
 export function filterActiveOrders(orders, nowMs = Date.now()) {
-    return (orders || []).filter((order) => isActiveOrder(order, nowMs));
+    return (orders || []).filter((order) => !isUnavailableOrder(order, nowMs));
 }
 
 export const NO_ACTIVE_ORDER_MESSAGE = 'לא מצאנו הזמנה פעילה — הסדנה שלך כבר התקיימה לפני יותר מ-2 ימים ❌';

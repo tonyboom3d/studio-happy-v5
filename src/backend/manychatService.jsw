@@ -575,11 +575,13 @@ export async function syncAiResponseFields(subscriberId, payload = {}) {
 // --- Existing-order identification (process 1) — sync lookup result fields ---
 // Custom fields created manually in ManyChat (Settings > Custom Fields):
 // order_lookup_status (Text), order_lookup_has_more (Boolean),
-// order_lookup_order_id (Text), order_lookup_source (Text),
-// order_lookup_attempts (Number), order_lookup_verified_at (Text/Date).
+// order_lookup_unavailable (Boolean), order_lookup_order_id (Text),
+// order_lookup_source (Text), order_lookup_attempts (Number),
+// order_lookup_verified_at (Text/Date).
 export const ORDER_LOOKUP_MC_FIELDS = {
     status: 'order_lookup_status',    // 'found' | 'not_found'
     hasMore: 'order_lookup_has_more', // boolean — more than one matching order
+    unavailable: 'order_lookup_unavailable', // boolean — expired or cancelled match
     orderId: 'order_lookup_order_id', // WorkshopOrders _id or Wix Booking _id — used by later flow steps
     source: 'order_lookup_source',    // 'cms' | 'booking'
     attempts: 'order_lookup_attempts', // number — failed lookups / failed OTP sends
@@ -638,10 +640,13 @@ export async function incrementOrderLookupAttempts(subscriberId, passedAttempts)
  * reference the identified order. Never throws — the HTTP response body is
  * still usable even if this fails.
  */
-export async function syncOrderLookupFields(subscriberId, { status, hasMore, orderId, source, orderUrl, attempts, verifiedAt } = {}) {
+export async function syncOrderLookupFields(subscriberId, { status, hasMore, unavailable, orderId, source, orderUrl, attempts, verifiedAt } = {}) {
     if (!subscriberId) return { synced: false, reason: 'no-subscriberId' };
     try {
-        await setBooleanCustomField(subscriberId, ORDER_LOOKUP_MC_FIELDS.hasMore, hasMore);
+        await setBooleanCustomField(subscriberId, ORDER_LOOKUP_MC_FIELDS.hasMore, !!hasMore);
+        if (unavailable != null) {
+            await setBooleanCustomField(subscriberId, ORDER_LOOKUP_MC_FIELDS.unavailable, !!unavailable);
+        }
         const textFields = [
             { name: ORDER_LOOKUP_MC_FIELDS.status, value: status || 'not_found' },
             { name: ORDER_LOOKUP_MC_FIELDS.orderId, value: orderId || '' },
@@ -656,8 +661,8 @@ export async function syncOrderLookupFields(subscriberId, { status, hasMore, ord
             await setNumberCustomField(subscriberId, ORDER_LOOKUP_MC_FIELDS.attempts, attempts);
         }
         console.log('[ManyChat] ✅ syncOrderLookupFields. subscriberId:', subscriberId,
-            'status:', status, 'hasMore:', !!hasMore, 'orderId:', orderId || '(none)',
-            'attempts:', attempts ?? '(unchanged)');
+            'status:', status, 'hasMore:', !!hasMore, 'unavailable:', unavailable ?? '(unchanged)',
+            'orderId:', orderId || '(none)', 'attempts:', attempts ?? '(unchanged)');
         return { synced: true };
     } catch (err) {
         console.warn('[ManyChat] syncOrderLookupFields failed. subscriberId:', subscriberId, err?.message || err);

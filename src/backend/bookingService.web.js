@@ -2096,9 +2096,10 @@ const AVAILABILITY_CHUNK_CONCURRENCY = 3;
 
 async function fetchAvailabilityChunk(serviceIds, startDate, endDate) {
     const options = { slotsPerDay: 50 };
+    const elevatedQueryAvailability = auth.elevate(availabilityCalendar.queryAvailability);
     const results = await Promise.all(serviceIds.map(async (serviceId) => {
         try {
-            const availability = await availabilityCalendar.queryAvailability({
+            const availability = await elevatedQueryAvailability({
                 filter: {
                     serviceId,
                     startDate: startDate.toISOString(),
@@ -2114,7 +2115,8 @@ async function fetchAvailabilityChunk(serviceIds, startDate, endDate) {
     return results.flat();
 }
 
-export const getCourseSessions = webMethod(Permissions.Anyone, async (dateRangeStart, dateRangeEnd, serviceIds) => {
+/** Shared slot fetch (Candels/Tufting iframe + ManyChat availableDates). */
+export async function fetchCourseSessionsInternal(dateRangeStart, dateRangeEnd, serviceIds) {
     try {
         const startDate = new Date(dateRangeStart);
         const endDate = new Date(dateRangeEnd);
@@ -2182,7 +2184,9 @@ export const getCourseSessions = webMethod(Permissions.Anyone, async (dateRangeS
         console.error("Error fetching class availability:", error);
         return [];
     }
-});
+}
+
+export const getCourseSessions = webMethod(Permissions.Anyone, fetchCourseSessionsInternal);
 
 /**
  * שליפת מחירי כרטיסים (יחיד / הורה+ילד) מ-Wix Bookings Variants API.

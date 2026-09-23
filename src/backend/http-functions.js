@@ -324,7 +324,7 @@ async function handleAiTurn({ subscriberId, userMessage, workshopName, action = 
     finalReply = finalizeRoutedReply(routingAction, finalReply);
 
     if (needsHandoff) {
-      console.log('[http-functions] Handoff triggered. subscriberId:', subscriberId, 'reason:', reason || 'unknown');
+      // console.log('[http-functions] Handoff triggered. subscriberId:', subscriberId, 'reason:', reason || 'unknown');
       await tagHandoff(subscriberId, reason || 'ai_or_keyword_trigger');
       await upsertUserConversation(subscriberId, {
         needsHumanReview: true,
@@ -337,7 +337,7 @@ async function handleAiTurn({ subscriberId, userMessage, workshopName, action = 
     }
 
     if (routingAction) {
-      console.log('[http-functions] Route suggested. subscriberId:', subscriberId, 'route:', routingAction.route, 'target:', routingAction.action_target);
+      // console.log('[http-functions] Route suggested. subscriberId:', subscriberId, 'route:', routingAction.route, 'target:', routingAction.action_target);
     }
 
     return { reply: finalReply, needsHandoff: routingAction ? false : needsHandoff, action: routingAction };
@@ -514,16 +514,29 @@ export async function get_identifyOrder(request) {
       });
     }
 
-    const phone = String(request.query?.phone || '').trim();
-    const subscriberId = String(request.query?.subscriber_id || '').trim();
-    const passedAttempts = request.query?.attempts;
-    const excludeOrderId = String(request.query?.exclude_order_id || '').trim();
+    const rawQuery = request.query || {};
+    const phone = String(rawQuery.phone || '').trim();
+    const subscriberId = String(rawQuery.subscriber_id || '').trim();
+    const passedAttempts = rawQuery.attempts;
+    const excludeOrderId = String(rawQuery.exclude_order_id || '').trim();
     const isNextOrderRequest = !!excludeOrderId;
 
+    console.log('[get_identifyOrder] REQUEST', JSON.stringify({
+      phone,
+      subscriber_id: subscriberId || null,
+      attempts: passedAttempts ?? null,
+      exclude_order_id: excludeOrderId || null,
+      is_next_order: isNextOrderRequest,
+      query_param_keys: Object.keys(rawQuery),
+      raw_query: rawQuery,
+    }));
+
     if (!phone) {
+      const missingPhoneBody = { status: 'error', error: 'missing_phone' };
+      console.log('[get_identifyOrder] RESPONSE', JSON.stringify(missingPhoneBody));
       return badRequest({
         headers: { 'Content-Type': 'application/json' },
-        body: { status: 'error', error: 'missing_phone' },
+        body: missingPhoneBody,
       });
     }
 
@@ -577,25 +590,53 @@ export async function get_identifyOrder(request) {
         attempts: lookupAttempts,
       }).catch(() => {});
     } else {
-      console.warn('[http-functions] get_identifyOrder called without subscriber_id — skipping ManyChat field sync. phone:', phone);
+      console.warn('[get_identifyOrder] no subscriber_id — skipping ManyChat field sync');
     }
+
+    console.log('[get_identifyOrder] LOOKUP', JSON.stringify({
+      all_orders_count: allOrders.length,
+      active_orders_count: activeOrders.length,
+      orders_summary: allOrders.map((o) => ({
+        id: o.id,
+        source: o.source,
+        workshopType: o.workshopType,
+        workshopStart: o.workshopStart instanceof Date ? o.workshopStart.toISOString() : o.workshopStart,
+        bookingsCancelled: !!o.bookingsCancelled,
+        cancelledAt: !!o.cancelledAt,
+      })),
+      had_unavailable_only: hadUnavailableOnly,
+      order_lookup_unavailable: orderLookupUnavailable,
+      found,
+      primary_order_id: primary?.id || null,
+      manychat_sync: subscriberId
+        ? {
+          status: found ? 'found' : 'not_found',
+          unavailable: orderLookupUnavailable,
+          lookup_attempts: lookupAttempts,
+        }
+        : null,
+    }));
+
+    const responseBody = {
+      status: 'ok',
+      found,
+      has_more: hasMore,
+      is_next_order: isNextOrderRequest,
+      order_id: found ? (primary?.id || null) : null,
+      order_source: found ? (primary?.source || null) : null,
+      order_url: found ? (primary?.orderUrl || null) : null,
+      order_lookup_unavailable: orderLookupUnavailable,
+      lookup_attempts: lookupAttempts,
+      lookup_handoff: lookupHandoff,
+      ai_reply: text,
+      content: { messages: [{ type: 'text', text }] },
+    };
+
+    console.log('[get_identifyOrder] RESPONSE', JSON.stringify(responseBody));
 
     return ok({
       headers: { 'Content-Type': 'application/json' },
-      body: {
-        status: 'ok',
-        found,
-        has_more: hasMore,
-        is_next_order: isNextOrderRequest,
-        order_id: found ? (primary?.id || null) : null,
-        order_source: found ? (primary?.source || null) : null,
-        order_url: found ? (primary?.orderUrl || null) : null,
-        order_lookup_unavailable: orderLookupUnavailable,
-        lookup_attempts: lookupAttempts,
-        lookup_handoff: lookupHandoff,
-        ai_reply: text,
-        content: { messages: [{ type: 'text', text }] },
-      },
+      body: responseBody,
     });
   } catch (err) {
     console.error('[http-functions] get_identifyOrder failed:', err?.message || err);

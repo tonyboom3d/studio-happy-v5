@@ -197,8 +197,15 @@ class RescheduleWorkshop extends HTMLElement {
             const dayBtn = e.target.closest('[data-day]');
             if (dayBtn && !dayBtn.disabled) {
                 const day = dayBtn.dataset.day;
-                this._selectedDay = this._selectedDay === day ? null : day;
-                this._selectedTime = null;
+                if (this._selectedDay === day) {
+                    this._selectedDay = null;
+                    this._selectedTime = null;
+                } else {
+                    this._selectedDay = day;
+                    const entry = this._days.find((d) => d.day === day);
+                    // Single time slot for the day — pick it automatically, no extra tap needed.
+                    this._selectedTime = entry?.times?.length === 1 ? entry.times[0] : null;
+                }
                 this.render();
                 return;
             }

@@ -12,21 +12,18 @@
  * submitRescheduleRequest once a date is chosen — which pushes the customer
  * back into the ManyChat summary flow via sendRescheduleSummary().
  *
+ * CMS updates MUST go through workshopOrderPatch.js — never spread a partial
+ * wixData.update() return value back into another update.
+ *
  * ------------------------------------------------------------------
- * WorkshopOrders CMS fields required (create manually in the Wix Editor —
- * Content Manager, no schema-as-code available for CMS collections):
- *   customerRescheduleCount   Number  (default 0)
- *   pendingRescheduleDate     Date
- *   pendingRescheduleStatus   Text    ('requested' | 'pending_staff_review' | empty)
- *   pendingRescheduleRequestedAt  Date
- *   rescheduleToken           Text
- *   rescheduleTokenExpiresAt  Date
- *   rescheduleDatesWorkshopQuery  Text  (optional — cached Hebrew label for availableDates)
+ * WorkshopOrders CMS fields required (create manually in the Wix Editor):
+ *   customerRescheduleCount, pendingRescheduleDate, pendingRescheduleStatus,
+ *   pendingRescheduleRequestedAt, rescheduleToken, rescheduleTokenExpiresAt,
+ *   rescheduleDatesWorkshopQuery (optional Text)
  * ------------------------------------------------------------------
  */
 import { randomBytes } from 'crypto';
 import { Permissions, webMethod } from 'wix-web-module';
-import wixData from 'wix-data';
 import {
     isRescheduleBlockedWithin48h,
     hasCustomerRescheduleUsed,
@@ -35,8 +32,12 @@ import {
 } from 'backend/orderLookupService.js';
 import { WORKSHOP_TYPE_LABELS_HE } from 'backend/workshopServiceIds.js';
 import { sendRescheduleSummary, findSubscriberIdByPhone } from 'backend/manychatService.jsw';
+import { getItemWithRetry } from 'backend/wixDataRetry.js';
+import {
+    mergePatchWorkshopOrder,
+    patchWorkshopOrderFields,
+} from 'backend/workshopOrderPatch.js';
 
-const SA = { suppressAuth: true };
 const ISRAEL_TZ = 'Asia/Jerusalem';
 
 export const RESCHEDULE_TOKEN_TTL_MS = 10 * 60 * 1000;
@@ -55,13 +56,15 @@ function formatTimeIL(date) {
     }).format(date);
 }
 
-async function appendOrderActionLog(order, action) {
+async function appendOrderActionLog(orderId, action) {
     try {
+        const order = await getItemWithRetry('WorkshopOrders', orderId, { callerLabel: 'reschedule.appendOrderActionLog' });
+        if (!order) return null;
         const actionLog = [{ timestamp: new Date().toISOString(), user: 'מערכת (עדכון מועד)', action }, ...(order.actionLog || [])].slice(0, 200);
-        return await wixData.update('WorkshopOrders', { ...order, actionLog }, SA);
+        return mergePatchWorkshopOrder(orderId, { actionLog }, 'reschedule.appendOrderActionLog');
     } catch (err) {
-        console.warn('[rescheduleService] appendOrderActionLog failed. orderId:', order?._id, 'error:', err?.message || err);
-        return order;
+        console.warn('[rescheduleService] appendOrderActionLog failed. orderId:', orderId, 'error:', err?.message || err);
+        return null;
     }
 }
 
@@ -69,7 +72,7 @@ async function appendOrderActionLog(order, action) {
 async function loadEligibleOrder(orderId, token) {
     if (!orderId || !token) throw new Error('NOT_FOUND: קישור לא תקין.');
 
-    const order = await wixData.get('WorkshopOrders', orderId, SA).catch(() => null);
+    const order = await getItemWithRetry('WorkshopOrders', orderId, { callerLabel: 'reschedule.loadEligibleOrder' });
     if (!order) throw new Error('NOT_FOUND: ההזמנה לא נמצאה.');
 
     if (!order.rescheduleToken || order.rescheduleToken !== token) {
@@ -117,26 +120,20 @@ export const getRescheduleContext = webMethod(Permissions.Anyone, async (orderId
     };
 });
 
-/**
- * Called once the customer picks a new date+time on the calendar. Never
- * applies the change to Wix Bookings itself — only records the request and
- * hands the customer back to ManyChat for final confirmation.
- */
 export const submitRescheduleRequest = webMethod(Permissions.Anyone, async (orderId, token, chosenDateIso) => {
     const order = await loadEligibleOrder(orderId, token);
 
     const chosenDate = new Date(chosenDateIso);
     if (isNaN(chosenDate.getTime())) throw new Error('BAD_REQUEST: תאריך לא תקין.');
 
-    const updated = await wixData.update('WorkshopOrders', {
-        ...order,
+    await mergePatchWorkshopOrder(orderId, {
         pendingRescheduleDate: chosenDate,
         pendingRescheduleStatus: 'requested',
         pendingRescheduleRequestedAt: new Date(),
-    }, SA);
+    }, 'reschedule.submitRescheduleRequest');
 
     const chosenDateLabel = `${formatDateIL(chosenDate)} בשעה ${formatTimeIL(chosenDate)}`;
-    await appendOrderActionLog(updated, `בקשת שינוי מועד נשלחה על ידי הלקוח: ${chosenDateLabel}`);
+    await appendOrderActionLog(orderId, `בקשת שינוי מועד נשלחה על ידי הלקוח: ${chosenDateLabel}`);
 
     const subscriberId = await findSubscriberIdByPhone(order.organizerPhone).catch(() => null);
     if (subscriberId) {
@@ -150,70 +147,54 @@ export const submitRescheduleRequest = webMethod(Permissions.Anyone, async (orde
     return { ok: true, chosenDateLabel };
 });
 
-/**
- * Staff dashboard action — the only way to release the one-time reschedule
- * back to the customer once a "pending_staff_review" request is cleared
- * (handled or discarded outside the system, e.g. Wix Bookings itself).
- */
 export const cancelRescheduleRequest = webMethod(Permissions.SiteMember, async (orderId) => {
     if (!orderId) throw new Error('BAD_REQUEST: חסר מזהה הזמנה.');
-    const order = await wixData.get('WorkshopOrders', orderId, SA).catch(() => null);
-    if (!order) throw new Error('NOT_FOUND: ההזמנה לא נמצאה.');
 
-    const updated = await wixData.update('WorkshopOrders', {
-        ...order,
+    await mergePatchWorkshopOrder(orderId, {
         customerRescheduleCount: 0,
         pendingRescheduleStatus: null,
         pendingRescheduleDate: null,
-    }, SA);
+    }, 'reschedule.cancelRescheduleRequest');
 
-    await appendOrderActionLog(updated, 'בקשת שינוי מועד בוטלה על ידי הצוות — השימוש החינמי שוחזר.');
+    await appendOrderActionLog(orderId, 'בקשת שינוי מועד בוטלה על ידי הצוות — השימוש החינמי שוחזר.');
     return { ok: true };
 });
 
 /**
- * Called by http-functions.js get_startReschedule to (re)issue the one-time link.
- * Must spread the full CMS row — a partial update object can wipe other fields.
+ * Token fields only — never send a partial full row (see workshopOrderPatch.js).
  */
 export async function issueRescheduleToken(orderId, { datesWorkshopQuery } = {}) {
-    const order = await wixData.get('WorkshopOrders', orderId, SA).catch(() => null);
+    const order = await getItemWithRetry('WorkshopOrders', orderId, { callerLabel: 'reschedule.issueRescheduleToken' });
     if (!order) throw new Error('NOT_FOUND: ההזמנה לא נמצאה.');
 
     const token = randomBytes(24).toString('hex');
     const expiresAt = new Date(Date.now() + RESCHEDULE_TOKEN_TTL_MS);
-    const patch = {
-        ...order,
+    const fields = {
         rescheduleToken: token,
         rescheduleTokenExpiresAt: expiresAt,
     };
     if (datesWorkshopQuery) {
-        patch.rescheduleDatesWorkshopQuery = datesWorkshopQuery;
+        fields.rescheduleDatesWorkshopQuery = datesWorkshopQuery;
     }
-    await wixData.update('WorkshopOrders', patch, SA);
+    await patchWorkshopOrderFields(orderId, fields, 'reschedule.issueRescheduleToken');
     return { token, expiresAt };
 }
 
-/**
- * Called by http-functions.js get_confirmReschedule once the customer taps
- * the final "אישור סופי" button in the ManyChat summary flow. This is what
- * actually consumes the one free reschedule and hands the request to staff.
- */
 export async function confirmRescheduleRequest(orderId) {
-    const order = await wixData.get('WorkshopOrders', orderId, SA).catch(() => null);
+    const order = await getItemWithRetry('WorkshopOrders', orderId, { callerLabel: 'reschedule.confirmRescheduleRequest' });
     if (!order) throw new Error('NOT_FOUND: ההזמנה לא נמצאה.');
 
     const chosenDateLabel = order.pendingRescheduleDate
         ? `${formatDateIL(new Date(order.pendingRescheduleDate))} בשעה ${formatTimeIL(new Date(order.pendingRescheduleDate))}`
         : '';
 
-    const updated = await wixData.update('WorkshopOrders', {
-        ...order,
+    await mergePatchWorkshopOrder(orderId, {
         customerRescheduleCount: 1,
         pendingRescheduleStatus: 'pending_staff_review',
         rescheduleToken: null,
         rescheduleTokenExpiresAt: null,
-    }, SA);
+    }, 'reschedule.confirmRescheduleRequest');
 
-    await appendOrderActionLog(updated, `הלקוח אישר סופית שינוי מועד ל: ${chosenDateLabel || '(תאריך לא ידוע)'}`);
+    await appendOrderActionLog(orderId, `הלקוח אישר סופית שינוי מועד ל: ${chosenDateLabel || '(תאריך לא ידוע)'}`);
     return { ok: true, chosenDateLabel };
 }

@@ -97,16 +97,6 @@ function rwEsc(str) {
 }
 
 const IL_TZ = 'Asia/Jerusalem';
-const AVAILABLE_DATES_URL = 'https://www.studiohappy.art/_functions/availableDates';
-
-/** Fallback when context lacks workshopTypeForDates (older cached responses). */
-const WORKSHOP_KEY_TO_DATES_QUERY = {
-    tufting: 'טאפטינג',
-    candles: 'נרות',
-    ceramics: 'קרמיקה',
-    charms: "צ'ארמס",
-    jewelry: 'תכשיטים',
-};
 
 function ilTimeKey(date) {
     return new Intl.DateTimeFormat('en-GB', {
@@ -144,23 +134,6 @@ function ilWallClockToUtc(dayLabel, timeLabel) {
     return new Date(utcGuess.getTime() - offsetMin * 60000);
 }
 
-/** Pulls date lines from get_availableDates JSON (array, datesText, or ManyChat v2 content). */
-function extractDatesLines(json) {
-    if (Array.isArray(json?.dates) && json.dates.length) return json.dates;
-    const text = json?.datesText || json?.content?.messages?.[0]?.text || '';
-    if (!text || typeof text !== 'string') return [];
-    if (text.includes('לא נמצאו') || text.includes('לא תקין')) return [];
-    return text.split('\n').map((line) => line.trim()).filter(Boolean);
-}
-
-function readUrlQueryParam(name) {
-    try {
-        return new URLSearchParams(window.location.search).get(name);
-    } catch (_) {
-        return null;
-    }
-}
-
 const HE_WEEKDAY_LETTERS = ['א', 'ב', 'ג', 'ד', 'ה', 'ו', 'ש']; // Sun..Sat
 const HE_MONTH_NAMES = ['ינואר', 'פברואר', 'מרץ', 'אפריל', 'מאי', 'יוני', 'יולי', 'אוגוסט', 'ספטמבר', 'אוקטובר', 'נובמבר', 'דצמבר'];
 
@@ -168,18 +141,6 @@ const HE_MONTH_NAMES = ['ינואר', 'פברואר', 'מרץ', 'אפריל', '�
 function dayOfWeekFromLabel(dayLabel) {
     const [d, m, y] = dayLabel.split('/').map(Number);
     return new Date(y, m - 1, d).getDay();
-}
-
-/** Parses "23/09/2026: 10:00 | 14:00" lines from get_availableDates into { day, times[] }. */
-function parseDatesText(lines) {
-    return (lines || []).map((line) => {
-        const sep = line.indexOf(': ');
-        if (sep === -1) return { day: line.trim(), times: [] };
-        const day = line.slice(0, sep).trim();
-        const timesRaw = line.slice(sep + 2);
-        const times = timesRaw ? timesRaw.split('|').map((t) => t.trim()).filter(Boolean) : [];
-        return { day, times };
-    }).filter((d) => d.day && d.times.length);
 }
 
 class RescheduleWorkshop extends HTMLElement {
@@ -204,6 +165,13 @@ class RescheduleWorkshop extends HTMLElement {
         this._timerHandle = null;
         this._bootstrapMessage = 'טוענים את עמוד שינוי המועד…';
         this._clickBound = false;
+        this._datesLoadGen = 0;
+    }
+
+    _resolveSlotList(context) {
+        if (Array.isArray(this._availableSlots)) return this._availableSlots;
+        if (Array.isArray(context?.slots)) return context.slots;
+        return null;
     }
 
     _ensureStyles() {
@@ -318,6 +286,9 @@ class RescheduleWorkshop extends HTMLElement {
                         this._selectedDay = null;
                         this._selectedTime = null;
                     } else {
+                        if (Array.isArray(data.slots)) {
+                            this._availableSlots = data.slots;
+                        }
                         this._startTimer(data.expiresAt);
                         this._loadDates(data, data.currentWorkshopStart);
                     }
@@ -326,7 +297,9 @@ class RescheduleWorkshop extends HTMLElement {
             if (name === 'available-slots') {
                 const slots = JSON.parse(newVal);
                 this._availableSlots = Array.isArray(slots) ? slots : [];
-                if (this._context) this._loadDates(this._context, this._context.currentWorkshopStart);
+                if (this._context && this._context.phase !== 'awaiting' && !this._context.awaitingReschedule) {
+                    this._loadDates(this._context, this._context.currentWorkshopStart);
+                }
             }
             if (name === 'submit-result') {
                 this._sending = false;
@@ -363,51 +336,16 @@ class RescheduleWorkshop extends HTMLElement {
         return ilDateKey(cur) === dayLabel && ilTimeKey(cur) === timeLabel;
     }
 
-    _resolveDatesQuery(context) {
-        const fromUrl = readUrlQueryParam('datesWorkshop');
-        if (fromUrl) return fromUrl;
-        if (!context || typeof context === 'string') {
-            return WORKSHOP_KEY_TO_DATES_QUERY[context] || context || '';
-        }
-        if (context.workshopTypeForDates) return context.workshopTypeForDates;
-        if (context.datesWorkshop) return context.datesWorkshop;
-        const key = context.workshopType;
-        if (key && WORKSHOP_KEY_TO_DATES_QUERY[key]) return WORKSHOP_KEY_TO_DATES_QUERY[key];
-        const knownLabels = Object.values(WORKSHOP_KEY_TO_DATES_QUERY);
-        if (key && knownLabels.includes(key)) return key;
-        return key || '';
-    }
+    _loadDates(context, currentWorkshopStartIso) {
+        this._datesLoadGen += 1;
+        const loadGen = this._datesLoadGen;
 
-    async _fetchAvailableDatesPage(datesQuery, offset) {
-        const q = `workshopType=${encodeURIComponent(datesQuery)}&offset=${offset}`;
-        const urls = [
-            `${AVAILABLE_DATES_URL}?${q}`,
-            `${window.location.origin}/_functions/availableDates?${q}`,
-        ];
-        let lastErr = null;
-        for (const url of urls) {
-            try {
-                const res = await fetch(url);
-                if (!res.ok) throw new Error(`HTTP ${res.status}`);
-                return await res.json();
-            } catch (err) {
-                lastErr = err;
-            }
-        }
-        throw lastErr || new Error('fetch failed');
-    }
-
-    async _loadDates(context, currentWorkshopStartIso) {
         this._loadingDates = true;
         this._datesLoadFailed = false;
         this.render();
 
-        const datesQuery = this._resolveDatesQuery(context);
-        if (!datesQuery) {
-            console.error('[reschedule-workshop] missing workshopTypeForDates', context?.workshopType, context?.orderId);
-            this._loadingDates = false;
-            this._datesLoadFailed = true;
-            this.render();
+        const slotList = this._resolveSlotList(context);
+        if (slotList === null) {
             return;
         }
 
@@ -419,11 +357,8 @@ class RescheduleWorkshop extends HTMLElement {
         this._originIsSaturday = currentDayKey ? dayOfWeekFromLabel(currentDayKey) === 6 : false;
         const byDay = new Map();
 
-        // Backend re-scans availability from scratch on every page (cost grows with offset),
-        // so cap pages tightly and render after EACH page — first page (~2-4s) already gives
-        // the customer plenty of choice instead of blocking on a slow multi-page fetch chain.
-        const MAX_PAGES = 3;
         const applyDays = () => {
+            if (loadGen !== this._datesLoadGen) return;
             this._days = [...byDay.entries()]
                 .map(([day, times]) => {
                     let filtered = times;
@@ -445,53 +380,24 @@ class RescheduleWorkshop extends HTMLElement {
                 });
         };
 
-        if (Array.isArray(this._availableSlots)) {
-            for (const slot of this._availableSlots) {
-                const timestamp = slot?.start?.timestamp;
-                if (!timestamp) continue;
-                const start = new Date(timestamp);
-                if (Number.isNaN(start.getTime())) continue;
-                const day = ilDateKey(start);
-                if (!byDay.has(day)) byDay.set(day, []);
-                const time = ilTimeKey(start);
-                if (currentDayKey === day && currentTimeKey === time) continue;
-                if (!byDay.get(day).includes(time)) byDay.get(day).push(time);
-            }
-            applyDays();
-            this._loadingDates = false;
-            this.render();
-            return;
+        for (const slot of slotList) {
+            const timestamp = slot?.start?.timestamp;
+            if (!timestamp) continue;
+            const start = new Date(timestamp);
+            if (Number.isNaN(start.getTime())) continue;
+            const day = ilDateKey(start);
+            if (!byDay.has(day)) byDay.set(day, []);
+            const time = ilTimeKey(start);
+            if (currentDayKey === day && currentTimeKey === time) continue;
+            if (!byDay.get(day).includes(time)) byDay.get(day).push(time);
         }
 
-        try {
-            let offset = 0;
-            let hasMore = true;
-            let pagesLoaded = 0;
-            while (hasMore && pagesLoaded < MAX_PAGES) {
-                const json = await this._fetchAvailableDatesPage(datesQuery, offset);
-                const lines = extractDatesLines(json);
-                for (const parsed of parseDatesText(lines)) {
-                    byDay.set(parsed.day, parsed.times);
-                }
-                hasMore = !!json.hasMore;
-                offset = json.nextOffset ?? offset + 10;
-                pagesLoaded += 1;
-
-                // Render as soon as the first page lands so the customer isn't stuck on a spinner.
-                applyDays();
-                this._loadingDates = false;
-                this.render();
-            }
-            if (!byDay.size) {
-                console.warn('[reschedule-workshop] availableDates returned no bookable days. query:', datesQuery);
-            }
-        } catch (err) {
-            console.error('[reschedule-workshop] _loadDates failed:', err?.message || err);
-            if (!byDay.size) this._datesLoadFailed = true; // keep already-rendered days on later-page failures
-        }
-
+        if (loadGen !== this._datesLoadGen) return;
         applyDays();
         this._loadingDates = false;
+        if (!this._days.length && !slotList.length) {
+            console.warn('[reschedule-workshop] no bookable slots from backend for order', context?.orderId);
+        }
         this.render();
     }
 

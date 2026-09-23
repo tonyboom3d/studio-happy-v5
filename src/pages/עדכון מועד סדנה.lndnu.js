@@ -59,6 +59,10 @@ $w.onReady(async function () {
                 el.setAttribute('context-data', JSON.stringify({ ...context, __ts: Date.now() }));
                 return;
             }
+            if (context?.phase === 'awaiting' || context?.awaitingReschedule) {
+                el.setAttribute('context-data', JSON.stringify({ ...context, __ts: Date.now() }));
+                return;
+            }
             const workshopTypeForDates = context.workshopTypeForDates || datesWorkshopFromUrl || null;
             el.setAttribute('available-slots', JSON.stringify(context.slots || []));
             el.setAttribute('context-data', JSON.stringify({

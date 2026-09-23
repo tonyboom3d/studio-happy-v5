@@ -78,8 +78,19 @@ const ERROR_MESSAGES = {
     BLOCKED_48H: 'הסדנה מתקיימת בעוד פחות מ-48 שעות, ולכן לא ניתן לדחות אותה באופן עצמאי. ניתן לפנות לשירות הלקוחות.',
     ALREADY_USED: 'כבר נעשה שינוי מועד חד-פעמי להזמנה הזו בעבר. ניתן לפנות לשירות הלקוחות.',
     ALREADY_PENDING: 'יש כבר בקשת שינוי מועד ממתינה לטיפול הצוות שלנו.',
+    ALREADY_SUBMITTED: 'כבר נבחר מועד חדש להזמנה — לא ניתן לבחור שוב.',
     SAME_SLOT: 'לא ניתן לבחור שוב את אותו מועד שבו הסדנה מתקיימת כיום. בחרו תאריך או שעה אחרים.',
 };
+
+function awaitingRescheduleMessage(context) {
+    const label = context?.chosenDateLabel || '';
+    const status = context?.pendingRescheduleStatus;
+    const dateLine = label ? `המועד שנבחר: <strong>${rwEsc(label)}</strong><br/><br/>` : '';
+    if (status === 'pending_staff_review') {
+        return `${dateLine}הבקשה ממתינה לאישור שירות הלקוחות. לא ניתן לבחור מועד נוסף בקישור זה — ניצור קשר בהקדם האפשרי.`;
+    }
+    return `${dateLine}כבר נשלחה בקשה לשינוי מועד. אם עדיין לא אישרתם בוואטסאפ — חזרו לשיחה ולחצו על &quot;אישור סופי&quot;. לא ניתן לבחור מועד נוסף בקישור זה.`;
+}
 
 function rwEsc(str) {
     return String(str ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -302,8 +313,14 @@ class RescheduleWorkshop extends HTMLElement {
                     this._context = data;
                     this._contextError = null;
                     this._bootstrapMessage = null;
-                    this._startTimer(data.expiresAt);
-                    this._loadDates(data, data.currentWorkshopStart);
+                    if (data.phase === 'awaiting' || data.awaitingReschedule) {
+                        this._days = [];
+                        this._selectedDay = null;
+                        this._selectedTime = null;
+                    } else {
+                        this._startTimer(data.expiresAt);
+                        this._loadDates(data, data.currentWorkshopStart);
+                    }
                 }
             }
             if (name === 'available-slots') {
@@ -561,6 +578,18 @@ class RescheduleWorkshop extends HTMLElement {
         if (this._contextError) {
             const message = ERROR_MESSAGES[this._contextError.code] || this._contextError.message || 'אירעה שגיאה.';
             this.innerHTML = `<div class="rw-wrap"><div class="rw-msg rw-bad">${rwEsc(message)}</div></div>`;
+            return;
+        }
+
+        if (this._context?.phase === 'awaiting' || this._context?.awaitingReschedule) {
+            this.innerHTML = `
+                <div class="rw-wrap">
+                    <div class="rw-head">
+                        <h1>עדכון מועד סדנה</h1>
+                        <div class="rw-sub">סטטוס הבקשה</div>
+                    </div>
+                    <div class="rw-msg rw-good">📋 ${awaitingRescheduleMessage(this._context)}</div>
+                </div>`;
             return;
         }
 

@@ -30,6 +30,7 @@ import {
   isRescheduleBlockedWithin48h,
   hasCustomerRescheduleUsed,
   hasOpenRescheduleRequest,
+  hasPendingRescheduleChoice,
   resolveCmsOrderWorkshopTypeKey,
 } from 'backend/orderLookupService.js';
 import { formatIsraeliPhoneLocal } from 'backend/orderUtils.js';
@@ -737,13 +738,12 @@ export async function get_startReschedule(request) {
     const rescheduleBlocked48h = isRescheduleBlockedWithin48h(order);
     const rescheduleAlreadyUsed = hasCustomerRescheduleUsed(order);
     const rescheduleAlreadyPending = hasOpenRescheduleRequest(order);
+    const rescheduleChoicePending = hasPendingRescheduleChoice(order);
 
-    if (rescheduleBlocked48h || rescheduleAlreadyUsed || rescheduleAlreadyPending) {
-      const ai_reply = rescheduleAlreadyPending
-        ? 'יש כבר בקשת שינוי מועד ממתינה לטיפול הצוות שלנו 🙏'
-        : rescheduleBlocked48h
-          ? 'הסדנה מתקיימת בעוד פחות מ-48 שעות ולכן לא ניתן לדחות אותה באופן עצמאי. אנא פני/ה לשירות הלקוחות שלנו 💬'
-          : 'כבר נעשה שינוי מועד חד-פעמי להזמנה הזו בעבר. אנא פני/ה לשירות הלקוחות שלנו 💬';
+    if (rescheduleBlocked48h || rescheduleAlreadyUsed) {
+      const ai_reply = rescheduleBlocked48h
+        ? 'הסדנה מתקיימת בעוד פחות מ-48 שעות ולכן לא ניתן לדחות אותה באופן עצמאי. ניתן לפנות לשירות הלקוחות 💬'
+        : 'כבר נעשה שינוי מועד חד-פעמי להזמנה הזו בעבר. ניתן לפנות לשירות הלקוחות 💬';
 
       return ok({
         headers: { 'Content-Type': 'application/json' },
@@ -752,6 +752,7 @@ export async function get_startReschedule(request) {
           reschedule_blocked_48h: rescheduleBlocked48h,
           reschedule_already_used: rescheduleAlreadyUsed,
           reschedule_already_pending: rescheduleAlreadyPending,
+          reschedule_choice_pending: rescheduleChoicePending,
           ai_reply,
         },
       });
@@ -786,13 +787,19 @@ export async function get_startReschedule(request) {
       await syncRescheduleLink(subscriberId, link).catch(() => {});
     }
 
+    const ai_reply = rescheduleChoicePending
+      ? 'כבר נבחר מועד חדש להזמנה. בקישור אפשר לראות את הסטטוס — יש להמתין לאישור שירות הלקוחות 🙏'
+      : 'הנה קישור לבחירת מועד חדש לסדנה — הקישור בתוקף ל-10 דקות ⏱️';
+
     return ok({
       headers: { 'Content-Type': 'application/json' },
       body: {
         status: 'ok',
         reschedule_link: link,
         expires_at: expiresAt.toISOString(),
-        ai_reply: 'הנה קישור לבחירת מועד חדש לסדנה שלך — הקישור בתוקף ל-10 דקות ⏱️',
+        reschedule_choice_pending: rescheduleChoicePending,
+        reschedule_already_pending: rescheduleAlreadyPending,
+        ai_reply,
       },
     });
   } catch (err) {

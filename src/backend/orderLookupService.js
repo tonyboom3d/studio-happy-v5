@@ -423,6 +423,12 @@ export function hasOpenRescheduleRequest(order) {
     return order?.pendingRescheduleStatus === 'pending_staff_review';
 }
 
+/** Customer already picked a new date — awaiting WhatsApp confirm and/or staff (no new calendar). */
+export function hasPendingRescheduleChoice(order) {
+    const status = order?.pendingRescheduleStatus;
+    return status === 'requested' || status === 'pending_staff_review';
+}
+
 export const NO_ACTIVE_ORDER_MESSAGE = 'לא מצאנו הזמנה פעילה — הסדנה שלך כבר התקיימה לפני יותר מ-2 ימים ❌';
 
 export const ORDER_NOT_FOUND_MESSAGE = 'לא מצאנו הזמנה קיימת עם המספר הזה ❌';

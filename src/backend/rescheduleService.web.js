@@ -27,7 +27,7 @@ import { Permissions, webMethod } from 'wix-web-module';
 import {
     isRescheduleBlockedWithin48h,
     hasCustomerRescheduleUsed,
-    hasOpenRescheduleRequest,
+    hasPendingRescheduleChoice,
     resolveCmsOrderWorkshopTypeKey,
 } from 'backend/orderLookupService.js';
 import {
@@ -93,11 +93,10 @@ async function appendOrderActionLog(orderId, action) {
     }
 }
 
-/** Loads the order and runs every eligibility check, throwing a labeled error on the first failure. */
-async function loadEligibleOrder(orderId, token) {
+async function loadOrderByRescheduleToken(orderId, token) {
     if (!orderId || !token) throw new Error('NOT_FOUND: קישור לא תקין.');
 
-    const order = await getItemWithRetry('WorkshopOrders', orderId, { callerLabel: 'reschedule.loadEligibleOrder' });
+    const order = await getItemWithRetry('WorkshopOrders', orderId, { callerLabel: 'reschedule.loadOrderByRescheduleToken' });
     if (!order) throw new Error('NOT_FOUND: ההזמנה לא נמצאה.');
 
     if (!order.rescheduleToken || order.rescheduleToken !== token) {
@@ -107,8 +106,35 @@ async function loadEligibleOrder(orderId, token) {
     if (!expiresAt || isNaN(expiresAt.getTime()) || expiresAt.getTime() < Date.now()) {
         throw new Error('EXPIRED: הקישור פג תוקף.');
     }
-    if (hasOpenRescheduleRequest(order)) {
-        throw new Error('ALREADY_PENDING: יש כבר בקשת דחייה ממתינה לאישור צוות.');
+    return order;
+}
+
+function pendingRescheduleDateLabel(order) {
+    if (!order?.pendingRescheduleDate) return '';
+    const d = new Date(order.pendingRescheduleDate);
+    if (isNaN(d.getTime())) return '';
+    return `${formatDateIL(d)} בשעה ${formatTimeIL(d)}`;
+}
+
+function buildAwaitingRescheduleContext(order) {
+    const chosenDateLabel = pendingRescheduleDateLabel(order);
+    const status = order.pendingRescheduleStatus;
+    return {
+        phase: 'awaiting',
+        awaitingReschedule: true,
+        orderId: order._id,
+        pendingRescheduleStatus: status,
+        chosenDateLabel,
+        expiresAt: order.rescheduleTokenExpiresAt
+            ? new Date(order.rescheduleTokenExpiresAt).toISOString()
+            : null,
+    };
+}
+
+/** Calendar pick — only when no pending choice yet. */
+function assertCanStartReschedulePick(order) {
+    if (hasPendingRescheduleChoice(order)) {
+        throw new Error('ALREADY_SUBMITTED: כבר נבחר מועד חדש להזמנה.');
     }
     if (hasCustomerRescheduleUsed(order)) {
         throw new Error('ALREADY_USED: כבר נעשה שינוי מועד פעם אחת להזמנה הזו.');
@@ -116,8 +142,6 @@ async function loadEligibleOrder(orderId, token) {
     if (isRescheduleBlockedWithin48h(order)) {
         throw new Error('BLOCKED_48H: הסדנה מתקיימת תוך פחות מ-48 שעות.');
     }
-
-    return order;
 }
 
 /** webMethod must not throw for expected failures — Wix shows a generic error to the page. */
@@ -138,7 +162,15 @@ function toClientError(err) {
 export const getRescheduleContext = webMethod(Permissions.Anyone, async (orderId, token) => {
     let order;
     try {
-        order = await loadEligibleOrder(orderId, token);
+        order = await loadOrderByRescheduleToken(orderId, token);
+    } catch (err) {
+        return toClientError(err);
+    }
+    if (hasPendingRescheduleChoice(order)) {
+        return buildAwaitingRescheduleContext(order);
+    }
+    try {
+        assertCanStartReschedulePick(order);
     } catch (err) {
         return toClientError(err);
     }
@@ -169,7 +201,21 @@ export const getRescheduleContext = webMethod(Permissions.Anyone, async (orderId
 export const submitRescheduleRequest = webMethod(Permissions.Anyone, async (orderId, token, chosenDateIso, subscriberIdHint) => {
     let order;
     try {
-        order = await loadEligibleOrder(orderId, token);
+        order = await loadOrderByRescheduleToken(orderId, token);
+    } catch (err) {
+        return { ok: false, ...toClientError(err) };
+    }
+    if (hasPendingRescheduleChoice(order)) {
+        return {
+            ok: false,
+            error: true,
+            code: 'ALREADY_SUBMITTED',
+            message: 'כבר נבחר מועד חדש להזמנה.',
+            chosenDateLabel: pendingRescheduleDateLabel(order),
+        };
+    }
+    try {
+        assertCanStartReschedulePick(order);
     } catch (err) {
         return { ok: false, ...toClientError(err) };
     }
@@ -197,6 +243,8 @@ export const submitRescheduleRequest = webMethod(Permissions.Anyone, async (orde
         pendingRescheduleDate: chosenDate,
         pendingRescheduleStatus: 'requested',
         pendingRescheduleRequestedAt: new Date(),
+        rescheduleToken: null,
+        rescheduleTokenExpiresAt: null,
     }, 'reschedule.submitRescheduleRequest');
 
     const chosenDateLabel = `${formatDateIL(chosenDate)} בשעה ${formatTimeIL(chosenDate)}`;

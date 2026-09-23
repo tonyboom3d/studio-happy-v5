@@ -70,6 +70,7 @@ const ERROR_MESSAGES = {
     BLOCKED_48H: 'הסדנה שלך מתקיימת בעוד פחות מ-48 שעות, ולכן לא ניתן לדחות אותה באופן עצמאי. אנא פני/ה לשירות הלקוחות שלנו.',
     ALREADY_USED: 'כבר נעשה שינוי מועד חד-פעמי להזמנה הזו בעבר. אנא פני/ה לשירות הלקוחות שלנו.',
     ALREADY_PENDING: 'יש כבר בקשת שינוי מועד ממתינה לטיפול הצוות שלנו.',
+    SAME_SLOT: 'לא ניתן לבחור שוב את אותו מועד שבו הסדנה מתקיימת כיום. בחרו תאריך או שעה אחרים.',
 };
 
 function rwEsc(str) {
@@ -87,6 +88,12 @@ const WORKSHOP_KEY_TO_DATES_QUERY = {
     charms: "צ'ארמס",
     jewelry: 'תכשיטים',
 };
+
+function ilTimeKey(date) {
+    return new Intl.DateTimeFormat('en-GB', {
+        timeZone: IL_TZ, hour: '2-digit', minute: '2-digit', hour12: false,
+    }).format(date);
+}
 
 function ilDateKey(date) {
     const parts = new Intl.DateTimeFormat('en-GB', {
@@ -223,6 +230,11 @@ class RescheduleWorkshop extends HTMLElement {
 
             const submitBtn = e.target.closest('[data-submit]');
             if (submitBtn && this._selectedDay && this._selectedTime) {
+                if (this._isSameAsCurrentWorkshop(this._selectedDay, this._selectedTime)) {
+                    this._submitResult = { ok: false, code: 'SAME_SLOT' };
+                    this.render();
+                    return;
+                }
                 const chosenDateIso = ilWallClockToUtc(this._selectedDay, this._selectedTime).toISOString();
                 this._sending = true;
                 this.render();
@@ -282,6 +294,14 @@ class RescheduleWorkshop extends HTMLElement {
         this._timerHandle = setInterval(tick, 1000);
     }
 
+    _isSameAsCurrentWorkshop(dayLabel, timeLabel) {
+        const iso = this._context?.currentWorkshopStart;
+        if (!iso || !dayLabel || !timeLabel) return false;
+        const cur = new Date(iso);
+        if (Number.isNaN(cur.getTime())) return false;
+        return ilDateKey(cur) === dayLabel && ilTimeKey(cur) === timeLabel;
+    }
+
     _resolveDatesQuery(context) {
         const fromUrl = readUrlQueryParam('datesWorkshop');
         if (fromUrl) return fromUrl;
@@ -330,7 +350,9 @@ class RescheduleWorkshop extends HTMLElement {
             return;
         }
 
-        const currentDayKey = currentWorkshopStartIso ? ilDateKey(new Date(currentWorkshopStartIso)) : null;
+        const currentStart = currentWorkshopStartIso ? new Date(currentWorkshopStartIso) : null;
+        const currentDayKey = currentStart && !Number.isNaN(currentStart.getTime()) ? ilDateKey(currentStart) : null;
+        const currentTimeKey = currentStart && !Number.isNaN(currentStart.getTime()) ? ilTimeKey(currentStart) : null;
         // Reschedule day-type policy: a Saturday booking may move to ANY day of the week;
         // a weekday (Sun-Thu) or Friday booking may only move within Sun-Thu (no upgrade to Fri/Sat).
         this._originIsSaturday = currentDayKey ? dayOfWeekFromLabel(currentDayKey) === 6 : false;
@@ -342,7 +364,13 @@ class RescheduleWorkshop extends HTMLElement {
         const MAX_PAGES = 3;
         const applyDays = () => {
             this._days = [...byDay.entries()]
-                .map(([day, times]) => ({ day, times, isCurrent: day === currentDayKey }))
+                .map(([day, times]) => {
+                    let filtered = times;
+                    if (day === currentDayKey && currentTimeKey) {
+                        filtered = times.filter((t) => t !== currentTimeKey);
+                    }
+                    return { day, times: filtered, isCurrent: day === currentDayKey };
+                })
                 .filter((entry) => {
                     if (!entry.times.length) return false;
                     if (this._originIsSaturday) return true;
@@ -364,12 +392,8 @@ class RescheduleWorkshop extends HTMLElement {
                 if (Number.isNaN(start.getTime())) continue;
                 const day = ilDateKey(start);
                 if (!byDay.has(day)) byDay.set(day, []);
-                const time = new Intl.DateTimeFormat('en-GB', {
-                    timeZone: IL_TZ,
-                    hour: '2-digit',
-                    minute: '2-digit',
-                    hour12: false,
-                }).format(start);
+                const time = ilTimeKey(start);
+                if (currentDayKey === day && currentTimeKey === time) continue;
                 if (!byDay.get(day).includes(time)) byDay.get(day).push(time);
             }
             applyDays();

@@ -179,6 +179,20 @@ export const submitRescheduleRequest = webMethod(Permissions.Anyone, async (orde
         return { ok: false, error: true, code: 'BAD_REQUEST', message: 'תאריך לא תקין.' };
     }
 
+    if (order.workshopStart) {
+        const currentStart = new Date(order.workshopStart);
+        if (!isNaN(currentStart.getTime())
+            && formatDateIL(currentStart) === formatDateIL(chosenDate)
+            && formatTimeIL(currentStart) === formatTimeIL(chosenDate)) {
+            return {
+                ok: false,
+                error: true,
+                code: 'SAME_SLOT',
+                message: 'לא ניתן לבחור שוב את אותו מועד שבו הסדנה מתקיימת כיום.',
+            };
+        }
+    }
+
     await mergePatchWorkshopOrder(orderId, {
         pendingRescheduleDate: chosenDate,
         pendingRescheduleStatus: 'requested',

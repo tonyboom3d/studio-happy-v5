@@ -210,6 +210,9 @@ function mapCmsOrder(order, bookingsById) {
         amount: order.paidTotal ?? order.basePrice ?? null,
         status: 'confirmed',
         bookingIds,
+        rugCount: Number(order.rugCount) || 0,
+        extraCandleCount: Number(order.extraCandleCount) || 0,
+        selectedProducts: Array.isArray(order.selectedProducts) ? order.selectedProducts : [],
         cancelledAt: order.cancelledAt ? parseWorkshopDate(order.cancelledAt) : null,
         bookingsCancelled: allLinkedCancelled,
     };
@@ -419,6 +422,27 @@ function formatTimeIL(date) {
     }).format(date);
 }
 
+function sumSelectedProductQuantity(selectedProducts) {
+    if (!Array.isArray(selectedProducts)) return 0;
+    return selectedProducts.reduce((sum, p) => sum + (Math.max(1, Number(p.quantity) || 1)), 0);
+}
+
+/** Workshop-specific quantity line (rugs / candles / ceramics pieces). */
+function formatOrderQuantityLine(order) {
+    const type = order?.workshopType;
+    const total = Number(order?.rugCount) || 0;
+    if (!type || total <= 0) return null;
+
+    if (type === 'tufting') return `🧵 שטיחים: ${total}`;
+    if (type === 'candles') return `🕯️ נרות: ${total}`;
+    if (type === 'ceramics') {
+        const extra = Number(order?.extraCandleCount) || 0;
+        if (extra > 0) return `🏺 כלי קרמיקה: ${total} (כולל ${extra} נוספים)`;
+        return `🏺 כלי קרמיקה: ${total}`;
+    }
+    return null;
+}
+
 /** Builds the WhatsApp-friendly Hebrew message for the primary order. */
 export function formatOrderMessage(order) {
     if (!order) return ORDER_NOT_FOUND_MESSAGE;
@@ -436,6 +460,14 @@ export function formatOrderMessage(order) {
     if (order.adults) participantsParts.push(`${order.adults} מבוגרים`);
     if (order.children) participantsParts.push(`${order.children} ילדים`);
     if (participantsParts.length) lines.push(`👥 משתתפים: ${participantsParts.join(', ')}`);
+
+    const quantityLine = formatOrderQuantityLine(order);
+    if (quantityLine) lines.push(quantityLine);
+
+    if (order.workshopType === 'candles') {
+        const cups = sumSelectedProductQuantity(order.selectedProducts);
+        if (cups > 0) lines.push(`☕ כוסות לנר: ${cups}`);
+    }
 
     if (order.amount != null) lines.push(`💰 סכום ששולם: ${order.amount} ₪`);
 

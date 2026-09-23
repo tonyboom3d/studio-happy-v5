@@ -100,14 +100,32 @@ function ilWallClockToUtc(dayLabel, timeLabel) {
     return new Date(utcGuess.getTime() - offsetMin * 60000);
 }
 
+/** Pulls date lines from get_availableDates JSON (array, datesText, or ManyChat v2 content). */
+function extractDatesLines(json) {
+    if (Array.isArray(json?.dates) && json.dates.length) return json.dates;
+    const text = json?.datesText || json?.content?.messages?.[0]?.text || '';
+    if (!text || typeof text !== 'string') return [];
+    if (text.includes('לא נמצאו') || text.includes('לא תקין')) return [];
+    return text.split('\n').map((line) => line.trim()).filter(Boolean);
+}
+
+function readUrlQueryParam(name) {
+    try {
+        return new URLSearchParams(window.location.search).get(name);
+    } catch (_) {
+        return null;
+    }
+}
+
 /** Parses "23/09/2026: 10:00 | 14:00" lines from get_availableDates into { day, times[] }. */
-function parseDatesText(dates) {
-    return (dates || []).map((line) => {
-        const [day, timesRaw] = line.split(':').length > 1
-            ? [line.split(': ')[0], line.slice(line.indexOf(': ') + 2)]
-            : [line, ''];
+function parseDatesText(lines) {
+    return (lines || []).map((line) => {
+        const sep = line.indexOf(': ');
+        if (sep === -1) return { day: line.trim(), times: [] };
+        const day = line.slice(0, sep).trim();
+        const timesRaw = line.slice(sep + 2);
         const times = timesRaw ? timesRaw.split('|').map((t) => t.trim()).filter(Boolean) : [];
-        return { day: day.trim(), times };
+        return { day, times };
     }).filter((d) => d.day && d.times.length);
 }
 
@@ -215,6 +233,8 @@ class RescheduleWorkshop extends HTMLElement {
     }
 
     _resolveDatesQuery(context) {
+        const fromUrl = readUrlQueryParam('datesWorkshop');
+        if (fromUrl) return fromUrl;
         if (!context || typeof context === 'string') {
             return WORKSHOP_KEY_TO_DATES_QUERY[context] || context || '';
         }
@@ -225,6 +245,25 @@ class RescheduleWorkshop extends HTMLElement {
         const knownLabels = Object.values(WORKSHOP_KEY_TO_DATES_QUERY);
         if (key && knownLabels.includes(key)) return key;
         return key || '';
+    }
+
+    async _fetchAvailableDatesPage(datesQuery, offset) {
+        const q = `workshopType=${encodeURIComponent(datesQuery)}&offset=${offset}`;
+        const urls = [
+            `${AVAILABLE_DATES_URL}?${q}`,
+            `${window.location.origin}/_functions/availableDates?${q}`,
+        ];
+        let lastErr = null;
+        for (const url of urls) {
+            try {
+                const res = await fetch(url);
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                return await res.json();
+            } catch (err) {
+                lastErr = err;
+            }
+        }
+        throw lastErr || new Error('fetch failed');
     }
 
     async _loadDates(context, currentWorkshopStartIso) {
@@ -248,28 +287,28 @@ class RescheduleWorkshop extends HTMLElement {
             let offset = 0;
             let hasMore = true;
             let pagesLoaded = 0;
-            while (hasMore && pagesLoaded < 6) {
-                const res = await fetch(`${AVAILABLE_DATES_URL}?workshopType=${encodeURIComponent(datesQuery)}&offset=${offset}`);
-                if (!res.ok) throw new Error(`HTTP ${res.status}`);
-                const json = await res.json();
-                for (const parsed of parseDatesText(json.dates)) {
+            while (hasMore && pagesLoaded < 12) {
+                const json = await this._fetchAvailableDatesPage(datesQuery, offset);
+                const lines = extractDatesLines(json);
+                for (const parsed of parseDatesText(lines)) {
                     byDay.set(parsed.day, parsed.times);
                 }
                 hasMore = !!json.hasMore;
                 offset = json.nextOffset ?? offset + 10;
                 pagesLoaded += 1;
             }
+            if (!byDay.size) {
+                console.warn('[reschedule-workshop] availableDates returned no bookable days. query:', datesQuery);
+            }
         } catch (err) {
             console.error('[reschedule-workshop] _loadDates failed:', err?.message || err);
             this._datesLoadFailed = true;
         }
 
-        if (currentDayKey && !byDay.has(currentDayKey)) {
-            byDay.set(currentDayKey, []); // shown as a locked placeholder for orientation
-        }
-
+        // Selectable rows only — current workshop date is shown in the blue banner above.
         this._days = [...byDay.entries()]
             .map(([day, times]) => ({ day, times, isCurrent: day === currentDayKey }))
+            .filter((entry) => entry.times.length > 0)
             .sort((a, b) => {
                 const [ad, am, ay] = a.day.split('/').map(Number);
                 const [bd, bm, by] = b.day.split('/').map(Number);
@@ -291,12 +330,10 @@ class RescheduleWorkshop extends HTMLElement {
 
     _renderDay(entry) {
         const isSelected = this._selectedDay === entry.day;
-        const locked = entry.isCurrent && !entry.times.length;
         return `
-            <div class="rw-day ${isSelected ? 'rw-selected' : ''} ${locked ? 'rw-locked' : ''}" data-day="${rwEsc(entry.day)}">
+            <div class="rw-day ${isSelected ? 'rw-selected' : ''}" data-day="${rwEsc(entry.day)}">
                 <div class="rw-day-label">
-                    <span>${rwEsc(entry.day)}${entry.isCurrent ? ' (המועד הנוכחי שלך)' : ''}</span>
-                    ${locked ? '<span class="rw-day-lock-badge">🔒 לא ניתן לבחירה</span> ' : ''}
+                    <span>${rwEsc(entry.day)}${entry.isCurrent ? ' (היום — ניתן לבחור שעה אחרת)' : ''}</span>
                 </div>
                 ${isSelected && entry.times.length ? `
                     <div class="rw-times">
@@ -345,9 +382,9 @@ class RescheduleWorkshop extends HTMLElement {
         } else if (this._datesLoadFailed) {
             daysBody = `<div class="rw-empty">לא הצלחנו לטעון תאריכים פנויים כרגע. נסו לרענן את הדף.</div>`;
         } else if (!this._days.length) {
-            daysBody = `<div class="rw-empty">לא נמצאו תאריכים פנויים כרגע.</div>`;
+            daysBody = `<div class="rw-empty">לא נמצאו תאריכים פנויים לבחירה כרגע. נסו לרענן את הדף, או פנו לשירות הלקוחות.</div>`;
         } else {
-            daysBody = this._days.map((d) => this._renderDay(d)).join('');
+            daysBody = `<p class="rw-sub" style="margin:0 0 10px;">בחרי תאריך מהרשימה ולאחר מכן שעה:</p>${this._days.map((d) => this._renderDay(d)).join('')}`;
         }
 
         const canSubmit = !!(this._selectedDay && this._selectedTime) && !this._sending;

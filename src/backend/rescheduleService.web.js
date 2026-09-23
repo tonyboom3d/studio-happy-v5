@@ -298,13 +298,27 @@ export async function issueRescheduleToken(orderId, { datesWorkshopQuery } = {})
     return { token, expiresAt };
 }
 
+function formatPendingRescheduleLabel(order) {
+    if (!order?.pendingRescheduleDate) return '';
+    const d = new Date(order.pendingRescheduleDate);
+    if (isNaN(d.getTime())) return '';
+    return `${formatDateIL(d)} בשעה ${formatTimeIL(d)}`;
+}
+
+/** ManyChat confirmReschedule — returns confirmed boolean (no throw on business failure). */
 export async function confirmRescheduleRequest(orderId) {
     const order = await getItemWithRetry('WorkshopOrders', orderId, { callerLabel: 'reschedule.confirmRescheduleRequest' });
-    if (!order) throw new Error('NOT_FOUND: ההזמנה לא נמצאה.');
+    if (!order) return { confirmed: false };
 
-    const chosenDateLabel = order.pendingRescheduleDate
-        ? `${formatDateIL(new Date(order.pendingRescheduleDate))} בשעה ${formatTimeIL(new Date(order.pendingRescheduleDate))}`
-        : '';
+    const chosenDateLabel = formatPendingRescheduleLabel(order);
+
+    if (order.pendingRescheduleStatus === 'pending_staff_review') {
+        return { confirmed: true, chosenDateLabel };
+    }
+
+    if (order.pendingRescheduleStatus !== 'requested' || !order.pendingRescheduleDate) {
+        return { confirmed: false };
+    }
 
     await mergePatchWorkshopOrder(orderId, {
         customerRescheduleCount: 1,
@@ -314,5 +328,5 @@ export async function confirmRescheduleRequest(orderId) {
     }, 'reschedule.confirmRescheduleRequest');
 
     await appendOrderActionLog(orderId, `הלקוח אישר סופית שינוי מועד ל: ${chosenDateLabel || '(תאריך לא ידוע)'}`);
-    return { ok: true, chosenDateLabel };
+    return { confirmed: true, chosenDateLabel };
 }

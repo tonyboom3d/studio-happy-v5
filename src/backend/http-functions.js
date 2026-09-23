@@ -810,31 +810,29 @@ export async function get_startReschedule(request) {
 
 export async function get_confirmReschedule(request) {
   try {
-    if (!(await authorizeManyChatWebhook(request))) {
-      return response({
-        status: 401,
-        headers: { 'Content-Type': 'application/json' },
-        body: { status: 'error', error: 'unauthorized' },
-      });
-    }
+    let rescheduleConfirmed = false;
 
-    const orderId = String(request.query?.order_id || '').trim();
-    if (!orderId) {
-      return badRequest({ headers: { 'Content-Type': 'application/json' }, body: { status: 'error', error: 'missing_order_id' } });
+    if (await authorizeManyChatWebhook(request)) {
+      const orderId = String(request.query?.order_id || '').trim();
+      if (orderId) {
+        const result = await confirmRescheduleRequest(orderId);
+        rescheduleConfirmed = !!result?.confirmed;
+      }
     }
-
-    const { chosenDateLabel } = await confirmRescheduleRequest(orderId);
 
     return ok({
       headers: { 'Content-Type': 'application/json' },
       body: {
         status: 'ok',
-        ai_reply: `בקשתך לשינוי מועד ל-${chosenDateLabel || 'המועד שנבחר'} התקבלה ✅ נציג שלנו יאשר את השינוי בבוקינגס ויחזור אליך במידת הצורך.`,
+        reschedule_confirmed: rescheduleConfirmed,
       },
     });
   } catch (err) {
     console.error('[http-functions] get_confirmReschedule failed:', err?.message || err);
-    return serverError({ body: { status: 'error', error: String(err?.message || err) } });
+    return ok({
+      headers: { 'Content-Type': 'application/json' },
+      body: { status: 'ok', reschedule_confirmed: false },
+    });
   }
 }
 

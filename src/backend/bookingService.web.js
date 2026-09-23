@@ -2096,10 +2096,9 @@ const AVAILABILITY_CHUNK_CONCURRENCY = 3;
 
 async function fetchAvailabilityChunk(serviceIds, startDate, endDate) {
     const options = { slotsPerDay: 50 };
-    const elevatedQueryAvailability = auth.elevate(availabilityCalendar.queryAvailability);
     const results = await Promise.all(serviceIds.map(async (serviceId) => {
         try {
-            const availability = await elevatedQueryAvailability({
+            const availability = await availabilityCalendar.queryAvailability({
                 filter: {
                     serviceId,
                     startDate: startDate.toISOString(),

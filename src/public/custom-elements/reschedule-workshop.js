@@ -2,8 +2,8 @@
  * Wix Custom Element: reschedule-workshop
  * ------------------------------------
  * עמוד "עדכון מועד סדנה" — הלקוח מגיע מקישור חד-פעמי בוואטסאפ (טוקן בתוקף
- * 10 דקות), בוחר תאריך/שעה חדשים מתוך התאריכים הפנויים (נשלף ישירות מ-
- * `/_functions/availableDates`, כמו שהבוט משתמש), ונשלח בחזרה לוואטסאפ
+ * 10 דקות), בוחר תאריך/שעה חדשים מתוך התאריכים הפנויים (מועברים מעמוד ה-Velo
+ * דרך `available-slots`), ונשלח בחזרה לוואטסאפ
  * לאישור סופי — לא משנה שום דבר ב-Wix Bookings בעצמו.
  *
  * התקנה בוויקס:
@@ -14,6 +14,7 @@
  * תקשורת:
  * - קלט:  attribute `context-data` — { orderId, workshopType, currentWorkshopStart,
  *          expiresAt, subscriberId } או { error, code, message }.
+ * - קלט:  attribute `available-slots` — מערך slots מ-getCourseSessions.
  * - קלט:  attribute `submit-result` — { ok, chosenDateLabel, message }.
  * - פלט:  CustomEvent `submit-request` עם detail = { chosenDateIso }.
  */
@@ -156,12 +157,13 @@ function parseDatesText(lines) {
 }
 
 class RescheduleWorkshop extends HTMLElement {
-    static get observedAttributes() { return ['context-data', 'submit-result']; }
+    static get observedAttributes() { return ['context-data', 'available-slots', 'submit-result']; }
 
     constructor() {
         super();
         this._context = null;
         this._contextError = null;
+        this._availableSlots = null;
         this._days = [];
         this._originIsSaturday = false;
         this._calendarMonthIndex = 0;
@@ -247,6 +249,11 @@ class RescheduleWorkshop extends HTMLElement {
                     this._startTimer(data.expiresAt);
                     this._loadDates(data, data.currentWorkshopStart);
                 }
+            }
+            if (name === 'available-slots') {
+                const slots = JSON.parse(newVal);
+                this._availableSlots = Array.isArray(slots) ? slots : [];
+                if (this._context) this._loadDates(this._context, this._context.currentWorkshopStart);
             }
             if (name === 'submit-result') {
                 this._sending = false;
@@ -348,6 +355,28 @@ class RescheduleWorkshop extends HTMLElement {
                     return new Date(ay, am - 1, ad) - new Date(by, bm - 1, bd);
                 });
         };
+
+        if (Array.isArray(this._availableSlots)) {
+            for (const slot of this._availableSlots) {
+                const timestamp = slot?.start?.timestamp;
+                if (!timestamp) continue;
+                const start = new Date(timestamp);
+                if (Number.isNaN(start.getTime())) continue;
+                const day = ilDateKey(start);
+                if (!byDay.has(day)) byDay.set(day, []);
+                const time = new Intl.DateTimeFormat('en-GB', {
+                    timeZone: IL_TZ,
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    hour12: false,
+                }).format(start);
+                if (!byDay.get(day).includes(time)) byDay.get(day).push(time);
+            }
+            applyDays();
+            this._loadingDates = false;
+            this.render();
+            return;
+        }
 
         try {
             let offset = 0;

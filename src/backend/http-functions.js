@@ -504,6 +504,15 @@ export async function use_workshopPolicy(request) {
 // ai_reply mirrors content.messages[0].text — map to ManyChat ai_reply custom field (same as workshopPolicy).
 // ============================================================
 
+/** Ignore unresolved ManyChat merge tags / wrong cuf_* ids sent as exclude_order_id. */
+function sanitizeExcludeOrderId(raw) {
+  const s = String(raw || '').trim();
+  if (!s) return '';
+  if (/\{\{|\}\}/.test(s)) return '';
+  if (/^cuf_\d+$/i.test(s)) return '';
+  return s;
+}
+
 export async function get_identifyOrder(request) {
   try {
     if (!(await authorizeManyChatWebhook(request))) {
@@ -518,13 +527,15 @@ export async function get_identifyOrder(request) {
     const phone = String(rawQuery.phone || '').trim();
     const subscriberId = String(rawQuery.subscriber_id || '').trim();
     const passedAttempts = rawQuery.attempts;
-    const excludeOrderId = String(rawQuery.exclude_order_id || '').trim();
+    const excludeOrderIdRaw = String(rawQuery.exclude_order_id || '').trim();
+    const excludeOrderId = sanitizeExcludeOrderId(excludeOrderIdRaw);
     const isNextOrderRequest = !!excludeOrderId;
 
     console.log('[get_identifyOrder] REQUEST', JSON.stringify({
       phone,
       subscriber_id: subscriberId || null,
       attempts: passedAttempts ?? null,
+      exclude_order_id_raw: excludeOrderIdRaw || null,
       exclude_order_id: excludeOrderId || null,
       is_next_order: isNextOrderRequest,
       query_param_keys: Object.keys(rawQuery),

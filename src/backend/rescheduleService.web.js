@@ -30,7 +30,13 @@ import {
     hasOpenRescheduleRequest,
     resolveCmsOrderWorkshopTypeKey,
 } from 'backend/orderLookupService.js';
-import { WORKSHOP_TYPE_LABELS_HE } from 'backend/workshopServiceIds.js';
+import {
+    WORKSHOP_TYPE_LABELS_HE,
+    WORKSHOP_SERVICE_IDS,
+    resolveWorkshopType,
+    expandCandlesServiceIds,
+} from 'backend/workshopServiceIds.js';
+import { fetchCourseSessionsInternal } from 'backend/bookingService.web.js';
 import { sendRescheduleSummary, findSubscriberIdByPhone } from 'backend/manychatService.jsw';
 import { getItemWithRetry } from 'backend/wixDataRetry.js';
 import {
@@ -39,8 +45,27 @@ import {
 } from 'backend/workshopOrderPatch.js';
 
 const ISRAEL_TZ = 'Asia/Jerusalem';
+const RESCHEDULE_SLOTS_LOOKAHEAD_DAYS = 365;
 
 export const RESCHEDULE_TOKEN_TTL_MS = 10 * 60 * 1000;
+
+async function fetchRescheduleSlots(workshopTypeKey, workshopTypeForDates) {
+    const key = workshopTypeKey || resolveWorkshopType(workshopTypeForDates);
+    if (!key) return [];
+    let serviceIds = WORKSHOP_SERVICE_IDS[key];
+    if (!serviceIds?.length) return [];
+    const start = new Date();
+    if (key === 'candles') {
+        serviceIds = expandCandlesServiceIds(serviceIds, start);
+    }
+    const end = new Date(start.getTime() + RESCHEDULE_SLOTS_LOOKAHEAD_DAYS * 24 * 60 * 60 * 1000);
+    try {
+        return await fetchCourseSessionsInternal(start, end, serviceIds);
+    } catch (err) {
+        console.warn('[rescheduleService] fetchRescheduleSlots failed:', err?.message || err);
+        return [];
+    }
+}
 
 function formatDateIL(date) {
     const parts = new Intl.DateTimeFormat('en-GB', {
@@ -111,12 +136,14 @@ export const getRescheduleContext = webMethod(Permissions.Anyone, async (orderId
             bookingIds: order.bookingIds,
         });
     }
+    const slots = await fetchRescheduleSlots(workshopType, workshopTypeForDates);
     return {
         orderId: order._id,
         workshopType,
         workshopTypeForDates,
         currentWorkshopStart: order.workshopStart ? new Date(order.workshopStart).toISOString() : null,
         expiresAt: new Date(order.rescheduleTokenExpiresAt).toISOString(),
+        slots,
     };
 });
 

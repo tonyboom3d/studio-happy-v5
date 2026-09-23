@@ -30,6 +30,10 @@ reschedule-workshop * { box-sizing: border-box; }
 .rw-current { background: #eef2ff; border: 1px solid #c7d2fe; border-radius: 12px; padding: 10px 14px; margin-bottom: 16px; font-size: 13.5px; }
 .rw-restriction-note { background: #fffbeb; border: 1px solid #fde68a; color: #92400e; border-radius: 10px; padding: 8px 12px; margin-bottom: 14px; font-size: 12.5px; text-align: center; }
 .rw-cal-card { background: #fff; border: 1px solid #e5e7eb; border-radius: 14px; padding: 12px; margin-bottom: 10px; }
+.rw-cal-nav { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.rw-cal-nav-btn { border: none; background: transparent; cursor: pointer; font-size: 16px; color: #4f46e5; padding: 4px 10px; border-radius: 8px; font-family: inherit; line-height: 1; }
+.rw-cal-nav-btn:hover:not(:disabled) { background: rgba(79,70,229,.1); }
+.rw-cal-nav-btn:disabled { color: #d1d5db; cursor: default; }
 .rw-cal-month-title { text-align: center; font-weight: 700; font-size: 14px; color: #4f46e5; margin-bottom: 8px; }
 .rw-cal-weekdays { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin-bottom: 4px; }
 .rw-cal-wd { text-align: center; font-size: 11px; font-weight: 600; color: #6b7280; padding: 2px 0; }
@@ -158,6 +162,7 @@ class RescheduleWorkshop extends HTMLElement {
         this._contextError = null;
         this._days = [];
         this._originIsSaturday = false;
+        this._calendarMonthIndex = 0;
         this._loadingDates = false;
         this._datesLoadFailed = false;
         this._selectedDay = null;
@@ -180,6 +185,14 @@ class RescheduleWorkshop extends HTMLElement {
 
         this.addEventListener('click', (e) => {
             if (this._expired || this._sending || this._submitResult?.ok) return;
+
+            const navBtn = e.target.closest('[data-cal-nav]');
+            if (navBtn && !navBtn.disabled) {
+                const dir = navBtn.dataset.calNav === 'next' ? 1 : -1;
+                this._calendarMonthIndex += dir;
+                this.render();
+                return;
+            }
 
             const dayBtn = e.target.closest('[data-day]');
             if (dayBtn && !dayBtn.disabled) {
@@ -380,7 +393,7 @@ class RescheduleWorkshop extends HTMLElement {
         return [...map.values()].sort((a, b) => (a.year - b.year) || (a.month - b.month));
     }
 
-    _renderMonthCalendar({ year, month, byDate }) {
+    _renderMonthCalendar({ year, month, byDate }, { canPrev, canNext } = {}) {
         const firstOfMonth = new Date(year, month - 1, 1);
         const startDow = firstOfMonth.getDay(); // 0=Sun
         const daysInMonth = new Date(year, month, 0).getDate();
@@ -405,7 +418,11 @@ class RescheduleWorkshop extends HTMLElement {
 
         return `
             <div class="rw-cal-card">
-                <div class="rw-cal-month-title">${HE_MONTH_NAMES[month - 1]} ${year}</div>
+                <div class="rw-cal-nav">
+                    <button type="button" class="rw-cal-nav-btn" data-cal-nav="prev" ${canPrev ? '' : 'disabled'}>›</button>
+                    <div class="rw-cal-month-title">${HE_MONTH_NAMES[month - 1]} ${year}</div>
+                    <button type="button" class="rw-cal-nav-btn" data-cal-nav="next" ${canNext ? '' : 'disabled'}>‹</button>
+                </div>
                 <div class="rw-cal-weekdays">${HE_WEEKDAY_LETTERS.map((l) => `<div class="rw-cal-wd">${l}</div>`).join('')}</div>
                 <div class="rw-cal-grid">${cellsHtml}</div>
             </div>`;
@@ -413,7 +430,14 @@ class RescheduleWorkshop extends HTMLElement {
 
     _renderCalendar() {
         const months = this._groupDaysByMonth();
-        const calendarHtml = months.map((m) => this._renderMonthCalendar(m)).join('');
+        if (this._calendarMonthIndex < 0) this._calendarMonthIndex = 0;
+        if (this._calendarMonthIndex > months.length - 1) this._calendarMonthIndex = months.length - 1;
+
+        const current = months[this._calendarMonthIndex];
+        const calendarHtml = current ? this._renderMonthCalendar(current, {
+            canPrev: this._calendarMonthIndex > 0,
+            canNext: this._calendarMonthIndex < months.length - 1,
+        }) : '';
 
         const selectedEntry = this._days.find((d) => d.day === this._selectedDay);
         const timesPanel = selectedEntry ? `

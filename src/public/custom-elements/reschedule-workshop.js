@@ -19,45 +19,46 @@
  */
 
 const RW_STYLE = `
-reschedule-workshop { display: block; direction: rtl; font-family: 'Heebo', 'Segoe UI', Arial, sans-serif; background: #f4f4f6; min-height: 100vh; color: #1f2937; }
-reschedule-workshop * { box-sizing: border-box; }
+reschedule-workshop { display: block; direction: rtl; font-family: 'Rubik', 'Heebo', 'Segoe UI', Arial, sans-serif; background: #f4f4f6; min-height: 100vh; color: #1f2937; }
+reschedule-workshop * { box-sizing: border-box; font-family: inherit; }
 .rw-wrap { max-width: 560px; margin: 0 auto; padding: 28px 16px 60px; }
 .rw-head { text-align: center; margin-bottom: 16px; }
-.rw-head h1 { margin: 0 0 4px; font-size: 19px; }
+.rw-head h1 { margin: 0 0 4px; font-size: 19px; color: #581E83; }
 .rw-sub { color: #6b7280; font-size: 13.5px; }
 .rw-timer { text-align: center; font-weight: 700; font-size: 14px; color: #b45309; background: #fffbeb; border: 1px solid #fde68a; border-radius: 10px; padding: 8px; margin-bottom: 16px; }
 .rw-timer.rw-timer-low { color: #b91c1c; background: #fef2f2; border-color: #fecaca; }
-.rw-current { background: #eef2ff; border: 1px solid #c7d2fe; border-radius: 12px; padding: 10px 14px; margin-bottom: 16px; font-size: 13.5px; }
+.rw-current { background: #f3ecfb; border: 1px solid #d9c3ee; border-radius: 12px; padding: 10px 14px; margin-bottom: 16px; font-size: 13.5px; color: #581E83; }
 .rw-restriction-note { background: #fffbeb; border: 1px solid #fde68a; color: #92400e; border-radius: 10px; padding: 8px 12px; margin-bottom: 14px; font-size: 12.5px; text-align: center; }
 .rw-cal-card { background: #fff; border: 1px solid #e5e7eb; border-radius: 14px; padding: 12px; margin-bottom: 10px; }
 .rw-cal-nav { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
-.rw-cal-nav-btn { border: none; background: transparent; cursor: pointer; font-size: 16px; color: #4f46e5; padding: 4px 10px; border-radius: 8px; font-family: inherit; line-height: 1; }
-.rw-cal-nav-btn:hover:not(:disabled) { background: rgba(79,70,229,.1); }
+.rw-cal-nav-btn { border: none; background: transparent; cursor: pointer; font-size: 16px; color: #5E2F88; padding: 4px 10px; border-radius: 8px; font-family: inherit; line-height: 1; }
+.rw-cal-nav-btn:hover:not(:disabled) { background: rgba(94,47,136,.1); }
 .rw-cal-nav-btn:disabled { color: #d1d5db; cursor: default; }
-.rw-cal-month-title { text-align: center; font-weight: 700; font-size: 14px; color: #4f46e5; margin-bottom: 8px; }
+.rw-cal-month-title { text-align: center; font-weight: 700; font-size: 14px; color: #581E83; margin-bottom: 8px; }
 .rw-cal-weekdays { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin-bottom: 4px; }
 .rw-cal-wd { text-align: center; font-size: 11px; font-weight: 600; color: #6b7280; padding: 2px 0; }
 .rw-cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
 .rw-cal-cell { height: 40px; border-radius: 9px; border: 1px solid transparent; background: transparent; font-size: 13.5px; font-family: inherit; color: #d1d5db; padding: 0; }
 .rw-cal-empty { visibility: hidden; }
-.rw-cal-bookable { border-color: #c7d2fe; background: #eef2ff; color: #3730a3; font-weight: 700; cursor: pointer; }
-.rw-cal-bookable:hover { background: #e0e7ff; }
+.rw-cal-bookable { border-color: #cbb2e6; background: #f3ecfb; color: #581E83; font-weight: 700; cursor: pointer; }
+.rw-cal-bookable:hover { background: #e6d7f5; }
 .rw-cal-current { position: relative; }
 .rw-cal-current::after { content: ''; position: absolute; bottom: 4px; left: 50%; transform: translateX(-50%); width: 5px; height: 5px; border-radius: 50%; background: #f59e0b; }
-.rw-cal-selected { background: #4f46e5 !important; color: #fff !important; border-color: #4f46e5 !important; }
+.rw-cal-selected { background: #5E2F88 !important; color: #fff !important; border-color: #5E2F88 !important; }
 .rw-cal-selected.rw-cal-current::after { background: #fff; }
 .rw-times-panel { margin-top: 12px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 12px; padding: 12px; }
 .rw-times-panel-title { font-size: 13px; font-weight: 700; color: #374151; margin-bottom: 8px; }
 .rw-times { display: flex; flex-wrap: wrap; gap: 8px; }
-.rw-time-chip { border: 1px solid #c7d2fe; background: #eef2ff; color: #3730a3; border-radius: 999px; padding: 6px 14px; font-size: 13.5px; cursor: pointer; font-family: inherit; }
-.rw-time-chip.rw-selected { background: #4f46e5; color: #fff; border-color: #4f46e5; }
+.rw-time-chip { border: 1px solid #cbb2e6; background: #f3ecfb; color: #581E83; border-radius: 999px; padding: 6px 14px; font-size: 13.5px; cursor: pointer; font-family: inherit; }
+.rw-time-chip.rw-selected { background: #5E2F88; color: #fff; border-color: #5E2F88; }
 .rw-empty { text-align: center; color: #6b7280; font-size: 14.5px; padding: 30px 10px; }
-.rw-submit { width: 100%; border: none; border-radius: 12px; padding: 14px; font-size: 15.5px; font-weight: 700; cursor: pointer; font-family: inherit; background: #4f46e5; color: #fff; margin-top: 14px; }
+.rw-submit { width: 100%; border: none; border-radius: 12px; padding: 14px; font-size: 15.5px; font-weight: 700; cursor: pointer; font-family: inherit; background: #5E2F88; color: #fff; margin-top: 14px; transition: background-color .15s; }
+.rw-submit:hover:not(:disabled) { background: #7B3DB0; }
 .rw-submit:disabled { opacity: .5; cursor: default; }
 .rw-msg { border-radius: 12px; padding: 20px 16px; font-size: 14.5px; font-weight: 600; text-align: center; }
 .rw-msg.rw-bad { background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; }
-.rw-msg.rw-good { background: #ecfdf5; border: 1px solid #6ee7b7; color: #065f46; }
-.rw-spinner { width: 34px; height: 34px; border: 3px solid #e5e7eb; border-top-color: #4f46e5; border-radius: 50%; margin: 30px auto; animation: rw-spin .8s linear infinite; }
+.rw-msg.rw-good { background: #f3ecfb; border: 1px solid #cbb2e6; color: #581E83; }
+.rw-spinner { width: 34px; height: 34px; border: 3px solid #e5e7eb; border-top-color: #5E2F88; border-radius: 50%; margin: 30px auto; animation: rw-spin .8s linear infinite; }
 @keyframes rw-spin { to { transform: rotate(360deg); } }
 `;
 

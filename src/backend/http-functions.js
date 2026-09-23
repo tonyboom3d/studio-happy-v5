@@ -27,6 +27,7 @@ import {
   NO_ACTIVE_ORDER_MESSAGE,
   ORDER_NOT_FOUND_MESSAGE,
   NO_MORE_ORDERS_MESSAGE,
+  getRescheduleEligibility,
 } from 'backend/orderLookupService.js';
 import { formatIsraeliPhoneLocal } from 'backend/orderUtils.js';
 import {
@@ -562,6 +563,10 @@ export async function get_identifyOrder(request) {
     const selection = selectActiveOrder(activeOrders, excludeOrderId);
     const { primary, hasMore } = selection;
     const found = !!primary;
+    const rescheduleEligibility = found ? getRescheduleEligibility(primary) : {
+      reschedule_blocked_48h: false,
+      reschedule_already_used: false,
+    };
 
     let text;
     if (orderLookupUnavailable) {
@@ -599,6 +604,8 @@ export async function get_identifyOrder(request) {
         source: found ? (primary?.source || '') : '',
         orderUrl: found ? (primary?.orderUrl || '') : '',
         attempts: lookupAttempts,
+        rescheduleBlocked48h: rescheduleEligibility.reschedule_blocked_48h,
+        rescheduleAlreadyUsed: rescheduleEligibility.reschedule_already_used,
       }).catch(() => {});
     } else {
       console.warn('[get_identifyOrder] no subscriber_id — skipping ManyChat field sync');
@@ -619,11 +626,13 @@ export async function get_identifyOrder(request) {
       order_lookup_unavailable: orderLookupUnavailable,
       found,
       primary_order_id: primary?.id || null,
+      reschedule: rescheduleEligibility,
       manychat_sync: subscriberId
         ? {
           status: found ? 'found' : 'not_found',
           unavailable: orderLookupUnavailable,
           lookup_attempts: lookupAttempts,
+          ...rescheduleEligibility,
         }
         : null,
     }));
@@ -637,6 +646,7 @@ export async function get_identifyOrder(request) {
       order_source: found ? (primary?.source || null) : null,
       order_url: found ? (primary?.orderUrl || null) : null,
       order_lookup_unavailable: orderLookupUnavailable,
+      ...rescheduleEligibility,
       lookup_attempts: lookupAttempts,
       lookup_handoff: lookupHandoff,
       ai_reply: text,

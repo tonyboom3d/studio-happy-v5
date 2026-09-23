@@ -28,6 +28,7 @@ import {
     resolveWorkshopType,
     serviceIdToWorkshopType,
 } from 'backend/workshopServiceIds.js';
+import { FORTY_EIGHT_HOURS_MS } from 'backend/sketchEditingPolicy.js';
 
 const SA_CONSISTENT = { suppressAuth: true, consistentRead: true };
 const ISRAEL_TZ = 'Asia/Jerusalem';
@@ -213,6 +214,7 @@ function mapCmsOrder(order, bookingsById) {
         rugCount: Number(order.rugCount) || 0,
         extraCandleCount: Number(order.extraCandleCount) || 0,
         selectedProducts: Array.isArray(order.selectedProducts) ? order.selectedProducts : [],
+        customerRescheduleCount: Number(order.customerRescheduleCount) || 0,
         cancelledAt: order.cancelledAt ? parseWorkshopDate(order.cancelledAt) : null,
         bookingsCancelled: allLinkedCancelled,
     };
@@ -353,6 +355,32 @@ export function isUnavailableOrder(order, nowMs = Date.now()) {
 
 export function filterActiveOrders(orders, nowMs = Date.now()) {
     return (orders || []).filter((order) => !isUnavailableOrder(order, nowMs));
+}
+
+/** Free customer reschedule blocked when workshop starts within 48 hours. */
+export function isRescheduleBlockedWithin48h(order, nowMs = Date.now()) {
+    if (!order?.workshopStart || !(order.workshopStart instanceof Date) || isNaN(order.workshopStart.getTime())) {
+        return false;
+    }
+    const msUntil = order.workshopStart.getTime() - nowMs;
+    return msUntil > 0 && msUntil <= FORTY_EIGHT_HOURS_MS;
+}
+
+/** One free customer reschedule per order — tracked on WorkshopOrders.customerRescheduleCount. */
+export function hasCustomerRescheduleUsed(order) {
+    const count = Number(order?.customerRescheduleCount);
+    if (Number.isFinite(count) && count >= 1) return true;
+    return order?.rescheduledByCustomer === true;
+}
+
+export function getRescheduleEligibility(order, nowMs = Date.now()) {
+    if (!order) {
+        return { reschedule_blocked_48h: false, reschedule_already_used: false };
+    }
+    return {
+        reschedule_blocked_48h: isRescheduleBlockedWithin48h(order, nowMs),
+        reschedule_already_used: hasCustomerRescheduleUsed(order),
+    };
 }
 
 export const NO_ACTIVE_ORDER_MESSAGE = 'לא מצאנו הזמנה פעילה — הסדנה שלך כבר התקיימה לפני יותר מ-2 ימים ❌';

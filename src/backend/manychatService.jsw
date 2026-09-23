@@ -162,7 +162,7 @@ async function getOrCreateCustomFieldId(fieldName) {
     const map = await getCustomFieldsMap();
     if (map[fieldName]) return map[fieldName];
 
-    console.log(`[ManyChat] Custom field "${fieldName}" not found — creating it.`);
+    // console.log(`[ManyChat] Custom field "${fieldName}" not found — creating it.`);
     const created = await manychatRequest('/fb/page/createCustomField', {
         method: 'POST',
         body: {
@@ -204,10 +204,10 @@ async function findSubscriber({ email, phone }) {
     if (phone) {
         const variants = getManyChatPhoneLookupVariants(phone);
         for (const variant of variants) {
-            console.log('[ManyChat] findBySystemField phone try:', variant);
+            // console.log('[ManyChat] findBySystemField phone try:', variant);
             const byPhone = await findSubscriberByField('phone', variant);
             if (byPhone) {
-                console.log('[ManyChat] Subscriber found via phone format:', variant);
+                // console.log('[ManyChat] Subscriber found via phone format:', variant);
                 return byPhone;
             }
         }
@@ -215,7 +215,7 @@ async function findSubscriber({ email, phone }) {
         try {
             const byCustomField = await findSubscriberByCustomField(WA_PHONE_LOOKUP_FIELD, digits);
             if (byCustomField) {
-                console.log('[ManyChat] Subscriber found via wa_phone_lookup custom field:', digits);
+                // console.log('[ManyChat] Subscriber found via wa_phone_lookup custom field:', digits);
                 return byCustomField;
             }
         } catch (err) {
@@ -462,7 +462,7 @@ function buildOrderCustomFields(order, notificationType = 'order_confirmed') {
 async function setOrderCustomFields(subscriberId, order, notificationType = 'order_confirmed') {
     const fields = buildOrderCustomFields(order, notificationType);
     const sending = fields.filter(f => hasManyChatFieldValue(f.value));
-    console.log('[ManyChat] setCustomFields:', sending.map(f => `${f.name}=${f.value}`).join(', '));
+    // console.log('[ManyChat] setCustomFields:', sending.map(f => `${f.name}=${f.value}`).join(', '));
     await setCustomFieldsByName(subscriberId, fields);
     return sending;
 }
@@ -480,12 +480,12 @@ function formatFieldsForLog(fields) {
 
 /** Logs a clear success line including every field/value that went into the message. */
 function logManyChatSendSuccess(label, { order, phone, subscriberId, notificationType, fields } = {}) {
-    console.log(
-        `[ManyChat] ✅ ${label} — ההודעה נשלחה בהצלחה | ` +
-        `orderId=${order?._id || '(none)'} phone=${phone || order?.organizerPhone || '(none)'} ` +
-        `subscriberId=${subscriberId || '(none)'} notificationType=${notificationType || '(none)'} | ` +
-        `פרטי ההודעה: ${formatFieldsForLog(fields)}`
-    );
+    // console.log(
+//         `[ManyChat] ✅ ${label} — ההודעה נשלחה בהצלחה | ` +
+//         `orderId=${order?._id || '(none)'} phone=${phone || order?.organizerPhone || '(none)'} ` +
+//         `subscriberId=${subscriberId || '(none)'} notificationType=${notificationType || '(none)'} | ` +
+//         `פרטי ההודעה: ${formatFieldsForLog(fields)}`
+//     );
 }
 
 /** Logs a clear, greppable error line when a message failed to send. */
@@ -562,9 +562,9 @@ export async function syncAiResponseFields(subscriberId, payload = {}) {
             { name: AI_MC_FIELDS.actionTarget, value: payload.action_target || '' },
             { name: AI_MC_FIELDS.buttonLabel, value: payload.button_label || '' },
         ]);
-        console.log('[ManyChat] ✅ syncAiResponseFields. subscriberId:', subscriberId,
-            'ai_show_action:', !!payload.show_action_button,
-            'type:', payload.action_type || '(none)');
+        // console.log('[ManyChat] ✅ syncAiResponseFields. subscriberId:', subscriberId,
+//             'ai_show_action:', !!payload.show_action_button,
+//             'type:', payload.action_type || '(none)');
         return { synced: true };
     } catch (err) {
         console.warn('[ManyChat] syncAiResponseFields failed. subscriberId:', subscriberId, err?.message || err);
@@ -582,6 +582,8 @@ export const ORDER_LOOKUP_MC_FIELDS = {
     status: 'order_lookup_status',    // 'found' | 'not_found'
     hasMore: 'order_lookup_has_more', // boolean — more than one matching order
     unavailable: 'order_lookup_unavailable', // boolean — expired or cancelled match
+    rescheduleBlocked48h: 'reschedule_blocked_48h', // boolean — workshop within 48h
+    rescheduleAlreadyUsed: 'reschedule_already_used', // boolean — customerRescheduleCount >= 1
     orderId: 'order_lookup_order_id', // WorkshopOrders _id or Wix Booking _id — used by later flow steps
     source: 'order_lookup_source',    // 'cms' | 'booking'
     attempts: 'order_lookup_attempts', // number — failed lookups / failed OTP sends
@@ -640,12 +642,21 @@ export async function incrementOrderLookupAttempts(subscriberId, passedAttempts)
  * reference the identified order. Never throws — the HTTP response body is
  * still usable even if this fails.
  */
-export async function syncOrderLookupFields(subscriberId, { status, hasMore, unavailable, orderId, source, orderUrl, attempts, verifiedAt } = {}) {
+export async function syncOrderLookupFields(subscriberId, {
+    status, hasMore, unavailable, rescheduleBlocked48h, rescheduleAlreadyUsed,
+    orderId, source, orderUrl, attempts, verifiedAt,
+} = {}) {
     if (!subscriberId) return { synced: false, reason: 'no-subscriberId' };
     try {
         await setBooleanCustomField(subscriberId, ORDER_LOOKUP_MC_FIELDS.hasMore, !!hasMore);
         if (unavailable != null) {
             await setBooleanCustomField(subscriberId, ORDER_LOOKUP_MC_FIELDS.unavailable, !!unavailable);
+        }
+        if (rescheduleBlocked48h != null) {
+            await setBooleanCustomField(subscriberId, ORDER_LOOKUP_MC_FIELDS.rescheduleBlocked48h, !!rescheduleBlocked48h);
+        }
+        if (rescheduleAlreadyUsed != null) {
+            await setBooleanCustomField(subscriberId, ORDER_LOOKUP_MC_FIELDS.rescheduleAlreadyUsed, !!rescheduleAlreadyUsed);
         }
         const textFields = [
             { name: ORDER_LOOKUP_MC_FIELDS.status, value: status || 'not_found' },
@@ -660,9 +671,9 @@ export async function syncOrderLookupFields(subscriberId, { status, hasMore, una
         if (attempts != null) {
             await setNumberCustomField(subscriberId, ORDER_LOOKUP_MC_FIELDS.attempts, attempts);
         }
-        console.log('[ManyChat] ✅ syncOrderLookupFields. subscriberId:', subscriberId,
-            'status:', status, 'hasMore:', !!hasMore, 'unavailable:', unavailable ?? '(unchanged)',
-            'orderId:', orderId || '(none)', 'attempts:', attempts ?? '(unchanged)');
+        // console.log('[ManyChat] ✅ syncOrderLookupFields. subscriberId:', subscriberId,
+//             'status:', status, 'hasMore:', !!hasMore, 'unavailable:', unavailable ?? '(unchanged)',
+//             'orderId:', orderId || '(none)', 'attempts:', attempts ?? '(unchanged)');
         return { synced: true };
     } catch (err) {
         console.warn('[ManyChat] syncOrderLookupFields failed. subscriberId:', subscriberId, err?.message || err);
@@ -697,7 +708,7 @@ export async function sendManyChatText(subscriberId, text) {
                 },
             },
         });
-        console.log('[ManyChat] ✅ sendManyChatText — נשלח. subscriberId:', subscriberId);
+        // console.log('[ManyChat] ✅ sendManyChatText — נשלח. subscriberId:', subscriberId);
         return { sent: true };
     } catch (err) {
         const message = err?.message || String(err);
@@ -743,7 +754,7 @@ export async function tagHandoff(subscriberId, reason) {
         } else {
             console.warn('[ManyChat] tagHandoff: HANDOFF_FLOW_NS not configured yet — only the custom field was set. subscriberId:', subscriberId);
         }
-        console.log('[ManyChat] ✅ tagHandoff — סומן לבדיקה אנושית. subscriberId:', subscriberId, 'reason:', reason);
+        // console.log('[ManyChat] ✅ tagHandoff — סומן לבדיקה אנושית. subscriberId:', subscriberId, 'reason:', reason);
         return { sent: true };
     } catch (err) {
         console.error('[ManyChat] ❌ tagHandoff נכשל. subscriberId:', subscriberId, 'error:', err?.message || err);
@@ -772,7 +783,7 @@ async function runOrderConfirmationManyChat(order, { allowCreate = true } = {}) 
 
     if (!subscriber && allowCreate) {
         const { firstName, lastName } = splitName(order?.organizerName);
-        console.log('[ManyChat] Subscriber not found, creating. orderId:', order?._id, 'phone:', phone);
+        // console.log('[ManyChat] Subscriber not found, creating. orderId:', order?._id, 'phone:', phone);
         subscriber = await findOrCreateSubscriber({ email, phone, firstName, lastName });
     } else if (!subscriber) {
         // allowCreate=false (sandbox test with ManyChat import permission not
@@ -780,7 +791,7 @@ async function runOrderConfirmationManyChat(order, { allowCreate = true } = {}) 
         const tried = getManyChatPhoneLookupVariants(order?.organizerPhone).join(', ') || phone;
         throw new Error(`[ManyChat] No subscriber found for phone variants tried: [${tried}] email=${email || '(none)'}. Create the contact manually in ManyChat first (createSubscriber is skipped), then re-run.`);
     } else {
-        console.log('[ManyChat] Subscriber found. orderId:', order?._id, 'subscriberId:', subscriber.id);
+        // console.log('[ManyChat] Subscriber found. orderId:', order?._id, 'subscriberId:', subscriber.id);
         await ensureWaPhoneLookupField(subscriber.id, phone);
     }
 
@@ -862,7 +873,7 @@ const CERAMICS_BOOK_URL = 'https://www.studiohappy.art/booking-flow-ceramic';
  * Never throws — same contract as sendOrderConfirmationManyChat.
  */
 export async function sendTuftingPromoCouponManyChat(couponRow, { waitForConsent = false } = {}) {
-    console.log(`🎟️[PROMO] sendTuftingPromoCouponManyChat called. couponId=${couponRow?._id} code=${couponRow?.code} orderId=${couponRow?.orderId}`);
+    // console.log(`🎟️[PROMO] sendTuftingPromoCouponManyChat called. couponId=${couponRow?._id} code=${couponRow?.code} orderId=${couponRow?.orderId}`);
     try {
         const phone = normalizeIsraeliPhone(couponRow?.organizerPhone);
         const email = couponRow?.organizerEmail || '';
@@ -880,7 +891,7 @@ export async function sendTuftingPromoCouponManyChat(couponRow, { waitForConsent
             ? await waitForPhoneMarketingConsent(phone)
             : await hasPhoneMarketingConsent(phone);
         if (!consented) {
-            console.log('🎟️[PROMO] WhatsApp skipped — no marketing consent for phone. orderId:', couponRow?.orderId);
+            // console.log('🎟️[PROMO] WhatsApp skipped — no marketing consent for phone. orderId:', couponRow?.orderId);
             return { sent: false, reason: 'no-marketing-consent' };
         }
 
@@ -905,7 +916,7 @@ export async function sendTuftingPromoCouponManyChat(couponRow, { waitForConsent
         await setCustomFieldsByName(subscriber.id, sending);
         await sendFlow(subscriber.id, ORDER_CONFIRMATION_FLOW_NS);
 
-        console.log(`🎟️[PROMO] ✅ WhatsApp sent (ManyChat flow ${ORDER_CONFIRMATION_FLOW_NS}). orderId=${couponRow?.orderId} code=${couponRow?.code} subscriberId=${subscriber.id}`);
+        // console.log(`🎟️[PROMO] ✅ WhatsApp sent (ManyChat flow ${ORDER_CONFIRMATION_FLOW_NS}). orderId=${couponRow?.orderId} code=${couponRow?.code} subscriberId=${subscriber.id}`);
         logManyChatSendSuccess('sendTuftingPromoCouponManyChat', {
             order: { _id: couponRow?.orderId }, phone, subscriberId: subscriber.id,
             notificationType: 'tufting_promo_coupon', fields: sending,
@@ -1125,10 +1136,10 @@ export async function testStaffManyChat(payload) {
     const audience = p.audience || 'employee';
     const vars = p.vars && typeof p.vars === 'object' ? p.vars : {};
 
-    console.log('[ManyChat staff TEST]', JSON.stringify({ actionKey, phone, audience, vars }));
+    // console.log('[ManyChat staff TEST]', JSON.stringify({ actionKey, phone, audience, vars }));
 
     const result = await sendStaffManyChat(actionKey, phone, audience, vars);
-    console.log('[ManyChat staff TEST] result:', JSON.stringify(result));
+    // console.log('[ManyChat staff TEST] result:', JSON.stringify(result));
     return { success: !!result.sent, ...result, actionKey, phone, audience, vars };
 }
 
@@ -1160,11 +1171,11 @@ export async function testManyChatFlow(overrides) {
         ...orderOverrides,
     };
 
-    console.log('[ManyChat TEST] Running with mock order:', JSON.stringify(mockOrder), 'allowCreate:', _allowCreate);
+    // console.log('[ManyChat TEST] Running with mock order:', JSON.stringify(mockOrder), 'allowCreate:', _allowCreate);
 
     try {
         const result = await runOrderConfirmationManyChat(mockOrder, { allowCreate: _allowCreate });
-        console.log('[ManyChat TEST] SUCCESS:', JSON.stringify(result));
+        // console.log('[ManyChat TEST] SUCCESS:', JSON.stringify(result));
         return { success: true, ...result, mockOrder };
     } catch (err) {
         console.error('[ManyChat TEST] FAILED:', err?.message || err);

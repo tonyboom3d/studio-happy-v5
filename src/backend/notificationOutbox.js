@@ -383,7 +383,7 @@ export async function flushOutbox({ now = new Date(), force = false } = {}) {
         const result = await flushGroup(groupRows, now);
         sent += result.sent; merged += result.merged; skipped += result.skipped;
     }
-    if (sent || merged) console.log(`[notificationOutbox] flushOutbox: sent=${sent} merged=${merged} skipped=${skipped}`);
+    // if (sent || merged) console.log(`[notificationOutbox] flushOutbox: sent=${sent} merged=${merged} skipped=${skipped}`);
     return { sent, merged, skipped };
 }
 

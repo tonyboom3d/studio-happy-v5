@@ -157,7 +157,7 @@ export async function processDeadlineReminders(now = new Date()) {
         sent++;
     }
     await flushOutbox({ force: true }).catch(err => console.error('[shiftConfirmations] flushOutbox failed:', err?.message || err));
-    console.log(`[shiftConfirmations] processDeadlineReminders: window=${period.start}..${period.end} sent=${sent}`);
+    // console.log(`[shiftConfirmations] processDeadlineReminders: window=${period.start}..${period.end} sent=${sent}`);
     return { sent, window: { start: period.start, end: period.end }, daysUntilDeadline };
 }
 
@@ -294,7 +294,7 @@ export async function processConfirmations(now = new Date()) {
     if (report.stage1 || report.stage2 || report.escalated) {
         await publishSchedulingUpdate('confirmations', report);
         await flushOutbox({ force: true }).catch(err => console.error('[shiftConfirmations] flushOutbox failed:', err?.message || err));
-        console.log('[shiftConfirmations] processConfirmations:', JSON.stringify(report));
+        // console.log('[shiftConfirmations] processConfirmations:', JSON.stringify(report));
     }
     return report;
 }
@@ -359,7 +359,7 @@ async function applyConfirmationResponse(a, accept, notes, { notifyManagers = tr
             confirmNotes: cleanNotes,
         }, SA);
         await publishSchedulingUpdate('shift-confirmed', { dateKey });
-        console.log(`[shiftConfirmations] confirmed: ${a._id} (${employeeName})`);
+        // console.log(`[shiftConfirmations] confirmed: ${a._id} (${employeeName})`);
         return { ok: true, state: CONFIRMATION_STATE.CONFIRMED };
     }
 
@@ -386,7 +386,7 @@ async function applyConfirmationResponse(a, accept, notes, { notifyManagers = tr
         await flushOutbox({ force: true }).catch(err => console.error('[shiftConfirmations] flushOutbox failed:', err?.message || err));
     }
     await runScheduling(dateKey, dateKey);
-    console.log(`[shiftConfirmations] declined: ${a._id} (${employeeName})`);
+    // console.log(`[shiftConfirmations] declined: ${a._id} (${employeeName})`);
     return { ok: true, state: CONFIRMATION_STATE.DECLINED };
 }
 

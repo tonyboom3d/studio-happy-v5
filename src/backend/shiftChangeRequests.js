@@ -160,7 +160,7 @@ export async function createShiftChangeRequest(role, submissionId, payload) {
     });
     await flushOutbox({ force: true }).catch(err => console.error('[shiftChangeRequests] flushOutbox failed:', err?.message || err));
 
-    console.log(`[shiftChangeRequests] request created: submission=${submissionId} type=${type} notified=${sentCount}`);
+    // console.log(`[shiftChangeRequests] request created: submission=${submissionId} type=${type} notified=${sentCount}`);
     return { ok: true };
 }
 
@@ -230,7 +230,7 @@ export async function decideRequestByToken(token, decision, comment) {
         employeeAcked: false,
     }, SA);
 
-    console.log(`[shiftChangeRequests] decided: id=${r._id} status=${status}`);
+    // console.log(`[shiftChangeRequests] decided: id=${r._id} status=${status}`);
     return { ok: true, status, managerComment: cleanComment };
 }
 

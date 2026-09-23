@@ -7,6 +7,7 @@ import {
   syncAiResponseFields,
   syncOrderLookupFields,
   incrementOrderLookupAttempts,
+  syncRescheduleLink,
 } from 'backend/manychatService.jsw';
 import { createConversation, createResponse, extractReplyText } from 'backend/openaiService.jsw';
 import { getUserConversation, upsertUserConversation } from 'backend/userConversationsStore.js';
@@ -28,6 +29,9 @@ import {
   ORDER_NOT_FOUND_MESSAGE,
   NO_MORE_ORDERS_MESSAGE,
   getRescheduleEligibility,
+  isRescheduleBlockedWithin48h,
+  hasCustomerRescheduleUsed,
+  hasOpenRescheduleRequest,
 } from 'backend/orderLookupService.js';
 import { formatIsraeliPhoneLocal } from 'backend/orderUtils.js';
 import {
@@ -35,6 +39,8 @@ import {
   verifyOrderLookupOtp,
   buildVerificationCheckResponse,
 } from 'backend/orderLookupOtpService.js';
+import wixData from 'wix-data';
+import { issueRescheduleToken, confirmRescheduleRequest } from 'backend/rescheduleService.web.js';
 
 // ============================================================
 // ManyChat availability endpoint
@@ -845,6 +851,111 @@ export async function get_verifyOrderLookupOtp(request) {
     });
   } catch (err) {
     console.error('[http-functions] get_verifyOrderLookupOtp failed:', err?.message || err);
+    return serverError({ body: { status: 'error', error: String(err?.message || err) } });
+  }
+}
+
+// ============================================================
+// Reschedule-workshop flow — "עדכון מועד סדנה" page
+// GET https://www.studiohappy.art/_functions/startReschedule?order_id=...&subscriber_id=...
+// GET https://www.studiohappy.art/_functions/confirmReschedule?order_id=...&subscriber_id=...
+// Header: X-API-KEY (manychat_webhook_apiKey)
+// ============================================================
+
+const RESCHEDULE_PAGE_URL = 'https://www.studiohappy.art/עדכון-מועד-סדנה';
+
+export async function get_startReschedule(request) {
+  try {
+    if (!(await authorizeManyChatWebhook(request))) {
+      return response({
+        status: 401,
+        headers: { 'Content-Type': 'application/json' },
+        body: { status: 'error', error: 'unauthorized' },
+      });
+    }
+
+    const orderId = String(request.query?.order_id || '').trim();
+    const subscriberId = String(request.query?.subscriber_id || '').trim();
+    if (!orderId) {
+      return badRequest({ headers: { 'Content-Type': 'application/json' }, body: { status: 'error', error: 'missing_order_id' } });
+    }
+
+    const order = await wixData.get('WorkshopOrders', orderId, { suppressAuth: true, consistentRead: true }).catch(() => null);
+    if (!order) {
+      return ok({ headers: { 'Content-Type': 'application/json' }, body: { status: 'error', ai_reply: 'לא מצאנו את ההזמנה 🔍' } });
+    }
+
+    const rescheduleBlocked48h = isRescheduleBlockedWithin48h(order);
+    const rescheduleAlreadyUsed = hasCustomerRescheduleUsed(order);
+    const rescheduleAlreadyPending = hasOpenRescheduleRequest(order);
+
+    if (rescheduleBlocked48h || rescheduleAlreadyUsed || rescheduleAlreadyPending) {
+      const ai_reply = rescheduleAlreadyPending
+        ? 'יש כבר בקשת שינוי מועד ממתינה לטיפול הצוות שלנו 🙏'
+        : rescheduleBlocked48h
+          ? 'הסדנה מתקיימת בעוד פחות מ-48 שעות ולכן לא ניתן לדחות אותה באופן עצמאי. אנא פני/ה לשירות הלקוחות שלנו 💬'
+          : 'כבר נעשה שינוי מועד חד-פעמי להזמנה הזו בעבר. אנא פני/ה לשירות הלקוחות שלנו 💬';
+
+      return ok({
+        headers: { 'Content-Type': 'application/json' },
+        body: {
+          status: 'ok',
+          reschedule_blocked_48h: rescheduleBlocked48h,
+          reschedule_already_used: rescheduleAlreadyUsed,
+          reschedule_already_pending: rescheduleAlreadyPending,
+          ai_reply,
+        },
+      });
+    }
+
+    const { token, expiresAt } = await issueRescheduleToken(orderId);
+    const link = `${RESCHEDULE_PAGE_URL}?orderId=${encodeURIComponent(orderId)}&token=${encodeURIComponent(token)}&sid=${encodeURIComponent(subscriberId)}`;
+
+    if (subscriberId) {
+      await syncRescheduleLink(subscriberId, link).catch(() => {});
+    }
+
+    return ok({
+      headers: { 'Content-Type': 'application/json' },
+      body: {
+        status: 'ok',
+        reschedule_link: link,
+        expires_at: expiresAt.toISOString(),
+        ai_reply: 'הנה קישור לבחירת מועד חדש לסדנה שלך — הקישור בתוקף ל-10 דקות ⏱️',
+      },
+    });
+  } catch (err) {
+    console.error('[http-functions] get_startReschedule failed:', err?.message || err);
+    return serverError({ body: { status: 'error', error: String(err?.message || err) } });
+  }
+}
+
+export async function get_confirmReschedule(request) {
+  try {
+    if (!(await authorizeManyChatWebhook(request))) {
+      return response({
+        status: 401,
+        headers: { 'Content-Type': 'application/json' },
+        body: { status: 'error', error: 'unauthorized' },
+      });
+    }
+
+    const orderId = String(request.query?.order_id || '').trim();
+    if (!orderId) {
+      return badRequest({ headers: { 'Content-Type': 'application/json' }, body: { status: 'error', error: 'missing_order_id' } });
+    }
+
+    const { chosenDateLabel } = await confirmRescheduleRequest(orderId);
+
+    return ok({
+      headers: { 'Content-Type': 'application/json' },
+      body: {
+        status: 'ok',
+        ai_reply: `בקשתך לשינוי מועד ל-${chosenDateLabel || 'המועד שנבחר'} התקבלה ✅ נציג שלנו יאשר את השינוי בבוקינגס ויחזור אליך במידת הצורך.`,
+      },
+    });
+  } catch (err) {
+    console.error('[http-functions] get_confirmReschedule failed:', err?.message || err);
     return serverError({ body: { status: 'error', error: String(err?.message || err) } });
   }
 }

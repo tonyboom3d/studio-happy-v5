@@ -79,7 +79,7 @@ class ShiftSwap extends HTMLElement {
     }
 
     connectedCallback() {
-        console.log('[shift-swap] CE connected');
+        // console.log('[shift-swap] CE connected');
         if (!document.getElementById('ssw-style')) {
             const style = document.createElement('style');
             style.id = 'ssw-style';
@@ -98,7 +98,7 @@ class ShiftSwap extends HTMLElement {
             const comment = this.querySelector('#sswComment')?.value || '';
             this._sending = true;
             this.render();
-            console.log('[shift-swap] action →', action, btn.dataset.decision);
+            // console.log('[shift-swap] action →', action, btn.dataset.decision);
             this.dispatchEvent(new CustomEvent('swap-action', {
                 detail: { action, decision: btn.dataset.decision, comment }, bubbles: true,
             }));
@@ -114,7 +114,7 @@ class ShiftSwap extends HTMLElement {
             console.error('[shift-swap] bad JSON attribute:', err);
             return;
         }
-        console.log('[shift-swap]', name, 'received');
+        // console.log('[shift-swap]', name, 'received');
         this.render();
     }
 

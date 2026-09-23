@@ -14,7 +14,7 @@ const copy404Plugin = () => {
       
       if (fs.existsSync(indexPath)) {
         fs.copyFileSync(indexPath, html404Path)
-        console.log('✓ Copied index.html to 404.html')
+        // console.log('✓ Copied index.html to 404.html')
       }
     }
   }

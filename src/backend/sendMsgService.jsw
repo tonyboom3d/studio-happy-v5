@@ -111,7 +111,7 @@ export async function sendAdminOtpSms(phone, code) {
                 TypeSms: 1,
             },
         });
-        console.log(`[SendMsg] ✅ sendAdminOtpSms — sent to ${cellphone}`);
+        // console.log(`[SendMsg] ✅ sendAdminOtpSms — sent to ${cellphone}`);
         return { sent: true };
     } catch (err) {
         console.error('[SendMsg] ❌ sendAdminOtpSms failed:', err?.message || err);
@@ -139,7 +139,7 @@ export async function sendOrderLookupOtpSms(phone, code) {
                 TypeSms: 1,
             },
         });
-        console.log(`[SendMsg] ✅ sendOrderLookupOtpSms — sent to ${cellphone}`);
+        // console.log(`[SendMsg] ✅ sendOrderLookupOtpSms — sent to ${cellphone}`);
         return { sent: true };
     } catch (err) {
         console.error('[SendMsg] ❌ sendOrderLookupOtpSms failed:', err?.message || err);

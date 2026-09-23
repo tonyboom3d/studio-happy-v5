@@ -237,7 +237,7 @@ export async function linkWorkshopOrderToEcom(workshopOrder, ecomOrderInput) {
         const backfilled = backfillCupsFromEcomOrder(ecomOrder);
         if (backfilled) {
             updates.selectedProducts = backfilled;
-            console.log(`[orderReconciliation] backfilled ${backfilled.length} cup(s) from eCom order for WorkshopOrder ${workshopOrder._id}`);
+            // console.log(`[orderReconciliation] backfilled ${backfilled.length} cup(s) from eCom order for WorkshopOrder ${workshopOrder._id}`);
         }
     }
 

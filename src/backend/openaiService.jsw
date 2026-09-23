@@ -307,16 +307,16 @@ export async function createResponse({ conversationId, input }) {
         },
     });
 
-    console.log(
-        '[OpenAI][cost]',
-        JSON.stringify({
-            model,
-            responseId: response?.id,
-            conversationId,
-            fileSearchUsed: usedFileSearch(response),
-            usage: response?.usage || null,
-        })
-    );
+    // console.log(
+//         '[OpenAI][cost]',
+//         JSON.stringify({
+//             model,
+//             responseId: response?.id,
+//             conversationId,
+//             fileSearchUsed: usedFileSearch(response),
+//             usage: response?.usage || null,
+//         })
+//     );
 
     return response;
 }

@@ -17,7 +17,7 @@ import { getMyPendingItems, respondToPendingItems } from 'backend/pendingActions
 const ELEMENT_ID = '#pendingActions1';
 
 $w.onReady(async function () {
-    console.log('[pending-actions] $w.onReady fired');
+    // console.log('[pending-actions] $w.onReady fired');
 
     const el = $w(ELEMENT_ID);
     if (!el) {
@@ -26,7 +26,7 @@ $w.onReady(async function () {
     }
 
     const token = wixLocation.query?.token || null;
-    console.log('[pending-actions] token present:', !!token);
+    // console.log('[pending-actions] token present:', !!token);
 
     if (!token) {
         el.setAttribute('items-data', JSON.stringify({ error: true, message: 'חסר קישור תקין.', __ts: Date.now() }));
@@ -35,10 +35,10 @@ $w.onReady(async function () {
 
     el.on('submit-decisions', async (event) => {
         const { decisions } = event.detail || {};
-        console.log('[pending-actions] page ← submit-decisions', decisions?.length);
+        // console.log('[pending-actions] page ← submit-decisions', decisions?.length);
         try {
             const result = await respondToPendingItems(token, decisions);
-            console.log('[pending-actions] respondToPendingItems result', result);
+            // console.log('[pending-actions] respondToPendingItems result', result);
             el.setAttribute('respond-result', JSON.stringify({ ...result, __ts: Date.now() }));
         } catch (err) {
             const message = err?.message || String(err);
@@ -50,7 +50,7 @@ $w.onReady(async function () {
     async function loadItems() {
         try {
             const details = await getMyPendingItems(token);
-            console.log('[pending-actions] items loaded:', details?.items?.length);
+            // console.log('[pending-actions] items loaded:', details?.items?.length);
             el.setAttribute('items-data', JSON.stringify({ ...details, __ts: Date.now() }));
         } catch (err) {
             console.error('[pending-actions] getMyPendingItems failed:', err?.message || err);

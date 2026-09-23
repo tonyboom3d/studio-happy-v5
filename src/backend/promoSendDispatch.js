@@ -51,11 +51,11 @@ export async function retryUnsentPromoCoupons() {
     let retried = 0;
     let sent = 0;
     for (const coupon of result.items || []) {
-        console.log(`${TAG} retryUnsentPromoCoupons: retrying couponId=${coupon._id} code=${coupon.code} orderId=${coupon.orderId}`);
+        // console.log(`${TAG} retryUnsentPromoCoupons: retrying couponId=${coupon._id} code=${coupon.code} orderId=${coupon.orderId}`);
         const outcome = await sendPromoCouponNotifications(coupon, { waitForConsent: false });
         retried++;
         if (outcome.ok) sent++;
     }
-    if (retried) console.log(`${TAG} retryUnsentPromoCoupons: retried=${retried} sent=${sent}`);
+    // if (retried) console.log(`${TAG} retryUnsentPromoCoupons: retried=${retried} sent=${sent}`);
     return { retried, sent };
 }

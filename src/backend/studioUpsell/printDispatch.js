@@ -207,6 +207,6 @@ export async function retryPendingPrintJobs() {
         if ((Number(row.attempts) || 0) + 1 >= MAX_ATTEMPTS) gaveUp++;
     }
 
-    if (retried) console.log(`[jobs] retryPendingPrintJobs: retried=${retried} nearingLimit=${gaveUp}`);
+    // if (retried) console.log(`[jobs] retryPendingPrintJobs: retried=${retried} nearingLimit=${gaveUp}`);
     return { retried, gaveUp };
 }

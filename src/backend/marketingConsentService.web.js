@@ -85,7 +85,7 @@ async function checkEmailViaContactExtendedFields(email) {
 
     if (chained.items?.[0]) {
         const status = readContactExtendedEmailSubscriptionStatus(chained.items[0]);
-        console.log(`🎟️[PROMO] email consent step contacts-extendedFields: ${queryEmail} -> subscribed=true status=${status} (chained query)`);
+        // console.log(`🎟️[PROMO] email consent step contacts-extendedFields: ${queryEmail} -> subscribed=true status=${status} (chained query)`);
         return { subscribed: true, detail: status, source: 'contacts.extendedFields' };
     }
 
@@ -99,14 +99,14 @@ async function checkEmailViaContactExtendedFields(email) {
         if (!contact) continue;
         const status = readContactExtendedEmailSubscriptionStatus(contact);
         if (isSubscribedStatus(contact.info?.extendedFields?.[EXT_EMAIL_SUB_STATUS])) {
-            console.log(`🎟️[PROMO] email consent step contacts-extendedFields: ${queryEmail} -> subscribed=true status=${status}`);
+            // console.log(`🎟️[PROMO] email consent step contacts-extendedFields: ${queryEmail} -> subscribed=true status=${status}`);
             return { subscribed: true, detail: status, source: 'contacts.extendedFields' };
         }
-        console.log(`🎟️[PROMO] email consent step contacts-extendedFields: ${queryEmail} -> subscribed=false status=${status}`);
+        // console.log(`🎟️[PROMO] email consent step contacts-extendedFields: ${queryEmail} -> subscribed=false status=${status}`);
         return { subscribed: false, detail: status, source: 'contacts.extendedFields' };
     }
 
-    console.log(`🎟️[PROMO] email consent step contacts-extendedFields: ${queryEmail} -> no contact`);
+    // console.log(`🎟️[PROMO] email consent step contacts-extendedFields: ${queryEmail} -> no contact`);
     return { subscribed: false, detail: 'no-contact', source: 'contacts.extendedFields' };
 }
 
@@ -124,7 +124,7 @@ async function checkEmailViaMarketingConsent(email) {
     const consent = response?.marketingConsent?.[0];
     const granted = consent?.state === 'CONFIRMED';
     const detail = consent?.state || 'none';
-    console.log(`🎟️[PROMO] email consent step marketing-consent: ${queryEmail} -> granted=${granted} state=${detail}`);
+    // console.log(`🎟️[PROMO] email consent step marketing-consent: ${queryEmail} -> granted=${granted} state=${detail}`);
     return { subscribed: granted, detail, source: 'marketing-consent' };
 }
 
@@ -138,7 +138,7 @@ async function checkEmailViaSubscriptions(email) {
     const sub = response?.subscriptions?.[0];
     const subscribed = isSubscribedStatus(sub?.subscriptionStatus);
     const detail = formatStatusDetail(sub?.subscriptionStatus);
-    console.log(`🎟️[PROMO] email consent step email-subscriptions: ${queryEmail} -> subscribed=${subscribed} status=${detail}`);
+    // console.log(`🎟️[PROMO] email consent step email-subscriptions: ${queryEmail} -> subscribed=${subscribed} status=${detail}`);
     return { subscribed, detail, source: 'email-subscriptions' };
 }
 
@@ -155,15 +155,15 @@ async function checkEmailViaContacts(email) {
         const emails = contact.info?.emails || [];
         const match = emails.find((e) => normalizeEmailForQuery(e?.email) === lowered);
         if (match && isSubscribedStatus(match.subscriptionStatus)) {
-            console.log(`🎟️[PROMO] email consent step contacts.emails: ${lowered} -> subscribed=true`);
+            // console.log(`🎟️[PROMO] email consent step contacts.emails: ${lowered} -> subscribed=true`);
             return { subscribed: true, detail: 'SUBSCRIBED', source: 'contacts.emails' };
         }
         if (isSubscribedStatus(contact.primaryInfo?.subscriptionStatus)) {
-            console.log(`🎟️[PROMO] email consent step contacts.primaryInfo: ${lowered} -> subscribed=true`);
+            // console.log(`🎟️[PROMO] email consent step contacts.primaryInfo: ${lowered} -> subscribed=true`);
             return { subscribed: true, detail: 'SUBSCRIBED', source: 'contacts.primaryInfo' };
         }
     }
-    console.log(`🎟️[PROMO] email consent step contacts fallback: ${lowered} -> subscribed=false`);
+    // console.log(`🎟️[PROMO] email consent step contacts fallback: ${lowered} -> subscribed=false`);
     return { subscribed: false, detail: 'none', source: 'contacts' };
 }
 
@@ -211,7 +211,7 @@ export async function hasEmailMarketingConsent(/** @type {string} */ email) {
             source: 'contacts-extendedFields-error',
         }));
         if (viaExt.subscribed) {
-            console.log(`🎟️[PROMO] email consent check: ${trimmed} -> subscribed=true source=${viaExt.source} status=${viaExt.detail}`);
+            // console.log(`🎟️[PROMO] email consent check: ${trimmed} -> subscribed=true source=${viaExt.source} status=${viaExt.detail}`);
             return true;
         }
 
@@ -221,7 +221,7 @@ export async function hasEmailMarketingConsent(/** @type {string} */ email) {
             source: 'marketing-consent-error',
         }));
         if (viaMarketing.subscribed) {
-            console.log(`🎟️[PROMO] email consent check: ${trimmed} -> subscribed=true source=${viaMarketing.source} status=${viaMarketing.detail}`);
+            // console.log(`🎟️[PROMO] email consent check: ${trimmed} -> subscribed=true source=${viaMarketing.source} status=${viaMarketing.detail}`);
             return true;
         }
 
@@ -231,7 +231,7 @@ export async function hasEmailMarketingConsent(/** @type {string} */ email) {
             source: 'email-subscriptions-error',
         }));
         if (viaApi.subscribed) {
-            console.log(`🎟️[PROMO] email consent check: ${trimmed} -> subscribed=true source=${viaApi.source} status=${viaApi.detail}`);
+            // console.log(`🎟️[PROMO] email consent check: ${trimmed} -> subscribed=true source=${viaApi.source} status=${viaApi.detail}`);
             return true;
         }
 
@@ -241,17 +241,17 @@ export async function hasEmailMarketingConsent(/** @type {string} */ email) {
             source: 'contacts-error',
         }));
         if (viaContacts.subscribed) {
-            console.log(`🎟️[PROMO] email consent check: ${trimmed} -> subscribed=true source=${viaContacts.source} (CRM fallback) status=${viaContacts.detail}`);
+            // console.log(`🎟️[PROMO] email consent check: ${trimmed} -> subscribed=true source=${viaContacts.source} (CRM fallback) status=${viaContacts.detail}`);
             return true;
         }
 
-        console.log(
-            `🎟️[PROMO] email consent check: ${trimmed} -> subscribed=false contactsExt=${viaExt.detail} marketing=${viaMarketing.detail} api=${viaApi.detail} contacts=${viaContacts.detail}`,
-        );
+        // console.log(
+            // `🎟️[PROMO] email consent check: ${trimmed} -> subscribed=false contactsExt=${viaExt.detail} marketing=${viaMarketing.detail} api=${viaApi.detail} contacts=${viaContacts.detail}`,
+        // );
         return false;
     } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
-        console.log(`🎟️[PROMO] email consent check: ${trimmed} -> no consent record (${message})`);
+        // console.log(`🎟️[PROMO] email consent check: ${trimmed} -> no consent record (${message})`);
         return false;
     }
 }
@@ -267,15 +267,15 @@ export async function waitForEmailMarketingConsent(/** @type {string} */ email) 
     for (let i = 0; i < attempts; i++) {
         if (i > 0) {
             const delay = CHECKOUT_CONSENT_POLL_DELAYS_MS[i - 1];
-            console.log(`🎟️[PROMO] email consent poll: waiting ${delay}ms (attempt ${i + 1}/${attempts}) email=${trimmed}`);
+            // console.log(`🎟️[PROMO] email consent poll: waiting ${delay}ms (attempt ${i + 1}/${attempts}) email=${trimmed}`);
             await sleep(delay);
         }
         if (await hasEmailMarketingConsent(trimmed)) {
-            if (i > 0) console.log(`🎟️[PROMO] email consent poll: confirmed on attempt ${i + 1}/${attempts} email=${trimmed}`);
+            // if (i > 0) console.log(`🎟️[PROMO] email consent poll: confirmed on attempt ${i + 1}/${attempts} email=${trimmed}`);
             return true;
         }
     }
-    console.log(`🎟️[PROMO] email consent poll: no consent after ${attempts} attempts email=${trimmed}`);
+    // console.log(`🎟️[PROMO] email consent poll: no consent after ${attempts} attempts email=${trimmed}`);
     return false;
 }
 
@@ -292,7 +292,7 @@ export async function hasPhoneMarketingConsent(/** @type {string} */ phone) {
             source: 'marketing-consent-error',
         }));
         if (viaApi.granted) {
-            console.log(`🎟️[PROMO] phone consent check: ${e164} -> granted=true source=${viaApi.source} state=${viaApi.detail}`);
+            // console.log(`🎟️[PROMO] phone consent check: ${e164} -> granted=true source=${viaApi.source} state=${viaApi.detail}`);
             return true;
         }
 
@@ -302,15 +302,15 @@ export async function hasPhoneMarketingConsent(/** @type {string} */ phone) {
             source: 'contacts-error',
         }));
         if (viaContacts.granted) {
-            console.log(`🎟️[PROMO] phone consent check: ${e164} -> granted=true source=${viaContacts.source} (CRM fallback)`);
+            // console.log(`🎟️[PROMO] phone consent check: ${e164} -> granted=true source=${viaContacts.source} (CRM fallback)`);
             return true;
         }
 
-        console.log(`🎟️[PROMO] phone consent check: ${e164} -> granted=false api=${viaApi.detail} contacts=${viaContacts.detail}`);
+        // console.log(`🎟️[PROMO] phone consent check: ${e164} -> granted=false api=${viaApi.detail} contacts=${viaContacts.detail}`);
         return false;
     } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
-        console.log(`🎟️[PROMO] phone consent check: ${e164} -> no consent record (${message})`);
+        // console.log(`🎟️[PROMO] phone consent check: ${e164} -> no consent record (${message})`);
         return false;
     }
 }
@@ -325,14 +325,14 @@ export async function waitForPhoneMarketingConsent(/** @type {string} */ phone) 
     for (let i = 0; i < attempts; i++) {
         if (i > 0) {
             const delay = CHECKOUT_CONSENT_POLL_DELAYS_MS[i - 1];
-            console.log(`🎟️[PROMO] phone consent poll: waiting ${delay}ms (attempt ${i + 1}/${attempts}) phone=${e164}`);
+            // console.log(`🎟️[PROMO] phone consent poll: waiting ${delay}ms (attempt ${i + 1}/${attempts}) phone=${e164}`);
             await sleep(delay);
         }
         if (await hasPhoneMarketingConsent(e164)) {
-            if (i > 0) console.log(`🎟️[PROMO] phone consent poll: confirmed on attempt ${i + 1}/${attempts} phone=${e164}`);
+            // if (i > 0) console.log(`🎟️[PROMO] phone consent poll: confirmed on attempt ${i + 1}/${attempts} phone=${e164}`);
             return true;
         }
     }
-    console.log(`🎟️[PROMO] phone consent poll: no consent after ${attempts} attempts phone=${e164}`);
+    // console.log(`🎟️[PROMO] phone consent poll: no consent after ${attempts} attempts phone=${e164}`);
     return false;
 }

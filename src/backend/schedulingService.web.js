@@ -36,7 +36,7 @@ export const runSchedulingNow = webMethod(Permissions.SiteMember, async (scope) 
     }
 
     const report = await runScheduling(fromKey, toKey);
-    console.log(`[schedulingService] runSchedulingNow by ${role._id}: ${fromKey}..${toKey}`);
+    // console.log(`[schedulingService] runSchedulingNow by ${role._id}: ${fromKey}..${toKey}`);
     return { ok: true, fromKey, toKey, ...report };
 });
 
@@ -44,7 +44,7 @@ export const runSchedulingNow = webMethod(Permissions.SiteMember, async (scope) 
 export const runSchedulingForEmployees = webMethod(Permissions.SiteMember, async (fromKey, toKey, employeeIds) => {
     const { role } = await assertEmployeeAccess('manageScheduling');
     const result = await engineRunSchedulingForEmployees(fromKey, toKey, employeeIds);
-    console.log(`[schedulingService] runSchedulingForEmployees by ${role._id}: ${fromKey}..${toKey} employees=${(employeeIds || []).join(',')}`);
+    // console.log(`[schedulingService] runSchedulingForEmployees by ${role._id}: ${fromKey}..${toKey} employees=${(employeeIds || []).join(',')}`);
     return result;
 });
 

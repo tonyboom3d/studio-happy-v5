@@ -25,7 +25,7 @@ import {
 const ELEMENT_ID = '#shiftSwap1';
 
 $w.onReady(async function () {
-    console.log('[shift-swap] $w.onReady fired');
+    // console.log('[shift-swap] $w.onReady fired');
 
     const el = $w(ELEMENT_ID);
     if (!el) {
@@ -34,7 +34,7 @@ $w.onReady(async function () {
     }
 
     const token = wixLocation.query?.token || null;
-    console.log('[shift-swap] token present:', !!token);
+    // console.log('[shift-swap] token present:', !!token);
 
     if (!token) {
         el.setAttribute('swap-data', JSON.stringify({ error: true, message: 'חסר קישור תקין.', __ts: Date.now() }));
@@ -44,7 +44,7 @@ $w.onReady(async function () {
     async function loadData() {
         try {
             const details = await getShiftSwapByToken(token);
-            console.log('[shift-swap] swap details loaded, viewer:', details.viewer);
+            // console.log('[shift-swap] swap details loaded, viewer:', details.viewer);
             el.setAttribute('swap-data', JSON.stringify({ ...details, __ts: Date.now() }));
         } catch (err) {
             console.error('[shift-swap] getShiftSwapByToken failed:', err?.message || err);
@@ -62,7 +62,7 @@ $w.onReady(async function () {
 
     el.on('swap-action', async (event) => {
         const { action, decision, comment } = event.detail || {};
-        console.log('[shift-swap] page ← swap-action', action, decision || '');
+        // console.log('[shift-swap] page ← swap-action', action, decision || '');
 
         if (action === 'login') {
             try {
@@ -95,7 +95,7 @@ $w.onReady(async function () {
                 console.warn('[shift-swap] unknown action:', action);
                 return;
             }
-            console.log('[shift-swap] decision result', result);
+            // console.log('[shift-swap] decision result', result);
             el.setAttribute('decide-result', JSON.stringify({ ...result, __ts: Date.now() }));
         } catch (err) {
             console.error('[shift-swap] decision failed:', err?.message || err);

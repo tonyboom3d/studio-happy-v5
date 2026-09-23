@@ -31,19 +31,23 @@ $w.onReady(function () {
 /**
  * שליחת נתונים ראשוניים (זמנים, מחירים, קטלוג כוסות) ל-iframe
  */
+function settledValue(label, result) {
+    if (result.status === 'fulfilled') return result.value;
+    console.error(`[Wix][candels] ${label} failed:`, result.reason?.message || result.reason);
+    return undefined;
+}
+
 async function initData(iframe) {
     try {
-        const [servicePricing, slots, products] = await Promise.all([
+        const [pricingResult, slotsResult, productsResult] = await Promise.allSettled([
             getServicePricing(CANDLES_SERVICE_ID_LIST),
             getCourseSessions(new Date(), new Date(Date.now() + 365 * 24 * 60 * 60 * 1000), CANDLES_SERVICE_ID_LIST),
             getProductsCatalog(CANDLES_SERVICE_IDS.a),
         ]);
 
-        console.log('[Wix][candels] Backend Data:', {
-            slotsCount: slots?.length ?? 0,
-            servicePricing,
-            productsCount: products?.length ?? 0,
-        });
+        const servicePricing = settledValue('getServicePricing', pricingResult) || {};
+        const slots = settledValue('getCourseSessions', slotsResult) || [];
+        const products = settledValue('getProductsCatalog', productsResult) || [];
 
         sendMessageToIframe(iframe, {
             type: 'WIX_DATA',

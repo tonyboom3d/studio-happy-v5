@@ -26,7 +26,7 @@ $w.onReady(async function () {
         const faqCatId = currentItem.faqCategoryId;
         const workshopId = currentItem._id;
 
-        console.log("workshopId", workshopId);
+        // console.log("workshopId", workshopId);
         switch (workshopId) {
         case "d20eb0d0-0485-4e91-8ed9-ca6812a0ed12": // טאפטינג
             $w('#new-flow-section').expand();
@@ -59,7 +59,7 @@ $w.onReady(async function () {
 
         if (topImages && topImages.length > 0) {
             const convertedTop = convertImages(topImages);
-            console.log(`TopGallery: ${convertedTop.length} תמונות`);
+            // console.log(`TopGallery: ${convertedTop.length} תמונות`);
 
             $w('#topGalleryElement').postMessage({
                 type: 'SET_IMAGES',
@@ -73,7 +73,7 @@ $w.onReady(async function () {
 
         if (bottomImages && bottomImages.length > 0) {
             const convertedBottom = convertImages(bottomImages);
-            console.log(`BottomGallery: ${convertedBottom.length} תמונות`);
+            // console.log(`BottomGallery: ${convertedBottom.length} תמונות`);
 
             $w('#bottomGalleryElement').postMessage({
                 type: 'SET_IMAGES',
@@ -86,9 +86,9 @@ $w.onReady(async function () {
         htmlComp.onMessage(async (event) => {
             if (event.data?.type === 'FAQ_READY') {
                 try {
-                    console.log("faqCatId", faqCatId);
+                    // console.log("faqCatId", faqCatId);
                     const items = await getPlainTextQuestionsByCategory(faqCatId);
-                    console.log("items", items);
+                    // console.log("items", items);
                     htmlComp.postMessage({ type: 'FAQ_DATA', items });
                 } catch (err) {
                     htmlComp.postMessage({ type: 'FAQ_ERROR', message: 'שגיאה בטעינת השאלות.' });

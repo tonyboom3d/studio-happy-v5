@@ -5,11 +5,11 @@ import { coupons } from "wix-marketing.v2";
  * @param {import('./__schema__.js').Payload} options
  */
 export const invoke = async ({ payload }) => {
-    console.log("invoke: Automation triggered with payload:", payload);
+    // console.log("invoke: Automation triggered with payload:", payload);
 
     try {
         const coupon = await createCoupon(payload);
-        console.log("invoke: Successfully generated coupon:", coupon._id);
+        // console.log("invoke: Successfully generated coupon:", coupon._id);
 
         // מחזירים אובייקט ריק כדי לעבור את הולידציה של האוטומציות
         return { couponCode: coupon };
@@ -25,7 +25,7 @@ function generateRandomCode() {
 
 async function createCoupon(payload) {
     const numberOfParticipants = parseInt(payload?.number_of_participants, 10) || 2;
-    console.log(`createCoupon: Usage limit set to ${numberOfParticipants}`);
+    // console.log(`createCoupon: Usage limit set to ${numberOfParticipants}`);
 
     const randomCouponCode = generateRandomCode();
 

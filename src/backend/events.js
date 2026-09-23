@@ -56,7 +56,7 @@ async function upsertDashboardRole(staffMemberId) {
         manageRates: false,
         manageRules: false,
     }, SA);
-    console.log(`[events] Dashboard_Roles: created default role for staff ${staffMemberId}`);
+    // console.log(`[events] Dashboard_Roles: created default role for staff ${staffMemberId}`);
 }
 
 /** Patches scheduling profile defaults on legacy Dashboard_Roles rows. */
@@ -86,7 +86,7 @@ async function removeDashboardRole(staffMemberId) {
         await wixData.update('Dashboard_Roles', { ...item, active: false }, SA);
     }
     if (existing.items.length) {
-        console.log(`[events] Dashboard_Roles: deactivated role(s) for staff ${staffMemberId}`);
+        // console.log(`[events] Dashboard_Roles: deactivated role(s) for staff ${staffMemberId}`);
     }
 }
 
@@ -162,7 +162,7 @@ export function wixPay_onPaymentUpdate(event) {
             return Promise.all(updates);
         })
         .then(() => {
-            console.log(`[events] wixPay_onPaymentUpdate: paymentId=${payment.id}, status=${status} — resolved`);
+            // console.log(`[events] wixPay_onPaymentUpdate: paymentId=${payment.id}, status=${status} — resolved`);
         })
         .catch(err => {
             console.error('[events] wixPay_onPaymentUpdate error:', err?.message || err);
@@ -250,12 +250,12 @@ export function wixBookingsV2_onBookingCanceled(event) {
     return findOrderByBookingId(bookingId)
         .then(async (order) => {
             if (!order) {
-                console.log('[events] wixBookingsV2_onBookingCanceled: no matching WorkshopOrder for bookingId', bookingId, '(legacy/non-CMS booking) — skipping.');
+                // console.log('[events] wixBookingsV2_onBookingCanceled: no matching WorkshopOrder for bookingId', bookingId, '(legacy/non-CMS booking) — skipping.');
                 return;
             }
 
             if (order.cancelledAt) {
-                console.log('[events] wixBookingsV2_onBookingCanceled: order', order._id, 'already marked cancelled — skipping.');
+                // console.log('[events] wixBookingsV2_onBookingCanceled: order', order._id, 'already marked cancelled — skipping.');
                 return;
             }
 
@@ -285,10 +285,10 @@ export function wixBookingsV2_onBookingCanceled(event) {
                 ...sketches.items.map((s) => wixData.update('SketchSelections', { ...s, cancelledAt }, SA)),
             ]);
 
-            console.log(
-                `[events] wixBookingsV2_onBookingCanceled: order ${order._id} marked cancelled ` +
-                `(${participants.items.length} participant(s), ${sketches.items.length} sketch(es)).`
-            );
+            // console.log(
+//                 `[events] wixBookingsV2_onBookingCanceled: order ${order._id} marked cancelled ` +
+//                 `(${participants.items.length} participant(s), ${sketches.items.length} sketch(es)).`
+//             );
         })
         .catch((err) => {
             console.error('[events] wixBookingsV2_onBookingCanceled error:', err?.message || err);
@@ -325,7 +325,7 @@ export function wixBookings_onBookingRescheduled(event) {
     return findOrderByBookingId(bookingId)
         .then(async (order) => {
             if (!order) {
-                console.log('[events] wixBookings_onBookingRescheduled: no matching WorkshopOrder for bookingId', bookingId, '(legacy/non-CMS booking) — skipping.');
+                // console.log('[events] wixBookings_onBookingRescheduled: no matching WorkshopOrder for bookingId', bookingId, '(legacy/non-CMS booking) — skipping.');
                 return;
             }
 
@@ -334,7 +334,7 @@ export function wixBookings_onBookingRescheduled(event) {
                 && new Date(order.workshopStart).getTime() === newStartDate.getTime()
                 && (!newSessionId || order.sessionId === newSessionId);
             if (unchanged) {
-                console.log('[events] wixBookings_onBookingRescheduled: order', order._id, 'already reflects the new schedule — skipping.');
+                // console.log('[events] wixBookings_onBookingRescheduled: order', order._id, 'already reflects the new schedule — skipping.');
                 return;
             }
 
@@ -359,7 +359,7 @@ export function wixBookings_onBookingRescheduled(event) {
                 });
             }
 
-            console.log(`[events] wixBookings_onBookingRescheduled: order ${order._id} rescheduled to ${newStartDate.toISOString()} (sessionId=${newSessionId || order.sessionId}).`);
+            // console.log(`[events] wixBookings_onBookingRescheduled: order ${order._id} rescheduled to ${newStartDate.toISOString()} (sessionId=${newSessionId || order.sessionId}).`);
         })
         .catch((err) => {
             console.error('[events] wixBookings_onBookingRescheduled error:', err?.message || err);
@@ -419,9 +419,9 @@ export async function wixEcom_onOrderPaymentStatusUpdated(event) {
         : reconcileEcomOrder(order)
             .then((result) => {
                 if (result.reconciled) {
-                    console.log(`[events] wixEcom_onOrderPaymentStatusUpdated: reconciled WorkshopOrder ${result.workshopOrder?._id} from ecomOrder ${order._id} (matchedBy=${result.matchedBy}).`);
+                    // console.log(`[events] wixEcom_onOrderPaymentStatusUpdated: reconciled WorkshopOrder ${result.workshopOrder?._id} from ecomOrder ${order._id} (matchedBy=${result.matchedBy}).`);
                 } else if (result.reason && result.reason !== 'not_paid' && result.reason !== 'no_match') {
-                    console.log(`[events] wixEcom_onOrderPaymentStatusUpdated: ecomOrder ${order._id} — ${result.reason}.`);
+                    // console.log(`[events] wixEcom_onOrderPaymentStatusUpdated: ecomOrder ${order._id} — ${result.reason}.`);
                 }
             })
             .catch((err) => {
@@ -431,7 +431,7 @@ export async function wixEcom_onOrderPaymentStatusUpdated(event) {
     const addOnOrderReconcile = reconcileAddOnEcomOrder(order)
         .then((result) => {
             if (result.reconciled) {
-                console.log(`[events] wixEcom_onOrderPaymentStatusUpdated: reconciled StudioAddOnOrder ${result.addOnOrder?._id} from ecomOrder ${order._id}.`);
+                // console.log(`[events] wixEcom_onOrderPaymentStatusUpdated: reconciled StudioAddOnOrder ${result.addOnOrder?._id} from ecomOrder ${order._id}.`);
             }
         })
         .catch((err) => {

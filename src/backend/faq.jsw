@@ -2,7 +2,7 @@ import { questionEntry } from "@wix/faq";
 
 export async function listQuestionEntries(options) {
     const response = await questionEntry.listQuestionEntries(options);
-    console.log("res", response);
+    // console.log("res", response);
 }
 
 

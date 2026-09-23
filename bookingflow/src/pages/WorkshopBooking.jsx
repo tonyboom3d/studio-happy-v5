@@ -254,7 +254,7 @@ export default function WorkshopBooking() {
       total_price: orderTotalPreview,
     };
 
-    console.log('[Booking][Frontend] bookingData being sent to Wix:', JSON.stringify(bookingData, null, 2));
+    // console.log('[Booking][Frontend] bookingData being sent to Wix:', JSON.stringify(bookingData, null, 2));
     addLog('Submitting booking', 'info');
     submitBooking(bookingData);
 

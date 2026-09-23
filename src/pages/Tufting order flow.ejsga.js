@@ -37,7 +37,7 @@ $w.onReady(function () {
  */
 async function handleTokenAccess(token, iframe) {
     try {
-        console.log('[Wix] Token-based access detected, verifying...');
+        // console.log('[Wix] Token-based access detected, verifying...');
         // Initially we don't have a phone — the iframe will ask for it
         // Send token context so the iframe knows it's in "select" mode
         sendMessageToIframe(iframe, {
@@ -59,11 +59,11 @@ async function initData(iframe) {
             getCourseSessions(new Date(), new Date(Date.now() + 365 * 24 * 60 * 60 * 1000)),
         ]);
 
-        console.log('[Wix] Backend Data:', {
-            slotsCount: slots?.length ?? 0,
-            servicePricing,
-            sampleSlotServiceId: slots?.[0]?.serviceId
-        });
+        // console.log('[Wix] Backend Data:', {
+//             slotsCount: slots?.length ?? 0,
+//             servicePricing,
+//             sampleSlotServiceId: slots?.[0]?.serviceId
+//         });
 
         sendMessageToIframe(iframe, {
             type: 'WIX_DATA',

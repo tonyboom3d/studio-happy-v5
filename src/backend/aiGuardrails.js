@@ -110,7 +110,7 @@ export async function checkGuardrails(userMessage) {
         }
 
         if (hit) {
-            console.log('[aiGuardrails] Guardrail triggered:', rule.ruleType, '|', keyword);
+            // console.log('[aiGuardrails] Guardrail triggered:', rule.ruleType, '|', keyword);
             return {
                 triggered: true,
                 ruleType: rule.ruleType,

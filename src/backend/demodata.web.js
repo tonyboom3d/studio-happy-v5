@@ -354,7 +354,7 @@ export const seedEmployeePortalDemo = webMethod(Permissions.Admin, async (option
         report.nextSteps.unshift('השלם שדות חסרים (ראה needsManualInput) והרץ שוב.');
     }
 
-    console.log('[demoSeed] seedEmployeePortalDemo complete:', JSON.stringify(report));
+    // console.log('[demoSeed] seedEmployeePortalDemo complete:', JSON.stringify(report));
     return report;
 });
 

@@ -758,7 +758,7 @@ async function ensureShortageHandled(dateKey, t, board, { batchNotify = false } 
 export async function runScheduling(fromKey, toKey, { batchNotify = false } = {}) {
     const settings = await loadSettings();
     if (settings.autoApproveShifts === false) {
-        console.log('[schedulingEngine] runScheduling skipped — autoApproveShifts is OFF (manual mode)');
+        // console.log('[schedulingEngine] runScheduling skipped — autoApproveShifts is OFF (manual mode)');
         return { assigned: 0, offers: 0, openCalls: 0, skipped: 'manual-mode' };
     }
     const board = await buildBoard(fromKey, toKey, { consistent: true, includeOffers: true });
@@ -848,7 +848,7 @@ export async function runScheduling(fromKey, toKey, { batchNotify = false } = {}
     if (report.assigned && !batchNotify) {
         await flushOutbox({ force: true }).catch(err => console.error('[schedulingEngine] flushOutbox failed:', err?.message || err));
     }
-    console.log(`[schedulingEngine] runScheduling ${fromKey}..${toKey}:`, JSON.stringify(report));
+    // console.log(`[schedulingEngine] runScheduling ${fromKey}..${toKey}:`, JSON.stringify(report));
     return report;
 }
 
@@ -968,7 +968,7 @@ export async function runSchedulingForEmployees(fromKey, toKey, employeeIds) {
         await flushOutbox({ force: true }).catch(err => console.error('[schedulingEngine] flushOutbox failed:', err?.message || err));
     }
 
-    console.log(`[schedulingEngine] runSchedulingForEmployees ${fromKey}..${toKey} employees=${ids.join(',')}: assigned=${totalAssigned}`);
+    // console.log(`[schedulingEngine] runSchedulingForEmployees ${fromKey}..${toKey} employees=${ids.join(',')}: assigned=${totalAssigned}`);
     return { ok: true, fromKey, toKey, employees };
 }
 
@@ -1138,7 +1138,7 @@ export async function processBookingPaid(order) {
     }
 
     await publishSchedulingUpdate('booking-paid', { dateKey });
-    console.log(`[schedulingEngine] processBookingPaid ${dateKey}/${typeId}:`, JSON.stringify(report));
+    // console.log(`[schedulingEngine] processBookingPaid ${dateKey}/${typeId}:`, JSON.stringify(report));
     return report;
 }
 

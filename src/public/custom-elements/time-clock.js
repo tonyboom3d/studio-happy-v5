@@ -76,7 +76,7 @@ class TimeClock extends HTMLElement {
     }
 
     connectedCallback() {
-        console.log('[time-clock] CE connected');
+        // console.log('[time-clock] CE connected');
         if (!document.getElementById('tc-style')) {
             const style = document.createElement('style');
             style.id = 'tc-style';
@@ -93,14 +93,14 @@ class TimeClock extends HTMLElement {
             if (name === 'clock-data') {
                 this._data = JSON.parse(newVal);
                 this._busy = false;
-                console.log('[time-clock] clock-data received', {
-                    open: !!this._data.openEntry, station: this._data.station?.key || null,
-                });
+                // console.log('[time-clock] clock-data received', {
+//                     open: !!this._data.openEntry, station: this._data.station?.key || null,
+//                 });
             }
             if (name === 'clock-result') {
                 const r = JSON.parse(newVal);
                 this._busy = false;
-                console.log('[time-clock] clock-result received', r.action || r.message);
+                // console.log('[time-clock] clock-result received', r.action || r.message);
                 if (r.error) this._message = { kind: 'bad', text: r.message || 'אירעה שגיאה. נסו שוב.' };
                 else this._message = {
                     kind: 'ok',
@@ -117,7 +117,7 @@ class TimeClock extends HTMLElement {
     _dispatch(taskType) {
         this._busy = true;
         this._message = null;
-        console.log('[time-clock] action →', taskType || '(clock out)');
+        // console.log('[time-clock] action →', taskType || '(clock out)');
         this.dispatchEvent(new CustomEvent('clock-action', { detail: { taskType: taskType || null }, bubbles: true }));
         this.render();
     }

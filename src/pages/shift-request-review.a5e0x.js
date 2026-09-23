@@ -39,7 +39,7 @@ function resolveReviewElement() {
 }
 
 $w.onReady(async function () {
-    console.log('[shift-request-review] $w.onReady fired');
+    // console.log('[shift-request-review] $w.onReady fired');
 
     const el = resolveReviewElement();
     if (!el) {
@@ -48,13 +48,13 @@ $w.onReady(async function () {
         return;
     }
 
-    console.log('[shift-request-review] element ready', {
-        hasOn: typeof el.on === 'function',
-        hasSetAttribute: typeof el.setAttribute === 'function',
-    });
+    // console.log('[shift-request-review] element ready', {
+//         hasOn: typeof el.on === 'function',
+//         hasSetAttribute: typeof el.setAttribute === 'function',
+//     });
 
     const token = wixLocation.query?.token || null;
-    console.log('[shift-request-review] token present:', !!token);
+    // console.log('[shift-request-review] token present:', !!token);
 
     if (!token) {
         el.setAttribute('request-data', JSON.stringify({ error: true, message: 'חסר קישור תקין.', __ts: Date.now() }));
@@ -63,10 +63,10 @@ $w.onReady(async function () {
 
     el.on('review-action', async (event) => {
         const { decision, comment } = event.detail || {};
-        console.log('[shift-request-review] page ← review-action', decision);
+        // console.log('[shift-request-review] page ← review-action', decision);
         try {
             const result = await decideShiftRequest(token, decision, comment || '');
-            console.log('[shift-request-review] decideShiftRequest result', result);
+            // console.log('[shift-request-review] decideShiftRequest result', result);
             el.setAttribute('decide-result', JSON.stringify({ ...result, __ts: Date.now() }));
         } catch (err) {
             const message = err?.message || String(err);
@@ -81,7 +81,7 @@ $w.onReady(async function () {
 
     try {
         const details = await getShiftRequestByToken(token);
-        console.log('[shift-request-review] request details loaded');
+        // console.log('[shift-request-review] request details loaded');
         el.setAttribute('request-data', JSON.stringify({ ...details, __ts: Date.now() }));
     } catch (err) {
         console.error('[shift-request-review] getShiftRequestByToken failed:', err?.message || err);

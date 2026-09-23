@@ -46,7 +46,7 @@ export const syncAllKnowledgeBaseItems = webMethod(Permissions.Admin, async () =
                 lastSynced: new Date(),
             }, SA);
             synced++;
-            console.log('[aiKnowledgeSync] synced:', item.title, 'fileId:', fileId);
+            // console.log('[aiKnowledgeSync] synced:', item.title, 'fileId:', fileId);
         } catch (err) {
             failed++;
             console.error('[aiKnowledgeSync] failed:', item._id, item.title, err?.message || err);
@@ -54,7 +54,7 @@ export const syncAllKnowledgeBaseItems = webMethod(Permissions.Admin, async () =
     }
 
     const summary = { synced, skipped, failed, total: (result.items || []).length };
-    console.log('[aiKnowledgeSync] done:', JSON.stringify(summary));
+    // console.log('[aiKnowledgeSync] done:', JSON.stringify(summary));
     return summary;
 });
 
@@ -78,7 +78,7 @@ export const resyncAllKnowledgeBaseItems = webMethod(Permissions.Admin, async ()
                 lastSynced: new Date(),
             }, SA);
             synced++;
-            console.log('[aiKnowledgeSync] re-synced:', item.title, 'fileId:', fileId);
+            // console.log('[aiKnowledgeSync] re-synced:', item.title, 'fileId:', fileId);
         } catch (err) {
             failed++;
             console.error('[aiKnowledgeSync] re-sync failed:', item._id, item.title, err?.message || err);
@@ -86,6 +86,6 @@ export const resyncAllKnowledgeBaseItems = webMethod(Permissions.Admin, async ()
     }
 
     const summary = { synced, failed, total: (result.items || []).length };
-    console.log('[aiKnowledgeSync] resync done:', JSON.stringify(summary));
+    // console.log('[aiKnowledgeSync] resync done:', JSON.stringify(summary));
     return summary;
 });

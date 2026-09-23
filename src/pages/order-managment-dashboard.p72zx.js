@@ -11,6 +11,7 @@ import {
     debugOrderMatch,
     resendPromoCoupon,
     cancelPromoCouponNoShow,
+    cancelRescheduleRequest,
 } from 'backend/dashboardService.web.js';
 
 import {
@@ -27,7 +28,7 @@ const VELO_DEBUG_BUILD = '2026-07-28-staff-tab-v2';
 
 function veloStaffDebug(label, payload) {
 
-    console.log(`[staff-admin][velo] ${label}`, payload);
+    // console.log(`[staff-admin][velo] ${label}`, payload);
 
 }
 
@@ -388,6 +389,12 @@ async function handleDashboardAction(dashboardEl, detail) {
     case 'cancelPromoCouponNoShow':
 
         await cancelPromoCouponNoShow(payload.orderId);
+
+        break;
+
+    case 'cancelRescheduleRequest':
+
+        await cancelRescheduleRequest(payload.orderId);
 
         break;
 

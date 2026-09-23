@@ -7,7 +7,7 @@
  * Preview URL (while enabled=false):
  *   https://www.studiohappy.art/?promo=<previewToken>
  *
- * Share URL (popup + terms open):
+ * Share URL (terms-only popup — works after campaign end date):
  *   https://www.studiohappy.art/?promo=<previewToken>&terms=1
  *
  * Popup UI: wix/custom-code/promo-popup-standalone.html (Wix Custom Code — keep
@@ -38,6 +38,9 @@ export const PROMO_CAMPAIGN = {
         '• במקרה של שינוי מועד סדנת הטאפטינג, מועד המימוש יתעדכן לתאריך הסדנה החדש.',
         '• מימוש ההטבה כפוף לזמינות המקומות בסדנאות ולביצוע הזמנה מראש.',
         '• הקופון אינו ניתן להמרה לכסף או לזיכוי.',
+        '• כלי הצביעה הינם מתוך מבחר משתנה שנבחר על ידי צוות הסטודיו והמלאי הקיים.',
+        '• הסטודיו רשאי להפסיק את המבצע בכל עת.',
+        'ט.ל.ח',
     ].join('\n'),
 };
 

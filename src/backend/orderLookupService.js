@@ -383,6 +383,11 @@ export function getRescheduleEligibility(order, nowMs = Date.now()) {
     };
 }
 
+/** True while a reschedule request is already sitting with staff for review. */
+export function hasOpenRescheduleRequest(order) {
+    return order?.pendingRescheduleStatus === 'pending_staff_review';
+}
+
 export const NO_ACTIVE_ORDER_MESSAGE = 'לא מצאנו הזמנה פעילה — הסדנה שלך כבר התקיימה לפני יותר מ-2 ימים ❌';
 
 export const ORDER_NOT_FOUND_MESSAGE = 'לא מצאנו הזמנה קיימת עם המספר הזה ❌';

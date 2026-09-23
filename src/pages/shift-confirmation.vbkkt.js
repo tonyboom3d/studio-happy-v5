@@ -17,7 +17,7 @@ import { getShiftByToken, respondToShift } from 'backend/shiftConfirmService.web
 const ELEMENT_ID = '#shiftConfirm1';
 
 $w.onReady(async function () {
-    console.log('[shift-confirm] $w.onReady fired');
+    // console.log('[shift-confirm] $w.onReady fired');
 
     const el = $w(ELEMENT_ID);
     if (!el) {
@@ -26,7 +26,7 @@ $w.onReady(async function () {
     }
 
     const token = wixLocation.query?.token || null;
-    console.log('[shift-confirm] token present:', !!token);
+    // console.log('[shift-confirm] token present:', !!token);
 
     if (!token) {
         el.setAttribute('shift-data', JSON.stringify({ error: true, message: 'חסר קישור תקין.', __ts: Date.now() }));
@@ -35,10 +35,10 @@ $w.onReady(async function () {
 
     el.on('confirm-action', async (event) => {
         const { action, notes } = event.detail || {};
-        console.log('[shift-confirm] page ← confirm-action', action);
+        // console.log('[shift-confirm] page ← confirm-action', action);
         try {
             const result = await respondToShift(token, action, notes || '');
-            console.log('[shift-confirm] respondToShift result', result);
+            // console.log('[shift-confirm] respondToShift result', result);
             el.setAttribute('respond-result', JSON.stringify({ ...result, __ts: Date.now() }));
         } catch (err) {
             const message = err?.message || String(err);
@@ -53,7 +53,7 @@ $w.onReady(async function () {
 
     try {
         const details = await getShiftByToken(token);
-        console.log('[shift-confirm] shift details loaded');
+        // console.log('[shift-confirm] shift details loaded');
         el.setAttribute('shift-data', JSON.stringify({ ...details, __ts: Date.now() }));
     } catch (err) {
         console.error('[shift-confirm] getShiftByToken failed:', err?.message || err);

@@ -69,7 +69,7 @@ class PendingActions extends HTMLElement {
     }
 
     connectedCallback() {
-        console.log('[pending-actions] CE connected');
+        // console.log('[pending-actions] CE connected');
         if (!document.getElementById('pa-style')) {
             const style = document.createElement('style');
             style.id = 'pa-style';
@@ -121,7 +121,7 @@ class PendingActions extends HTMLElement {
                 if (!decisions.length) return;
                 this._sending = true;
                 this.render();
-                console.log('[pending-actions] submitting', decisions.length, 'decisions');
+                // console.log('[pending-actions] submitting', decisions.length, 'decisions');
                 this.dispatchEvent(new CustomEvent('submit-decisions', { detail: { decisions }, bubbles: true }));
             }
         });
@@ -146,7 +146,7 @@ class PendingActions extends HTMLElement {
             console.error('[pending-actions] bad JSON attribute:', err);
             return;
         }
-        console.log('[pending-actions]', name, 'received');
+        // console.log('[pending-actions]', name, 'received');
         this.render();
     }
 

@@ -143,7 +143,7 @@ export const clockAction = webMethod(Permissions.SiteMember, async (taskType) =>
 
     if (open && (!task || open.taskType === task)) {
         const closed = await closeEntry(open, now);
-        console.log(`[timeClockService] clock-out: ${role._id} ${open.taskType} ${closed.hours}h`);
+        // console.log(`[timeClockService] clock-out: ${role._id} ${open.taskType} ${closed.hours}h`);
         await publishSchedulingUpdate('time-entry', { employeeId: role._id });
         return { ok: true, action: 'out', entry: mapEntry(closed) };
     }
@@ -163,7 +163,7 @@ export const clockAction = webMethod(Permissions.SiteMember, async (taskType) =>
         source: 'SCAN',
         notes: '',
     }, SA);
-    console.log(`[timeClockService] clock-${open ? 'switch' : 'in'}: ${role._id} → ${task}`);
+    // console.log(`[timeClockService] clock-${open ? 'switch' : 'in'}: ${role._id} → ${task}`);
     await publishSchedulingUpdate('time-entry', { employeeId: role._id });
     return { ok: true, action: open ? 'switch' : 'in', entry: mapEntry(inserted) };
 });
@@ -207,7 +207,7 @@ export const approveMyMonth = webMethod(Permissions.SiteMember, async (monthKey)
         monthKey,
         approvedAt: new Date(),
     }, SA);
-    console.log(`[timeClockService] month approved: ${role._id} ${monthKey}`);
+    // console.log(`[timeClockService] month approved: ${role._id} ${monthKey}`);
     return { ok: true };
 });
 
@@ -239,7 +239,7 @@ export const getTeamTime = webMethod(Permissions.SiteMember, async (monthKey) =>
     }
     for (const emp of Object.values(byEmployee)) emp.totals = sumByTask(emp.entries.filter(e => e.hours));
 
-    console.log(`[timeClockService] getTeamTime ${month} by ${role._id}: ${entries.length} entries`);
+    // console.log(`[timeClockService] getTeamTime ${month} by ${role._id}: ${entries.length} entries`);
     return { monthKey: month, employees: Object.values(byEmployee), taskTypes: TASK_TYPES.map(t => ({ value: t, label: TASK_LABELS[t] })) };
 });
 
@@ -271,7 +271,7 @@ export const upsertTimeEntry = webMethod(Permissions.SiteMember, async (payload)
         if (!employeeId) throw new Error('BAD_REQUEST: חסר מזהה עובד/ת.');
         await wixData.insert('TimeEntries', { employeeId, ...fields, source: 'MANUAL' }, SA);
     }
-    console.log(`[timeClockService] upsertTimeEntry ${id || '(new)'} by ${role._id}`);
+    // console.log(`[timeClockService] upsertTimeEntry ${id || '(new)'} by ${role._id}`);
     return { ok: true };
 });
 
@@ -279,7 +279,7 @@ export const deleteTimeEntry = webMethod(Permissions.SiteMember, async (entryId)
     const { role } = await assertEmployeeAccess('editTimeEntries');
     if (!entryId) throw new Error('BAD_REQUEST: חסר מזהה רישום.');
     await wixData.remove('TimeEntries', entryId, SA);
-    console.log(`[timeClockService] deleteTimeEntry ${entryId} by ${role._id}`);
+    // console.log(`[timeClockService] deleteTimeEntry ${entryId} by ${role._id}`);
     return { ok: true };
 });
 
@@ -296,6 +296,6 @@ export const exportMonthCsv = webMethod(Permissions.SiteMember, async (monthKey)
         }
     }
     const csv = '\uFEFF' + rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\r\n');
-    console.log(`[timeClockService] exportMonthCsv ${team.monthKey} by ${role._id}: ${rows.length - 1} rows`);
+    // console.log(`[timeClockService] exportMonthCsv ${team.monthKey} by ${role._id}: ${rows.length - 1} rows`);
     return { ok: true, monthKey: team.monthKey, filename: `hours-${team.monthKey}.csv`, csv };
 });

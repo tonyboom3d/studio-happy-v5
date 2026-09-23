@@ -107,7 +107,7 @@ let __epRealtimeTimer = null;
 let __epSuppressRealtimeUntil = 0;
 
 $w.onReady(function () {
-    console.log('[employee-portal] $w.onReady fired');
+    // console.log('[employee-portal] $w.onReady fired');
 
     const portalEl = $w(PORTAL_ELEMENT_ID);
     if (!portalEl) {
@@ -116,14 +116,14 @@ $w.onReady(function () {
         return;
     }
 
-    console.log('[employee-portal] element found', {
-        id: PORTAL_ELEMENT_ID,
-        hasOn: typeof portalEl.on === 'function',
-        hasSetAttribute: typeof portalEl.setAttribute === 'function',
-    });
+    // console.log('[employee-portal] element found', {
+//         id: PORTAL_ELEMENT_ID,
+//         hasOn: typeof portalEl.on === 'function',
+//         hasSetAttribute: typeof portalEl.setAttribute === 'function',
+//     });
 
     portalEl.on('portal-action', (event) => {
-        console.log('[employee-portal] page ← portal-action', event.detail?.type, event.detail?.payload ?? '');
+        // console.log('[employee-portal] page ← portal-action', event.detail?.type, event.detail?.payload ?? '');
         handlePortalAction(portalEl, event.detail).catch((err) => {
             console.error('[employee-portal] Unhandled action error:', err?.message || err, err?.stack || '');
             pushActionResult(portalEl, {
@@ -144,7 +144,7 @@ $w.onReady(function () {
 function subscribeToRealtime(portalEl) {
     subscribe({ name: 'scheduling-updates' }, () => {
         if (Date.now() < __epSuppressRealtimeUntil) return;
-        console.log('[employee-portal] realtime scheduling-updates → refresh');
+        // console.log('[employee-portal] realtime scheduling-updates → refresh');
         clearTimeout(__epRealtimeTimer);
         __epRealtimeTimer = setTimeout(() => {
             loadAndPushData(portalEl);
@@ -168,35 +168,35 @@ function friendlyError(err) {
 async function loadAndPushData(portalEl) {
     const generation = ++__epLoadGeneration;
     const t0 = Date.now();
-    console.log('[employee-portal] loadAndPushData start', { generation });
+    // console.log('[employee-portal] loadAndPushData start', { generation });
 
     try {
-        console.log('[employee-portal] calling getMyPortalData()…');
+        // console.log('[employee-portal] calling getMyPortalData()…');
         const data = await getMyPortalData();
         const elapsed = Date.now() - t0;
 
         if (generation !== __epLoadGeneration) {
-            console.log('[employee-portal] loadAndPushData stale — skipped', { generation, current: __epLoadGeneration });
+            // console.log('[employee-portal] loadAndPushData stale — skipped', { generation, current: __epLoadGeneration });
             return;
         }
 
-        console.log('[employee-portal] getMyPortalData OK', {
-            elapsedMs: elapsed,
-            user: data?.user?.name,
-            roleType: data?.user?.roleType,
-            submissions: data?.submissions?.length ?? 0,
-            months: data?.months?.length ?? 0,
-            hasUser: !!data?.user,
-        });
+        // console.log('[employee-portal] getMyPortalData OK', {
+//             elapsedMs: elapsed,
+//             user: data?.user?.name,
+//             roleType: data?.user?.roleType,
+//             submissions: data?.submissions?.length ?? 0,
+//             months: data?.months?.length ?? 0,
+//             hasUser: !!data?.user,
+//         });
 
         if (!data?.user) {
             console.error('[employee-portal] getMyPortalData returned no user object — CE will stay on loading');
         }
 
         const json = JSON.stringify({ ...data, __fetchedAt: Date.now() });
-        console.log('[employee-portal] setAttribute portal-data', { bytes: json.length });
+        // console.log('[employee-portal] setAttribute portal-data', { bytes: json.length });
         portalEl.setAttribute('portal-data', json);
-        console.log('[employee-portal] portal-data pushed successfully');
+        // console.log('[employee-portal] portal-data pushed successfully');
     } catch (err) {
         if (generation !== __epLoadGeneration) return;
 
@@ -213,7 +213,7 @@ async function loadAndPushData(portalEl) {
             ? { error: 'ACCESS_DENIED', message }
             : { error: 'LOAD_FAILED', message };
 
-        console.log('[employee-portal] pushing error state to CE:', payload.error);
+        // console.log('[employee-portal] pushing error state to CE:', payload.error);
         portalEl.setAttribute('portal-data', JSON.stringify({
             ...payload,
             __fetchedAt: Date.now(),
@@ -227,10 +227,10 @@ async function loadAndPushAdminData(portalEl, monthKey) {
     try {
         const data = await getStaffAdminData(monthKey);
         if (generation !== __epAdminGeneration) return;
-        console.log('[employee-portal] page → admin-data pushed', {
-            month: data.monthKey,
-            employees: data.employees?.length ?? 0,
-        });
+        // console.log('[employee-portal] page → admin-data pushed', {
+//             month: data.monthKey,
+//             employees: data.employees?.length ?? 0,
+//         });
         portalEl.setAttribute('admin-data', JSON.stringify({
             ...data,
             __fetchedAt: Date.now(),
@@ -244,10 +244,10 @@ async function loadAndPushAdminData(portalEl, monthKey) {
 async function loadAndPushHoursData(portalEl, monthKey) {
     try {
         const data = await getMyTimeEntries(monthKey);
-        console.log('[employee-portal] page → hours-data pushed', {
-            month: data.monthKey,
-            entries: data.entries?.length ?? 0,
-        });
+        // console.log('[employee-portal] page → hours-data pushed', {
+//             month: data.monthKey,
+//             entries: data.entries?.length ?? 0,
+//         });
         portalEl.setAttribute('hours-data', JSON.stringify({
             ...data,
             __fetchedAt: Date.now(),
@@ -373,7 +373,7 @@ async function handlePortalAction(portalEl, detail) {
 
         case 'submitAvailability': {
             const result = await submitAvailability(payload?.shifts || []);
-            console.log('[employee-portal] submitAvailability result', result);
+            // console.log('[employee-portal] submitAvailability result', result);
             pushActionResult(portalEl, { type, ...result });
             break;
         }

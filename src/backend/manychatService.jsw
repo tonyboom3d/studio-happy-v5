@@ -41,6 +41,9 @@ export const MC_FIELDS = {
     couponExpires: 'coupon_expires',
     couponRedeemFrom: 'coupon_redeem_from',
     ceramicsBookUrl: 'ceramics_book_url',
+    // Reschedule-workshop flow (see rescheduleService.web.js / http-functions.js)
+    rescheduleLink: 'reschedule_link',
+    rescheduleChosenDateLabel: 'reschedule_chosen_date_label',
 };
 
 // Custom field created manually in ManyChat (Settings > Custom Fields, type "Text")
@@ -60,6 +63,10 @@ const ORDER_CONFIRMATION_FLOW_NS = 'content20260826091942_789880';
 
 // Shared employee/manager notification flow — branches internally by action_key.
 const STAFF_NOTIFICATION_FLOW_NS = 'content20260826132939_659401';
+
+// Reschedule-workshop summary flow — shown after the customer picks a new date
+// on the "עדכון מועד סדנה" page. Branches to confirm/edit buttons internally.
+const RESCHEDULE_SUMMARY_FLOW_NS = 'content20260923100948_424304';
 
 // Custom fields used by the staff/manager flow's routing conditions.
 const STAFF_ACTION_KEY_FIELD = 'action_key';
@@ -678,6 +685,47 @@ export async function syncOrderLookupFields(subscriberId, {
     } catch (err) {
         console.warn('[ManyChat] syncOrderLookupFields failed. subscriberId:', subscriberId, err?.message || err);
         return { synced: false, error: err?.message || String(err) };
+    }
+}
+
+// --- Reschedule-workshop flow — see rescheduleService.web.js / http-functions.js ---
+
+/** Resolves a ManyChat subscriberId from a phone number (WorkshopOrders.organizerPhone). */
+export async function findSubscriberIdByPhone(phone) {
+    if (!phone) return null;
+    const subscriber = await findSubscriber({ phone }).catch(() => null);
+    return subscriber?.id || null;
+}
+
+/** Writes the one-time link to the "עדכון מועד סדנה" page onto the subscriber. */
+export async function syncRescheduleLink(subscriberId, link) {
+    if (!subscriberId) return { synced: false, reason: 'no-subscriberId' };
+    try {
+        await setCustomFieldsByName(subscriberId, [
+            { name: MC_FIELDS.rescheduleLink, value: link || '' },
+        ]);
+        return { synced: true };
+    } catch (err) {
+        console.warn('[ManyChat] syncRescheduleLink failed. subscriberId:', subscriberId, err?.message || err);
+        return { synced: false, error: err?.message || String(err) };
+    }
+}
+
+/**
+ * Writes the chosen-date label and pushes the subscriber into the reschedule
+ * summary flow (confirm / edit buttons live inside that ManyChat flow).
+ */
+export async function sendRescheduleSummary(subscriberId, chosenDateLabel) {
+    if (!subscriberId) return { sent: false, reason: 'no-subscriberId' };
+    try {
+        await setCustomFieldsByName(subscriberId, [
+            { name: MC_FIELDS.rescheduleChosenDateLabel, value: chosenDateLabel || '' },
+        ]);
+        await sendFlow(subscriberId, RESCHEDULE_SUMMARY_FLOW_NS);
+        return { sent: true };
+    } catch (err) {
+        console.warn('[ManyChat] sendRescheduleSummary failed. subscriberId:', subscriberId, err?.message || err);
+        return { sent: false, error: err?.message || String(err) };
     }
 }
 

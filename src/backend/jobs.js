@@ -43,7 +43,7 @@ export async function processSchedulingHourly() {
         return { sent: 0, merged: 0, skipped: 0 };
     });
 
-    console.log('[jobs] processSchedulingHourly:', JSON.stringify({ escalation, engine, outbox }));
+    // console.log('[jobs] processSchedulingHourly:', JSON.stringify({ escalation, engine, outbox }));
     return { escalation, engine, outbox };
 }
 
@@ -88,7 +88,7 @@ export async function processAlertsHourly() {
         return { retried: 0, sent: 0 };
     });
 
-    console.log('[jobs] processAlertsHourly:', JSON.stringify({ holidays, reminders, confirmations, staleEntries, outbox, promoRetries }));
+    // console.log('[jobs] processAlertsHourly:', JSON.stringify({ holidays, reminders, confirmations, staleEntries, outbox, promoRetries }));
     return { holidays, reminders, confirmations, staleEntries, outbox, promoRetries };
 }
 
@@ -112,7 +112,7 @@ async function autoCloseStaleTimeEntries() {
         }, SA);
         closed++;
     }
-    if (closed) console.log(`[jobs] autoCloseStaleTimeEntries: closed ${closed}`);
+    // if (closed) console.log(`[jobs] autoCloseStaleTimeEntries: closed ${closed}`);
     return { closed };
 }
 
@@ -155,7 +155,7 @@ export async function expireStuckUpgradePayments() {
     }
 
     if (reverted) {
-        console.log(`[jobs] expireStuckUpgradePayments: reverted ${reverted} stuck upgrade(s) to 60x60`);
+        // console.log(`[jobs] expireStuckUpgradePayments: reverted ${reverted} stuck upgrade(s) to 60x60`);
     }
     return { reverted };
 }
@@ -226,7 +226,7 @@ export async function reconcileStuckWorkshopOrders() {
     }
 
     if (reconciled || abandoned) {
-        console.log(`[jobs] reconcileStuckWorkshopOrders: reconciled=${reconciled} abandoned=${abandoned} stillPending=${stillPending}`);
+        // console.log(`[jobs] reconcileStuckWorkshopOrders: reconciled=${reconciled} abandoned=${abandoned} stillPending=${stillPending}`);
     }
     return { reconciled, abandoned, stillPending };
 }
@@ -279,6 +279,6 @@ export async function cleanupStaleConversations() {
         deleted++;
     }
 
-    if (deleted) console.log(`[jobs] cleanupStaleConversations: deleted ${deleted} stale conversation(s)`);
+    // if (deleted) console.log(`[jobs] cleanupStaleConversations: deleted ${deleted} stale conversation(s)`);
     return { deleted };
 }

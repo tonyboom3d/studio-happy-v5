@@ -98,7 +98,7 @@ async function refreshIframeContext(iframe) {
             ecomSummary: orderContext.ecomSummary || null,
         };
         iframe.postMessage(pendingIframePayload);
-        console.log('[UserSelections] ORDER_CONTEXT refreshed');
+        // console.log('[UserSelections] ORDER_CONTEXT refreshed');
     } catch (err) {
         console.warn('[UserSelections] context refresh failed:', err?.message || err);
     }
@@ -117,8 +117,8 @@ $w.onReady(function () {
     const ref = query.ref || null;
     const adminOrderId = query.admin || null;
 
-    console.log('[UserSelections] onReady — query:', JSON.stringify(query));
-    console.log('[UserSelections] parsed — orderId:', orderId, 'token:', token ? token.slice(0, 8) + '...' : null, 'ref:', ref, 'admin:', adminOrderId);
+    // console.log('[UserSelections] onReady — query:', JSON.stringify(query));
+    // console.log('[UserSelections] parsed — orderId:', orderId, 'token:', token ? token.slice(0, 8) + '...' : null, 'ref:', ref, 'admin:', adminOrderId);
 
     const groupInfo = {
         name: query.group ? decodeURIComponent(query.group) : null,

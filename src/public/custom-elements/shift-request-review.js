@@ -63,7 +63,7 @@ class ShiftRequestReview extends HTMLElement {
     }
 
     connectedCallback() {
-        console.log('[shift-request-review] CE connected');
+        // console.log('[shift-request-review] CE connected');
         if (!document.getElementById('srr-style')) {
             const style = document.createElement('style');
             style.id = 'srr-style';
@@ -77,7 +77,7 @@ class ShiftRequestReview extends HTMLElement {
             const comment = this.querySelector('#srrComment')?.value || '';
             this._sending = true;
             this.render();
-            console.log('[shift-request-review] action →', btn.dataset.action);
+            // console.log('[shift-request-review] action →', btn.dataset.action);
             this.dispatchEvent(new CustomEvent('review-action', {
                 detail: { decision: btn.dataset.action, comment }, bubbles: true,
             }));
@@ -93,7 +93,7 @@ class ShiftRequestReview extends HTMLElement {
             console.error('[shift-request-review] bad JSON attribute:', err);
             return;
         }
-        console.log('[shift-request-review]', name, 'received');
+        // console.log('[shift-request-review]', name, 'received');
         this.render();
     }
 

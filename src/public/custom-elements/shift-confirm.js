@@ -63,7 +63,7 @@ class ShiftConfirm extends HTMLElement {
     }
 
     connectedCallback() {
-        console.log('[shift-confirm] CE connected');
+        // console.log('[shift-confirm] CE connected');
         if (!document.getElementById('sc-style')) {
             const style = document.createElement('style');
             style.id = 'sc-style';
@@ -77,7 +77,7 @@ class ShiftConfirm extends HTMLElement {
             const notes = this.querySelector('#scNotes')?.value || '';
             this._sending = true;
             this.render();
-            console.log('[shift-confirm] action →', btn.dataset.action);
+            // console.log('[shift-confirm] action →', btn.dataset.action);
             this.dispatchEvent(new CustomEvent('confirm-action', {
                 detail: { action: btn.dataset.action, notes }, bubbles: true,
             }));
@@ -93,7 +93,7 @@ class ShiftConfirm extends HTMLElement {
             console.error('[shift-confirm] bad JSON attribute:', err);
             return;
         }
-        console.log('[shift-confirm]', name, 'received');
+        // console.log('[shift-confirm]', name, 'received');
         this.render();
     }
 

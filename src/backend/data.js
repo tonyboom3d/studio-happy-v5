@@ -34,7 +34,7 @@ export function WorkshopOrders_afterUpdate(item, context) {
     if (justPaid) {
         processBookingPaid(item)
             .then(report => {
-                if (report?.handled) console.log('[data.js hook] processBookingPaid:', item._id, JSON.stringify(report));
+                // if (report?.handled) console.log('[data.js hook] processBookingPaid:', item._id, JSON.stringify(report));
             })
             .catch(err => {
                 console.error('[data.js hook] processBookingPaid failed. orderId:', item._id, 'error:', err?.message || err);
@@ -44,16 +44,16 @@ export function WorkshopOrders_afterUpdate(item, context) {
         // one-time Wix coupon and sends it via WhatsApp + email. No-ops when the
         // promo campaign (promoCampaignConfig.js enabled=false) is off, or the order isn't tufting.
         if (item.workshopType === 'tufting') {
-            console.log(`🎟️[PROMO] Tufting order paid — starting promo flow. orderId=${item._id}`);
+            // console.log(`🎟️[PROMO] Tufting order paid — starting promo flow. orderId=${item._id}`);
             issuePromoCouponForOrder(item)
                 .then(result => {
                     if (!result?.issued) {
-                        console.log(`🎟️[PROMO] No coupon issued (reason=${result?.reason}). orderId=${item._id}`);
+                        // console.log(`🎟️[PROMO] No coupon issued (reason=${result?.reason}). orderId=${item._id}`);
                         return;
                     }
-                    console.log(`🎟️[PROMO] Coupon issued — sending WhatsApp + email (consent poll enabled). orderId=${item._id} code=${result.coupon?.code}`);
+                    // console.log(`🎟️[PROMO] Coupon issued — sending WhatsApp + email (consent poll enabled). orderId=${item._id} code=${result.coupon?.code}`);
                     return sendPromoCouponNotifications(result.coupon, { waitForConsent: true }).then(({ ok, waResult, emailResult }) => {
-                        console.log(`🎟️[PROMO] Send results. orderId=${item._id} code=${result.coupon?.code} whatsapp=${JSON.stringify(waResult)} email=${JSON.stringify(emailResult)}`);
+                        // console.log(`🎟️[PROMO] Send results. orderId=${item._id} code=${result.coupon?.code} whatsapp=${JSON.stringify(waResult)} email=${JSON.stringify(emailResult)}`);
                         if (!ok) {
                             console.warn(`🎟️[PROMO] ⚠️ Coupon issued but NOT sent. orderId:`, item._id, 'couponId:', result.coupon._id, 'whatsapp:', waResult?.reason || 'unknown', 'email:', emailResult?.reason || 'unknown');
                         }
@@ -75,11 +75,11 @@ export function WorkshopOrders_afterUpdate(item, context) {
     // ManyChat import permission was approved by ManyChat support — all
     // paid orders now go through the "אישור הזמנה" ManyChat flow (no more
     // Green API / test-phone gate here).
-    console.log(`[data.js hook] Sending confirmation via ManyChat (${reason}). orderId:`, item._id, 'phone:', item.organizerPhone);
+    // console.log(`[data.js hook] Sending confirmation via ManyChat (${reason}). orderId:`, item._id, 'phone:', item.organizerPhone);
 
     sendOrderConfirmationManyChat(item)
         .then(() => {
-            console.log('[data.js hook] Confirmation sent successfully. orderId:', item._id);
+            // console.log('[data.js hook] Confirmation sent successfully. orderId:', item._id);
             if (resendRequested) {
                 return wixData.update('WorkshopOrders', {
                     ...item,
@@ -122,7 +122,7 @@ async function syncKnowledgeBaseItem(item) {
         openAiFileId: fileId,
         lastSynced: new Date(),
     }, SA);
-    console.log('[data.js hook] Workshops_KnowledgeBase synced. itemId:', item._id, 'fileId:', fileId);
+    // console.log('[data.js hook] Workshops_KnowledgeBase synced. itemId:', item._id, 'fileId:', fileId);
 }
 
 export function Workshops_KnowledgeBase_afterInsert(item, context) {
@@ -145,7 +145,7 @@ async function resyncKnowledgeBaseItem(item, oldFileId) {
         openAiFileId: fileId,
         lastSynced: new Date(),
     }, SA);
-    console.log('[data.js hook] Workshops_KnowledgeBase re-synced. itemId:', item._id, 'fileId:', fileId);
+    // console.log('[data.js hook] Workshops_KnowledgeBase re-synced. itemId:', item._id, 'fileId:', fileId);
 }
 
 export function Workshops_KnowledgeBase_afterUpdate(item, context) {

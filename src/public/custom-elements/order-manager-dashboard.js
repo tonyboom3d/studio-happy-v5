@@ -76,6 +76,9 @@ var __wdTemplateHtml = `
 
         <div id="ordersDebugBanner" class="mb-4 hidden shrink-0"></div>
 
+        <!-- Reschedule requests (customer submitted "שינוי מועד" via WhatsApp) -->
+        <div id="rescheduleRequestsBanner" class="mb-4 hidden shrink-0"></div>
+
         <!-- Filters Bar -->
         <section class="wd-filters-panel" aria-label="סינון הזמנות">
             <div class="wd-filters-header">
@@ -1315,7 +1318,7 @@ function __wdInjectGlobalAssets() {
 
         /** Focused debug logs for staff-tab permission issues — filter console by "[staff-admin]". */
         window.__wdStaffDebug = function (label, payload) {
-            console.log(`[staff-admin] ${label}`, payload);
+            // console.log(`[staff-admin] ${label}`, payload);
         };
         const __wdStaffDebug = window.__wdStaffDebug;
 
@@ -1386,7 +1389,7 @@ function __wdInjectGlobalAssets() {
 
         function dispatchDashboardAction(type, payload) {
             if (!__wdHostElement) return;
-            console.log(`[workshops-dashboard] Dispatching action "${type}":`, payload);
+            // console.log(`[workshops-dashboard] Dispatching action "${type}":`, payload);
             __wdHostElement.dispatchEvent(new CustomEvent('dashboard-action', {
                 detail: { type, payload },
                 bubbles: true,
@@ -1742,14 +1745,14 @@ function __wdInjectGlobalAssets() {
             }
 
             if (!isLightRefresh) {
-                console.log('[workshops-dashboard] Received dashboard data:', {
-                    workshopTypesCount: Object.keys(data.workshopTypes || {}).length,
-                    workshopsCount: (data.workshops || []).length,
-                    ordersCount: (data.orders || []).length,
-                    templatesCount: (data.templates || []).length,
-                    alertsSummary: data.alertsSummary,
-                    currentUser: data.currentUser,
-                });
+                // console.log('[workshops-dashboard] Received dashboard data:', {
+//                     workshopTypesCount: Object.keys(data.workshopTypes || {}).length,
+//                     workshopsCount: (data.workshops || []).length,
+//                     ordersCount: (data.orders || []).length,
+//                     templatesCount: (data.templates || []).length,
+//                     alertsSummary: data.alertsSummary,
+//                     currentUser: data.currentUser,
+//                 });
                 console.warn('👥 [workshops-dashboard] All customer orders:', data.orders || []);
             }
 
@@ -1796,6 +1799,7 @@ function __wdInjectGlobalAssets() {
                 renderTemplatesManager();
             }
             renderOrdersDebugBanner();
+            renderRescheduleRequestsBanner();
             __wdHideLoadingOverlay();
 
             // Refreshing data (e.g. after toggling "show all orders") should also
@@ -1996,6 +2000,53 @@ function __wdInjectGlobalAssets() {
             } else {
                 alertsContainer.classList.add('hidden');
             }
+        }
+
+        /**
+         * "בקשות דחיית מועד" — orders where the customer confirmed a reschedule
+         * request in WhatsApp (see rescheduleService.web.js) and it's now
+         * waiting for a staff member to apply the change in Wix Bookings and
+         * clear the request (single "ביטול" button — no approve/reject logic,
+         * approval happens manually outside the system).
+         */
+        function renderRescheduleRequestsBanner() {
+            const banner = document.getElementById('rescheduleRequestsBanner');
+            if (!banner) return;
+
+            const pending = mockOrders.filter(o => o.pendingRescheduleStatus === 'pending_staff_review');
+            if (!pending.length) {
+                banner.classList.add('hidden');
+                banner.innerHTML = '';
+                return;
+            }
+
+            const rows = pending.map(order => `
+                <div class="flex items-center justify-between gap-3 py-2 px-1 border-b border-amber-100 last:border-b-0 flex-wrap">
+                    <div class="text-sm text-amber-900">
+                        <strong>${order.organizerName || 'ללא שם'}</strong>
+                        <span class="text-amber-700"> · ${order.organizerPhone || ''}</span>
+                        <span class="text-amber-700"> · מבקש/ת מועד חדש: ${formatShortDate(order.pendingRescheduleDate) || '—'}</span>
+                    </div>
+                    <button onclick="cancelRescheduleRequestUI('${order.id}', event)" class="text-[11px] font-bold px-3 py-1.5 rounded bg-white border border-amber-300 text-amber-800 hover:bg-amber-100 transition-colors ${!hasDashboardPermission('editOrderNotes')?'pointer-events-none opacity-40':''}">ביטול</button>
+                </div>`).join('');
+
+            banner.innerHTML = `
+                <div class="bg-amber-50 border border-amber-200 rounded-lg p-3 shadow-sm">
+                    <div class="flex items-center gap-2 text-amber-800 mb-1">
+                        <i class="ph-fill ph-calendar-x text-lg"></i>
+                        <p class="text-sm font-bold">בקשות דחיית מועד ממתינות (${pending.length}) — יש לטפל בשינוי ב-Wix Bookings ואז לבטל את הבקשה כאן</p>
+                    </div>
+                    ${rows}
+                </div>`;
+            banner.classList.remove('hidden');
+        }
+
+        function cancelRescheduleRequestUI(orderId, event) {
+            event?.stopPropagation();
+            if (!hasDashboardPermission('editOrderNotes')) return;
+            if (!confirm('לבטל את בקשת דחיית המועד? השימוש החינמי בדחייה יוחזר להזמנה (יתאפשר לבקש דחייה נוספת).')) return;
+            addLog(orderId, 'בקשת שינוי מועד בוטלה על ידי הצוות — השימוש החינמי שוחזר.');
+            dispatchDashboardAction('cancelRescheduleRequest', { orderId });
         }
 
         // --- FILTERS & MAIN TABLE RENDERING ---
@@ -3733,7 +3784,7 @@ function __wdInjectGlobalAssets() {
             const userName = getCurrentActorName();
             if (!order.logs) order.logs = [];
             order.logs.unshift({ time: timeStr, user: userName, action: actionText });
-            console.log(`[workshops-dashboard] ${timeStr} • ${userName}: ${actionText}`);
+            // console.log(`[workshops-dashboard] ${timeStr} • ${userName}: ${actionText}`);
         }
 
         function openNoteModal(orderId) {
@@ -4156,6 +4207,7 @@ window.toggleInlineLogs = toggleInlineLogs;
 window.updateSketchStatus = updateSketchStatus;
 window.resendPromoCoupon = resendPromoCoupon;
 window.cancelPromoCouponNoShow = cancelPromoCouponNoShow;
+window.cancelRescheduleRequestUI = cancelRescheduleRequestUI;
 
 
 // ============================================================
@@ -4180,10 +4232,10 @@ class WorkshopsDashboardElement extends HTMLElement {
         // מציגים קודם את מסך הטעינה + את תוכן הדאשבורד (מוסתר מתחתיו),
         // כדי שהנתונים כבר יהיו מוכנים ברגע שמסך הטעינה נעלם.
         this.innerHTML = __wdLoadingHtml + __wdTemplateHtml;
-        console.log('[staff-admin] connectedCallback', {
-            hasStaffTabBtn: !!this.querySelector('#wdTabStaffBtn'),
-            hasStaffSection: !!this.querySelector('#wdStaffAdminSection'),
-        });
+        // console.log('[staff-admin] connectedCallback', {
+//             hasStaffTabBtn: !!this.querySelector('#wdTabStaffBtn'),
+//             hasStaffSection: !!this.querySelector('#wdStaffAdminSection'),
+//         });
 
         // ממתינים לפריים הבא כדי לוודא שה-DOM התייצב וש-Tailwind
         // ביצע סריקה ראשונית, ורק אז מריצים את פונקציית האתחול המקורית
@@ -4295,4 +4347,4 @@ if (!customElements.get(__wdTagName)) {
 
 // Always-on boot marker — if you don't see this in the browser console, the CE
 // file on the live site was NOT updated (Publish alone does not refresh uploaded CE files).
-console.log('[staff-admin] CE build loaded', '2026-07-28-staff-tab-v2');
+// console.log('[staff-admin] CE build loaded', '2026-07-28-staff-tab-v2');

@@ -5,7 +5,7 @@ import { getClockStatus, clockAction } from 'backend/timeClockService.web.js';
 const ELEMENT_ID = '#timeClock1';
 
 $w.onReady(async function () {
-    console.log('[time-clock] $w.onReady fired');
+    // console.log('[time-clock] $w.onReady fired');
 
     const el = $w(ELEMENT_ID);
     if (!el) {
@@ -14,14 +14,14 @@ $w.onReady(async function () {
     }
 
     const stationKey = wixLocation.query?.station || null;
-    console.log('[time-clock] station:', stationKey || '(none)');
+    // console.log('[time-clock] station:', stationKey || '(none)');
 
     el.on('clock-action', async (event) => {
         const taskType = event.detail?.taskType || null;
-        console.log('[time-clock] page ← clock-action', taskType || '(out)');
+        // console.log('[time-clock] page ← clock-action', taskType || '(out)');
         try {
             const result = await clockAction(taskType);
-            console.log('[time-clock] clockAction result', result.action);
+            // console.log('[time-clock] clockAction result', result.action);
             el.setAttribute('clock-result', JSON.stringify({ ...result, __ts: Date.now() }));
             await loadStatus(el, stationKey);
         } catch (err) {
@@ -40,9 +40,9 @@ $w.onReady(async function () {
 
 async function loadStatus(el, stationKey) {
     try {
-        console.log('[time-clock] calling getClockStatus()…');
+        // console.log('[time-clock] calling getClockStatus()…');
         const data = await getClockStatus(stationKey);
-        console.log('[time-clock] status loaded', { open: !!data.openEntry });
+        // console.log('[time-clock] status loaded', { open: !!data.openEntry });
         el.setAttribute('clock-data', JSON.stringify({ ...data, __ts: Date.now() }));
     } catch (err) {
         const message = err?.message || String(err);

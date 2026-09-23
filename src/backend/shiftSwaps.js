@@ -214,7 +214,7 @@ export async function createSwapRequest(role, submissionId, targetEmployeeId) {
         console.warn(`[shiftSwaps] target role ${target._id} has no phone — swap request created without WhatsApp`);
     }
 
-    console.log(`[shiftSwaps] request created: submission=${submissionId} requester=${requester._id} target=${target._id}`);
+    // console.log(`[shiftSwaps] request created: submission=${submissionId} requester=${requester._id} target=${target._id}`);
     return { ok: true };
 }
 
@@ -315,7 +315,7 @@ export async function respondToSwapAsTarget(viewerRole, token, accept) {
     }, { priority: PRIORITY.NORMAL, entityKey: `swap-manager:${swap.token}`, shouldSuppress: maybeSuppressManagerNotification });
     await flushOutbox({ force: true }).catch(err => console.error('[shiftSwaps] flushOutbox failed:', err?.message || err));
 
-    console.log(`[shiftSwaps] target accepted: id=${swap._id}`);
+    // console.log(`[shiftSwaps] target accepted: id=${swap._id}`);
     return { ok: true, status: SWAP_STATUS.PENDING_MANAGER };
 }
 
@@ -381,7 +381,7 @@ export async function decideSwapAsManager(viewerRole, token, decision, comment) 
     await notify(requester, actionKey, vars, `swap-decision:${swap.token}:${requester._id}`, { line: digestLine });
     await notify(target, actionKey, vars, `swap-decision:${swap.token}:${target._id}`, { line: digestLine });
 
-    console.log(`[shiftSwaps] manager decided: id=${swap._id} status=${status}`);
+    // console.log(`[shiftSwaps] manager decided: id=${swap._id} status=${status}`);
     return { ok: true, status };
 }
 

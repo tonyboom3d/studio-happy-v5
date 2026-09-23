@@ -226,7 +226,7 @@ export default function CeramicsBooking() {
       products: [],
     };
 
-    console.log('[Ceramics][Frontend] bookingData being sent to Wix:', JSON.stringify(bookingData, null, 2));
+    // console.log('[Ceramics][Frontend] bookingData being sent to Wix:', JSON.stringify(bookingData, null, 2));
     addLog('[Ceramics] Submitting booking', 'info');
     submitBooking(bookingData);
 

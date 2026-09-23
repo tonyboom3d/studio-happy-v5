@@ -526,11 +526,11 @@ export const getProductsCatalog = webMethod(Permissions.Anyone, async (serviceId
         } else if (isCandles) {
             query = query.hasSome('relatedService', ['נרות']);
         }
-        const productsResult = await query.find({ suppressAuth: true, omitTotalCount: true });
+        const productsResult = await query.limit(100).find({ suppressAuth: true, omitTotalCount: true });
         return productsResult.items.map((product) => mapCatalogProduct(product, { isCandles }));
     } catch (error) {
-        console.error("Error fetching products catalog:", error);
-        throw error;
+        console.error("Error fetching products catalog:", error?.message || error);
+        return [];
     }
 });
 
@@ -677,7 +677,7 @@ async function hashAccessToken(token) {
 // --- פונקציה 1b: תהליך eCommerce Checkout — יצירת הזמנות ומעבר ל-checkout של Wix ---
 // סדנת טאפטינג: createBooking (הזמנה בודדת) + WorkshopOrders CMS + eCommerce checkout
 export const createAndCheckout = webMethod(Permissions.Anyone, async (orderData) => {
-    console.log('[createAndCheckout] orderData received:', JSON.stringify(orderData, null, 2));
+    // console.log('[createAndCheckout] orderData received:', JSON.stringify(orderData, null, 2));
 
     const {
         adults, children, extraCandles: rawExtraCandles,
@@ -928,7 +928,7 @@ export const createAndCheckout = webMethod(Permissions.Anyone, async (orderData)
         }
     }
 
-    console.log('[createAndCheckout] createBooking payload:', JSON.stringify(bookingPayload, null, 2));
+    // console.log('[createAndCheckout] createBooking payload:', JSON.stringify(bookingPayload, null, 2));
     const elevatedCreateBooking = auth.elevate(bookings.createBooking);
     const bookingResult = await elevatedCreateBooking(bookingPayload, {
         flowControlSettings: {
@@ -947,7 +947,7 @@ export const createAndCheckout = webMethod(Permissions.Anyone, async (orderData)
     }
 
     const bookingIds = [createdBooking._id];
-    console.log('[createAndCheckout] Booking created:', createdBooking._id, 'status:', createdBooking.status);
+    // console.log('[createAndCheckout] Booking created:', createdBooking._id, 'status:', createdBooking.status);
 
     // --- שלב 2: יצירת רשומת WorkshopOrders ב-CMS ---
     const orderToken = generateToken();
@@ -1049,7 +1049,7 @@ export const createAndCheckout = webMethod(Permissions.Anyone, async (orderData)
         selectedProducts: selectedCupsForOrder,
     }, { suppressAuth: true });
 
-    console.log('[createAndCheckout] WorkshopOrder created:', workshopOrder._id);
+    // console.log('[createAndCheckout] WorkshopOrder created:', workshopOrder._id);
 
     // --- שלב 3: יצירת eCommerce checkout ---
     const WIX_BOOKINGS_APP_ID = '13d21c63-b5ec-5912-8397-c3a5ddb27a97';
@@ -1090,13 +1090,13 @@ export const createAndCheckout = webMethod(Permissions.Anyone, async (orderData)
     };
 
     if (lockCeramicsPromoCoupon) {
-        console.log('[createAndCheckout] Ceramics Fri/Sat session — coupon code field locked on checkout.', { ceramicsSlotStartIso, ceramicsDayEnum });
+        // console.log('[createAndCheckout] Ceramics Fri/Sat session — coupon code field locked on checkout.', { ceramicsSlotStartIso, ceramicsDayEnum });
     }
 
-    console.log('[createAndCheckout] Creating eCommerce checkout...', checkoutOptions);
+    // console.log('[createAndCheckout] Creating eCommerce checkout...', checkoutOptions);
     const elevatedCreateCheckout = auth.elevate(checkout.createCheckout);
     const newCheckout = await elevatedCreateCheckout(checkoutOptions);
-    console.log('[createAndCheckout] Checkout created:', newCheckout?._id);
+    // console.log('[createAndCheckout] Checkout created:', newCheckout?._id);
 
     // --- שלב 4: עדכון WorkshopOrders עם checkoutId ---
     await wixData.update('WorkshopOrders', {
@@ -1117,7 +1117,7 @@ export const createAndCheckout = webMethod(Permissions.Anyone, async (orderData)
 // @deprecated — השתמש ב-createAndCheckout עם eCommerce checkout במקום זה
 export const createWorkshopPayment = webMethod(Permissions.Anyone, async (orderData) => {
     // לוג קלט לדיבאג
-    console.log('[createWorkshopPayment] orderData received:', JSON.stringify(orderData, null, 2));
+    // console.log('[createWorkshopPayment] orderData received:', JSON.stringify(orderData, null, 2));
 
     const { participants, products, totalSessions, woodType, userDetails: rawUser } = orderData;
     // תמיכה גם ב-customerInfo (מהדף) וגם ב-userDetails
@@ -1206,7 +1206,7 @@ export const createWorkshopPayment = webMethod(Permissions.Anyone, async (orderD
     if (isRecycledWood && totalRecycledUnits > 0) {
         // מפחיתים 1 ש"ח לכל יחידה ממחיר הכרטיסים
         adjustedTicketPrice = Math.max(1, totalTicketPrice - totalRecycledUnits);
-        console.log(`[createWorkshopPayment] Recycled wood: reducing ticket price by ${totalRecycledUnits} NIS (${totalRecycledUnits} units)`);
+        // console.log(`[createWorkshopPayment] Recycled wood: reducing ticket price by ${totalRecycledUnits} NIS (${totalRecycledUnits} units)`);
     }
 
     const finalAmount = adjustedTicketPrice + totalProductsPrice;
@@ -1262,11 +1262,11 @@ export const createWorkshopPayment = webMethod(Permissions.Anyone, async (orderD
     }
 
     // לוג לדיבאג – מה נשלח ל-createPayment
-    console.log('[createWorkshopPayment] paymentOptions:', JSON.stringify(paymentOptions, null, 2));
+    // console.log('[createWorkshopPayment] paymentOptions:', JSON.stringify(paymentOptions, null, 2));
 
     try {
         const payment = await wixPayBackend.createPayment(paymentOptions);
-        console.log('[createWorkshopPayment] Payment created successfully:', payment?.id);
+        // console.log('[createWorkshopPayment] Payment created successfully:', payment?.id);
         return payment;
     } catch (payError) {
         console.error('[createWorkshopPayment] createPayment failed:', payError?.message || payError);
@@ -1568,7 +1568,7 @@ export const syncCmsProductToAddOn = webMethod(Permissions.Admin, async (product
 
             // עדכון קבוצת ה-Add-Ons בשירות אחרי יצירת add-on חדש
             await refreshAddOnsGroup();
-            console.log(`[syncCmsProductToAddOn] Add-ons group updated successfully`);
+            // console.log(`[syncCmsProductToAddOn] Add-ons group updated successfully`);
         }
         return addOnId;
     } catch (err) {
@@ -1601,10 +1601,10 @@ async function refreshAddOnsGroup() {
             .map(p => p.addOnId)
             .filter(id => id && typeof id === 'string' && id.trim() !== '');
 
-        console.log(`[refreshAddOnsGroup] Found ${allAddOnIds.length} add-on IDs to assign to group`);
+        // console.log(`[refreshAddOnsGroup] Found ${allAddOnIds.length} add-on IDs to assign to group`);
 
         if (allAddOnIds.length === 0) {
-            console.log('[refreshAddOnsGroup] No add-on IDs found, skipping group update');
+            // console.log('[refreshAddOnsGroup] No add-on IDs found, skipping group update');
             return;
         }
 
@@ -1618,7 +1618,7 @@ async function refreshAddOnsGroup() {
             groupId: ADDON_GROUP_ID
         });
 
-        console.log(`[refreshAddOnsGroup] Successfully updated group ${ADDON_GROUP_ID} with ${Math.min(allAddOnIds.length, 7)} add-ons`);
+        // console.log(`[refreshAddOnsGroup] Successfully updated group ${ADDON_GROUP_ID} with ${Math.min(allAddOnIds.length, 7)} add-ons`);
     } catch (error) {
         console.error('[refreshAddOnsGroup] Error updating add-ons group:', error);
         throw error;
@@ -1628,7 +1628,7 @@ async function refreshAddOnsGroup() {
 // --- פונקציה 4: סנכרון חד-פעמי של כל המוצרים ל-Add-Ons ---
 export const bulkSyncProductsToAddOns = webMethod(Permissions.Admin, async () => {
     try {
-        console.log('[bulkSyncProductsToAddOns] Starting bulk sync...');
+        // console.log('[bulkSyncProductsToAddOns] Starting bulk sync...');
 
         // 1. שאילתה למוצרים עם תג "סדנה פתוחה" שאין להם addOnId
         const productsQuery = await wixData.query('bookingProducts')
@@ -1639,7 +1639,7 @@ export const bulkSyncProductsToAddOns = webMethod(Permissions.Admin, async () =>
         const productsToSync = productsQuery.items.filter(p => !p.addOnId || p.addOnId === null || p.addOnId === '');
 
         if (productsToSync.length === 0) {
-            console.log('[bulkSyncProductsToAddOns] No products to sync');
+            // console.log('[bulkSyncProductsToAddOns] No products to sync');
             return {
                 success: true,
                 created: 0,
@@ -1648,7 +1648,7 @@ export const bulkSyncProductsToAddOns = webMethod(Permissions.Admin, async () =>
             };
         }
 
-        console.log(`[bulkSyncProductsToAddOns] Found ${productsToSync.length} products to sync`);
+        // console.log(`[bulkSyncProductsToAddOns] Found ${productsToSync.length} products to sync`);
 
         // 2. המרת מוצרים למבנה Add-On
         const addOnsToCreate = productsToSync.map(product => {
@@ -1664,9 +1664,9 @@ export const bulkSyncProductsToAddOns = webMethod(Permissions.Admin, async () =>
         const elevatedBulkCreateAddOns = auth.elevate(addOns.bulkCreateAddOns);
         const result = await elevatedBulkCreateAddOns(addOnsToCreate, { returnEntity: true });
 
-        console.log('[bulkSyncProductsToAddOns] Bulk create result:', JSON.stringify(result, null, 2));
-        console.log(`[bulkSyncProductsToAddOns] Total results: ${(result.results || []).length}`);
-        console.log(`[bulkSyncProductsToAddOns] Results with items: ${(result.results || []).filter(r => r.item).length}`);
+        // console.log('[bulkSyncProductsToAddOns] Bulk create result:', JSON.stringify(result, null, 2));
+        // console.log(`[bulkSyncProductsToAddOns] Total results: ${(result.results || []).length}`);
+        // console.log(`[bulkSyncProductsToAddOns] Results with items: ${(result.results || []).filter(r => r.item).length}`);
 
         // טיפול בשגיאות מה-bulkActionMetadata
         const errors = [];
@@ -1694,7 +1694,7 @@ export const bulkSyncProductsToAddOns = webMethod(Permissions.Admin, async () =>
             if (r.itemMetadata && r.itemMetadata.success === false) return false; // יש itemMetadata עם success=false = כשלון
             return true; // יש item ו-(אין itemMetadata או success !== false) = הצלחה
         });
-        console.log(`[bulkSyncProductsToAddOns] Created ${successfulResults.length} add-ons successfully (out of ${(result.results || []).length} total results)`);
+        // console.log(`[bulkSyncProductsToAddOns] Created ${successfulResults.length} add-ons successfully (out of ${(result.results || []).length} total results)`);
 
         // 4. עדכון רשומות ב-CMS עם addOnId - התאמה לפי name ו-originalIndex
         const updatePromises = [];
@@ -1712,12 +1712,12 @@ export const bulkSyncProductsToAddOns = webMethod(Permissions.Admin, async () =>
             }
 
             // לוג לניפוי באגים
-            console.log(`[bulkSyncProductsToAddOns] Processing result item ${i}:`, {
-                originalIndex,
-                addOnId: createdAddOn._id || createdAddOn.id,
-                addOnName: createdAddOn.name,
-                addOnObject: JSON.stringify(createdAddOn, null, 2)
-            });
+            // console.log(`[bulkSyncProductsToAddOns] Processing result item ${i}:`, {
+//                 originalIndex,
+//                 addOnId: createdAddOn._id || createdAddOn.id,
+//                 addOnName: createdAddOn.name,
+//                 addOnObject: JSON.stringify(createdAddOn, null, 2)
+//             });
 
             // מציאת המוצר המתאים לפי אינדקס מקורי או לפי שם
             let matchingProduct;
@@ -1736,7 +1736,7 @@ export const bulkSyncProductsToAddOns = webMethod(Permissions.Admin, async () =>
 
             if (matchingProduct && addOnId) {
                 try {
-                    console.log(`[bulkSyncProductsToAddOns] Updating product ${matchingProduct._id} with addOnId: ${addOnId}`);
+                    // console.log(`[bulkSyncProductsToAddOns] Updating product ${matchingProduct._id} with addOnId: ${addOnId}`);
                     // שליפת הרשומה המלאה לפני עדכון כדי לא לאבד מידע
                     const fullProduct = await wixData.get('bookingProducts', matchingProduct._id);
                     await wixData.update('bookingProducts', {
@@ -1745,7 +1745,7 @@ export const bulkSyncProductsToAddOns = webMethod(Permissions.Admin, async () =>
                     });
                     updatedCount++;
                     updatePromises.push(matchingProduct._id);
-                    console.log(`[bulkSyncProductsToAddOns] Successfully updated product ${matchingProduct._id}`);
+                    // console.log(`[bulkSyncProductsToAddOns] Successfully updated product ${matchingProduct._id}`);
                 } catch (updateError) {
                     console.error(`[bulkSyncProductsToAddOns] Failed to update product ${matchingProduct._id}:`, updateError);
                     errors.push({
@@ -1774,7 +1774,7 @@ export const bulkSyncProductsToAddOns = webMethod(Permissions.Admin, async () =>
         // 5. עדכון קבוצת ה-Add-Ons בשירות
         try {
             await refreshAddOnsGroup();
-            console.log('[bulkSyncProductsToAddOns] Add-ons group updated successfully');
+            // console.log('[bulkSyncProductsToAddOns] Add-ons group updated successfully');
         } catch (groupError) {
             console.error('[bulkSyncProductsToAddOns] Failed to update add-ons group:', groupError);
             errors.push({
@@ -1790,7 +1790,7 @@ export const bulkSyncProductsToAddOns = webMethod(Permissions.Admin, async () =>
             errors: errors
         };
 
-        console.log('[bulkSyncProductsToAddOns] Final result:', JSON.stringify(finalResult, null, 2));
+        // console.log('[bulkSyncProductsToAddOns] Final result:', JSON.stringify(finalResult, null, 2));
 
         return finalResult;
 
@@ -1808,7 +1808,7 @@ export const bulkSyncProductsToAddOns = webMethod(Permissions.Admin, async () =>
 // --- פונקציה 5: סנכרון מוצר בודד ל-Add-On ---
 export const syncNewProductToAddOn = webMethod(Permissions.Admin, async (productId) => {
     try {
-        console.log(`[syncNewProductToAddOn] Syncing product ${productId}...`);
+        // console.log(`[syncNewProductToAddOn] Syncing product ${productId}...`);
 
         // 1. שליפת המוצר מ-CMS
         const product = await wixData.get('bookingProducts', productId);
@@ -1825,7 +1825,7 @@ export const syncNewProductToAddOn = webMethod(Permissions.Admin, async (product
         }
 
         if (product.addOnId) {
-            console.log(`[syncNewProductToAddOn] Product ${productId} already has addOnId: ${product.addOnId}`);
+            // console.log(`[syncNewProductToAddOn] Product ${productId} already has addOnId: ${product.addOnId}`);
             return product.addOnId;
         }
 
@@ -1840,7 +1840,7 @@ export const syncNewProductToAddOn = webMethod(Permissions.Admin, async (product
         const elevatedCreateAddOn = auth.elevate(addOns.createAddOn);
         const newAddOn = await elevatedCreateAddOn(addOnInfo);
 
-        console.log(`[syncNewProductToAddOn] Created add-on ${newAddOn._id} for product ${productId}`);
+        // console.log(`[syncNewProductToAddOn] Created add-on ${newAddOn._id} for product ${productId}`);
 
         // 4. עדכון הרשומה ב-CMS עם addOnId (שימוש ב-spread כדי לא לאבד מידע)
         await wixData.update('bookingProducts', {
@@ -1850,7 +1850,7 @@ export const syncNewProductToAddOn = webMethod(Permissions.Admin, async (product
 
         // 5. עדכון קבוצת ה-Add-Ons בשירות
         await refreshAddOnsGroup();
-        console.log(`[syncNewProductToAddOn] Add-ons group updated successfully`);
+        // console.log(`[syncNewProductToAddOn] Add-ons group updated successfully`);
 
         return newAddOn._id;
 
@@ -1863,7 +1863,7 @@ export const syncNewProductToAddOn = webMethod(Permissions.Admin, async (product
 // --- פונקציה 6: עדכון Add-On כשמחיר/שם משתנים ---
 export const updateProductAddOn = webMethod(Permissions.Admin, async (productId) => {
     try {
-        console.log(`[updateProductAddOn] Updating add-on for product ${productId}...`);
+        // console.log(`[updateProductAddOn] Updating add-on for product ${productId}...`);
 
         // 1. שליפת המוצר מ-CMS
         const product = await wixData.get('bookingProducts', productId);
@@ -1888,7 +1888,7 @@ export const updateProductAddOn = webMethod(Permissions.Admin, async (productId)
         const elevatedUpdateAddOn = auth.elevate(addOns.updateAddOn);
         await elevatedUpdateAddOn(product.addOnId, addOnInfo);
 
-        console.log(`[updateProductAddOn] Updated add-on ${product.addOnId} for product ${productId}`);
+        // console.log(`[updateProductAddOn] Updated add-on ${product.addOnId} for product ${productId}`);
 
         return product.addOnId;
 
@@ -1901,7 +1901,7 @@ export const updateProductAddOn = webMethod(Permissions.Admin, async (productId)
 // --- פונקציה 7: מחיקת Add-On ---
 export const deleteProductAddOn = webMethod(Permissions.Admin, async (productId) => {
     try {
-        console.log(`[deleteProductAddOn] Deleting add-on for product ${productId}...`);
+        // console.log(`[deleteProductAddOn] Deleting add-on for product ${productId}...`);
 
         // 1. שליפת המוצר מ-CMS
         const product = await wixData.get('bookingProducts', productId);
@@ -1912,7 +1912,7 @@ export const deleteProductAddOn = webMethod(Permissions.Admin, async (productId)
 
         // 2. בדיקה שיש addOnId
         if (!product.addOnId) {
-            console.log(`[deleteProductAddOn] Product ${productId} does not have addOnId, nothing to delete`);
+            // console.log(`[deleteProductAddOn] Product ${productId} does not have addOnId, nothing to delete`);
             return null;
         }
 
@@ -1920,7 +1920,7 @@ export const deleteProductAddOn = webMethod(Permissions.Admin, async (productId)
         const elevatedDeleteAddOn = auth.elevate(addOns.deleteAddOn);
         await elevatedDeleteAddOn(product.addOnId);
 
-        console.log(`[deleteProductAddOn] Deleted add-on ${product.addOnId} for product ${productId}`);
+        // console.log(`[deleteProductAddOn] Deleted add-on ${product.addOnId} for product ${productId}`);
 
         // 4. עדכון הרשומה ב-CMS להסרת addOnId (שימוש ב-spread כדי לא לאבד מידע)
         await wixData.update('bookingProducts', {
@@ -1930,7 +1930,7 @@ export const deleteProductAddOn = webMethod(Permissions.Admin, async (productId)
 
         // 5. עדכון קבוצת ה-Add-Ons בשירות (ה-add-on שנמחק לא יופיע ברשימה)
         await refreshAddOnsGroup();
-        console.log(`[deleteProductAddOn] Add-ons group updated successfully`);
+        // console.log(`[deleteProductAddOn] Add-ons group updated successfully`);
 
         return product.addOnId;
 
@@ -1943,7 +1943,7 @@ export const deleteProductAddOn = webMethod(Permissions.Admin, async (productId)
 // --- פונקציה חד-פעמית: עדכון קבוצת Add-Ons עם add-ons חדשים (חוץ מ-7 קיימים) ---
 export const updateAddOnsGroupWithNewOnes = webMethod(Permissions.Admin, async () => {
     try {
-        console.log('[updateAddOnsGroupWithNewOnes] Starting to update group with new add-ons...');
+        // console.log('[updateAddOnsGroupWithNewOnes] Starting to update group with new add-ons...');
 
         // רשימת ה-7 add-ons שכבר נמצאים בקבוצה (לא נוסיף אותם שוב)
         const existingAddOnIds = [
@@ -1965,15 +1965,15 @@ export const updateAddOnsGroupWithNewOnes = webMethod(Permissions.Admin, async (
             .map(p => p.addOnId)
             .filter(id => id && typeof id === 'string' && id.trim() !== '');
 
-        console.log(`[updateAddOnsGroupWithNewOnes] Found ${allAddOnIds.length} total add-on IDs in CMS`);
+        // console.log(`[updateAddOnsGroupWithNewOnes] Found ${allAddOnIds.length} total add-on IDs in CMS`);
 
         // 2. סינון - רק add-ons שלא נמצאים ב-7 הקיימים
         const newAddOnIds = allAddOnIds.filter(id => !existingAddOnIds.includes(id));
 
-        console.log(`[updateAddOnsGroupWithNewOnes] Found ${newAddOnIds.length} new add-ons (excluding ${existingAddOnIds.length} existing ones)`);
+        // console.log(`[updateAddOnsGroupWithNewOnes] Found ${newAddOnIds.length} new add-ons (excluding ${existingAddOnIds.length} existing ones)`);
 
         if (newAddOnIds.length === 0) {
-            console.log('[updateAddOnsGroupWithNewOnes] No new add-ons to add');
+            // console.log('[updateAddOnsGroupWithNewOnes] No new add-ons to add');
             return {
                 success: true,
                 message: 'No new add-ons to add',
@@ -1997,7 +1997,7 @@ export const updateAddOnsGroupWithNewOnes = webMethod(Permissions.Admin, async (
             groupId: ADDON_GROUP_ID
         });
 
-        console.log(`[updateAddOnsGroupWithNewOnes] Successfully updated group ${ADDON_GROUP_ID} with ${addOnIdsToAdd.length} new add-ons`);
+        // console.log(`[updateAddOnsGroupWithNewOnes] Successfully updated group ${ADDON_GROUP_ID} with ${addOnIdsToAdd.length} new add-ons`);
 
         return {
             success: true,
@@ -2087,97 +2087,93 @@ export const getCourseAvailability = webMethod(Permissions.Anyone, async () => {
 // מסנן לפי: bookable, locked, tooLateToBook
 // מחזיר openSpots כדי שהפרונטנד יוכל לסנן לפי כמות משתתפים
 
+// queryAvailability over a full year × several services times out / overflows
+// the webMethod transport ("Network Error"). Same 45-day chunks as http-functions.
+const AVAILABILITY_CHUNK_DAYS = 45;
+const AVAILABILITY_CHUNK_CONCURRENCY = 3;
+
+async function fetchAvailabilityChunk(serviceIds, startDate, endDate) {
+    const options = { slotsPerDay: 50 };
+    const results = await Promise.all(serviceIds.map(async (serviceId) => {
+        try {
+            const availability = await availabilityCalendar.queryAvailability({
+                filter: {
+                    serviceId,
+                    startDate: startDate.toISOString(),
+                    endDate: endDate.toISOString(),
+                },
+            }, options);
+            return (availability.availabilityEntries || []).map((entry) => ({ ...entry, _serviceId: serviceId }));
+        } catch (err) {
+            console.error(`Error fetching availability for service ${serviceId}:`, err?.message || err);
+            return [];
+        }
+    }));
+    return results.flat();
+}
+
 export const getCourseSessions = webMethod(Permissions.Anyone, async (dateRangeStart, dateRangeEnd, serviceIds) => {
     try {
         const startDate = new Date(dateRangeStart);
         const endDate = new Date(dateRangeEnd);
+        if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime()) || endDate <= startDate) {
+            return [];
+        }
 
-        const options = {
-            slotsPerDay: 50
-        };
-
-        // קריאה לכל השירותים הרלוונטיים במקביל (טאפטינג כברירת מחדל, או serviceIds חלופי כמו נרות)
         let targetServiceIds = Array.isArray(serviceIds) && serviceIds.length > 0 ?
             serviceIds :
             Object.values(TUFTING_SERVICE_IDS);
         if (targetServiceIds.some((id) => CANDLES_ID_SET.has(id))) {
             targetServiceIds = expandCandlesServiceIds(targetServiceIds, startDate);
         }
-        const allResults = await Promise.all(
-            targetServiceIds.map(async (serviceId) => {
-                try {
-                    const query = {
-                        filter: {
-                            serviceId: serviceId,
-                            startDate: startDate.toISOString(),
-                            endDate: endDate.toISOString()
-                        }
-                    };
-                    const availability = await availabilityCalendar.queryAvailability(query, options);
-                    return { serviceId, entries: availability.availabilityEntries || [] };
-                } catch (err) {
-                    console.error(`Error fetching availability for service ${serviceId}:`, err);
-                    return { serviceId, entries: [] };
-                }
-            })
-        );
 
-        // איחוד כל התוצאות
-        const allEntries = [];
-        for (const result of allResults) {
-            for (const entry of result.entries) {
-                allEntries.push({ ...entry, _serviceId: result.serviceId });
+        const isCandlesQuery = targetServiceIds.some((id) => CANDLES_ID_SET.has(id));
+        let allEntries = [];
+        if (isCandlesQuery) {
+            const chunkMs = AVAILABILITY_CHUNK_DAYS * 24 * 60 * 60 * 1000;
+            const chunks = [];
+            for (let t = startDate.getTime(); t < endDate.getTime(); t += chunkMs) {
+                chunks.push({
+                    start: new Date(t),
+                    end: new Date(Math.min(t + chunkMs, endDate.getTime())),
+                });
             }
+            for (let i = 0; i < chunks.length; i += AVAILABILITY_CHUNK_CONCURRENCY) {
+                const batch = chunks.slice(i, i + AVAILABILITY_CHUNK_CONCURRENCY);
+                const batchResults = await Promise.all(
+                    batch.map((chunk) => fetchAvailabilityChunk(targetServiceIds, chunk.start, chunk.end))
+                );
+                for (const entries of batchResults) allEntries.push(...entries);
+            }
+        } else {
+            allEntries = await fetchAvailabilityChunk(targetServiceIds, startDate, endDate);
         }
 
-        // סינון לפי הקריטריונים
-        const filteredEntries = allEntries.filter(entry => {
-            if (!entry.bookable) return false;
-            if (entry.locked) return false;
-            if (entry.bookingPolicyViolations?.tooLateToBook) return false;
-            if (!entry.openSpots || entry.openSpots <= 0) return false;
-            return true;
-        });
-
-        // המרת המבנה לפורמט שהפרונטנד מצפה לו
-        const availableSlots = filteredEntries.map(entry => {
-            const slot = entry.slot || {};
-            const serviceId = slot.serviceId || entry._serviceId;
-
-            const startDateObj = slot.startDate ? new Date(slot.startDate) : null;
-            const endDateObj = slot.endDate ? new Date(slot.endDate) : null;
-
-            return {
-                _id: slot.sessionId || slot.eventId,
-                sessionId: slot.sessionId,
-                start: startDateObj ? {
-                    timestamp: slot.startDate,
-                    localDateTime: toIsraelLocalDateTime(startDateObj)
-                } : null,
-                end: endDateObj ? {
-                    timestamp: slot.endDate,
-                    localDateTime: toIsraelLocalDateTime(endDateObj)
-                } : null,
-                scheduleId: slot.scheduleId,
-                serviceId: serviceId,
-                totalSpots: entry.totalSpots || 0,
-                openSpots: entry.openSpots || 0,
-                bookedParticipants: (entry.totalSpots || 0) - (entry.openSpots || 0),
-                remainingSpots: entry.openSpots || 0,
-                isAvailable: true,
-                resource: slot.resource,
-                location: slot.location,
-                originalSlot: {
-                    sessionId: slot.sessionId,
-                    serviceId: serviceId,
+        const availableSlots = allEntries
+            .filter((entry) => {
+                if (!entry.bookable) return false;
+                if (entry.locked) return false;
+                if (entry.bookingPolicyViolations?.tooLateToBook) return false;
+                if (!entry.openSpots || entry.openSpots <= 0) return false;
+                return true;
+            })
+            .map((entry) => {
+                const slot = entry.slot || {};
+                const serviceId = slot.serviceId || entry._serviceId;
+                const sessionId = slot.sessionId || slot.eventId;
+                return {
+                    _id: sessionId,
+                    sessionId,
+                    start: slot.startDate ? { timestamp: slot.startDate } : null,
+                    end: slot.endDate ? { timestamp: slot.endDate } : null,
                     scheduleId: slot.scheduleId,
-                    startDate: slot.startDate,
-                    endDate: slot.endDate,
-                    resource: slot.resource,
-                    location: slot.location
-                }
-            };
-        });
+                    serviceId,
+                    totalSpots: entry.totalSpots || 0,
+                    openSpots: entry.openSpots || 0,
+                    bookedParticipants: (entry.totalSpots || 0) - (entry.openSpots || 0),
+                    remainingSpots: entry.openSpots || 0,
+                };
+            });
 
         return filterCandlesLimitedSlots(availableSlots);
     } catch (error) {
@@ -2300,7 +2296,7 @@ async function _fetchServicePricingInternal(serviceIds) {
         };
     }
 
-    console.log('[ServicePricing] Fetched variant pricing:', JSON.stringify(result));
+    // console.log('[ServicePricing] Fetched variant pricing:', JSON.stringify(result));
     return result;
 }
 
@@ -2341,7 +2337,7 @@ async function _fetchCeramicsPricingInternal(serviceId) {
     }
 
     applyCeramicsExtraItemAddonPricing(byDay);
-    console.log('[CeramicsPricing] Fetched by-day variant pricing:', JSON.stringify(byDay));
+    // console.log('[CeramicsPricing] Fetched by-day variant pricing:', JSON.stringify(byDay));
     return { byDay, currency: item?.minPrice?.currency || 'ILS' };
 }
 
@@ -2572,7 +2568,7 @@ export const confirmOrderPayment = webMethod(Permissions.Anyone, async (orderId,
 
     // WhatsApp is now sent automatically by the WorkshopOrders_afterUpdate
     // data hook in data.js when status changes to 'paid'.
-    console.log('[confirmOrderPayment] order updated to paid. orderId:', orderId, 'source:', correlated ? 'ecom-verified' : 'degraded-fallback');
+    // console.log('[confirmOrderPayment] order updated to paid. orderId:', orderId, 'source:', correlated ? 'ecom-verified' : 'degraded-fallback');
 
     return updated;
 });
@@ -3858,7 +3854,7 @@ export const approveDuplicatePhone = webMethod(Permissions.Anyone, async (partic
 });
 
 export const queueParticipantLinks = webMethod(Permissions.Anyone, async (orderId) => {
-    console.log(`[Notifications] Placeholder: would send participant links for order ${orderId} via WhatsApp/Email`);
+    // console.log(`[Notifications] Placeholder: would send participant links for order ${orderId} via WhatsApp/Email`);
     await wixData.insert('WorkshopNotifications', {
         orderId,
         type: 'participant_links',
@@ -3870,12 +3866,12 @@ export const queueParticipantLinks = webMethod(Permissions.Anyone, async (orderI
 export const queueOrganizerSelectionCompleted = webMethod(Permissions.Anyone, async (orderId, participantName) => {
     // Notification is now fired inline inside saveSketchSelection.
     // This export is kept for backwards compatibility.
-    console.log(`[queueOrganizerSelectionCompleted] Notification handled inline for order ${orderId}, participant: ${participantName}`);
+    // console.log(`[queueOrganizerSelectionCompleted] Notification handled inline for order ${orderId}, participant: ${participantName}`);
     return { queued: true };
 });
 
 export const queueSelectionReminders = webMethod(Permissions.Anyone, async (orderId) => {
-    console.log(`[Notifications] Placeholder: would queue reminder for incomplete selections on order ${orderId}`);
+    // console.log(`[Notifications] Placeholder: would queue reminder for incomplete selections on order ${orderId}`);
     await wixData.insert('WorkshopNotifications', {
         orderId,
         type: 'selection_reminder',
@@ -4273,7 +4269,7 @@ async function persistSketchToWix(sketchUrl) {
 
 async function executeSketchGeneration(jobId, { imageBase64, orderId }) {
     try {
-        console.log('[executeSketchGeneration] Starting Replicate for job:', jobId);
+        // console.log('[executeSketchGeneration] Starting Replicate for job:', jobId);
         // Nothing is written to Wix Media here — neither the input image nor the
         // sketch. saveApprovedSketch persists everything only after the user clicks
         // "אישור ושמירה". Until then the sketch is a temporary Replicate URL.
@@ -4286,7 +4282,7 @@ async function executeSketchGeneration(jobId, { imageBase64, orderId }) {
             status: 'done',
             text: JSON.stringify({ sketchUrl }),
         }, SA);
-        console.log('[executeSketchGeneration] Done job:', jobId);
+        // console.log('[executeSketchGeneration] Done job:', jobId);
     } catch (err) {
         console.error('[executeSketchGeneration] Failed job:', jobId, err?.message || err);
         try {

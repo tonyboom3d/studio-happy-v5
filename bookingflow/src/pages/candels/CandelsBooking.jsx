@@ -352,7 +352,7 @@ export default function CandelsBooking() {
       })),
     };
 
-    console.log('[Candels][Frontend] bookingData being sent to Wix:', JSON.stringify(bookingData, null, 2));
+    // console.log('[Candels][Frontend] bookingData being sent to Wix:', JSON.stringify(bookingData, null, 2));
     addLog('[Candels] Submitting booking', 'info');
     submitBooking(bookingData);
 

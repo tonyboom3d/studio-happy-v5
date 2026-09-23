@@ -18,6 +18,7 @@ import { SKETCH_STATUS, SKETCH_STATUSES, normalizeSketchStatus, isLockedStatus }
 import { PERMISSION_KEYS, PERMISSION_DEFAULTS, refId } from 'backend/staffRoles.js';
 import { getItemWithRetry } from 'backend/wixDataRetry.js';
 import { TUFTING_SERVICE_IDS } from 'backend/sketchEditingPolicy.js';
+import { cancelRescheduleRequest as cancelRescheduleRequestCore } from 'backend/rescheduleService.web.js';
 import {
     TEMPLATE_USE,
     assertTemplateUse,
@@ -998,14 +999,14 @@ export const getInitialDashboardData = webMethod(Permissions.SiteMember, async (
     const startDate = filters?.dateRangeStart ? new Date(filters.dateRangeStart) : now;
     const endDate = filters?.dateRangeEnd ? new Date(filters.dateRangeEnd) : new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
 
-    console.log(`[dashboardService] getInitialDashboardData${refreshOnly ? ' (refresh)' : ''}: range ${startDate.toISOString()} → ${endDate.toISOString()}`);
+    // console.log(`[dashboardService] getInitialDashboardData${refreshOnly ? ' (refresh)' : ''}: range ${startDate.toISOString()} → ${endDate.toISOString()}`);
 
     const [{ typesMap, serviceIdToTypeId, allServiceIds }, staffNamesById] = await Promise.all([
         loadWorkshopTypes(),
         loadStaffNamesById(),
     ]);
-    console.log(`[dashboardService] Loaded ${Object.keys(typesMap).length} workshop type(s), serviceIds:`, allServiceIds);
-    console.log(`[dashboardService] Loaded ${Object.keys(staffNamesById).length} staff member(s):`, staffNamesById);
+    // console.log(`[dashboardService] Loaded ${Object.keys(typesMap).length} workshop type(s), serviceIds:`, allServiceIds);
+    // console.log(`[dashboardService] Loaded ${Object.keys(staffNamesById).length} staff member(s):`, staffNamesById);
 
     const [{ sessions, idLookup }, ordersLoad, addOnOrdersLoad] = await Promise.all([
         loadSessions(allServiceIds, startDate, endDate),
@@ -1017,7 +1018,7 @@ export const getInitialDashboardData = webMethod(Permissions.SiteMember, async (
     const addOnsBySessionId = addOnOrdersLoad.bySessionId;
     const ordersQueryTotal = ordersLoad.queryReturned;
     const queryLimitHit = false;
-    console.log(`[dashboardService] Loaded ${sessions.length} Bookings session(s) and ${orders.length} paid WorkshopOrders record(s) in range.`);
+    // console.log(`[dashboardService] Loaded ${sessions.length} Bookings session(s) and ${orders.length} paid WorkshopOrders record(s) in range.`);
     if (!refreshOnly) console.warn('📦 [dashboardService] Raw WorkshopOrders from CMS:', orders);
 
     const orderIds = orders.map(o => o._id);
@@ -1029,7 +1030,7 @@ export const getInitialDashboardData = webMethod(Permissions.SiteMember, async (
         getPromoCouponsByOrderIds(orderIds),
     ]);
     const totalSketches = Object.values(sketchesByOrderId).reduce((sum, arr) => sum + arr.length, 0);
-    console.log(`[dashboardService] Loaded ${totalSketches} SketchSelections record(s) across ${Object.keys(sketchesByOrderId).length} order(s).`);
+    // console.log(`[dashboardService] Loaded ${totalSketches} SketchSelections record(s) across ${Object.keys(sketchesByOrderId).length} order(s).`);
 
     const allSketchSelections = Object.values(sketchesByOrderId).flat();
     const allProductIds = [
@@ -1176,6 +1177,9 @@ export const getInitialDashboardData = webMethod(Permissions.SiteMember, async (
                 quantity: adults + children,
                 rugCount: order.rugCount || 0,
                 orderStatus: order.cancelledAt ? 'cancelled' : 'active',
+                pendingRescheduleStatus: order.pendingRescheduleStatus || null,
+                pendingRescheduleDate: order.pendingRescheduleDate || null,
+                customerRescheduleCount: order.customerRescheduleCount || 0,
                 customerNotes: order.customerNotes || '',
                 notes: order.internalNotes || '',
                 logs: mapOrderLog(order.actionLog),
@@ -1262,7 +1266,7 @@ export const getInitialDashboardData = webMethod(Permissions.SiteMember, async (
             legacyGroupsBySessionId[resolvedId] = (legacyGroupsBySessionId[resolvedId] || 0) + 1;
             legacyOrdersCount++;
         }
-        console.log(`[dashboardService] Found ${legacyOrdersCount} legacy booking(s) (not in WorkshopOrders CMS, deduped by bookingId) out of ${allServiceBookings.length} total booking(s) checked.`);
+        // console.log(`[dashboardService] Found ${legacyOrdersCount} legacy booking(s) (not in WorkshopOrders CMS, deduped by bookingId) out of ${allServiceBookings.length} total booking(s) checked.`);
     }
 
     // Default view: only workshop slots that have at least one WorkshopOrders CMS
@@ -1309,7 +1313,7 @@ export const getInitialDashboardData = webMethod(Permissions.SiteMember, async (
         if (b.startTimestamp === null) return -1;
         return a.startTimestamp - b.startTimestamp;
     });
-    console.log('[dashboardService] Per-workshop alert flags:', scopedWorkshopRows.map(w => ({ id: w.id, date: w.date, time: w.time, hasAlert: w.hasAlert, isUrgent: w.isUrgent, sketches: `${w.sketchesReady}/${w.totalSketchesNeeded}` })));
+    // console.log('[dashboardService] Per-workshop alert flags:', scopedWorkshopRows.map(w => ({ id: w.id, date: w.date, time: w.time, hasAlert: w.hasAlert, isUrgent: w.isUrgent, sketches: `${w.sketchesReady}/${w.totalSketchesNeeded}` })));
 
     // Same scoping for orders — plus, for non-managers, strip payment/coupon
     // details and the Wix eCom order id (used by the UI to build the
@@ -1328,9 +1332,9 @@ export const getInitialDashboardData = webMethod(Permissions.SiteMember, async (
             .map(t => mapTemplateRow(t, ORDER_NOTIFICATION_TYPE_LABELS))
             .filter(t => t.use === TEMPLATE_USE.ORDERS)
         : undefined;
-    if (!refreshOnly) console.log(`[dashboardService] Loaded ${(templates || []).length} WhatsApp template(s).`);
-    if (!refreshOnly) console.log('[dashboardService] Resolved current dashboard user:', currentUser);
-    console.log(`[dashboardService] getInitialDashboardData done: ${scopedWorkshopRows.length} workshop(s), ${scopedOrders.length} order(s), ${missingSketchesCount} missing sketch(es) across ${alertWorkshopIds.length} alerted workshop(s).`);
+    // if (!refreshOnly) console.log(`[dashboardService] Loaded ${(templates || []).length} WhatsApp template(s).`);
+    // if (!refreshOnly) console.log('[dashboardService] Resolved current dashboard user:', currentUser);
+    // console.log(`[dashboardService] getInitialDashboardData done: ${scopedWorkshopRows.length} workshop(s), ${scopedOrders.length} order(s), ${missingSketchesCount} missing sketch(es) across ${alertWorkshopIds.length} alerted workshop(s).`);
     if (!refreshOnly) console.warn('🧾 [dashboardService] Dashboard orders (UI-ready, with sketches):', scopedOrders);
 
     return {
@@ -1612,7 +1616,7 @@ async function logOrderAction(orderId, action, userOverride) {
     }
 
     const timestamp = new Date().toISOString();
-    console.log(`[dashboardService] ${formatLogTime(timestamp)} • ${userName}: ${action}`);
+    // console.log(`[dashboardService] ${formatLogTime(timestamp)} • ${userName}: ${action}`);
 
     const entry = { timestamp, user: userName, action };
     const actionLog = [entry, ...(order.actionLog || [])].slice(0, 200);
@@ -1621,7 +1625,7 @@ async function logOrderAction(orderId, action, userOverride) {
 
 export const updateSketchState = webMethod(Permissions.SiteMember, async (orderId, sketchId, newStatus, options) => {
     const role = await assertPermission('editSketchStatus');
-    console.log(`[dashboardService] updateSketchState: order=${orderId} sketch=${sketchId} newStatus="${newStatus}"`);
+    // console.log(`[dashboardService] updateSketchState: order=${orderId} sketch=${sketchId} newStatus="${newStatus}"`);
 
     if (!SKETCH_STATUSES.includes(newStatus)) {
         throw new Error(`INVALID_STATUS:${newStatus}`);
@@ -1681,7 +1685,7 @@ export const updateSketchState = webMethod(Permissions.SiteMember, async (orderI
 
 export const deleteSketchImage = webMethod(Permissions.SiteMember, async (orderId, sketchId, options) => {
     await assertPermission('deleteSketchImage');
-    console.log(`[dashboardService] deleteSketchImage: order=${orderId} sketch=${sketchId}`);
+    // console.log(`[dashboardService] deleteSketchImage: order=${orderId} sketch=${sketchId}`);
 
     const sel = await wixData.get('SketchSelections', sketchId, SA);
     if (!sel) throw new Error('Sketch not found');
@@ -1724,7 +1728,7 @@ const DASHBOARD_SENDABLE_TEMPLATE_LABEL = 'אישור הזמנה';
 /** Sends (or resends) the fixed "אישור הזמנה" ManyChat template. */
 export const sendDashboardWhatsApp = webMethod(Permissions.SiteMember, async (orderId, phone, options) => {
     await assertPermission('sendWhatsApp');
-    console.log(`[dashboardService] sendDashboardWhatsApp: order=${orderId} phone=${phone} template=${DASHBOARD_SENDABLE_TEMPLATE}`);
+    // console.log(`[dashboardService] sendDashboardWhatsApp: order=${orderId} phone=${phone} template=${DASHBOARD_SENDABLE_TEMPLATE}`);
 
     const targetPhone = normalizePhone(phone);
     if (!targetPhone) throw new Error('Invalid phone number');
@@ -1795,6 +1799,15 @@ export const cancelPromoCouponNoShow = webMethod(Permissions.SiteMember, async (
     const result = await cancelPromoCouponsForOrder(orderId, 'no_show');
     await logOrderAction(orderId, `קופון המבצע (${coupon.code}) בוטל — אי-הגעה לסדנת הטאפטינג`, options?.user);
     return { success: true, cancelled: result.cancelled };
+});
+
+/**
+ * Dashboard "ביטול" button on a pending reschedule request — see
+ * rescheduleService.web.js (which already writes its own actionLog entry).
+ */
+export const cancelRescheduleRequest = webMethod(Permissions.SiteMember, async (orderId) => {
+    await assertPermission('editOrderNotes');
+    return cancelRescheduleRequestCore(orderId);
 });
 
 export const getTemplates = webMethod(Permissions.SiteMember, async () => {

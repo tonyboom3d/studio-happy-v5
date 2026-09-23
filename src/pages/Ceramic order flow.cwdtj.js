@@ -29,10 +29,10 @@ async function initData(iframe) {
             getCourseSessions(new Date(), new Date(Date.now() + 365 * 24 * 60 * 60 * 1000), CERAMICS_SERVICE_ID_LIST),
         ]);
 
-        console.log('[Wix][ceramics] Backend Data:', {
-            slotsCount: slots?.length ?? 0,
-            servicePricing,
-        });
+        // console.log('[Wix][ceramics] Backend Data:', {
+//             slotsCount: slots?.length ?? 0,
+//             servicePricing,
+//         });
 
         sendMessageToIframe(iframe, {
             type: 'WIX_DATA',

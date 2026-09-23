@@ -71,7 +71,7 @@ export async function syncHebcalHolidays(year) {
     const merged = Object.values(byDate).sort((a, b) => a.date.localeCompare(b.date));
     await wixData.update('AvailabilitySettings', { ...row, holidays: JSON.stringify(merged) }, SA);
     await publishSchedulingUpdate('holidays-updated', { source: 'hebcal', year: y });
-    console.log(`[holidayService] syncHebcalHolidays: year=${y} added=${added} refreshed=${refreshed} total=${merged.length}`);
+    // console.log(`[holidayService] syncHebcalHolidays: year=${y} added=${added} refreshed=${refreshed} total=${merged.length}`);
     return { ok: true, year: y, added, refreshed, total: merged.length };
 }
 

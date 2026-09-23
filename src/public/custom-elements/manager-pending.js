@@ -70,7 +70,7 @@ class ManagerPending extends HTMLElement {
     }
 
     connectedCallback() {
-        console.log('[manager-pending] CE connected');
+        // console.log('[manager-pending] CE connected');
         if (!document.getElementById('mp-style')) {
             const style = document.createElement('style');
             style.id = 'mp-style';
@@ -123,7 +123,7 @@ class ManagerPending extends HTMLElement {
                 if (!decisions.length) return;
                 this._sending = true;
                 this.render();
-                console.log('[manager-pending] submitting', decisions.length, 'decisions');
+                // console.log('[manager-pending] submitting', decisions.length, 'decisions');
                 this.dispatchEvent(new CustomEvent('submit-decisions', { detail: { decisions }, bubbles: true }));
             }
         });
@@ -148,7 +148,7 @@ class ManagerPending extends HTMLElement {
             console.error('[manager-pending] bad JSON attribute:', err);
             return;
         }
-        console.log('[manager-pending]', name, 'received');
+        // console.log('[manager-pending]', name, 'received');
         this.render();
     }
 

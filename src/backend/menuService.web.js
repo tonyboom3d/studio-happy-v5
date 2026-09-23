@@ -52,17 +52,17 @@ function buildPreloaderEmbedHtml() {
   // בדיקת דף בית ו-session + הפעלה עצמאית — ללא תלות ב-masterPage.js
   const js = [
     "(function(){",
-      "console.log('[SH-Preloader] script running, pathname='+location.pathname);",
+      "/* console.log('[SH-Preloader] script running, pathname='+location.pathname); */",
       // בדיקת session — לא להציג שוב באותו סשן
-      "if(sessionStorage.getItem('sh_pl_shown')){console.log('[SH-Preloader] already shown this session, skip');return;}",
+      "if(sessionStorage.getItem('sh_pl_shown')){/* console.log('[SH-Preloader] already shown this session, skip'); */return;}",
       // בדיקת דף בית לפי URL
       "var p=location.pathname.replace(/\\/+$/,'');",
-      "console.log('[SH-Preloader] normalised path='+p);",
+      "/* console.log('[SH-Preloader] normalised path='+p); */",
       "var isHome=(p===''||p==='/studio-happy'||p.endsWith('/home'));",
-      "console.log('[SH-Preloader] isHome='+isHome);",
-      "if(!isHome){console.log('[SH-Preloader] not home page, skip');return;}",
+      "/* console.log('[SH-Preloader] isHome='+isHome); */",
+      "if(!isHome){/* console.log('[SH-Preloader] not home page, skip'); */return;}",
       "sessionStorage.setItem('sh_pl_shown','1');",
-      "console.log('[SH-Preloader] starting preloader');",
+      "/* console.log('[SH-Preloader] starting preloader'); */",
 
     "function buildDOM(){",
       "var el=document.createElement('div');",
@@ -95,12 +95,12 @@ function buildPreloaderEmbedHtml() {
       "},{once:true});",
     "}",
     // הפעלה ישירה — לא מחכה ל-masterPage
-    "console.log('[SH-Preloader] buildDOM...');",
+    "/* console.log('[SH-Preloader] buildDOM...'); */",
     "var el=buildDOM();",
-    "console.log('[SH-Preloader] DOM built, el='+el.id);",
+    "/* console.log('[SH-Preloader] DOM built, el='+el.id); */",
     "requestAnimationFrame(function(){requestAnimationFrame(function(){",
       "var c=document.getElementById('sh-preloader__content');",
-      "console.log('[SH-Preloader] content el='+c);",
+      "/* console.log('[SH-Preloader] content el='+c); */",
       "if(c)c.classList.add('sh-visible');",
     "});});",
     "runProgress(function(){dismiss(el);});",

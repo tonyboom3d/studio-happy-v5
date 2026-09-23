@@ -17,7 +17,7 @@ import { getPendingManagerItems, respondToManagerPendingItems } from 'backend/ma
 const ELEMENT_ID = '#managerPending1';
 
 $w.onReady(async function () {
-    console.log('[manager-pending] $w.onReady fired');
+    // console.log('[manager-pending] $w.onReady fired');
 
     const el = $w(ELEMENT_ID);
     if (!el) {
@@ -26,7 +26,7 @@ $w.onReady(async function () {
     }
 
     const token = wixLocation.query?.token || null;
-    console.log('[manager-pending] token present:', !!token);
+    // console.log('[manager-pending] token present:', !!token);
 
     if (!token) {
         el.setAttribute('items-data', JSON.stringify({ error: true, message: 'חסר קישור תקין.', __ts: Date.now() }));
@@ -35,10 +35,10 @@ $w.onReady(async function () {
 
     el.on('submit-decisions', async (event) => {
         const { decisions } = event.detail || {};
-        console.log('[manager-pending] page ← submit-decisions', decisions?.length);
+        // console.log('[manager-pending] page ← submit-decisions', decisions?.length);
         try {
             const result = await respondToManagerPendingItems(token, decisions);
-            console.log('[manager-pending] respondToManagerPendingItems result', result);
+            // console.log('[manager-pending] respondToManagerPendingItems result', result);
             el.setAttribute('respond-result', JSON.stringify({ ...result, __ts: Date.now() }));
         } catch (err) {
             const message = err?.message || String(err);
@@ -49,7 +49,7 @@ $w.onReady(async function () {
 
     try {
         const details = await getPendingManagerItems(token);
-        console.log('[manager-pending] items loaded:', details?.items?.length);
+        // console.log('[manager-pending] items loaded:', details?.items?.length);
         el.setAttribute('items-data', JSON.stringify({ ...details, __ts: Date.now() }));
     } catch (err) {
         console.error('[manager-pending] getPendingManagerItems failed:', err?.message || err);

@@ -15,6 +15,6 @@ export function add(param1, param2) {
 import {add} from 'public/custom-elements/chat-bubble.js'
 $w.onReady(function () {
     let sum = add(6,7);
-    console.log(sum);
+    // console.log(sum);
 });
 */

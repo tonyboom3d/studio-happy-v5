@@ -133,23 +133,23 @@ export function isPromoCeramicsCouponBlockedDay(dateInput) {
  * Never throws — a promo failure must never affect the underlying order.
  */
 export async function issuePromoCouponForOrder(order, { force = false } = {}) {
-    console.log(`${TAG} issuePromoCouponForOrder called. orderId=${order?._id} workshopType=${order?.workshopType} force=${force}`);
+    // console.log(`${TAG} issuePromoCouponForOrder called. orderId=${order?._id} workshopType=${order?.workshopType} force=${force}`);
     try {
         if (!order?._id) return { issued: false, reason: 'no-order' };
         if (order.workshopType !== 'tufting') {
-            console.log(`${TAG} Skipping — not a tufting order. orderId=${order._id} workshopType=${order.workshopType}`);
+            // console.log(`${TAG} Skipping — not a tufting order. orderId=${order._id} workshopType=${order.workshopType}`);
             return { issued: false, reason: 'not-tufting' };
         }
 
         const campaign = await getPromoCampaign();
         if (!force && !campaign?.enabled) {
-            console.log(`${TAG} Campaign disabled — skipping issuance. orderId=${order._id} expired=${campaign?.expired}`);
+            // console.log(`${TAG} Campaign disabled — skipping issuance. orderId=${order._id} expired=${campaign?.expired}`);
             return { issued: false, reason: 'campaign-disabled' };
         }
 
         const existing = await wixData.query('PromoCoupons').eq('orderId', order._id).limit(1).find(SA);
         if (existing.items.length) {
-            console.log(`${TAG} Coupon already issued for order — skipping. orderId=${order._id} code=${existing.items[0]?.code}`);
+            // console.log(`${TAG} Coupon already issued for order — skipping. orderId=${order._id} code=${existing.items[0]?.code}`);
             return { issued: false, reason: 'already-issued', coupon: existing.items[0] };
         }
 
@@ -186,12 +186,12 @@ export async function issuePromoCouponForOrder(order, { force = false } = {}) {
             moneyOffAmount: discountAmountNis,
         };
 
-        console.log(`${TAG} Creating Wix coupon via wix-marketing.v2. orderId=${order._id} code=${code} moneyOff=${discountAmountNis} scope=bookings/service/${CERAMICS_SERVICE_ID}`);
+        // console.log(`${TAG} Creating Wix coupon via wix-marketing.v2. orderId=${order._id} code=${code} moneyOff=${discountAmountNis} scope=bookings/service/${CERAMICS_SERVICE_ID}`);
         const { createCoupon: elevatedCreateCoupon } = await getElevatedCoupons();
         const created = await elevatedCreateCoupon(specification);
         const wixCouponId = created?._id || created?.id;
         if (!wixCouponId) throw new Error('createCoupon returned no id');
-        console.log(`${TAG} Wix coupon created. orderId=${order._id} code=${code} wixCouponId=${wixCouponId}`);
+        // console.log(`${TAG} Wix coupon created. orderId=${order._id} code=${code} wixCouponId=${wixCouponId}`);
 
         const couponRow = await wixData.insert('PromoCoupons', {
             code,
@@ -212,10 +212,10 @@ export async function issuePromoCouponForOrder(order, { force = false } = {}) {
             lastSentAt: null,
         }, SA);
 
-        console.log(
-            `${TAG} ✅ Coupon issued + saved to PromoCoupons CMS. orderId=${order._id} code=${code} wixCouponId=${wixCouponId} ` +
-            `couponRowId=${couponRow?._id} giftPieces=${giftPieces} discountAmountNis=${discountAmountNis} redeemFrom=${redeemFrom.toISOString()} expiresAt=${expiresAt.toISOString()}`,
-        );
+        // console.log(
+//             `${TAG} ✅ Coupon issued + saved to PromoCoupons CMS. orderId=${order._id} code=${code} wixCouponId=${wixCouponId} ` +
+//             `couponRowId=${couponRow?._id} giftPieces=${giftPieces} discountAmountNis=${discountAmountNis} redeemFrom=${redeemFrom.toISOString()} expiresAt=${expiresAt.toISOString()}`,
+//         );
 
         return { issued: true, coupon: couponRow };
     } catch (err) {
@@ -259,7 +259,7 @@ export async function cancelPromoCouponsForOrder(orderId, reason = 'cancelled') 
             await wixData.update('PromoCoupons', { ...row, status: 'cancelled' }, SA);
         }
 
-        console.log(`[promoCouponService] Cancelled ${rows.length} coupon(s) for orderId=${orderId} (reason: ${reason}).`);
+        // console.log(`[promoCouponService] Cancelled ${rows.length} coupon(s) for orderId=${orderId} (reason: ${reason}).`);
         return { cancelled: rows.length };
     } catch (err) {
         console.error('[promoCouponService] cancelPromoCouponsForOrder failed. orderId:', orderId, 'error:', err?.message || err);
@@ -296,7 +296,7 @@ export async function reschedulePromoCouponsForOrder(orderId, newWorkshopStart) 
             }, SA);
         }
 
-        console.log(`[promoCouponService] Rescheduled ${rows.length} coupon(s) for orderId=${orderId} -> redeemFrom=${newRedeemFrom.toISOString()}.`);
+        // console.log(`[promoCouponService] Rescheduled ${rows.length} coupon(s) for orderId=${orderId} -> redeemFrom=${newRedeemFrom.toISOString()}.`);
         return { updated: rows.length };
     } catch (err) {
         console.error('[promoCouponService] reschedulePromoCouponsForOrder failed. orderId:', orderId, 'error:', err?.message || err);
@@ -331,7 +331,7 @@ export async function markPromoCouponRedeemedIfApplicable(couponCode, ceramicsOr
             redeemedOrderId: ceramicsOrderId,
         }, SA);
 
-        console.log(`[promoCouponService] ✅ Coupon redeemed. code=${couponCode} ceramicsOrderId=${ceramicsOrderId} originalOrderId=${row.orderId}`);
+        // console.log(`[promoCouponService] ✅ Coupon redeemed. code=${couponCode} ceramicsOrderId=${ceramicsOrderId} originalOrderId=${row.orderId}`);
         return { redeemed: true, coupon: row };
     } catch (err) {
         console.error('[promoCouponService] markPromoCouponRedeemedIfApplicable failed. code:', couponCode, 'error:', err?.message || err);

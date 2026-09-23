@@ -125,7 +125,7 @@ async function refreshOrderContext(iframe, workshopOrderId) {
         }
 
         iframe.postMessage(pendingIframePayload);
-        console.log('[ThankYouPage] ORDER_CONTEXT refreshed');
+        // console.log('[ThankYouPage] ORDER_CONTEXT refreshed');
     } catch (err) {
         console.warn('[ThankYouPage] ORDER_CONTEXT refresh failed:', err?.message || err);
     }
@@ -149,7 +149,7 @@ $w.onReady(async function () {
     // #hideMe is the loading element inside section4 — hide it after 6 seconds max.
     const fallbackTimer = setTimeout(() => {
         if (!resolvedSection) {
-            console.log('[ThankYouPage] Fallback timeout — showing thankYouPage');
+            // console.log('[ThankYouPage] Fallback timeout — showing thankYouPage');
             showSection('thankYouPage');
         }
     }, 12000);
@@ -161,10 +161,10 @@ $w.onReady(async function () {
             if (!data || !data.type) return;
 
             if (data.type === 'IFRAME_READY') {
-                console.log('[ThankYouPage] IFRAME_READY received');
+                // console.log('[ThankYouPage] IFRAME_READY received');
                 if (pendingIframePayload) {
                     iframe.postMessage(pendingIframePayload);
-                    console.log('[ThankYouPage] ORDER_CONTEXT re-sent after IFRAME_READY');
+                    // console.log('[ThankYouPage] ORDER_CONTEXT re-sent after IFRAME_READY');
                 } else if (data.data?.orderId) {
                     await loadAndShowOrderHub(data.data.orderId, iframe, fallbackTimer);
                 }
@@ -193,7 +193,7 @@ $w.onReady(async function () {
     // stale workshop_order_id from an earlier, unrelated visit is cached on
     // this device/browser.
     if (resolvedFromEcom?.noMatch) {
-        console.log('[ThankYouPage] Confirmed non-workshop order — showing default thankYouPage');
+        // console.log('[ThankYouPage] Confirmed non-workshop order — showing default thankYouPage');
         showSection('thankYouPage');
         clearTimeout(fallbackTimer);
         return;
@@ -210,10 +210,10 @@ $w.onReady(async function () {
     }
 
     if (sessionOrderId) {
-        console.log('[ThankYouPage] Falling back to cached workshop order id:', sessionOrderId);
+        // console.log('[ThankYouPage] Falling back to cached workshop order id:', sessionOrderId);
         await loadAndShowOrderHub(sessionOrderId, iframe, fallbackTimer);
     } else {
-        console.log('[ThankYouPage] No ecom order and no cached order — showing default thankYouPage');
+        // console.log('[ThankYouPage] No ecom order and no cached order — showing default thankYouPage');
         showSection('thankYouPage');
         clearTimeout(fallbackTimer);
     }
@@ -262,7 +262,7 @@ async function loadAndShowOrderHub(workshopOrderId, iframe, fallbackTimer, ecomO
             orderHistory: [],
         };
 
-        console.log('[ThankYouPage] Showing section16, sending ORDER_CONTEXT to iframe');
+        // console.log('[ThankYouPage] Showing section16, sending ORDER_CONTEXT to iframe');
         showSection('section16');
         clearTimeout(fallbackTimer);
 
@@ -303,7 +303,7 @@ async function loadAndShowOrderHub(workshopOrderId, iframe, fallbackTimer, ecomO
  */
 function showErrorInIframe(iframe, fallbackTimer) {
     pendingIframePayload = { type: 'ORDER_CONTEXT', error: true };
-    console.log('[ThankYouPage] Showing section16 with error state');
+    // console.log('[ThankYouPage] Showing section16 with error state');
     showSection('section16');
     clearTimeout(fallbackTimer);
     if (iframe) {
@@ -415,20 +415,20 @@ async function resolveCurrentEcomOrder(thankYouPage) {
 
     const buyer = order.buyerInfo || order.billingInfo || {};
     const lineItem = order.lineItems?.[0] || {};
-    console.log('[ThankYouPage] getOrder() result:', JSON.stringify({
-        orderId: order._id,
-        orderNumber: order.number,
-        buyerPhone: buyer.phone,
-        workshopName: lineItem.name,
-        catalogItemId: lineItem.catalogReference?.catalogItemId || null,
-    }, null, 2));
+    // console.log('[ThankYouPage] getOrder() result:', JSON.stringify({
+//         orderId: order._id,
+//         orderNumber: order.number,
+//         buyerPhone: buyer.phone,
+//         workshopName: lineItem.name,
+//         catalogItemId: lineItem.catalogReference?.catalogItemId || null,
+//     }, null, 2));
 
     const RETRY_DELAYS = [0, 1500, 3000];
     let resolved = null;
 
     for (let attempt = 0; attempt < RETRY_DELAYS.length; attempt++) {
         if (attempt > 0) {
-            console.log(`[ThankYouPage] CMS retry #${attempt} — waiting ${RETRY_DELAYS[attempt]}ms`);
+            // console.log(`[ThankYouPage] CMS retry #${attempt} — waiting ${RETRY_DELAYS[attempt]}ms`);
             await new Promise(r => setTimeout(r, RETRY_DELAYS[attempt]));
         }
 
@@ -440,7 +440,7 @@ async function resolveCurrentEcomOrder(thankYouPage) {
         }
 
         if (resolved?.workshopOrder?._id) {
-            console.log('[ThankYouPage] CMS match found on attempt', attempt + 1, '— matchedBy:', resolved.matchedBy);
+            // console.log('[ThankYouPage] CMS match found on attempt', attempt + 1, '— matchedBy:', resolved.matchedBy);
             break;
         }
     }
@@ -452,7 +452,7 @@ async function resolveCurrentEcomOrder(thankYouPage) {
         // couldn't even resolve an eCom order") so the caller never falls
         // back to a stale cached workshop_order_id from an earlier, unrelated
         // visit on this device — it must show the default Wix Thank You page.
-        console.log('[ThankYouPage] No WorkshopOrder matched after retries — this is not a tapting order');
+        // console.log('[ThankYouPage] No WorkshopOrder matched after retries — this is not a tapting order');
         return { workshopOrderId: null, ecomOrder: order, noMatch: true };
     }
 

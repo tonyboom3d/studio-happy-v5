@@ -160,12 +160,12 @@ export const seedEmployeeWhatsAppTemplates = webMethod(Permissions.Admin, async 
         }
     }
 
-    console.log('[TEST] seedEmployeeWhatsAppTemplates:', JSON.stringify({
-        inserted: report.inserted.length,
-        updated: report.updated.length,
-        skipped: report.skipped.length,
-        errors: report.errors.length,
-    }));
+    // console.log('[TEST] seedEmployeeWhatsAppTemplates:', JSON.stringify({
+//         inserted: report.inserted.length,
+//         updated: report.updated.length,
+//         skipped: report.skipped.length,
+//         errors: report.errors.length,
+//     }));
 
     return {
         ok: !report.errors.length,
@@ -262,8 +262,8 @@ export const listCandlesAddOns = webMethod(Permissions.Admin, async () => {
         }
     }
 
-    console.log('[TEST] listCandlesAddOns — allAddOns:', JSON.stringify(allAddOns));
-    console.log('[TEST] listCandlesAddOns — byService:', JSON.stringify(byService));
+    // console.log('[TEST] listCandlesAddOns — allAddOns:', JSON.stringify(allAddOns));
+    // console.log('[TEST] listCandlesAddOns — byService:', JSON.stringify(byService));
 
     return { ok: true, allAddOns, byService };
 });
@@ -359,16 +359,16 @@ export const getCeramicsServiceTest = webMethod(Permissions.Admin, async (servic
         addOnGroupsError,
     };
 
-    console.log('[TEST] getCeramicsServiceTest:', JSON.stringify({
-        serviceId: id,
-        serviceName: service?.name || service?.service?.name || null,
-        variantsCount: variantsSummary.length,
-        variantsSummary,
-        addOnGroupsCount: addOnGroups?.length ?? 0,
-        serviceError,
-        optionsAndVariantsError,
-        addOnGroupsError,
-    }));
+    // console.log('[TEST] getCeramicsServiceTest:', JSON.stringify({
+//         serviceId: id,
+//         serviceName: service?.name || service?.service?.name || null,
+//         variantsCount: variantsSummary.length,
+//         variantsSummary,
+//         addOnGroupsCount: addOnGroups?.length ?? 0,
+//         serviceError,
+//         optionsAndVariantsError,
+//         addOnGroupsError,
+//     }));
 
     return result;
 });
@@ -418,7 +418,7 @@ export const getCeramicsAddOnsTest = webMethod(Permissions.Admin, async (service
 
     const result = { ok: true, serviceId: id, allAddOns, addOnGroups, addOnGroupsError };
 
-    console.log('[TEST] getCeramicsAddOnsTest:', JSON.stringify(result));
+    // console.log('[TEST] getCeramicsAddOnsTest:', JSON.stringify(result));
 
     return result;
 });

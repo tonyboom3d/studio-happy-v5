@@ -110,7 +110,7 @@ export const saveMessage = webMethod(Permissions.SiteMember, async (payload) => 
         saved = await wixData.insert(COLLECTION, { ...data, createdBy: role._id }, SA);
     }
 
-    console.log(`[messagingService] saveMessage: id=${saved._id} scope=${scope} by=${role._id}`);
+    // console.log(`[messagingService] saveMessage: id=${saved._id} scope=${scope} by=${role._id}`);
     return { ok: true, message: mapMessage(saved, new Date()) };
 });
 
@@ -120,6 +120,6 @@ export const deleteMessage = webMethod(Permissions.SiteMember, async (messageId)
     if (!messageId) throw new Error('BAD_REQUEST: חסר מזהה הודעה.');
 
     await wixData.remove(COLLECTION, messageId, SA);
-    console.log(`[messagingService] deleteMessage: id=${messageId} by=${role._id}`);
+    // console.log(`[messagingService] deleteMessage: id=${messageId} by=${role._id}`);
     return { ok: true };
 });

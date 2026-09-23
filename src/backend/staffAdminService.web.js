@@ -574,9 +574,9 @@ export const saveEmployeeAdmin = webMethod(Permissions.SiteMember, async (roleId
 
     await persistEmployeePatch(roleId, patch, { callerRole: role, permissions });
     await publishSchedulingUpdate('employee-updated', { roleId });
-    console.log(`[staffAdminService] saveEmployeeAdmin: ${roleId} by ${role._id}`, {
-        skills: Array.isArray(patch.skillIds) ? skillIdsForWrite(patch.skillIds).length : 'unchanged',
-    });
+    // console.log(`[staffAdminService] saveEmployeeAdmin: ${roleId} by ${role._id}`, {
+//         skills: Array.isArray(patch.skillIds) ? skillIdsForWrite(patch.skillIds).length : 'unchanged',
+//     });
     return { ok: true };
 });
 
@@ -623,7 +623,7 @@ export const removeEmployeeUpcomingShifts = webMethod(Permissions.SiteMember, as
     await Promise.all(toRemove.map(s => wixData.remove('AvailabilitySubmissions', s._id, SA).catch(() => null)));
 
     await publishSchedulingUpdate('employee-shifts-removed', { roleId, count: toRemove.length });
-    console.log(`[staffAdminService] removeEmployeeUpcomingShifts: ${roleId} removed=${toRemove.length} by ${role._id}`);
+    // console.log(`[staffAdminService] removeEmployeeUpcomingShifts: ${roleId} removed=${toRemove.length} by ${role._id}`);
     return { ok: true, removed: toRemove.length };
 });
 
@@ -651,7 +651,7 @@ export const reorderEmployees = webMethod(Permissions.SiteMember, async (roleIds
         }));
     if (rows.length) await wixData.bulkUpdate('Dashboard_Roles', rows, SA);
     await publishSchedulingUpdate('employees-reordered', { count: unique.length });
-    console.log(`[staffAdminService] reorderEmployees: ${unique.length} rows by ${role._id}`);
+    // console.log(`[staffAdminService] reorderEmployees: ${unique.length} rows by ${role._id}`);
     return { ok: true, roleIds: unique };
 });
 
@@ -664,7 +664,7 @@ export const updateEmployeeProfile = webMethod(Permissions.SiteMember, async (ro
 
     await persistEmployeePatch(roleId, patch, { callerRole: role });
     await publishSchedulingUpdate('employee-updated', { roleId });
-    console.log(`[staffAdminService] updateEmployeeProfile: ${roleId} by ${role._id}`);
+    // console.log(`[staffAdminService] updateEmployeeProfile: ${roleId} by ${role._id}`);
     return { ok: true };
 });
 
@@ -684,7 +684,7 @@ export const updateEmployeePermissions = webMethod(Permissions.SiteMember, async
 
     await wixData.update('Dashboard_Roles', row, SA);
     await publishSchedulingUpdate('employee-permissions-updated', { roleId });
-    console.log(`[staffAdminService] updateEmployeePermissions: ${roleId} by ${role._id}`);
+    // console.log(`[staffAdminService] updateEmployeePermissions: ${roleId} by ${role._id}`);
     return { ok: true };
 });
 
@@ -785,7 +785,7 @@ export const linkEmployeeStaff = webMethod(Permissions.SiteMember, async (staffI
         });
         const saved = await wixData.update('Dashboard_Roles', savedRow, SA);
         await publishSchedulingUpdate('employee-linked', { roleId: saved._id, staffId });
-        console.log(`[staffAdminService] linkEmployeeStaff: staff=${staffId} → existing role=${saved._id} by ${caller._id}`);
+        // console.log(`[staffAdminService] linkEmployeeStaff: staff=${staffId} → existing role=${saved._id} by ${caller._id}`);
         return { ok: true, roleId: saved._id };
     }
 
@@ -841,7 +841,7 @@ export const linkEmployeeStaff = webMethod(Permissions.SiteMember, async (staffI
         : await wixData.insert('Dashboard_Roles', savedRow, SA);
 
     await publishSchedulingUpdate('employee-linked', { roleId: saved._id, staffId });
-    console.log(`[staffAdminService] linkEmployeeStaff: staff=${staffId} role=${saved._id} by ${caller._id}`);
+    // console.log(`[staffAdminService] linkEmployeeStaff: staff=${staffId} role=${saved._id} by ${caller._id}`);
     return { ok: true, roleId: saved._id };
 });
 
@@ -885,7 +885,7 @@ export const updateSchedulingRule = webMethod(Permissions.SiteMember, async (wor
         await wixData.insert('SchedulingRules', row, SA);
     }
     await publishSchedulingUpdate('rules-updated', { workshopTypeId });
-    console.log(`[staffAdminService] updateSchedulingRule: ${workshopTypeId} by ${role._id}`);
+    // console.log(`[staffAdminService] updateSchedulingRule: ${workshopTypeId} by ${role._id}`);
     return { ok: true };
 });
 
@@ -915,7 +915,7 @@ export const updateDayFlags = webMethod(Permissions.SiteMember, async (dateKey, 
     if (flags?.promoted !== undefined) await updateSettingsList('promotedDates', dateKey, !!flags.promoted);
 
     await publishSchedulingUpdate('day-flags-updated', { dateKey });
-    console.log(`[staffAdminService] updateDayFlags: ${dateKey} ${JSON.stringify(flags)} by ${role._id}`);
+    // console.log(`[staffAdminService] updateDayFlags: ${dateKey} ${JSON.stringify(flags)} by ${role._id}`);
     return { ok: true };
 });
 
@@ -941,7 +941,7 @@ export const updateHolidays = webMethod(Permissions.SiteMember, async (holidays)
 
     await wixData.update('AvailabilitySettings', { ...row, holidays: JSON.stringify(clean) }, SA);
     await publishSchedulingUpdate('holidays-updated', {});
-    console.log(`[staffAdminService] updateHolidays: ${clean.length} entries by ${role._id}`);
+    // console.log(`[staffAdminService] updateHolidays: ${clean.length} entries by ${role._id}`);
     return { ok: true };
 });
 
@@ -971,7 +971,7 @@ export const setHolidayMode = webMethod(Permissions.SiteMember, async (dateKey, 
 
     await wixData.update('AvailabilitySettings', { ...row, holidays: JSON.stringify(list) }, SA);
     await publishSchedulingUpdate('holidays-updated', { dateKey });
-    console.log(`[staffAdminService] setHolidayMode: ${dateKey} -> ${cleanMode || 'regular'} by ${role._id}`);
+    // console.log(`[staffAdminService] setHolidayMode: ${dateKey} -> ${cleanMode || 'regular'} by ${role._id}`);
     return { ok: true };
 });
 
@@ -979,7 +979,7 @@ export const setHolidayMode = webMethod(Permissions.SiteMember, async (dateKey, 
 export const syncHolidaysNow = webMethod(Permissions.SiteMember, async (year) => {
     const { role } = await assertEmployeeAccess('manageRules');
     const result = await syncHebcalHolidays(year);
-    console.log(`[staffAdminService] syncHolidaysNow: year=${result.year} by ${role._id}`);
+    // console.log(`[staffAdminService] syncHolidaysNow: year=${result.year} by ${role._id}`);
     return result;
 });
 
@@ -1005,7 +1005,7 @@ export const setDayNote = webMethod(Permissions.SiteMember, async (dateKey, mess
 
     await wixData.update('AvailabilitySettings', { ...row, dayNotes: JSON.stringify(notes) }, SA);
     await publishSchedulingUpdate('day-note-updated', { dateKey });
-    console.log(`[staffAdminService] setDayNote: ${dateKey} ${cleanMessage ? 'set' : 'cleared'} by ${role._id}`);
+    // console.log(`[staffAdminService] setDayNote: ${dateKey} ${cleanMessage ? 'set' : 'cleared'} by ${role._id}`);
     return { ok: true };
 });
 
@@ -1049,7 +1049,7 @@ export const saveSketchSewingDay = webMethod(Permissions.SiteMember, async (date
 
     await wixData.update('AvailabilitySettings', { ...row, sketchSewingDays: JSON.stringify(days) }, SA);
     await publishSchedulingUpdate('sketch-duty-updated', { dateKey });
-    console.log(`[staffAdminService] saveSketchSewingDay: ${dateKey} ${startTime}-${endTime} by ${role._id}`);
+    // console.log(`[staffAdminService] saveSketchSewingDay: ${dateKey} ${startTime}-${endTime} by ${role._id}`);
     return { ok: true };
 });
 
@@ -1069,7 +1069,7 @@ export const deleteSketchSewingDay = webMethod(Permissions.SiteMember, async (da
 
     await wixData.update('AvailabilitySettings', { ...row, sketchSewingDays: JSON.stringify(days) }, SA);
     await publishSchedulingUpdate('sketch-duty-updated', { dateKey });
-    console.log(`[staffAdminService] deleteSketchSewingDay: ${dateKey} by ${role._id}`);
+    // console.log(`[staffAdminService] deleteSketchSewingDay: ${dateKey} by ${role._id}`);
     return { ok: true };
 });
 
@@ -1113,7 +1113,7 @@ export const updateAvailabilitySettings = webMethod(Permissions.SiteMember, asyn
 
     await wixData.update('AvailabilitySettings', updated, SA);
     await publishSchedulingUpdate('settings-updated', {});
-    console.log(`[staffAdminService] updateAvailabilitySettings by ${role._id}`);
+    // console.log(`[staffAdminService] updateAvailabilitySettings by ${role._id}`);
     return { ok: true };
 });
 
@@ -1136,7 +1136,7 @@ export const saveEmployeeVacation = webMethod(Permissions.SiteMember, async (vac
     const { role } = await assertEmployeeAccess('manageEmployees');
     const saved = await saveVacationRow(vacation);
     await publishSchedulingUpdate('vacation-updated', { employeeId: saved.employeeId });
-    console.log(`[staffAdminService] saveEmployeeVacation: ${saved.id} by ${role._id}`);
+    // console.log(`[staffAdminService] saveEmployeeVacation: ${saved.id} by ${role._id}`);
     return { ok: true, vacation: saved };
 });
 
@@ -1144,7 +1144,7 @@ export const deleteEmployeeVacation = webMethod(Permissions.SiteMember, async (v
     const { role } = await assertEmployeeAccess('manageEmployees');
     await deleteVacationRow(vacationId);
     await publishSchedulingUpdate('vacation-updated', {});
-    console.log(`[staffAdminService] deleteEmployeeVacation: ${vacationId} by ${role._id}`);
+    // console.log(`[staffAdminService] deleteEmployeeVacation: ${vacationId} by ${role._id}`);
     return { ok: true };
 });
 
@@ -1152,7 +1152,7 @@ export const approveEmployeeVacation = webMethod(Permissions.SiteMember, async (
     const { role } = await assertEmployeeAccess('manageEmployees');
     const result = await decideVacationRequest(vacationId, true, managerComment);
     await publishSchedulingUpdate('vacation-updated', { employeeId: result.vacation?.employeeId });
-    console.log(`[staffAdminService] approveEmployeeVacation: ${vacationId} by ${role._id}`);
+    // console.log(`[staffAdminService] approveEmployeeVacation: ${vacationId} by ${role._id}`);
     return result;
 });
 
@@ -1160,7 +1160,7 @@ export const rejectEmployeeVacation = webMethod(Permissions.SiteMember, async (v
     const { role } = await assertEmployeeAccess('manageEmployees');
     const result = await decideVacationRequest(vacationId, false, managerComment);
     await publishSchedulingUpdate('vacation-updated', { employeeId: result.vacation?.employeeId });
-    console.log(`[staffAdminService] rejectEmployeeVacation: ${vacationId} by ${role._id}`);
+    // console.log(`[staffAdminService] rejectEmployeeVacation: ${vacationId} by ${role._id}`);
     return result;
 });
 
@@ -1240,7 +1240,7 @@ export const sendAvailabilityNudge = webMethod(Permissions.SiteMember, async (ro
     // Informational reminder — no longer force-flushed; rides the aggregation
     // window and gets swept by the next hourly job (merges with anything
     // else queued for the same employee in that window).
-    console.log(`[staffAdminService] sendAvailabilityNudge: queued=${sent} failures=${failures.length} by ${role._id}`);
+    // console.log(`[staffAdminService] sendAvailabilityNudge: queued=${sent} failures=${failures.length} by ${role._id}`);
     return { ok: true, sent, failures };
 });
 
@@ -1368,7 +1368,7 @@ async function _manualAssignCore(role, dateKey, workshopTypeIds, employeeId, wor
         });
     }
 
-    console.log(`[staffAdminService] manualAssign: ${employeeId} → ${dateKey}/[${toAssign.join(',')}] workType=${normalizedWorkType} by ${role._id}`);
+    // console.log(`[staffAdminService] manualAssign: ${employeeId} → ${dateKey}/[${toAssign.join(',')}] workType=${normalizedWorkType} by ${role._id}`);
     return { ok: true, assigned: toAssign.length, skipped: alreadyAssigned.length, target };
 }
 
@@ -1451,7 +1451,7 @@ async function _cancelAssignmentCore(role, dateKey, workshopTypeId, employeeId, 
         });
     }
 
-    console.log(`[staffAdminService] cancelAssignment: ${employeeId} @ ${dateKey}/${workshopTypeId} disposition=${mode} by ${role._id}`);
+    // console.log(`[staffAdminService] cancelAssignment: ${employeeId} @ ${dateKey}/${workshopTypeId} disposition=${mode} by ${role._id}`);
     return { ok: true, disposition: mode, target };
 }
 
@@ -1536,7 +1536,7 @@ async function _swapAssignmentCore(role, dateKey, workshopTypeId, fromEmployeeId
         shiftNote: opts.shiftNote,
     });
 
-    console.log(`[staffAdminService] swapAssignment: ${fromEmployeeId} → ${toEmployeeId} @ ${dateKey}/${workshopTypeId} by ${role._id}`);
+    // console.log(`[staffAdminService] swapAssignment: ${fromEmployeeId} → ${toEmployeeId} @ ${dateKey}/${workshopTypeId} by ${role._id}`);
     return { ok: true, warning, disposition: cancelResult.disposition, assigned: assignResult.assigned };
 }
 
@@ -1673,7 +1673,7 @@ export const applyScheduleBatch = webMethod(Permissions.SiteMember, async (actio
     await publishSchedulingUpdate('batch-apply', { count: list.length, dates: [...affectedDates] });
 
     const savedCount = results.filter(r => r.ok).length;
-    console.log(`[staffAdminService] applyScheduleBatch: ${list.length} actions, ${savedCount} ok by ${role._id}`);
+    // console.log(`[staffAdminService] applyScheduleBatch: ${list.length} actions, ${savedCount} ok by ${role._id}`);
     return { ok: true, results, savedCount, failedCount: results.length - savedCount };
 });
 
@@ -1801,7 +1801,7 @@ export const approveSubmission = webMethod(Permissions.SiteMember, async (submis
         }, dateKey);
     }
 
-    console.log(`[staffAdminService] approveSubmission: ${submissionId} by ${role._id}`);
+    // console.log(`[staffAdminService] approveSubmission: ${submissionId} by ${role._id}`);
     return { ok: true };
 });
 
@@ -1836,7 +1836,7 @@ export const rejectSubmission = webMethod(Permissions.SiteMember, async (submiss
         }, dateKey);
     }
 
-    console.log(`[staffAdminService] rejectSubmission: ${submissionId} by ${role._id}`);
+    // console.log(`[staffAdminService] rejectSubmission: ${submissionId} by ${role._id}`);
     return { ok: true };
 });
 
@@ -1865,6 +1865,6 @@ export const updateSubmissionWorkType = webMethod(Permissions.SiteMember, async 
     }
 
     await publishSchedulingUpdate('work-type-update', { submissionId });
-    console.log(`[staffAdminService] updateSubmissionWorkType: ${submissionId} → ${normalizedWorkType} by ${role._id}`);
+    // console.log(`[staffAdminService] updateSubmissionWorkType: ${submissionId} → ${normalizedWorkType} by ${role._id}`);
     return { ok: true };
 });

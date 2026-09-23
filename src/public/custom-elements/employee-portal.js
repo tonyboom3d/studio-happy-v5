@@ -723,7 +723,7 @@ class EmployeePortal extends HTMLElement {
     }
 
     connectedCallback() {
-        console.log('[employee-portal] CE connected (tag: employee-portal)');
+        // console.log('[employee-portal] CE connected (tag: employee-portal)');
         if (!document.getElementById('ep-style')) {
             const style = document.createElement('style');
             style.id = 'ep-style';
@@ -948,13 +948,13 @@ class EmployeePortal extends HTMLElement {
                 this.renderLoadError(this._data.message);
                 return;
             }
-            console.log('[employee-portal] portal-data received', {
-                user: this._data.user?.name,
-                submissions: this._data.submissions?.length ?? 0,
-                offers: this._data.myOffers?.length ?? 0,
-                openCalls: this._data.openCalls?.length ?? 0,
-                canAdmin: !!this._data.user?.permissions?.manageEmployeeSystem,
-            });
+            // console.log('[employee-portal] portal-data received', {
+//                 user: this._data.user?.name,
+//                 submissions: this._data.submissions?.length ?? 0,
+//                 offers: this._data.myOffers?.length ?? 0,
+//                 openCalls: this._data.openCalls?.length ?? 0,
+//                 canAdmin: !!this._data.user?.permissions?.manageEmployeeSystem,
+//             });
             if (!this._viewMonth && this._data?.months?.length) {
                 // Default view: first future month if open, else current month.
                 const future = this._data.months.find(m => !m.isCurrentMonth);
@@ -985,11 +985,11 @@ class EmployeePortal extends HTMLElement {
                 this._toast(t.message, t.kind); // _toast() already schedules the single render
                 return;
             }
-            console.log('[employee-portal] admin-data received', {
-                month: this._adminData.monthKey,
-                employees: this._adminData.employees?.length ?? 0,
-                days: Object.keys(this._adminData.days || {}).length,
-            });
+            // console.log('[employee-portal] admin-data received', {
+//                 month: this._adminData.monthKey,
+//                 employees: this._adminData.employees?.length ?? 0,
+//                 days: Object.keys(this._adminData.days || {}).length,
+//             });
             if (this._empSaveFinishing) return;
             this._scheduleRender();
         }
@@ -1002,10 +1002,10 @@ class EmployeePortal extends HTMLElement {
             }
             this._busy = null;
             if (this._hoursData?.monthKey) this._hoursMonth = this._hoursData.monthKey;
-            console.log('[employee-portal] hours-data received', {
-                month: this._hoursData.monthKey,
-                entries: this._hoursData.entries?.length ?? 0,
-            });
+            // console.log('[employee-portal] hours-data received', {
+//                 month: this._hoursData.monthKey,
+//                 entries: this._hoursData.entries?.length ?? 0,
+//             });
             this._scheduleRender();
         }
         if (name === 'templates-data') {
@@ -1095,7 +1095,7 @@ class EmployeePortal extends HTMLElement {
     }
 
     _dispatch(type, payload) {
-        console.log('[employee-portal] action →', type, payload ?? '');
+        // console.log('[employee-portal] action →', type, payload ?? '');
         this.dispatchEvent(new CustomEvent('portal-action', { detail: { type, payload }, bubbles: true }));
     }
 
@@ -1242,7 +1242,7 @@ class EmployeePortal extends HTMLElement {
 
         this._busy = null;
         this._clearBusyOverlay();
-        console.log('[employee-portal] action-result ←', result.type, result.error ? result.message : result);
+        // console.log('[employee-portal] action-result ←', result.type, result.error ? result.message : result);
         if (result.error) {
             if (result.type === 'adminTemplatesLoad') this._templatesData = [];
             if (result.type === 'adminStaffLoad') {
@@ -3147,18 +3147,18 @@ class EmployeePortal extends HTMLElement {
                 this._dispatch('promptLogin');
                 return;
             case 'tab-portal':
-                console.log('[employee-portal] tab → portal');
+                // console.log('[employee-portal] tab → portal');
                 this._tab = 'portal';
                 this.render();
                 return;
             case 'tab-admin':
-                console.log('[employee-portal] tab → admin');
+                // console.log('[employee-portal] tab → admin');
                 this._tab = 'admin';
                 if (!this._adminData) this._requestAdminData();
                 else this.render();
                 return;
             case 'tab-hours':
-                console.log('[employee-portal] tab → hours');
+                // console.log('[employee-portal] tab → hours');
                 this._tab = 'hours';
                 if (!this._hoursData) this._requestHoursData();
                 else this.render();

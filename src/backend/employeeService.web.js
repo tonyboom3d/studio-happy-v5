@@ -103,7 +103,7 @@ async function ensureRoleProfile(role, member) {
     }
 
     const updated = await wixData.update('Dashboard_Roles', patch, SA);
-    console.log(`[employeeService] Dashboard_Roles: patched profile fields for role ${role._id}`);
+    // console.log(`[employeeService] Dashboard_Roles: patched profile fields for role ${role._id}`);
     return updated;
 }
 
@@ -728,7 +728,7 @@ export const submitAvailability = webMethod(Permissions.Anyone, async (shifts) =
     }
 
     await publishSchedulingUpdate('submission', { dates: batchDates });
-    console.log(`[employeeService] submitAvailability: role=${roleRow._id} inserted=${inserted} standby=${standby} autoApproved=${autoApproved.length}`);
+    // console.log(`[employeeService] submitAvailability: role=${roleRow._id} inserted=${inserted} standby=${standby} autoApproved=${autoApproved.length}`);
     return { ok: true, errors: [], inserted, standby, placements, autoApproved };
 });
 
@@ -754,7 +754,7 @@ export const withdrawAvailability = webMethod(Permissions.Anyone, async (submiss
 
     await wixData.remove('AvailabilitySubmissions', submissionId, SA);
     await publishSchedulingUpdate('withdrawal', { dates: [toDateKey(item.date)] });
-    console.log(`[employeeService] withdrawAvailability: role=${roleRow._id} removed=${submissionId}`);
+    // console.log(`[employeeService] withdrawAvailability: role=${roleRow._id} removed=${submissionId}`);
     return { ok: true };
 });
 
@@ -803,7 +803,7 @@ export const updateSubmission = webMethod(Permissions.Anyone, async (submissionI
         hours: hrs,
     }, SA);
     await publishSchedulingUpdate('submission-edit', { dates: [toDateKey(item.date)] });
-    console.log(`[employeeService] updateSubmission: role=${roleRow._id} id=${submissionId}`);
+    // console.log(`[employeeService] updateSubmission: role=${roleRow._id} id=${submissionId}`);
     return { ok: true };
 });
 

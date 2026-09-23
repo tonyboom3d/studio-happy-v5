@@ -29,11 +29,11 @@ $w.onReady(() => {
     });
 
     getActiveWorkshops().then((workshops) => {
-        console.log("workshops", workshops);
+        // console.log("workshops", workshops);
         if (workshops && workshops.length > 0) {
             htmlElement.postMessage({ type: 'initWorkshops', data: workshops });
         } else {
-            console.log("No workshops found or error occurred.");
+            // console.log("No workshops found or error occurred.");
         }
     });
 

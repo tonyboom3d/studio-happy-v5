@@ -27,6 +27,7 @@ $w.onReady(async function () {
     const orderId = wixLocation.query?.orderId || null;
     const token = wixLocation.query?.token || null;
     const subscriberId = wixLocation.query?.sid || null;
+    const datesWorkshopFromUrl = wixLocation.query?.datesWorkshop || null;
 
     if (!orderId || !token) {
         el.setAttribute('context-data', JSON.stringify({ error: true, code: 'NOT_FOUND', message: 'קישור לא תקין.', __ts: Date.now() }));
@@ -48,7 +49,14 @@ $w.onReady(async function () {
     async function loadContext() {
         try {
             const context = await getRescheduleContext(orderId, token);
-            el.setAttribute('context-data', JSON.stringify({ ...context, subscriberId, __ts: Date.now() }));
+            const workshopTypeForDates = context.workshopTypeForDates || datesWorkshopFromUrl || null;
+            el.setAttribute('context-data', JSON.stringify({
+                ...context,
+                workshopTypeForDates,
+                datesWorkshop: datesWorkshopFromUrl,
+                subscriberId,
+                __ts: Date.now(),
+            }));
         } catch (err) {
             const message = err?.message || String(err);
             console.error('[reschedule-workshop] getRescheduleContext failed:', message);

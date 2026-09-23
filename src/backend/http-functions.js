@@ -15,6 +15,7 @@ import { detectSuggestedAction, finalizeRoutedReply } from 'backend/aiRouting.js
 import { buildWorkshopPolicyReply, isGeneralWorkshopSelection } from 'backend/policyContent.js';
 import {
   WORKSHOP_SERVICE_IDS,
+  WORKSHOP_TYPE_LABELS_HE,
   resolveWorkshopType,
   expandCandlesServiceIds,
   isCandlesLimitedSlotAllowed,
@@ -32,6 +33,7 @@ import {
   isRescheduleBlockedWithin48h,
   hasCustomerRescheduleUsed,
   hasOpenRescheduleRequest,
+  resolveCmsOrderWorkshopTypeKey,
 } from 'backend/orderLookupService.js';
 import { formatIsraeliPhoneLocal } from 'backend/orderUtils.js';
 import {
@@ -909,7 +911,12 @@ export async function get_startReschedule(request) {
     }
 
     const { token, expiresAt } = await issueRescheduleToken(orderId);
-    const link = `${RESCHEDULE_PAGE_URL}?orderId=${encodeURIComponent(orderId)}&token=${encodeURIComponent(token)}&sid=${encodeURIComponent(subscriberId)}`;
+    const workshopTypeKey = await resolveCmsOrderWorkshopTypeKey(order);
+    const datesWorkshop = workshopTypeKey ? (WORKSHOP_TYPE_LABELS_HE[workshopTypeKey] || workshopTypeKey) : '';
+    let link = `${RESCHEDULE_PAGE_URL}?orderId=${encodeURIComponent(orderId)}&token=${encodeURIComponent(token)}&sid=${encodeURIComponent(subscriberId)}`;
+    if (datesWorkshop) {
+      link += `&datesWorkshop=${encodeURIComponent(datesWorkshop)}`;
+    }
 
     if (subscriberId) {
       await syncRescheduleLink(subscriberId, link).catch(() => {});

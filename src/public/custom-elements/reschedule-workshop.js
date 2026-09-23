@@ -219,8 +219,12 @@ class RescheduleWorkshop extends HTMLElement {
             return WORKSHOP_KEY_TO_DATES_QUERY[context] || context || '';
         }
         if (context.workshopTypeForDates) return context.workshopTypeForDates;
+        if (context.datesWorkshop) return context.datesWorkshop;
         const key = context.workshopType;
-        return WORKSHOP_KEY_TO_DATES_QUERY[key] || key || '';
+        if (key && WORKSHOP_KEY_TO_DATES_QUERY[key]) return WORKSHOP_KEY_TO_DATES_QUERY[key];
+        const knownLabels = Object.values(WORKSHOP_KEY_TO_DATES_QUERY);
+        if (key && knownLabels.includes(key)) return key;
+        return key || '';
     }
 
     async _loadDates(context, currentWorkshopStartIso) {
@@ -230,7 +234,7 @@ class RescheduleWorkshop extends HTMLElement {
 
         const datesQuery = this._resolveDatesQuery(context);
         if (!datesQuery) {
-            console.error('[reschedule-workshop] missing workshopTypeForDates');
+            console.error('[reschedule-workshop] missing workshopTypeForDates', context?.workshopType, context?.orderId);
             this._loadingDates = false;
             this._datesLoadFailed = true;
             this.render();

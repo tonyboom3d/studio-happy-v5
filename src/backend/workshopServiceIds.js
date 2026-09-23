@@ -120,7 +120,12 @@ export function resolveWorkshopTypeKey(rawType, serviceId) {
   if (fromService) return fromService;
   const trimmed = String(rawType || '').trim();
   if (!trimmed || trimmed === 'סדנה') return null;
-  return resolveWorkshopType(trimmed);
+  const fromAlias = resolveWorkshopType(trimmed);
+  if (fromAlias) return fromAlias;
+  for (const [key, label] of Object.entries(WORKSHOP_TYPE_LABELS_HE)) {
+    if (trimmed === label) return key;
+  }
+  return null;
 }
 
 /** Query value for GET /_functions/availableDates (Hebrew label, same as ManyChat). */

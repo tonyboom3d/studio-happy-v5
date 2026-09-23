@@ -30,8 +30,9 @@ import {
     isRescheduleBlockedWithin48h,
     hasCustomerRescheduleUsed,
     hasOpenRescheduleRequest,
+    resolveCmsOrderWorkshopTypeKey,
 } from 'backend/orderLookupService.js';
-import { resolveWorkshopTypeKey, toAvailableDatesWorkshopQuery } from 'backend/workshopServiceIds.js';
+import { WORKSHOP_TYPE_LABELS_HE } from 'backend/workshopServiceIds.js';
 import { sendRescheduleSummary, findSubscriberIdByPhone } from 'backend/manychatService.jsw';
 
 const SA = { suppressAuth: true };
@@ -93,8 +94,16 @@ async function loadEligibleOrder(orderId, token) {
 /** Page/CE load — validates the link and returns everything needed to render the calendar. */
 export const getRescheduleContext = webMethod(Permissions.Anyone, async (orderId, token) => {
     const order = await loadEligibleOrder(orderId, token);
-    const workshopType = resolveWorkshopTypeKey(order.workshopType, order.serviceId);
-    const workshopTypeForDates = toAvailableDatesWorkshopQuery(order.workshopType, order.serviceId);
+    const workshopType = await resolveCmsOrderWorkshopTypeKey(order);
+    const workshopTypeForDates = workshopType ? (WORKSHOP_TYPE_LABELS_HE[workshopType] || workshopType) : null;
+    if (!workshopTypeForDates) {
+        console.warn('[rescheduleService] getRescheduleContext: unresolved workshop type', {
+            orderId: order._id,
+            workshopType: order.workshopType,
+            serviceId: order.serviceId,
+            bookingIds: order.bookingIds,
+        });
+    }
     return {
         orderId: order._id,
         workshopType,

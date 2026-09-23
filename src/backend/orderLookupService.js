@@ -26,6 +26,7 @@ import {
     BOOKING_ONLY_WORKSHOP_TYPES,
     WORKSHOP_TYPE_LABELS_HE,
     resolveWorkshopType,
+    resolveWorkshopTypeKey,
     serviceIdToWorkshopType,
 } from 'backend/workshopServiceIds.js';
 import { FORTY_EIGHT_HOURS_MS } from 'backend/sketchEditingPolicy.js';
@@ -220,6 +221,24 @@ function mapCmsOrder(order, bookingsById) {
     };
     mapped.orderUrl = buildOrderViewUrl(mapped);
     return mapped;
+}
+
+/** Resolves tufting/candles/… for a WorkshopOrders row — CMS fields, then linked booking(s). */
+export async function resolveCmsOrderWorkshopTypeKey(order) {
+    if (!order) return null;
+    let key = resolveWorkshopTypeKey(order.workshopType, order.serviceId);
+    if (key) return key;
+
+    const bookingIds = extractBookingIds(order);
+    if (!bookingIds.length) return null;
+    const bookingsById = await fetchBookingsByIds(bookingIds);
+    for (const id of bookingIds) {
+        const booking = bookingsById.get(id);
+        if (!booking) continue;
+        const fromBooking = serviceIdToWorkshopType(extractBookingServiceId(booking));
+        if (fromBooking) return fromBooking;
+    }
+    return null;
 }
 
 async function findCmsOrders(phone) {

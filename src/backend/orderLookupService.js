@@ -60,8 +60,10 @@ function unwrapExtendedBooking(entry) {
 
 function parseWorkshopDate(raw) {
     if (!raw) return null;
-    const date = raw instanceof Date ? raw : new Date(raw);
-    return date instanceof Date && !isNaN(date) ? date : null;
+    if (raw instanceof Date) return !isNaN(raw.getTime()) ? raw : null;
+    if (typeof raw === 'object' && raw.$date) return parseWorkshopDate(raw.$date);
+    const date = new Date(raw);
+    return !isNaN(date.getTime()) ? date : null;
 }
 
 function extractBookingServiceId(booking) {

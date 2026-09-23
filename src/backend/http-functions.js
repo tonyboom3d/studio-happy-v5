@@ -24,6 +24,7 @@ import {
   formatOrderMessage,
   filterActiveOrders,
   selectActiveOrder,
+  pickPrimaryOrder,
   NO_ACTIVE_ORDER_MESSAGE,
   ORDER_NOT_FOUND_MESSAGE,
   NO_MORE_ORDERS_MESSAGE,
@@ -534,20 +535,25 @@ export async function get_identifyOrder(request) {
 
     const activeOrders = filterActiveOrders(allOrders);
     const hadExpiredOnly = allOrders.length > 0 && activeOrders.length === 0;
+    const expiredPrimary = hadExpiredOnly ? pickPrimaryOrder(allOrders) : null;
     const selection = selectActiveOrder(activeOrders, excludeOrderId);
     const { primary, hasMore } = selection;
-    const found = !!primary;
+    const found = !!primary || (!!expiredPrimary && hadExpiredOnly && !isNextOrderRequest);
 
     let text;
-    if (hadExpiredOnly && !isNextOrderRequest) {
+    if (hadExpiredOnly && !isNextOrderRequest && expiredPrimary) {
+      text = `${formatOrderMessage(expiredPrimary)}\n\n⚠️ הסדנה כבר התקיימה (עברו יותר מ-2 ימים ממועד הסדנה).`;
+    } else if (hadExpiredOnly && !isNextOrderRequest) {
       text = NO_ACTIVE_ORDER_MESSAGE;
     } else if (isNextOrderRequest && !found) {
       text = activeOrders.length > 0 ? NO_MORE_ORDERS_MESSAGE : ORDER_NOT_FOUND_MESSAGE;
-    } else if (found) {
+    } else if (found && primary) {
       text = formatOrderMessage(primary);
     } else {
       text = ORDER_NOT_FOUND_MESSAGE;
     }
+
+    const orderForSync = primary || expiredPrimary || null;
 
     let lookupAttempts = 0;
     let lookupHandoff = false;
@@ -569,9 +575,9 @@ export async function get_identifyOrder(request) {
       await syncOrderLookupFields(subscriberId, {
         status: found ? 'found' : 'not_found',
         hasMore,
-        orderId: primary?.id || '',
-        source: primary?.source || '',
-        orderUrl: primary?.orderUrl || '',
+        orderId: orderForSync?.id || '',
+        source: orderForSync?.source || '',
+        orderUrl: orderForSync?.orderUrl || '',
         attempts: lookupAttempts,
       }).catch(() => {});
     } else {
@@ -585,9 +591,10 @@ export async function get_identifyOrder(request) {
         found,
         has_more: hasMore,
         is_next_order: isNextOrderRequest,
-        order_id: primary?.id || null,
-        order_source: primary?.source || null,
-        order_url: primary?.orderUrl || null,
+        order_id: orderForSync?.id || null,
+        order_source: orderForSync?.source || null,
+        order_url: orderForSync?.orderUrl || null,
+        order_expired: hadExpiredOnly && !!expiredPrimary,
         lookup_attempts: lookupAttempts,
         lookup_handoff: lookupHandoff,
         ai_reply: text,

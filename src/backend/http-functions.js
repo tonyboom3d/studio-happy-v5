@@ -1,6 +1,4 @@
 import { ok, badRequest, serverError, response } from 'wix-http-functions';
-import { availabilityCalendar } from 'wix-bookings.v2';
-import { auth } from '@wix/essentials';
 import wixSecretsBackend from 'wix-secrets-backend';
 import { checkRateLimit, checkGuardrails, detectHandoff, HANDOFF_REPLY_DEFAULT } from 'backend/aiGuardrails.js';
 import {
@@ -15,14 +13,11 @@ import { getUserConversation, upsertUserConversation } from 'backend/userConvers
 import { detectSuggestedAction, finalizeRoutedReply } from 'backend/aiRouting.js';
 import { buildWorkshopPolicyReply, isGeneralWorkshopSelection } from 'backend/policyContent.js';
 import {
-  WORKSHOP_SERVICE_IDS,
   WORKSHOP_TYPE_LABELS_HE as WORKSHOP_TYPE_LABELS_MAP,
   resolveWorkshopType,
   resolveWorkshopTypeKey,
-  expandCandlesServiceIds,
-  isCandlesLimitedSlotAllowed,
-  CANDLES_LIMITED_SERVICE_ID,
 } from 'backend/workshopServiceIds.js';
+import { buildAvailableDatesPayload } from 'backend/availableDatesService.web.js';
 import {
   findOrdersByPhone,
   formatOrderMessage,
@@ -49,178 +44,26 @@ import { issueRescheduleToken, confirmRescheduleRequest } from 'backend/reschedu
 // ============================================================
 // ManyChat availability endpoint
 // GET /_functions/availableDates?workshopType=tufting&offset=0
+// (Bookings queryAvailability runs via availableDatesService.web.js — not here.)
 // ============================================================
-
-const ISRAEL_TZ = 'Asia/Jerusalem';
-const PAGE_SIZE = 10;
-const QUERY_CHUNK_DAYS = 45;
-const MAX_LOOKAHEAD_DAYS = 365;
-
-const WORKSHOP_TYPE_LABELS_HE = ['טאפטינג', 'נרות', 'תכשיטים', "צ'ארמס", 'קרמיקה'];
-
-function israelDateKey(d) {
-  const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone: ISRAEL_TZ, year: 'numeric', month: '2-digit', day: '2-digit',
-  }).formatToParts(d);
-  const get = (t) => parts.find((p) => p.type === t)?.value;
-  return `${get('year')}-${get('month')}-${get('day')}`;
-}
-
-function formatDateIL(d) {
-  const parts = new Intl.DateTimeFormat('en-GB', {
-    timeZone: ISRAEL_TZ, day: '2-digit', month: '2-digit', year: 'numeric',
-  }).formatToParts(d);
-  const get = (t) => parts.find((p) => p.type === t)?.value;
-  return `${get('day')}/${get('month')}/${get('year')}`;
-}
-
-function formatTimeIL(d) {
-  return new Intl.DateTimeFormat('en-GB', {
-    timeZone: ISRAEL_TZ, hour: '2-digit', minute: '2-digit', hour12: false,
-  }).format(d);
-}
-
-const elevatedQueryAvailability = auth.elevate(availabilityCalendar.queryAvailability);
-
-async function fetchAvailabilityChunk(serviceIds, startDate, endDate) {
-  const options = { slotsPerDay: 100 };
-  const results = await Promise.all(serviceIds.map(async (serviceId) => {
-    try {
-      const availability = await elevatedQueryAvailability({
-        filter: {
-          serviceId,
-          startDate: startDate.toISOString(),
-          endDate: endDate.toISOString(),
-        },
-      }, options);
-      return availability.availabilityEntries || [];
-    } catch (err) {
-      console.warn(`[availableDates] availability error for service ${serviceId}:`, err?.message || err);
-      return [];
-    }
-  }));
-  return results.flat();
-}
-
-function isBookableEntry(entry, now) {
-  if (!entry.bookable) return false;
-  if (entry.locked) return false;
-  if (entry.bookingPolicyViolations?.tooLateToBook) return false;
-  if (!entry.openSpots || entry.openSpots <= 0) return false;
-  const startDate = entry.slot?.startDate;
-  if (!startDate) return false;
-  return new Date(startDate).getTime() >= now.getTime();
-}
-
-/** Scans forward in date-range chunks until `neededCount` distinct future
- * bookable calendar dates are found (or MAX_LOOKAHEAD_DAYS is hit). */
-async function collectAvailableDates(serviceIds, neededCount) {
-  const now = new Date();
-  const byDate = new Map(); // dateKey -> { dateObj, times: Set<string> }
-  let chunkStart = new Date(now);
-  let daysScanned = 0;
-
-  while (byDate.size < neededCount && daysScanned < MAX_LOOKAHEAD_DAYS) {
-    const chunkEnd = new Date(chunkStart.getTime() + QUERY_CHUNK_DAYS * 24 * 60 * 60 * 1000);
-    const entries = await fetchAvailabilityChunk(serviceIds, chunkStart, chunkEnd);
-
-    for (const entry of entries) {
-      if (!isBookableEntry(entry, now)) continue;
-      const startDateObj = new Date(entry.slot.startDate);
-      const entryServiceId = entry.slot?.serviceId;
-      if (entryServiceId === CANDLES_LIMITED_SERVICE_ID && !isCandlesLimitedSlotAllowed(startDateObj)) continue;
-      const dateKey = israelDateKey(startDateObj);
-
-      if (!byDate.has(dateKey)) byDate.set(dateKey, { dateObj: startDateObj, times: new Set() });
-      const bucket = byDate.get(dateKey);
-      bucket.times.add(formatTimeIL(startDateObj));
-      if (startDateObj < bucket.dateObj) bucket.dateObj = startDateObj;
-    }
-
-    daysScanned += QUERY_CHUNK_DAYS;
-    chunkStart = chunkEnd;
-  }
-
-  return byDate;
-}
-
-function buildNextPageUrl(request, workshopType, nextOffset) {
-  try {
-    const u = new URL(request.url);
-    u.searchParams.set('workshopType', workshopType);
-    u.searchParams.set('offset', String(nextOffset));
-    return u.toString();
-  } catch (_) {
-    return null;
-  }
-}
-
-function parseOffset(raw) {
-  const value = String(raw ?? '').trim();
-  if (!value || value === 'null' || value === 'undefined') return 0;
-  const parsed = parseInt(value, 10);
-  return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
-}
 
 // GET https://www.studiohappy.art/_functions/availableDates?workshopType=טאפטינג&offset=0
 export async function get_availableDates(request) {
   try {
     const workshopTypeRaw = String(request.query.workshopType || '').trim();
-    const workshopKey = resolveWorkshopType(workshopTypeRaw);
-    const serviceIds = workshopKey
-      ? (workshopKey === 'candles'
-        ? expandCandlesServiceIds(WORKSHOP_SERVICE_IDS.candles, new Date())
-        : WORKSHOP_SERVICE_IDS[workshopKey])
-      : null;
+    const offsetRaw = request.query.offset;
+    const result = await buildAvailableDatesPayload(workshopTypeRaw, offsetRaw, request.url);
 
-    if (!serviceIds) {
+    if (result.invalid) {
       return badRequest({
         headers: { 'Content-Type': 'application/json' },
-        body: {
-          version: 'v2',
-          content: {
-            messages: [{
-              type: 'text',
-              text: `סוג סדנה לא תקין. השתמש באחד מהערכים: ${WORKSHOP_TYPE_LABELS_HE.join(' | ')}`,
-            }],
-          },
-          error: 'invalid_workshopType',
-        },
+        body: result.body,
       });
     }
 
-    const offset = parseOffset(request.query.offset);
-
-    const neededCount = offset + PAGE_SIZE + 1;
-    const byDate = await collectAvailableDates(serviceIds, neededCount);
-
-    const sortedDates = [...byDate.values()].sort((a, b) => a.dateObj - b.dateObj);
-    const pageSlice = sortedDates.slice(offset, offset + PAGE_SIZE);
-
-    const dates = pageSlice.map(({ dateObj, times }) => {
-      const sortedTimes = [...times].sort();
-      return `${formatDateIL(dateObj)}: ${sortedTimes.join(' | ')}`;
-    });
-
-    const hasMore = sortedDates.length > offset + PAGE_SIZE;
-    const nextOffset = hasMore ? offset + PAGE_SIZE : null;
-    const nextPageUrl = hasMore ? buildNextPageUrl(request, workshopTypeRaw, nextOffset) : null;
-    const datesText = dates.length ? dates.join('\n') : 'לא נמצאו תאריכים פנויים.';
-
     return ok({
       headers: { 'Content-Type': 'application/json' },
-      body: {
-        version: 'v2',
-        content: { messages: [{ type: 'text', text: datesText }] },
-        workshopType: workshopTypeRaw,
-        offset,
-        count: dates.length,
-        dates,
-        datesText,
-        hasMore,
-        nextOffset,
-        nextPageUrl,
-      },
+      body: result.body,
     });
   } catch (err) {
     return serverError({ body: { error: String(err) } });

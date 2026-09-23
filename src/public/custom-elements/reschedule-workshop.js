@@ -67,8 +67,8 @@ reschedule-workshop * { box-sizing: border-box; font-family: inherit; }
 const ERROR_MESSAGES = {
     NOT_FOUND: 'הקישור לא תקין או שכבר נוצל. לקבלת קישור חדש — חזרו לשיחה עם הבוט בוואטסאפ ובקשו שוב לשינוי מועד.',
     EXPIRED: 'הקישור פג תוקף (תקף ל-10 דקות בלבד). לקבלת קישור חדש — חזרו לשיחה עם הבוט בוואטסאפ ובקשו שוב לשינוי מועד.',
-    BLOCKED_48H: 'הסדנה שלך מתקיימת בעוד פחות מ-48 שעות, ולכן לא ניתן לדחות אותה באופן עצמאי. אנא פני/ה לשירות הלקוחות שלנו.',
-    ALREADY_USED: 'כבר נעשה שינוי מועד חד-פעמי להזמנה הזו בעבר. אנא פני/ה לשירות הלקוחות שלנו.',
+    BLOCKED_48H: 'הסדנה מתקיימת בעוד פחות מ-48 שעות, ולכן לא ניתן לדחות אותה באופן עצמאי. ניתן לפנות לשירות הלקוחות.',
+    ALREADY_USED: 'כבר נעשה שינוי מועד חד-פעמי להזמנה הזו בעבר. ניתן לפנות לשירות הלקוחות.',
     ALREADY_PENDING: 'יש כבר בקשת שינוי מועד ממתינה לטיפול הצוות שלנו.',
     SAME_SLOT: 'לא ניתן לבחור שוב את אותו מועד שבו הסדנה מתקיימת כיום. בחרו תאריך או שעה אחרים.',
 };
@@ -504,7 +504,7 @@ class RescheduleWorkshop extends HTMLElement {
         const selectedEntry = this._days.find((d) => d.day === this._selectedDay);
         const timesPanel = selectedEntry ? `
             <div class="rw-times-panel">
-                <div class="rw-times-panel-title">בחרי שעה ל-${rwEsc(selectedEntry.day)}:</div>
+                <div class="rw-times-panel-title">בחרו שעה ל-${rwEsc(selectedEntry.day)}:</div>
                 <div class="rw-times">
                     ${selectedEntry.times.map((t) => `<button type="button" class="rw-time-chip ${this._selectedTime === t ? 'rw-selected' : ''}" data-time="${rwEsc(t)}">${rwEsc(t)}</button>`).join('')}
                 </div>
@@ -523,7 +523,7 @@ class RescheduleWorkshop extends HTMLElement {
         if (this._submitResult?.ok) {
             this.innerHTML = `
                 <div class="rw-wrap">
-                    <div class="rw-msg rw-good">✅ הבקשה לשינוי מועד ל-${rwEsc(this._submitResult.chosenDateLabel || '')} נשלחה בהצלחה!<br/><br/>חזרי לוואטסאפ ולחצי על "אישור סופי" כדי לסיים את התהליך 💬</div>
+                    <div class="rw-msg rw-good">✅ הבקשה לשינוי מועד ל-${rwEsc(this._submitResult.chosenDateLabel || '')} נשלחה בהצלחה!<br/><br/>חזרו לוואטסאפ ולחצו על &quot;אישור סופי&quot; כדי לסיים את התהליך 💬</div>
                 </div>`;
             return;
         }
@@ -568,7 +568,7 @@ class RescheduleWorkshop extends HTMLElement {
             <div class="rw-wrap">
                 <div class="rw-head">
                     <h1>עדכון מועד סדנה</h1>
-                    <div class="rw-sub">בחרי תאריך ושעה חדשים לסדנה שלך</div>
+                    <div class="rw-sub">בחרו תאריך ושעה חדשים לסדנה</div>
                 </div>
                 ${this._renderTimer()}
                 ${currentLabel ? `<div class="rw-current">📅 המועד הנוכחי שלך: <strong>${rwEsc(currentLabel)}</strong></div>` : ''}

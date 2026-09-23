@@ -37,7 +37,7 @@ $w.onReady(async function () {
     el.on('submit-request', async (event) => {
         const { chosenDateIso } = event.detail || {};
         try {
-            const result = await submitRescheduleRequest(orderId, token, chosenDateIso);
+            const result = await submitRescheduleRequest(orderId, token, chosenDateIso, subscriberId);
             el.setAttribute('submit-result', JSON.stringify({ ...result, __ts: Date.now() }));
         } catch (err) {
             const message = err?.message || String(err);

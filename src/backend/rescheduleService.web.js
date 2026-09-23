@@ -166,7 +166,7 @@ export const getRescheduleContext = webMethod(Permissions.Anyone, async (orderId
     };
 });
 
-export const submitRescheduleRequest = webMethod(Permissions.Anyone, async (orderId, token, chosenDateIso) => {
+export const submitRescheduleRequest = webMethod(Permissions.Anyone, async (orderId, token, chosenDateIso, subscriberIdHint) => {
     let order;
     try {
         order = await loadEligibleOrder(orderId, token);
@@ -202,7 +202,10 @@ export const submitRescheduleRequest = webMethod(Permissions.Anyone, async (orde
     const chosenDateLabel = `${formatDateIL(chosenDate)} בשעה ${formatTimeIL(chosenDate)}`;
     await appendOrderActionLog(orderId, `בקשת שינוי מועד נשלחה על ידי הלקוח: ${chosenDateLabel}`);
 
-    const subscriberId = await findSubscriberIdByPhone(order.organizerPhone).catch(() => null);
+    let subscriberId = String(subscriberIdHint || '').trim() || null;
+    if (!subscriberId) {
+        subscriberId = await findSubscriberIdByPhone(order.organizerPhone).catch(() => null);
+    }
     if (subscriberId) {
         await sendRescheduleSummary(subscriberId, chosenDateLabel).catch((err) => {
             console.warn('[rescheduleService] sendRescheduleSummary failed. orderId:', orderId, 'error:', err?.message || err);

@@ -34,6 +34,12 @@ $w.onReady(async function () {
         return;
     }
 
+    el.setAttribute('context-data', JSON.stringify({
+        loading: true,
+        message: 'מאמתים את הקישור וטוענים תאריכים פנויים…',
+        __ts: Date.now(),
+    }));
+
     el.on('submit-request', async (event) => {
         const { chosenDateIso } = event.detail || {};
         try {

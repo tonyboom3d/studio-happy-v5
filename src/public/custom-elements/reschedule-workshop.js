@@ -61,7 +61,15 @@ reschedule-workshop * { box-sizing: border-box; font-family: inherit; }
 .rw-msg.rw-bad { background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; }
 .rw-msg.rw-good { background: #f3ecfb; border: 1px solid #cbb2e6; color: #581E83; }
 .rw-spinner { width: 34px; height: 34px; border: 3px solid #e5e7eb; border-top-color: #5E2F88; border-radius: 50%; margin: 30px auto; animation: rw-spin .8s linear infinite; }
+.rw-loading-block { text-align: center; padding: 24px 12px 32px; }
+.rw-loading-text { color: #6b7280; font-size: 14px; line-height: 1.5; margin-top: 8px; }
 @keyframes rw-spin { to { transform: rotate(360deg); } }
+`;
+
+/** Minimal styles so the first paint is not a white screen (before connectedCallback). */
+const RW_CRITICAL_STYLE = `
+@keyframes rw-spin { to { transform: rotate(360deg); } }
+reschedule-workshop { display:block; direction:rtl; min-height:100vh; background:#f4f4f6; font-family:Rubik,Heebo,sans-serif; color:#1f2937; }
 `;
 
 const ERROR_MESSAGES = {
@@ -183,6 +191,45 @@ class RescheduleWorkshop extends HTMLElement {
         this._expired = false;
         this._remainingMs = null;
         this._timerHandle = null;
+        this._bootstrapMessage = 'טוענים את עמוד שינוי המועד…';
+        this._paintBootstrap();
+    }
+
+    _paintBootstrap(message) {
+        const text = message || this._bootstrapMessage || 'טוענים…';
+        this._bootstrapMessage = text;
+        if (!document.getElementById('rw-critical-style')) {
+            const s = document.createElement('style');
+            s.id = 'rw-critical-style';
+            s.textContent = RW_CRITICAL_STYLE;
+            document.head.appendChild(s);
+        }
+        this.innerHTML = `
+            <div style="max-width:560px;margin:0 auto;padding:28px 16px 60px;">
+                <div style="text-align:center;margin-bottom:20px;">
+                    <h1 style="margin:0 0 4px;font-size:19px;color:#581E83;">עדכון מועד סדנה</h1>
+                    <div style="color:#6b7280;font-size:13.5px;">בחרו תאריך ושעה חדשים לסדנה</div>
+                </div>
+                <div style="text-align:center;padding:24px 12px;">
+                    <div style="width:34px;height:34px;border:3px solid #e5e7eb;border-top-color:#5E2F88;border-radius:50%;margin:0 auto;animation:rw-spin .8s linear infinite;"></div>
+                    <div style="color:#6b7280;font-size:14px;line-height:1.5;margin-top:12px;">${rwEsc(text)}</div>
+                </div>
+            </div>`;
+    }
+
+    _renderBootstrapPanel(message) {
+        const text = message || this._bootstrapMessage || 'טוענים…';
+        return `
+            <div class="rw-wrap">
+                <div class="rw-head">
+                    <h1>עדכון מועד סדנה</h1>
+                    <div class="rw-sub">בחרו תאריך ושעה חדשים לסדנה</div>
+                </div>
+                <div class="rw-loading-block">
+                    <div class="rw-spinner"></div>
+                    <div class="rw-loading-text">${rwEsc(text)}</div>
+                </div>
+            </div>`;
     }
 
     connectedCallback() {
@@ -252,12 +299,18 @@ class RescheduleWorkshop extends HTMLElement {
         try {
             if (name === 'context-data') {
                 const data = JSON.parse(newVal);
-                if (data.error) {
+                if (data.loading) {
+                    this._context = null;
+                    this._contextError = null;
+                    this._bootstrapMessage = data.message || 'מאמתים את הקישור וטוענים תאריכים פנויים…';
+                } else if (data.error) {
                     this._contextError = data;
                     this._context = null;
+                    this._bootstrapMessage = null;
                 } else {
                     this._context = data;
                     this._contextError = null;
+                    this._bootstrapMessage = null;
                     this._startTimer(data.expiresAt);
                     this._loadDates(data, data.currentWorkshopStart);
                 }
@@ -540,7 +593,7 @@ class RescheduleWorkshop extends HTMLElement {
         }
 
         if (!this._context) {
-            this.innerHTML = `<div class="rw-wrap"><div class="rw-spinner"></div><div class="rw-sub" style="text-align:center;">טוען...</div></div>`;
+            this.innerHTML = this._renderBootstrapPanel(this._bootstrapMessage);
             return;
         }
 
@@ -550,7 +603,11 @@ class RescheduleWorkshop extends HTMLElement {
 
         let daysBody;
         if (this._loadingDates && !this._days.length) {
-            daysBody = `<div class="rw-spinner"></div><div class="rw-sub" style="text-align:center;">טוען תאריכים פנויים…</div>`;
+            daysBody = `
+                <div class="rw-loading-block">
+                    <div class="rw-spinner"></div>
+                    <div class="rw-loading-text">טוענים תאריכים פנויים…</div>
+                </div>`;
         } else if (this._datesLoadFailed) {
             daysBody = `<div class="rw-empty">לא הצלחנו לטעון תאריכים פנויים כרגע. נסו לרענן את הדף.</div>`;
         } else if (!this._days.length) {

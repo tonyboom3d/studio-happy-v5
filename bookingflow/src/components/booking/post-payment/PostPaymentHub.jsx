@@ -948,9 +948,13 @@ export default function PostPaymentHub({
     const workshopStartTime = localOrder?.workshopStart
       ? format(new Date(localOrder.workshopStart), 'HH:mm')
       : null;
-    const workshopEndTime = localOrder?.workshopStart
-      ? format(new Date(new Date(localOrder.workshopStart).getTime() + 4 * 60 * 60 * 1000), 'HH:mm')
-      : null;
+    // Real session end (from the booked slot) — falls back to the old fixed
+    // +4h guess only for legacy orders placed before workshopEnd was persisted.
+    const workshopEndTime = localOrder?.workshopEnd
+      ? format(new Date(localOrder.workshopEnd), 'HH:mm')
+      : localOrder?.workshopStart
+        ? format(new Date(new Date(localOrder.workshopStart).getTime() + 4 * 60 * 60 * 1000), 'HH:mm')
+        : null;
     const formatPhone = (phone) => {
       const digits = String(phone).replace(/\D/g, '');
       return digits.length === 10 ? `${digits.slice(0, 3)}-${digits.slice(3, 6)}-${digits.slice(6)}` : phone;

@@ -252,6 +252,36 @@ export function getUpcomingPeriods(now = new Date(), count = 2) {
     return periods;
 }
 
+/**
+ * Whether `dateKey`'s 2-week submission window is open to a brand-new shift
+ * ahead of time.
+ *
+ * - Current/past windows (period.start <= the window `now` falls in) are not
+ *   gated here — handled by the "bonus" quota check on the currently-active
+ *   window instead (see `validateSubmission`).
+ * - The window immediately following the one in progress ("2 weeks ahead")
+ *   is always open until its own deadline passes — this is the normal
+ *   submission flow.
+ * - Any window further ahead only opens once EVERY intervening window's
+ *   quota has been fully met — an employee who stays caught up gets to look
+ *   (and submit) further into the future.
+ */
+export function isFutureWindowOpen(dateKey, profile, settings, now, allSubmissions, vacations) {
+    const currentPeriod = getPeriodForDate(toDateKey(now));
+    const period = getPeriodForDate(dateKey);
+    if (period.start <= currentPeriod.end) return true; // current/past window — not gated here
+    if (now.getTime() > period.deadline.getTime()) return false; // this window's own deadline already passed
+
+    let cursor = nextDateKey(currentPeriod.end);
+    for (let guard = 0; guard < 104 && cursor < period.start; guard++) { // ~4 years safety cap
+        const p = getPeriodForDate(cursor);
+        const quota = evaluatePeriodQuota(profile, settings, p, allSubmissions, vacations);
+        if (!quota.met) return false; // an intervening window's quota isn't met yet — stay locked
+        cursor = nextDateKey(p.end);
+    }
+    return true;
+}
+
 /** Shift length in hours from 'HH:mm' strings; null when invalid/negative. */
 export function shiftHours(startTime, endTime) {
     const parse = (t) => {
@@ -543,20 +573,21 @@ export function evaluateWeekendCompliance(profile, settings, monthKey, allSubmis
  * @param {Array<{date: string, startTime: string, endTime: string}>} shifts   new shifts ('YYYY-MM-DD')
  * @param {object} profile        Dashboard_Roles row (scheduling profile fields)
  * @param {object} settings       normalized settings
- * @param {Array}  existing       employee's existing non-rejected submissions (all open months)
- * @param {object} [opts]         { managerOverride?: boolean, now?: Date }
+ * @param {Array}  existing       employee's existing non-rejected submissions (all open months),
+ *                                each with { status, dateKey|date, startTime }
+ * @param {object} [opts]         { managerOverride?: boolean, now?: Date, vacations?: Array }
  * @returns {{ ok: boolean, errors: Array<{date: string|null, code: string, message: string}> }}
  */
 export function validateSubmission(shifts, profile, settings, existing, opts = {}) {
     const now = opts.now || new Date();
     const managerOverride = !!opts.managerOverride;
+    const vacations = opts.vacations || [];
     const errors = [];
 
     if (!Array.isArray(shifts) || !shifts.length) {
         return { ok: false, errors: [{ date: null, code: 'EMPTY', message: 'לא נבחרו משמרות להגשה.' }] };
     }
 
-    const openMonths = getOpenMonthKeys(settings, now);
     const minHours = getMinShiftHours(profile, settings);
     const todayKey = toDateKey(now);
     const existingDates = new Set((existing || [])
@@ -588,7 +619,6 @@ export function validateSubmission(shifts, profile, settings, existing, opts = {
             errors.push({ date: dateKey || null, code: 'BAD_DATE', message: 'תאריך לא תקין.' });
             continue;
         }
-        const monthKey = dateKey.slice(0, 7);
         const startTime = String(shift.startTime || '').trim();
         const endTime = String(shift.endTime || '').trim();
         const batchKey = `${dateKey}|${startTime}|${endTime}`;
@@ -606,11 +636,6 @@ export function validateSubmission(shifts, profile, settings, existing, opts = {
 
         if (dateKey <= todayKey) {
             errors.push({ date: dateKey, code: 'PAST_DATE', message: 'לא ניתן להגיש זמינות לתאריך שעבר.' });
-            continue;
-        }
-
-        if (!openMonths.includes(monthKey)) {
-            errors.push({ date: dateKey, code: 'MONTH_CLOSED', message: `חודש ${monthKey} אינו פתוח להגשה.` });
             continue;
         }
 
@@ -654,13 +679,15 @@ export function validateSubmission(shifts, profile, settings, existing, opts = {
         }
 
         // Biweekly submission window: a date belongs to a 2-week window whose
-        // deadline sits one day before the window starts. The currently-active
-        // window's own deadline has necessarily already passed (bonus rule
-        // below governs it instead); only a still-upcoming window is gated here.
+        // deadline sits one day before the window starts (submit ~2 weeks
+        // ahead). The currently-active window's own deadline has necessarily
+        // already passed (the bonus rule below governs it instead). A window
+        // further than "2 weeks ahead" only opens once every intervening
+        // window's quota was met — the "look further ahead" bonus.
         const period = getPeriodForDate(dateKey);
         const isFutureWindow = period.start > currentPeriod.end;
-        if (isFutureWindow && now.getTime() > period.deadline.getTime()) {
-            errors.push({ date: dateKey, code: 'DEADLINE_PASSED', message: `חלף המועד האחרון להגשת זמינות לתקופה ${period.start}–${period.end}.` });
+        if (isFutureWindow && !isFutureWindowOpen(dateKey, profile, settings, now, existing, vacations)) {
+            errors.push({ date: dateKey, code: 'DEADLINE_PASSED', message: `החלון להגשת זמינות לתקופה ${period.start}–${period.end} טרם נפתח, או שחלף המועד להגשה מוקדמת אליו.` });
             continue;
         }
 

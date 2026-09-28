@@ -159,9 +159,13 @@ export default function OrganizerOrderHub({
     ? format(new Date(order.workshopStart), 'HH:mm')
     : null;
 
-  const workshopEndTime = order.workshopStart
-    ? format(new Date(new Date(order.workshopStart).getTime() + 4 * 60 * 60 * 1000), 'HH:mm')
-    : null;
+  // Real session end (from the booked slot) — falls back to the old fixed
+  // +4h guess only for legacy orders placed before workshopEnd was persisted.
+  const workshopEndTime = order.workshopEnd
+    ? format(new Date(order.workshopEnd), 'HH:mm')
+    : order.workshopStart
+      ? format(new Date(new Date(order.workshopStart).getTime() + 4 * 60 * 60 * 1000), 'HH:mm')
+      : null;
 
   const displayAddress = 'הדובדבן 7, קריית אונו - קומה 5';
 
@@ -255,7 +259,7 @@ export default function OrganizerOrderHub({
   const calendarUrl = useMemo(() => {
     if (!order.workshopStart) return null;
     const start = new Date(order.workshopStart);
-    const end = new Date(start.getTime() + 4 * 60 * 60 * 1000);
+    const end = order.workshopEnd ? new Date(order.workshopEnd) : new Date(start.getTime() + 4 * 60 * 60 * 1000);
     const fmt = (d) => d.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
     const title = encodeURIComponent(ecomSummary?.workshopName || 'סדנת טאפטינג - סטודיו האפי');
     const location = encodeURIComponent(ecomSummary?.location || '');

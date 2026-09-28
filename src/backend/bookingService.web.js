@@ -958,6 +958,13 @@ export const createAndCheckout = webMethod(Permissions.Anyone, async (orderData)
     const orderToken = generateToken();
     const slotDate = slotsList[0].date || slotsList[0].startDate;
     const workshopStart = slotDate ? new Date(slotDate) : new Date();
+    // Real session end (from the actual availability slot picked) — used for
+    // display everywhere instead of guessing a fixed workshop duration, since
+    // duration varies per service/day (e.g. 90 min tufting session vs. the
+    // service's own default). Falls back to null when the client didn't send
+    // an end timestamp (older client build) — UI falls back to a fixed offset then.
+    const slotEndDate = slotsList[0].end || slotsList[0].endDate;
+    const workshopEnd = slotEndDate ? new Date(slotEndDate) : null;
 
     const msUntilWorkshop = workshopStart.getTime() - Date.now();
     if (isTuftingServiceId(serviceId)) {
@@ -1035,6 +1042,7 @@ export const createAndCheckout = webMethod(Permissions.Anyone, async (orderData)
         serviceId,
         sessionId: slotsList[0].sessionId || slotsList[0]._id,
         workshopStart,
+        workshopEnd,
         adults: numAdults,
         children: numChildren,
         rugCount,
@@ -2500,6 +2508,7 @@ export const getOrderHistoryForBuyer = webMethod(Permissions.Anyone, async (phon
             _id: order._id,
             orderNumber: order.ecomOrderNumber || null,
             workshopStart: order.workshopStart || null,
+            workshopEnd: order.workshopEnd || null,
             paidTotal: order.paidTotal || order.basePrice || 0,
             organizerName: order.organizerName || '',
             createdDate: order._createdDate,
@@ -3141,6 +3150,7 @@ export const verifyAccessToken = webMethod(Permissions.Anyone, async (token, raw
         order: {
             _id: enrichedOrder._id,
             workshopStart: enrichedOrder.workshopStart,
+            workshopEnd: enrichedOrder.workshopEnd,
             _createdDate: enrichedOrder._createdDate,
             deadlineAt: enrichedOrder.deadlineAt,
             editingWindowAllowed: enrichedOrder.editingWindowAllowed,

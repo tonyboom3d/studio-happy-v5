@@ -2189,7 +2189,12 @@ class EmployeePortal extends HTMLElement {
             const full = (rules.fullDates || []).includes(dateKey);
             const promoted = (rules.promotedDates || []).includes(dateKey);
             const quotaMet = !!viewInfo?.quota?.bonusUnlocked;
-            const monthOpen = !!viewInfo?.open;
+            // Openness is gated per 2-week window (days 1–15 / 16–end), not
+            // as one blanket flag for the whole month — a future month can
+            // have its first half open while the second half isn't yet.
+            const monthOpen = viewInfo?.isCurrentMonth
+                ? true
+                : !!(day <= 15 ? viewInfo?.windowA?.open : viewInfo?.windowB?.open);
             const fullLocked = full && !quotaMet;
             const selected = this._selected.has(dateKey);
             // Personalized per-skill state from the scheduling engine.

@@ -341,6 +341,7 @@ export default function CandelsBooking() {
       selectedSlot: selectedSlot ? {
         slot_id: selectedSlot._id || selectedSlot.sessionId,
         date: selectedSlot.start?.timestamp,
+        end: selectedSlot.end?.timestamp,
         sessionId: selectedSlot.sessionId,
         serviceId: selectedSlot.serviceId,
         openSpots: selectedSlot.openSpots

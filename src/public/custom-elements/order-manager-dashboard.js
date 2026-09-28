@@ -2523,20 +2523,18 @@ function __wdInjectGlobalAssets() {
             workshops.forEach(w => {
                 const typeInfo = workshopTypes[w.type];
                 
-                // Instructors badge list generation
+                // Instructors badge list generation — compact: one name badge +
+                // a single "+N" badge (hover shows the rest) for any additional staff.
+                const escInstructor = (v) => String(v ?? '')
+                    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
                 let instructorsHtml = '';
                 if (w.instructors && w.instructors.length > 0) {
                     const firstInstructor = w.instructors[0];
-                    instructorsHtml += `<span class="bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded text-xs border border-emerald-200 font-semibold whitespace-nowrap">${firstInstructor}</span>`;
-                    
+                    instructorsHtml += `<span class="bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded text-xs border border-emerald-200 font-semibold whitespace-nowrap">${escInstructor(firstInstructor)}</span>`;
+
                     if (w.instructors.length > 1) {
-                        const secondInstructor = w.instructors[1];
-                        instructorsHtml += `<span class="bg-amber-100 text-amber-800 px-2 py-0.5 rounded text-xs border border-amber-200 font-medium whitespace-nowrap" title="STANDBY">גיבוי: ${secondInstructor}</span>`;
-                    }
-                    
-                    if (w.instructors.length > 2) {
-                        const extraCount = w.instructors.length - 2;
-                        const extraNames = w.instructors.slice(2).join(', ');
+                        const extraCount = w.instructors.length - 1;
+                        const extraNames = w.instructors.slice(1).map(escInstructor).join(', ');
                         instructorsHtml += `
                             <div class="relative group inline-block">
                                 <span class="bg-gray-100 text-gray-600 px-2 py-0.5 rounded text-xs border border-gray-200 cursor-help font-semibold">

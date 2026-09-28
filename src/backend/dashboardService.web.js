@@ -18,6 +18,7 @@ import { SKETCH_STATUS, SKETCH_STATUSES, normalizeSketchStatus, isLockedStatus }
 import { PERMISSION_KEYS, PERMISSION_DEFAULTS, refId } from 'backend/staffRoles.js';
 import { getItemWithRetry } from 'backend/wixDataRetry.js';
 import { TUFTING_SERVICE_IDS } from 'backend/sketchEditingPolicy.js';
+import { toDateKey } from 'backend/availabilityRules.js';
 import { cancelRescheduleRequest as cancelRescheduleRequestCore } from 'backend/rescheduleService.web.js';
 import {
     TEMPLATE_USE,
@@ -952,6 +953,54 @@ function mapAddOnOrderForDashboard(row) {
     };
 }
 
+/**
+ * Real instructor team per workshop slot — sourced from ShiftAssignments
+ * (the staff-scheduling system), keyed by `${dateKey}|${workshopTypeId}`.
+ * Powers the order dashboard's "צוות מדריכים" column so employees assigned
+ * to a workshop can see who else is assigned to it (managers see all).
+ */
+async function loadShiftInstructorsMap(startDate, endDate) {
+    const fromKey = toDateKey(startDate);
+    const toKey = toDateKey(endDate);
+    const assignmentsByKey = {};
+    if (!fromKey || !toKey) return { assignmentsByKey, employeeNameById: {} };
+
+    const items = [];
+    let result = await wixData.query('ShiftAssignments')
+        .ge('dateKey', fromKey)
+        .le('dateKey', toKey)
+        .ne('status', 'CANCELLED')
+        .limit(1000)
+        .find(SA)
+        .catch(() => ({ items: [] }));
+    items.push(...(result.items || []));
+    while (typeof result.hasNext === 'function' && result.hasNext()) {
+        result = await result.next();
+        items.push(...(result.items || []));
+    }
+
+    const employeeIds = new Set();
+    for (const a of items) {
+        if (!a.dateKey || !a.workshopTypeId || !a.employeeId) continue;
+        const key = `${a.dateKey}|${a.workshopTypeId}`;
+        if (!assignmentsByKey[key]) assignmentsByKey[key] = [];
+        assignmentsByKey[key].push(a.employeeId);
+        employeeIds.add(a.employeeId);
+    }
+
+    const employeeNameById = {};
+    if (employeeIds.size) {
+        const rolesResult = await wixData.query('Dashboard_Roles')
+            .hasSome('_id', [...employeeIds])
+            .limit(1000).find(SA).catch(() => ({ items: [] }));
+        for (const r of (rolesResult.items || [])) {
+            employeeNameById[r._id] = r.displayName || '(ללא שם)';
+        }
+    }
+
+    return { assignmentsByKey, employeeNameById };
+}
+
 /** Authoritative workshop bucket key — CMS sessionId groups all ticket variants. */
 function cmsWorkshopKey(order) {
     if (order.sessionId) return `sid:${order.sessionId}`;
@@ -991,6 +1040,7 @@ export const getInitialDashboardData = webMethod(Permissions.SiteMember, async (
     const canManageOrdersSystem = hasPermission(dashboardRole, 'manageOrdersSystem');
     const hasSketchSewingSkill = hasPermission(dashboardRole, 'sketchSewingSkill');
     const myStaffId = refId(dashboardRole.connectedStaff);
+    const myEmployeeId = dashboardRole._id;
     const loggedInMember = await getLoggedInMember();
     const showOrderDebug = isOrderDebugUser(loggedInMember);
 
@@ -1008,11 +1058,13 @@ export const getInitialDashboardData = webMethod(Permissions.SiteMember, async (
     // console.log(`[dashboardService] Loaded ${Object.keys(typesMap).length} workshop type(s), serviceIds:`, allServiceIds);
     // console.log(`[dashboardService] Loaded ${Object.keys(staffNamesById).length} staff member(s):`, staffNamesById);
 
-    const [{ sessions, idLookup }, ordersLoad, addOnOrdersLoad] = await Promise.all([
+    const [{ sessions, idLookup }, ordersLoad, addOnOrdersLoad, shiftInstructors] = await Promise.all([
         loadSessions(allServiceIds, startDate, endDate),
         loadPaidWorkshopOrdersInRange(startDate, endDate),
         loadAddOnOrdersInRange(startDate, endDate),
+        loadShiftInstructorsMap(startDate, endDate),
     ]);
+    const { assignmentsByKey: shiftAssignmentsByKey, employeeNameById: shiftEmployeeNameById } = shiftInstructors;
     const orders = ordersLoad.items || [];
     const addOnsByWorkshopOrderId = addOnOrdersLoad.byWorkshopOrderId;
     const addOnsBySessionId = addOnOrdersLoad.bySessionId;
@@ -1120,12 +1172,21 @@ export const getInitialDashboardData = webMethod(Permissions.SiteMember, async (
     // Instructor per session — used to scope workshops/orders to the logged-in
     // employee's own sessions when they lack the manageOrdersSystem permission.
     const sessionStaffMap = {};
+    // Employee-scheduling assignees (ShiftAssignments) per session — lets an
+    // assigned employee see the other employees assigned to the same workshop.
+    const sessionAssignedEmployeeMap = {};
 
     for (const session of workshopSessions) {
         const sessionId = session.id;
         sessionStaffMap[sessionId] = session.staffId || null;
         const typeId = serviceIdToTypeId[session.serviceId] || 'unknown';
         const typeInfo = typesMap[typeId] || typesMap.unknown;
+        const sessionDateKey = session.start ? toDateKey(session.start) : null;
+        const assignedEmployeeIds = (sessionDateKey && shiftAssignmentsByKey[`${sessionDateKey}|${typeId}`]) || [];
+        sessionAssignedEmployeeMap[sessionId] = assignedEmployeeIds;
+        const shiftInstructorNames = assignedEmployeeIds
+            .map((id) => shiftEmployeeNameById[id])
+            .filter(Boolean);
 
         const sessionOrders = ordersBySessionId[sessionId] || [];
         let totalSketchesNeeded = 0;
@@ -1235,7 +1296,9 @@ export const getInitialDashboardData = webMethod(Permissions.SiteMember, async (
             groupsCount,
             allGroupsCount: groupsCount,
             waitlist: 0,
-            instructors: session.staffId && staffNamesById[session.staffId] ? [staffNamesById[session.staffId]] : [],
+            instructors: shiftInstructorNames.length
+                ? shiftInstructorNames
+                : (session.staffId && staffNamesById[session.staffId] ? [staffNamesById[session.staffId]] : []),
             totalSketchesNeeded,
             sketchesSelected,
             sketchesReady,
@@ -1293,8 +1356,9 @@ export const getInitialDashboardData = webMethod(Permissions.SiteMember, async (
         ? visibleWorkshopRows
         : visibleWorkshopRows.filter((w) => {
             const isOwnSession = myStaffId && sessionStaffMap[w.id] === myStaffId;
+            const isOwnShiftAssignment = myEmployeeId && (sessionAssignedEmployeeMap[w.id] || []).includes(myEmployeeId);
             const isTufting = tuftingTypeIds.has(w.type);
-            return isOwnSession || (hasSketchSewingSkill && isTufting);
+            return isOwnSession || isOwnShiftAssignment || (hasSketchSewingSkill && isTufting);
         });
 
     // Recompute alerts against the scoped workshop set only.

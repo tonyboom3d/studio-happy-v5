@@ -2400,7 +2400,13 @@ class EmployeePortal extends HTMLElement {
             return { requiredBase, submitted, vacation, live: livePortion, remainder };
         };
 
-        const shiftsSeg = seg(shifts, shiftsLiveRaw);
+        // Cap each week's contribution at its own requirement before summing,
+        // so front-loading extra shifts into one week can't visually fill the
+        // bar for weeks that still have zero submissions of their own — the
+        // real unlock gate (`quota.met`) requires EVERY week to be met
+        // individually, and the bar must not promise 100% before that's true.
+        const shiftsEffectiveSubmitted = weeks.reduce((sum, w) => sum + Math.min(w.submitted, w.required), 0);
+        const shiftsSeg = seg({ ...shifts, submitted: shiftsEffectiveSubmitted }, shiftsLiveRaw);
         const fridaysSeg = seg(fridays, fridaysLive);
         const saturdaysSeg = seg(saturdays, saturdaysLive);
         const grandTotal = shiftsSeg.requiredBase + fridaysSeg.requiredBase + saturdaysSeg.requiredBase;
@@ -2424,7 +2430,10 @@ class EmployeePortal extends HTMLElement {
         const pct = (n) => Math.max(0, Math.min(100, (n / grandTotal) * 100));
         const completedPct = Math.round(pct(totals.submitted + totals.vacation));
         const withLivePct = Math.round(pct(totals.submitted + totals.vacation + totals.live));
-        const complete = completedPct >= 100;
+        // "Complete" (and everything that unlocks because of it — bonus
+        // shifts, looking further ahead) must match the backend's real gate:
+        // every week's own quota met, not just the summed total reaching 100%.
+        const complete = !!(info.quota?.met && info.weekend?.met);
 
         const breakdownPart = (label, comp) => {
             if (!comp.requiredBase) return '';

@@ -27,6 +27,7 @@ import {
     CANDLES_LIMITED_SERVICE_ID,
     expandCandlesServiceIds,
     filterCandlesLimitedSlots,
+    applyTuftingDatePricing,
 } from 'backend/workshopServiceIds.js';
 
 const WORKSHOP_ACCESS_TOKEN_SECRET_NAME = 'WorkshopAccessTokens';
@@ -786,8 +787,10 @@ export const createAndCheckout = webMethod(Permissions.Anyone, async (orderData)
         soloAdults = numAdults - parentChildPairs;
         rugCount = numAdults;
 
-        const pricePerAdult = servicePricing.solo;
-        const childTicketPrice = servicePricing.parentChild || pricePerAdult;
+        const tuftingSlotStart = slotsList[0].date || slotsList[0].startDate || slotsList[0].start?.timestamp || slotsList[0].start;
+        const tuftingPricing = applyTuftingDatePricing(servicePricing, tuftingSlotStart);
+        const pricePerAdult = tuftingPricing.solo;
+        const childTicketPrice = tuftingPricing.parentChild || pricePerAdult;
         basePrice = (soloAdults * pricePerAdult) + (parentChildPairs * childTicketPrice);
     }
 

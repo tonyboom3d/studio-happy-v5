@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Minus, Plus, Users, Baby, MessageCircle, AlertTriangle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { validateFirstOrderMinimum, FIRST_ORDER_MIN_TICKETS_MESSAGE } from '@/lib/firstOrderMinimum';
+import { resolveDisplayedPricing } from '@/lib/tuftingDatePricing';
 
 export default function ParticipantsSection({
   adults,
@@ -34,7 +35,7 @@ export default function ParticipantsSection({
 
   const { totalPrice } = useMemo(() => {
     if (!selectedSlot || !servicePricing) return { totalPrice: 0 };
-    const pricing = servicePricing[selectedSlot.serviceId];
+    const pricing = resolveDisplayedPricing(selectedSlot, servicePricing);
     if (!pricing) return { totalPrice: 0 };
 
     const pricePerAdult = pricing.solo || 0;

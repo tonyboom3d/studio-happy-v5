@@ -9,6 +9,7 @@ import {
   getSlotWeekdayEnum,
   sortSlotsByStartTime,
 } from '@/lib/slotTime';
+import { resolveDisplayedPricing } from '@/lib/tuftingDatePricing';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   format,
@@ -141,7 +142,7 @@ function getMinPriceForDate(slots, servicePricing) {
   let minPrice = Infinity;
 
   slots.forEach(slot => {
-    const pricing = servicePricing[slot.serviceId];
+    const pricing = resolveDisplayedPricing(slot, servicePricing);
     if (!pricing) return;
 
     // Ceramics: pricing is per day-of-week (single consolidated service),

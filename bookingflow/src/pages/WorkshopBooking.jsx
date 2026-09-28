@@ -8,6 +8,7 @@ import ParticipantsSection from '../components/booking/ParticipantsSection';
 import SketchInfoSection from '../components/booking/SketchInfoSection';
 import OrderSummarySection from '../components/booking/OrderSummarySection';
 import { submitBooking, subscribeToWix, notifyProgress, isWixEditorOrPreview } from '@/api/wixBridge';
+import { resolveDisplayedPricing } from '@/lib/tuftingDatePricing';
 import { addLog } from '@/components/VersionLogger';
 
 const SESSION_TIMEOUT_MS = 10 * 60 * 1000; // 10 דקות
@@ -170,7 +171,7 @@ export default function WorkshopBooking() {
   // מחיר בסיס
   const basePrice = useMemo(() => {
     if (!selectedSlot || !servicePricing) return 0;
-    const pricing = servicePricing[selectedSlot.serviceId];
+    const pricing = resolveDisplayedPricing(selectedSlot, servicePricing);
     if (!pricing) return 0;
 
     const pricePerAdult = pricing.solo || 0;

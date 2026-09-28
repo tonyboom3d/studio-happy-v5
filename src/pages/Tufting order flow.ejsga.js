@@ -10,6 +10,10 @@ import {
     verifySketchForEdit,
 } from 'backend/bookingService.web.js';
 
+// GitHub Pages caches index.html — bump v= when bookingflow prices change.
+const BOOKINGFLOW_IFRAME_SRC =
+    'https://tonyboom3d.github.io/studio-happy-v5/?v=20260928-tufting-2710';
+
 // Tufting Service IDs (for reference)
 const TUFTING_SERVICE_IDS = {
     weekday: '3406e74d-949b-44b0-a5cc-064548129c08',
@@ -23,6 +27,7 @@ $w.onReady(function () {
         console.error('[Wix] #htmlComponent1 not found on page!');
         return;
     }
+    mainIframe.src = BOOKINGFLOW_IFRAME_SRC;
     mainIframe.onMessage((event) => handleIframeMessage(event, mainIframe));
 
     // Check for participant/organizer access token in URL query

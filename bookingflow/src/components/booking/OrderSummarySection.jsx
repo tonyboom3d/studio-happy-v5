@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import { format } from 'date-fns';
 import { he } from 'date-fns/locale';
 import { getSlotLocalDate, getSlotTimeRange } from '@/lib/slotTime';
+import { resolveDisplayedPricing } from '@/lib/tuftingDatePricing';
 
 export default function OrderSummarySection({
   adults,
@@ -27,7 +28,7 @@ export default function OrderSummarySection({
     };
   }, [selectedSlot]);
 
-  const pricing = servicePricing?.[selectedSlot?.serviceId];
+  const pricing = resolveDisplayedPricing(selectedSlot, servicePricing);
   const soloUnitPrice = pricing?.solo || 0;
   const parentChildUnitPrice = pricing?.parentChild || soloUnitPrice;
 

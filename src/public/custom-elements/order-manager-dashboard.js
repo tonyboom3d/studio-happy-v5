@@ -1381,6 +1381,34 @@ function __wdInjectGlobalAssets() {
             renderLastDataRefreshLabel();
             startAutoDataRefresh();
             startWorkshopTimeStatusTick();
+            initInstructorsTooltipCloseOnOutsideClick();
+        }
+
+        // "צוות מדריכים" +N badge — click-to-toggle tooltip, one open at a time.
+        let __wdOpenInstructorsTooltipId = null;
+
+        function initInstructorsTooltipCloseOnOutsideClick() {
+            document.addEventListener('click', () => {
+                if (!__wdOpenInstructorsTooltipId) return;
+                const el = document.getElementById(__wdOpenInstructorsTooltipId);
+                if (el) el.classList.add('hidden');
+                __wdOpenInstructorsTooltipId = null;
+            });
+        }
+
+        function toggleInstructorsTooltip(event, tooltipId) {
+            if (event) event.stopPropagation();
+            const el = document.getElementById(tooltipId);
+            if (!el) return;
+
+            if (__wdOpenInstructorsTooltipId && __wdOpenInstructorsTooltipId !== tooltipId) {
+                const prev = document.getElementById(__wdOpenInstructorsTooltipId);
+                if (prev) prev.classList.add('hidden');
+            }
+
+            const willOpen = el.classList.contains('hidden');
+            el.classList.toggle('hidden', !willOpen);
+            __wdOpenInstructorsTooltipId = willOpen ? tooltipId : null;
         }
 
         // Host element reference, set in connectedCallback, used to dispatch
@@ -2535,12 +2563,13 @@ function __wdInjectGlobalAssets() {
                     if (w.instructors.length > 1) {
                         const extraCount = w.instructors.length - 1;
                         const extraNames = w.instructors.slice(1).map(escInstructor).join(', ');
+                        const tooltipId = `instructors-tooltip-${w.id}`;
                         instructorsHtml += `
-                            <div class="relative group inline-block">
-                                <span class="bg-gray-100 text-gray-600 px-2 py-0.5 rounded text-xs border border-gray-200 cursor-help font-semibold">
+                            <div class="relative inline-block">
+                                <span onclick="toggleInstructorsTooltip(event, '${tooltipId}')" class="bg-gray-100 text-gray-600 px-2 py-0.5 rounded text-xs border border-gray-200 cursor-pointer font-semibold hover:bg-gray-200">
                                     +${extraCount}
                                 </span>
-                                <div class="absolute bottom-full right-1/2 translate-x-1/2 mb-2 hidden group-hover:block bg-gray-900 text-white text-[11px] rounded py-1 px-2.5 z-20 whitespace-nowrap shadow-lg">
+                                <div id="${tooltipId}" onclick="event.stopPropagation()" class="absolute bottom-full right-1/2 translate-x-1/2 mb-2 hidden bg-gray-900 text-white text-[11px] rounded py-1 px-2.5 z-20 whitespace-nowrap shadow-lg">
                                     ${extraNames}
                                 </div>
                             </div>

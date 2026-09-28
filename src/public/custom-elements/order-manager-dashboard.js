@@ -4235,6 +4235,7 @@ window.updateSketchStatus = updateSketchStatus;
 window.resendPromoCoupon = resendPromoCoupon;
 window.cancelPromoCouponNoShow = cancelPromoCouponNoShow;
 window.cancelRescheduleRequestUI = cancelRescheduleRequestUI;
+window.toggleInstructorsTooltip = toggleInstructorsTooltip;
 
 
 // ============================================================

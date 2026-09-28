@@ -40,7 +40,7 @@ export const ALL_CANDLES_SERVICE_IDS = [
 
 /** Tufting-only price for a single calendar day (Israel). Other dates keep service variants. */
 export const TUFTING_DATE_PRICE_OVERRIDES = {
-  '2026-10-27': { solo: 550, parentChild: 660 },
+  '2026-10-27': { solo: 550, parentChild: 600 },
 };
 
 export function applyTuftingDatePricing(pricing, dateInput) {

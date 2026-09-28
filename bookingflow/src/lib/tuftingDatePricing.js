@@ -8,7 +8,7 @@ const TUFTING_SERVICE_IDS = new Set([
 
 /** Keep in sync with TUFTING_DATE_PRICE_OVERRIDES in workshopServiceIds.js */
 const TUFTING_DATE_PRICE_OVERRIDES = {
-  '2026-10-27': { solo: 550, parentChild: 660 },
+  '2026-10-27': { solo: 550, parentChild: 600 },
 };
 
 export function resolveDisplayedPricing(slot, servicePricing) {

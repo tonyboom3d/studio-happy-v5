@@ -12,7 +12,7 @@ import {
 
 // GitHub Pages caches index.html — bump v= when bookingflow prices change.
 const BOOKINGFLOW_IFRAME_SRC =
-    'https://tonyboom3d.github.io/studio-happy-v5/?v=20260928-tufting-2710';
+    'https://tonyboom3d.github.io/studio-happy-v5/?v=20260928-tufting-2710b';
 
 // Tufting Service IDs (for reference)
 const TUFTING_SERVICE_IDS = {

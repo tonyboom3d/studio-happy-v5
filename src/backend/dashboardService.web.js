@@ -21,6 +21,11 @@ import { TUFTING_SERVICE_IDS } from 'backend/sketchEditingPolicy.js';
 import { toDateKey } from 'backend/availabilityRules.js';
 import { cancelRescheduleRequest as cancelRescheduleRequestCore } from 'backend/rescheduleService.web.js';
 import {
+    listPendingRescheduleRequests,
+    approveReschedule,
+    rejectReschedule,
+} from 'backend/rescheduleDecision.js';
+import {
     TEMPLATE_USE,
     assertTemplateUse,
     mapTemplateRow,
@@ -879,7 +884,7 @@ function hasPermission(role, key) {
     return getRolePermissionValue(role, key);
 }
 
-async function assertPermission(key) {
+export async function assertPermission(key) {
     const role = await assertDashboardAccess();
     if (!hasPermission(role, key)) {
         throw new Error(`PERMISSION_DENIED:${key}`);
@@ -1246,6 +1251,7 @@ export const getInitialDashboardData = webMethod(Permissions.SiteMember, async (
                 logs: mapOrderLog(order.actionLog),
                 sketches,
                 selectedProducts,
+                pickupItems: Array.isArray(order.pickupItems) ? order.pickupItems : [],
                 participantGroups: orderParticipants.map(p => ({
                     id: p._id,
                     name: p.name || '',
@@ -1669,7 +1675,7 @@ export const debugOrderMatch = webMethod(Permissions.SiteMember, async (orderId)
     };
 });
 
-async function logOrderAction(orderId, action, userOverride) {
+export async function logOrderAction(orderId, action, userOverride) {
     const order = await getItemWithRetry('WorkshopOrders', orderId, { callerLabel: 'logOrderAction' });
     if (!order) return;
 
@@ -1872,6 +1878,32 @@ export const cancelPromoCouponNoShow = webMethod(Permissions.SiteMember, async (
 export const cancelRescheduleRequest = webMethod(Permissions.SiteMember, async (orderId) => {
     await assertPermission('editOrderNotes');
     return cancelRescheduleRequestCore(orderId);
+});
+
+/** Order dashboard — open reschedule requests awaiting manager review. */
+export const getPendingRescheduleRequests = webMethod(Permissions.SiteMember, async () => {
+    await assertPermission('manageScheduling');
+    return listPendingRescheduleRequests();
+});
+
+/** Order dashboard — approve, only after the manager confirms the manual booking/credit update. */
+export const approveRescheduleRequest = webMethod(Permissions.SiteMember, async (orderId, manualActionConfirmed) => {
+    const role = await assertPermission('manageScheduling');
+    const current = await resolveCurrentDashboardUser();
+    return approveReschedule(orderId, {
+        actorName: current.name || role.displayName || 'מנהל/ת',
+        manualActionConfirmed,
+    });
+});
+
+/** Order dashboard — reject, restores the customer's free reschedule. */
+export const rejectRescheduleRequest = webMethod(Permissions.SiteMember, async (orderId, reason) => {
+    const role = await assertPermission('manageScheduling');
+    const current = await resolveCurrentDashboardUser();
+    return rejectReschedule(orderId, {
+        actorName: current.name || role.displayName || 'מנהל/ת',
+        reason,
+    });
 });
 
 export const getTemplates = webMethod(Permissions.SiteMember, async () => {

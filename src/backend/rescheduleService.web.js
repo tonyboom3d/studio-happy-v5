@@ -43,6 +43,13 @@ import {
     mergePatchWorkshopOrder,
     patchWorkshopOrderFields,
 } from 'backend/workshopOrderPatch.js';
+import { assertEmployeeAccess } from 'backend/staffRoles.js';
+import {
+    notifyManagersOfRescheduleRequest,
+    listPendingRescheduleRequests,
+    approveReschedule,
+    rejectReschedule,
+} from 'backend/rescheduleDecision.js';
 
 const ISRAEL_TZ = 'Asia/Jerusalem';
 const RESCHEDULE_SLOTS_LOOKAHEAD_DAYS = 365;
@@ -278,6 +285,28 @@ export const cancelRescheduleRequest = webMethod(Permissions.SiteMember, async (
     return { ok: true };
 });
 
+// --- Employee-portal manager review (see rescheduleDecision.js) ---
+// Order-dashboard equivalents live in dashboardService.web.js (SiteMember +
+// the dashboard's own assertPermission), delegating to the same core module.
+
+/** Employee portal — list of open reschedule requests, managers only. */
+export const getPendingRescheduleRequests = webMethod(Permissions.Anyone, async () => {
+    await assertEmployeeAccess('manageScheduling');
+    return listPendingRescheduleRequests();
+});
+
+/** Employee portal — approve, only after the manager confirms the manual booking/credit update. */
+export const approveRescheduleRequest = webMethod(Permissions.Anyone, async (orderId, manualActionConfirmed) => {
+    const { role } = await assertEmployeeAccess('manageScheduling');
+    return approveReschedule(orderId, { actorName: role.displayName || role.name || 'מנהל/ת', manualActionConfirmed });
+});
+
+/** Employee portal — reject, restores the customer's free reschedule. */
+export const rejectRescheduleRequest = webMethod(Permissions.Anyone, async (orderId, reason) => {
+    const { role } = await assertEmployeeAccess('manageScheduling');
+    return rejectReschedule(orderId, { actorName: role.displayName || role.name || 'מנהל/ת', reason });
+});
+
 /**
  * Token fields only — never send a partial full row (see workshopOrderPatch.js).
  */
@@ -320,7 +349,7 @@ export async function confirmRescheduleRequest(orderId) {
         return { confirmed: false };
     }
 
-    await mergePatchWorkshopOrder(orderId, {
+    const updatedOrder = await mergePatchWorkshopOrder(orderId, {
         customerRescheduleCount: 1,
         pendingRescheduleStatus: 'pending_staff_review',
         rescheduleToken: null,
@@ -328,5 +357,11 @@ export async function confirmRescheduleRequest(orderId) {
     }, 'reschedule.confirmRescheduleRequest');
 
     await appendOrderActionLog(orderId, `הלקוח אישר סופית שינוי מועד ל: ${chosenDateLabel || '(תאריך לא ידוע)'}`);
+
+    // Manager alert — never blocks the customer's confirmation flow.
+    notifyManagersOfRescheduleRequest(updatedOrder || order).catch((err) => {
+        console.warn('[rescheduleService] notifyManagersOfRescheduleRequest failed. orderId:', orderId, 'error:', err?.message || err);
+    });
+
     return { confirmed: true, chosenDateLabel };
 }

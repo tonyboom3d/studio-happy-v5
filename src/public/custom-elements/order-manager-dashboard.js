@@ -407,6 +407,99 @@ var __wdTemplateHtml = `
         </div>
     </div>
 
+    <!-- Pickup ("מוכן לאיסוף" / "פריט נאסף") — item selection + status -->
+    <div id="pickupModal" class="modal fixed inset-0 z-[70] items-center justify-center p-4 bg-gray-900/60 backdrop-blur-sm">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-lg modal-content border border-gray-200 max-h-[90vh] flex flex-col">
+            <div class="px-5 py-3 border-b flex justify-between items-center bg-amber-50 rounded-t-xl shrink-0">
+                <h3 class="font-bold text-amber-800 flex items-center gap-2"><i class="ph-fill ph-package text-amber-500"></i> איסוף פריטים</h3>
+                <button onclick="closeModal('pickupModal')" class="text-gray-400 hover:text-gray-700"><i class="ph ph-x"></i></button>
+            </div>
+            <div class="p-5 flex flex-col gap-4 overflow-y-auto custom-scrollbar">
+                <div id="pickupOrderMeta"></div>
+                <div id="pickupItemsList" class="flex flex-col gap-2"></div>
+                <p class="text-xs text-gray-500">בחר/י את הפריטים שמוכנים לאיסוף ולחצ/י "שלח הודעת מוכן לאיסוף" — תישלח הודעת וואטסאפ אחת ללקוח על כל הפריטים המסומנים. סימון "נאסף" לפריט בודד לא שולח הודעה.</p>
+                <button onclick="confirmSendPickupReady()" class="w-full bg-amber-500 hover:bg-amber-600 text-white font-medium py-2 rounded-lg transition-colors flex items-center justify-center gap-2">
+                    <i class="ph ph-paper-plane-right"></i> שלח הודעת מוכן לאיסוף
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Pickup — step 2: confirm WhatsApp send -->
+    <div id="pickupConfirmModal" class="modal fixed inset-0 z-[80] items-center justify-center p-4 bg-gray-900/60 backdrop-blur-sm">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-md modal-content p-6">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-xl font-bold text-gray-800">אישור שליחת הודעה</h3>
+                <button onclick="closeModal('pickupConfirmModal')" class="text-gray-400 hover:text-gray-700"><i class="ph ph-x"></i></button>
+            </div>
+            <div class="bg-amber-50 border border-amber-200 rounded-lg p-4 text-sm text-amber-900 mb-5 flex gap-2 items-start">
+                <i class="ph-fill ph-whatsapp-logo text-amber-500 text-lg mt-0.5"></i>
+                <p id="pickupConfirmText"></p>
+            </div>
+            <div class="flex gap-3">
+                <button onclick="closeModal('pickupConfirmModal')" class="flex-1 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-lg transition-colors">ביטול</button>
+                <button onclick="executeSendPickupReady()" class="flex-1 py-2 bg-amber-500 hover:bg-amber-600 text-white font-medium rounded-lg transition-colors">שליחה</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Pickup — "פריט נאסף" without a prior "מוכן לאיסוף" -->
+    <div id="pickupNotReadyModal" class="modal fixed inset-0 z-[80] items-center justify-center p-4 bg-gray-900/60 backdrop-blur-sm">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-md modal-content p-6">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-xl font-bold text-gray-800">פריט לא סומן כמוכן לאיסוף</h3>
+                <button onclick="cancelPickupNotReady()" class="text-gray-400 hover:text-gray-700"><i class="ph ph-x"></i></button>
+            </div>
+            <div class="bg-red-50 border border-red-200 rounded-lg p-4 text-sm text-red-800 mb-4 flex gap-2 items-start">
+                <i class="ph-fill ph-warning text-red-500 text-lg mt-0.5"></i>
+                <p id="pickupNotReadyText"></p>
+            </div>
+            <div class="flex gap-3">
+                <button onclick="cancelPickupNotReady()" class="flex-1 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-lg transition-colors">ביטול</button>
+                <button onclick="confirmPickupNotReady()" class="flex-1 py-2 bg-red-500 hover:bg-red-600 text-white font-medium rounded-lg transition-colors">המשך</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Reschedule approve — requires confirming the manual Wix Bookings/credit update first -->
+    <div id="rescheduleApproveModal" class="modal fixed inset-0 z-[70] items-center justify-center p-4 bg-gray-900/60 backdrop-blur-sm">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-md modal-content p-6">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-xl font-bold text-gray-800">אישור שינוי מועד</h3>
+                <button onclick="closeModal('rescheduleApproveModal')" class="text-gray-400 hover:text-gray-700"><i class="ph ph-x"></i></button>
+            </div>
+            <p id="rescheduleApproveSummary" class="text-sm text-gray-700 mb-3"></p>
+            <div class="bg-amber-50 border border-amber-200 rounded-lg p-4 text-sm text-amber-900 mb-4 flex gap-2 items-start">
+                <i class="ph-fill ph-warning text-amber-500 text-lg mt-0.5"></i>
+                <p>לפני האישור יש לעדכן ידנית את ההזמנה ב-Wix Bookings למועד החדש, ולבצע זיכוי במידת הצורך. המערכת אינה מזיזה את ההזמנה באופן אוטומטי.</p>
+            </div>
+            <label class="flex items-start gap-2 text-sm text-gray-800 mb-5 cursor-pointer">
+                <input id="rescheduleApproveConfirmBox" type="checkbox" onchange="updateRescheduleApproveBtn()" class="mt-0.5" />
+                <span>ביצעתי את העדכון/זיכוי ידנית — אפשר לאשר ולהודיע ללקוח.</span>
+            </label>
+            <div class="flex gap-3">
+                <button onclick="closeModal('rescheduleApproveModal')" class="flex-1 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-lg transition-colors">ביטול</button>
+                <button id="rescheduleApproveConfirmBtn" onclick="confirmRescheduleApprove()" disabled class="flex-1 py-2 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-40 disabled:pointer-events-none text-white font-medium rounded-lg transition-colors">אישור סופי</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Reschedule reject — restores the customer's free reschedule -->
+    <div id="rescheduleRejectModal" class="modal fixed inset-0 z-[70] items-center justify-center p-4 bg-gray-900/60 backdrop-blur-sm">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-md modal-content p-6">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-xl font-bold text-gray-800">דחיית שינוי מועד</h3>
+                <button onclick="closeModal('rescheduleRejectModal')" class="text-gray-400 hover:text-gray-700"><i class="ph ph-x"></i></button>
+            </div>
+            <p class="text-sm text-gray-600 mb-3">הלקוח יקבל הודעה שהמועד המבוקש לא אושר, וההזמנה תישאר במועד המקורי. השימוש החינמי בשינוי מועד ישוחזר ויתאפשר לבקש מועד אחר.</p>
+            <textarea id="rescheduleRejectReason" rows="2" class="compact-input w-full bg-gray-50 mb-5" placeholder="סיבת הדחייה (אופציונלי, לשימוש פנימי)"></textarea>
+            <div class="flex gap-3">
+                <button onclick="closeModal('rescheduleRejectModal')" class="flex-1 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-lg transition-colors">ביטול</button>
+                <button onclick="confirmRescheduleReject()" class="flex-1 py-2 bg-red-500 hover:bg-red-600 text-white font-medium rounded-lg transition-colors">דחיית הבקשה</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Templates Manager Modal -->
     <div id="templatesModal" class="modal fixed inset-0 z-[60] items-center justify-center p-4">
         <div class="bg-white rounded-xl shadow-2xl w-full max-w-3xl max-h-[80vh] flex flex-col modal-content">
@@ -2031,15 +2124,22 @@ function __wdInjectGlobalAssets() {
         }
 
         /**
-         * "בקשות דחיית מועד" — orders where the customer confirmed a reschedule
+         * "בקשות שינוי מועד" — orders where the customer confirmed a reschedule
          * request in WhatsApp (see rescheduleService.web.js) and it's now
-         * waiting for a staff member to apply the change in Wix Bookings and
-         * clear the request (single "ביטול" button — no approve/reject logic,
-         * approval happens manually outside the system).
+         * waiting for a manager (manageScheduling) to review it: apply the
+         * change manually in Wix Bookings / issue a credit, then approve or
+         * reject here. Rejecting restores the customer's free reschedule
+         * (see rescheduleDecision.js).
          */
         function renderRescheduleRequestsBanner() {
             const banner = document.getElementById('rescheduleRequestsBanner');
             if (!banner) return;
+
+            if (!hasDashboardPermission('manageScheduling')) {
+                banner.classList.add('hidden');
+                banner.innerHTML = '';
+                return;
+            }
 
             const pending = mockOrders.filter(o => o.pendingRescheduleStatus === 'pending_staff_review');
             if (!pending.length) {
@@ -2053,28 +2153,77 @@ function __wdInjectGlobalAssets() {
                     <div class="text-sm text-amber-900">
                         <strong>${order.organizerName || 'ללא שם'}</strong>
                         <span class="text-amber-700"> · ${order.organizerPhone || ''}</span>
+                        <span class="text-amber-700"> · מועד נוכחי: ${formatShortDate(order.workshopStart) || '—'}</span>
                         <span class="text-amber-700"> · מבקש/ת מועד חדש: ${formatShortDate(order.pendingRescheduleDate) || '—'}</span>
                     </div>
-                    <button onclick="cancelRescheduleRequestUI('${order.id}', event)" class="text-[11px] font-bold px-3 py-1.5 rounded bg-white border border-amber-300 text-amber-800 hover:bg-amber-100 transition-colors ${!hasDashboardPermission('editOrderNotes')?'pointer-events-none opacity-40':''}">ביטול</button>
+                    <div class="flex gap-2 shrink-0">
+                        <button onclick="openRescheduleApproveModal('${order.id}', event)" class="text-[11px] font-bold px-3 py-1.5 rounded bg-emerald-500 hover:bg-emerald-600 text-white transition-colors">אישור</button>
+                        <button onclick="openRescheduleRejectModal('${order.id}', event)" class="text-[11px] font-bold px-3 py-1.5 rounded bg-white border border-red-300 text-red-700 hover:bg-red-50 transition-colors">דחייה</button>
+                    </div>
                 </div>`).join('');
 
             banner.innerHTML = `
                 <div class="bg-amber-50 border border-amber-200 rounded-lg p-3 shadow-sm">
                     <div class="flex items-center gap-2 text-amber-800 mb-1">
                         <i class="ph-fill ph-calendar-x text-lg"></i>
-                        <p class="text-sm font-bold">בקשות דחיית מועד ממתינות (${pending.length}) — יש לטפל בשינוי ב-Wix Bookings ואז לבטל את הבקשה כאן</p>
+                        <p class="text-sm font-bold">🔴 בקשות שינוי מועד ממתינות לאישור (${pending.length}) — יש לעדכן ידנית ב-Wix Bookings (ולבצע זיכוי במידת הצורך) ולאחר מכן לאשר או לדחות</p>
                     </div>
                     ${rows}
                 </div>`;
             banner.classList.remove('hidden');
         }
 
-        function cancelRescheduleRequestUI(orderId, event) {
+        let __rescheduleTargetOrderId = null;
+
+        function openRescheduleApproveModal(orderId, event) {
             event?.stopPropagation();
-            if (!hasDashboardPermission('editOrderNotes')) return;
-            if (!confirm('לבטל את בקשת דחיית המועד? השימוש החינמי בדחייה יוחזר להזמנה (יתאפשר לבקש דחייה נוספת).')) return;
-            addLog(orderId, 'בקשת שינוי מועד בוטלה על ידי הצוות — השימוש החינמי שוחזר.');
-            dispatchDashboardAction('cancelRescheduleRequest', { orderId });
+            if (!hasDashboardPermission('manageScheduling')) return;
+            __rescheduleTargetOrderId = orderId;
+            const order = mockOrders.find(o => o.id === orderId);
+            const box = document.getElementById('rescheduleApproveConfirmBox');
+            if (box) box.checked = false;
+            const summary = document.getElementById('rescheduleApproveSummary');
+            if (summary && order) {
+                summary.textContent = `${order.organizerName || 'ללא שם'} — ${formatShortDate(order.workshopStart) || '—'} ← ${formatShortDate(order.pendingRescheduleDate) || '—'}`;
+            }
+            updateRescheduleApproveBtn();
+            openModal('rescheduleApproveModal');
+        }
+
+        function updateRescheduleApproveBtn() {
+            const box = document.getElementById('rescheduleApproveConfirmBox');
+            const btn = document.getElementById('rescheduleApproveConfirmBtn');
+            if (btn) btn.disabled = !(box && box.checked);
+        }
+
+        function confirmRescheduleApprove() {
+            const box = document.getElementById('rescheduleApproveConfirmBox');
+            if (!box || !box.checked || !__rescheduleTargetOrderId) return;
+            const orderId = __rescheduleTargetOrderId;
+            __rescheduleTargetOrderId = null;
+            closeModal('rescheduleApproveModal');
+            addLog(orderId, 'בקשת שינוי מועד אושרה על ידי הצוות — הלקוח קיבל הודעה.');
+            dispatchDashboardAction('approveRescheduleRequest', { orderId, manualActionConfirmed: true });
+        }
+
+        function openRescheduleRejectModal(orderId, event) {
+            event?.stopPropagation();
+            if (!hasDashboardPermission('manageScheduling')) return;
+            __rescheduleTargetOrderId = orderId;
+            const reasonEl = document.getElementById('rescheduleRejectReason');
+            if (reasonEl) reasonEl.value = '';
+            openModal('rescheduleRejectModal');
+        }
+
+        function confirmRescheduleReject() {
+            if (!__rescheduleTargetOrderId) return;
+            const orderId = __rescheduleTargetOrderId;
+            __rescheduleTargetOrderId = null;
+            const reasonEl = document.getElementById('rescheduleRejectReason');
+            const reason = reasonEl ? reasonEl.value.trim() : '';
+            closeModal('rescheduleRejectModal');
+            addLog(orderId, `בקשת שינוי מועד נדחתה על ידי הצוות${reason ? ` — ${reason}` : ''} — השימוש החינמי שוחזר.`);
+            dispatchDashboardAction('rejectRescheduleRequest', { orderId, reason });
         }
 
         // --- FILTERS & MAIN TABLE RENDERING ---
@@ -2161,6 +2310,209 @@ function __wdInjectGlobalAssets() {
                 }
             }
             return items;
+        }
+
+        // --- Pickup ("מוכן לאיסוף" / "פריט נאסף") ------------------------------
+        // Item-level pickup state lives on order.pickupItems (see
+        // pickupService.web.js): [{ key, label, state: 'ready'|'collected', ... }].
+        // The catalog (key + label per physical item) is computed here from the
+        // same sketches/selectedProducts data already used to render the order —
+        // the backend only persists whatever items the UI sends it.
+        function getPickupItemCatalog(order) {
+            if (order.workshopType === 'ceramics') {
+                const cups = expandCupSelections(order);
+                const seenByProduct = {};
+                return cups.map((cup, idx) => {
+                    const productKey = cup.productId || 'unknown';
+                    const n = (seenByProduct[productKey] = (seenByProduct[productKey] || 0) + 1);
+                    return { key: `cup:${productKey}:${n}`, label: `כלי קרמיקה ${idx + 1}`, img: cup.img || null };
+                });
+            }
+            if (order.workshopType === 'tufting' || (!order.workshopType && !isCandlesOrder(order))) {
+                const sketches = sortSketchesByRugIndex(order.sketches || []);
+                return sketches.map((s, idx) => ({ key: `sketch:${s.id}`, label: `שטיח ${idx + 1}`, img: s.img || null }));
+            }
+            return [];
+        }
+
+        function getPickupItemsState(order) {
+            const stateByKey = {};
+            (order.pickupItems || []).forEach(pi => { stateByKey[pi.key] = pi; });
+            return getPickupItemCatalog(order).map(item => ({
+                ...item,
+                state: stateByKey[item.key]?.state || 'pending',
+            }));
+        }
+
+        function getPickupSummary(order) {
+            const items = getPickupItemsState(order);
+            return {
+                total: items.length,
+                ready: items.filter(i => i.state === 'ready').length,
+                collected: items.filter(i => i.state === 'collected').length,
+            };
+        }
+
+        function reopenOrderDetailRow(orderId, workshopId) {
+            const w = mockWorkshops.find(x => x.id === (workshopId || currentWorkshopId));
+            if (!w) return;
+            renderOrdersTable(w.id, workshopTypes[w.type].requiresSketch);
+            const row = document.getElementById(`detail-${orderId}`);
+            const icon = document.getElementById(`icon-${orderId}`);
+            if (row) {
+                row.classList.remove('hidden');
+                icon.classList.add('-rotate-90');
+            }
+        }
+
+        let currentPickupOrderId = null;
+        let pendingPickupReadyItems = [];
+        let pendingPickupCollect = null; // { orderId, items }
+
+        function openPickupModal(orderId) {
+            if (!hasDashboardPermission('sendWhatsApp')) {
+                alert('אין לך הרשאה לניהול איסוף פריטים.');
+                return;
+            }
+            const order = mockOrders.find(o => o.id === orderId);
+            if (!order) return;
+            const workshop = mockWorkshops.find(x => x.id === order.workshopId);
+            if (!workshop || Date.now() < getWorkshopEndTimestamp(workshop)) {
+                alert('ניתן לסמן פריט כמוכן לאיסוף רק לאחר שהסדנה הסתיימה.');
+                return;
+            }
+            currentPickupOrderId = orderId;
+            renderPickupModalBody(order, workshop);
+            openModal('pickupModal');
+        }
+
+        function renderPickupModalBody(order, workshop) {
+            const metaEl = document.getElementById('pickupOrderMeta');
+            if (metaEl) {
+                metaEl.innerHTML = `
+                    <div class="text-sm text-gray-700"><strong>${order.organizerName || 'ללא שם'}</strong> · <span dir="ltr">${order.organizerPhone || '—'}</span></div>
+                    <div class="text-xs text-gray-500 mt-0.5">${workshop ? `${workshop.title || ''} · ${workshop.date || ''} ${workshop.time || ''}` : ''}</div>
+                `;
+            }
+            const items = getPickupItemsState(order);
+            const list = document.getElementById('pickupItemsList');
+            if (!list) return;
+            if (!items.length) {
+                list.innerHTML = `<div class="text-sm text-gray-400 py-4 text-center">אין פריטים להזמנה זו.</div>`;
+                return;
+            }
+            list.innerHTML = items.map(item => {
+                const isCollected = item.state === 'collected';
+                const isReady = item.state === 'ready';
+                const badge = isCollected
+                    ? '<span class="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-100 text-emerald-700 border border-emerald-200 whitespace-nowrap">נאסף</span>'
+                    : isReady
+                        ? '<span class="text-[10px] font-bold px-2 py-0.5 rounded bg-amber-100 text-amber-700 border border-amber-200 whitespace-nowrap">מוכן לאיסוף</span>'
+                        : '<span class="text-[10px] font-bold px-2 py-0.5 rounded bg-gray-100 text-gray-600 border border-gray-200 whitespace-nowrap">ממתין</span>';
+                const safeLabel = String(item.label).replace(/'/g, "\\'");
+                return `
+                    <div class="flex items-center justify-between gap-3 border border-gray-200 rounded-lg p-2.5">
+                        <label class="flex items-center gap-2.5 flex-1 min-w-0 ${isCollected ? 'opacity-50' : 'cursor-pointer'}">
+                            <input type="checkbox" data-pickup-key="${item.key}" data-pickup-label="${safeLabel}" ${isCollected ? 'disabled' : ''} ${isReady ? 'checked' : ''} class="w-4 h-4 accent-primary shrink-0">
+                            <span class="text-sm font-medium text-gray-800 truncate">${item.label}</span>
+                        </label>
+                        ${badge}
+                        <button onclick="collectPickupItem('${order.id}', '${item.key}', '${safeLabel}', ${isReady})" class="text-xs font-bold text-primary hover:text-primary-hover px-2 py-1 rounded-lg border border-primary/20 bg-primary/5 shrink-0 ${isCollected ? 'pointer-events-none opacity-30' : ''}">
+                            <i class="ph ph-check-circle"></i> נאסף
+                        </button>
+                    </div>`;
+            }).join('');
+        }
+
+        function confirmSendPickupReady() {
+            const order = mockOrders.find(o => o.id === currentPickupOrderId);
+            if (!order) return;
+            const checkboxes = document.querySelectorAll('#pickupItemsList input[data-pickup-key]:checked:not(:disabled)');
+            const items = Array.from(checkboxes).map(cb => ({ key: cb.dataset.pickupKey, label: cb.dataset.pickupLabel }));
+            if (!items.length) {
+                alert('בחר/י לפחות פריט אחד שמוכן לאיסוף.');
+                return;
+            }
+            pendingPickupReadyItems = items;
+            const textEl = document.getElementById('pickupConfirmText');
+            if (textEl) {
+                textEl.innerHTML = `תישלח הודעת וואטסאפ ל<strong>${order.organizerName || 'הלקוח'}</strong> לגבי: <strong>${items.map(i => i.label).join(', ')}</strong>. להמשיך?`;
+            }
+            openModal('pickupConfirmModal');
+        }
+
+        function executeSendPickupReady() {
+            const order = mockOrders.find(o => o.id === currentPickupOrderId);
+            if (!order || !pendingPickupReadyItems.length) {
+                closeModal('pickupConfirmModal');
+                return;
+            }
+            const items = pendingPickupReadyItems;
+            addLog(order.id, `מוכן לאיסוף: ${items.map(i => i.label).join(', ')} — הודעת וואטסאפ נשלחה ל-${order.organizerPhone || ''}`);
+            dispatchDashboardAction('markReadyForPickup', {
+                orderId: order.id,
+                items,
+                organizerPhone: order.organizerPhone,
+                organizerName: order.organizerName,
+            });
+            pendingPickupReadyItems = [];
+            closeModal('pickupConfirmModal');
+            closeModal('pickupModal');
+            reopenOrderDetailRow(order.id, order.workshopId);
+        }
+
+        function collectPickupItem(orderId, key, label, wasReady) {
+            if (!hasDashboardPermission('sendWhatsApp')) {
+                alert('אין לך הרשאה לסמן פריט כנאסף.');
+                return;
+            }
+            const item = { key, label };
+            if (!wasReady) {
+                pendingPickupCollect = { orderId, items: [item] };
+                const textEl = document.getElementById('pickupNotReadyText');
+                if (textEl) {
+                    textEl.innerHTML = `הפריט <strong>${label}</strong> לא סומן כ"מוכן לאיסוף" קודם לכן. להמשיך ולסמן אותו כנאסף בכל זאת?`;
+                }
+                openModal('pickupNotReadyModal');
+                return;
+            }
+            executeCollectPickupItems(orderId, [item], false);
+        }
+
+        function executeCollectPickupItems(orderId, items, confirmedNotReady) {
+            addLog(orderId, `פריט נאסף: ${items.map(i => i.label).join(', ')}`);
+            dispatchDashboardAction('markItemsCollected', { orderId, items, confirmedNotReady: !!confirmedNotReady });
+            const order = mockOrders.find(o => o.id === orderId);
+            closeModal('pickupModal');
+            if (order) reopenOrderDetailRow(orderId, order.workshopId);
+        }
+
+        function confirmPickupNotReady() {
+            if (!pendingPickupCollect) {
+                closeModal('pickupNotReadyModal');
+                return;
+            }
+            const { orderId, items } = pendingPickupCollect;
+            pendingPickupCollect = null;
+            closeModal('pickupNotReadyModal');
+            executeCollectPickupItems(orderId, items, true);
+        }
+
+        function cancelPickupNotReady() {
+            pendingPickupCollect = null;
+            closeModal('pickupNotReadyModal');
+        }
+
+        /**
+         * Fallback if the server rejects a markItemsCollected call because its
+         * own record shows the item was never "ready" (race with another staff
+         * member) — reuses the same warning modal as the client-side check.
+         */
+        function handlePickupNotReadyError(info) {
+            pendingPickupCollect = { orderId: info.orderId, items: info.items || [] };
+            const textEl = document.getElementById('pickupNotReadyText');
+            if (textEl) textEl.innerHTML = info.message || 'הפריט לא סומן כ"מוכן לאיסוף" קודם לכן. להמשיך ולסמן אותו כנאסף בכל זאת?';
+            openModal('pickupNotReadyModal');
         }
 
         function formatIls(amount) {
@@ -2795,6 +3147,9 @@ function __wdInjectGlobalAssets() {
             const canSendWhatsApp = hasDashboardPermission('sendWhatsApp');
             const canEditSketchStatus = hasDashboardPermission('editSketchStatus');
             const canRejectSketchStatus = hasDashboardPermission('rejectSketchStatus');
+            const canManagePickup = hasDashboardPermission('sendWhatsApp');
+            const pickupWorkshopRow = mockWorkshops.find(w => w.id === workshopId);
+            const pickupWorkshopEnded = !!pickupWorkshopRow && Date.now() >= getWorkshopEndTimestamp(pickupWorkshopRow);
 
             orders.forEach(o => {
                 const isCancelled = o.orderStatus === 'cancelled';
@@ -2808,6 +3163,29 @@ function __wdInjectGlobalAssets() {
                     : '';
                 const isCandles = isCandlesOrder(o);
                 const isCeramics = o?.workshopType === 'ceramics';
+                // Pickup ("מוכן לאיסוף" / "פריט נאסף") applies to tufting rugs and
+                // ceramics pieces only — candles orders have no per-item pickup flow.
+                const supportsPickup = !isCandles && !isLegacy;
+                const pickupSummary = supportsPickup ? getPickupSummary(o) : null;
+                let pickupBtnClass = 'bg-gray-50 text-gray-400 border-gray-200';
+                if (pickupSummary && pickupSummary.total > 0) {
+                    if (pickupSummary.collected === pickupSummary.total) {
+                        pickupBtnClass = 'bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-500 hover:text-white';
+                    } else if (pickupSummary.ready > 0) {
+                        pickupBtnClass = 'bg-amber-50 text-amber-600 border-amber-200 hover:bg-amber-500 hover:text-white';
+                    } else {
+                        pickupBtnClass = 'bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-400 hover:text-white';
+                    }
+                }
+                const pickupClickable = canManagePickup && !isCancelled && pickupWorkshopEnded;
+                const pickupTitle = pickupWorkshopEnded
+                    ? 'מוכן לאיסוף / פריט נאסף'
+                    : 'ניתן לסמן פריט מוכן לאיסוף רק לאחר שהסדנה הסתיימה';
+                const pickupBtnHtml = supportsPickup ? `
+                    <button onclick="openPickupModal('${o.id}')" class="relative w-9 h-9 flex items-center justify-center rounded-full ${pickupBtnClass} transition-all shadow-sm border shrink-0 ${!pickupClickable ? 'pointer-events-none opacity-40' : ''}" title="${pickupTitle}">
+                        <i class="ph-fill ph-package text-xl"></i>
+                        ${pickupSummary && pickupSummary.ready > 0 ? `<span class="absolute -top-1 -left-1 w-4 h-4 bg-amber-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center border border-white">${pickupSummary.ready}</span>` : ''}
+                    </button>` : '';
                 const unitWord = isCandles ? 'נרות' : isCeramics ? 'כלים' : 'שטיחים';
                 const adultsWord = isCeramics ? 'משתתפים' : 'מבוגרים';
                 // Clear breakdown: adults / children (if any) / total rugs needed —
@@ -2965,6 +3343,7 @@ function __wdInjectGlobalAssets() {
                             <button onclick="openWaModal('${o.id}')" class="w-9 h-9 flex items-center justify-center rounded-full bg-green-50 text-green-600 hover:bg-green-500 hover:text-white transition-all shadow-sm border border-green-200 shrink-0 ${!canSendWhatsApp?'pointer-events-none opacity-40':''}" title="שלח הודעה ללקוח">
                                 <i class="ph-fill ph-whatsapp-logo text-xl"></i>
                             </button>
+                            ${pickupBtnHtml}
                             ${stackedSketchesHtml}
                         </div>
                     </td>
@@ -4234,8 +4613,19 @@ window.toggleInlineLogs = toggleInlineLogs;
 window.updateSketchStatus = updateSketchStatus;
 window.resendPromoCoupon = resendPromoCoupon;
 window.cancelPromoCouponNoShow = cancelPromoCouponNoShow;
-window.cancelRescheduleRequestUI = cancelRescheduleRequestUI;
+window.openRescheduleApproveModal = openRescheduleApproveModal;
+window.updateRescheduleApproveBtn = updateRescheduleApproveBtn;
+window.confirmRescheduleApprove = confirmRescheduleApprove;
+window.openRescheduleRejectModal = openRescheduleRejectModal;
+window.confirmRescheduleReject = confirmRescheduleReject;
 window.toggleInstructorsTooltip = toggleInstructorsTooltip;
+window.openPickupModal = openPickupModal;
+window.confirmSendPickupReady = confirmSendPickupReady;
+window.executeSendPickupReady = executeSendPickupReady;
+window.collectPickupItem = collectPickupItem;
+window.confirmPickupNotReady = confirmPickupNotReady;
+window.cancelPickupNotReady = cancelPickupNotReady;
+window.handlePickupNotReadyError = handlePickupNotReadyError;
 
 
 // ============================================================
@@ -4314,7 +4704,11 @@ class WorkshopsDashboardElement extends HTMLElement {
             if (!newValue || newValue === oldValue) return;
             try {
                 const info = JSON.parse(newValue);
-                if (info?.message) alert(info.message);
+                if (info?.code === 'NOT_READY_CONFIRMATION_REQUIRED' && typeof window.handlePickupNotReadyError === 'function') {
+                    window.handlePickupNotReadyError(info);
+                } else if (info?.message) {
+                    alert(info.message);
+                }
             } catch (err) {
                 console.error('[workshops-dashboard] Failed to parse action-error attribute:', err);
             }

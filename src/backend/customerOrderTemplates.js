@@ -143,3 +143,81 @@ export function buildWorkshopReminderMetaExample(workshopType = 'tufting') {
         .replace(/\{\{5\}\}/g, s[5])
         .replace(/\{\{6\}\}/g, s[6]);
 }
+
+/**
+ * "מוכן לאיסוף" (ready-for-pickup) notice — sent from the order dashboard
+ * (see pickupService.web.js → sendPickupReadyManyChat, notification_type =
+ * pickup_ready) when staff mark one or more items of an order ready. One
+ * message covers every item marked ready in that action.
+ */
+export const PICKUP_READY_META_NAME = 'pickup_ready';
+export const PICKUP_READY_NOTIFICATION_TYPE = 'pickup_ready';
+export const PICKUP_READY_DEADLINE_DAYS = 15;
+
+/**
+ * Meta WhatsApp template body — variables {{1}}…{{2}} only in the approved
+ * template. The "תיאום איסוף" button is a template Quick Reply / CTA button
+ * (configured in Meta/ManyChat), not part of the body text.
+ */
+export const PICKUP_READY_META_BODY = `היי {{1}} 🎉
+הפריטים שלך מוכנים לאיסוף בסטודיו!
+
+מוכן לאיסוף: {{2}}
+
+לתיאום מועד האיסוף לחצו על הכפתור "תיאום איסוף" למטה 🤍
+
+חשוב לדעת: פריט שלא ייאסף תוך 15 ימים מהודעה זו יתרם, ימוחזר או ייזרק.`;
+
+/** Maps Meta template variables → ManyChat custom field names. */
+export const PICKUP_READY_META_TO_MANYCHAT = [
+    { metaVar: 1, manyChatField: 'organizer_name', label: 'שם מזמין/ה' },
+    { metaVar: 2, manyChatField: 'pickup_items_line', label: 'פריטים מוכנים לאיסוף' },
+];
+
+/** Example values for Meta template review. */
+export const PICKUP_READY_META_SAMPLES = {
+    tufting: { 1: 'נועה', 2: 'שטיח 1, שטיח 2' },
+    ceramics: { 1: 'מיכל', 2: 'כלי קרמיקה 1' },
+};
+
+/**
+ * ManyChat custom-field names (must match MC_FIELDS in manychatService.jsw).
+ * Use this version when wiring the flow / CMS preview. In the Meta-approved
+ * WhatsApp template body, replace each named token with {{1}}…{{2}} per
+ * PICKUP_READY_META_TO_MANYCHAT.
+ */
+export const PICKUP_READY_NAMED_BODY = `היי {{organizer_name}} 🎉
+הפריטים שלך מוכנים לאיסוף בסטודיו!
+
+מוכן לאיסוף: {{pickup_items_line}}
+
+לתיאום מועד האיסוף לחצו על הכפתור "תיאום איסוף" למטה 🤍
+
+חשוב לדעת: פריט שלא ייאסף תוך 15 ימים מהודעה זו יתרם, ימוחזר או ייזרק.`;
+
+/** Sample values keyed by ManyChat field name (for preview / tests). */
+export const PICKUP_READY_NAMED_SAMPLES = {
+    tufting: { organizer_name: 'נועה', pickup_items_line: 'שטיח 1, שטיח 2' },
+    ceramics: { organizer_name: 'מיכל', pickup_items_line: 'כלי קרמיקה 1' },
+};
+
+export function renderPickupReadyPreview(vars = {}) {
+    return String(PICKUP_READY_NAMED_BODY).replace(/\{\{\s*(\w+)\s*\}\}/g, (_, key) => {
+        const v = vars[key];
+        return v === undefined || v === null ? '' : String(v);
+    });
+}
+
+/** Filled pickup-ready text using ManyChat field names (tufting / ceramics). */
+export function buildPickupReadyNamedExample(workshopType = 'tufting') {
+    const vars = PICKUP_READY_NAMED_SAMPLES[workshopType] || PICKUP_READY_NAMED_SAMPLES.tufting;
+    return renderPickupReadyPreview(vars);
+}
+
+/** Filled examples (copy into Meta “sample message” if needed). */
+export function buildPickupReadyMetaExample(workshopType = 'tufting') {
+    const s = PICKUP_READY_META_SAMPLES[workshopType] || PICKUP_READY_META_SAMPLES.tufting;
+    return String(PICKUP_READY_META_BODY)
+        .replace(/\{\{1\}\}/g, s[1])
+        .replace(/\{\{2\}\}/g, s[2]);
+}

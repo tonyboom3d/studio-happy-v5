@@ -96,6 +96,11 @@ import {
     saveMessage,
     deleteMessage,
 } from 'backend/messagingService.web.js';
+import {
+    getPendingRescheduleRequests,
+    approveRescheduleRequest,
+    rejectRescheduleRequest,
+} from 'backend/rescheduleService.web.js';
 
 const PORTAL_ELEMENT_ID = '#employeePortal1';
 const REALTIME_DEBOUNCE_MS = 1500;
@@ -105,6 +110,7 @@ let __epAdminGeneration = 0;
 let __epLastAdminMonth = null;
 let __epRealtimeTimer = null;
 let __epSuppressRealtimeUntil = 0;
+let __epIsRescheduleManager = false; // set from portal-data.user.permissions.manageScheduling
 
 $w.onReady(function () {
     // console.log('[employee-portal] $w.onReady fired');
@@ -197,6 +203,13 @@ async function loadAndPushData(portalEl) {
         // console.log('[employee-portal] setAttribute portal-data', { bytes: json.length });
         portalEl.setAttribute('portal-data', json);
         // console.log('[employee-portal] portal-data pushed successfully');
+
+        __epIsRescheduleManager = !!data?.user?.permissions?.manageScheduling;
+        if (__epIsRescheduleManager) {
+            loadAndPushRescheduleData(portalEl).catch((err) => {
+                console.error('[employee-portal] loadAndPushRescheduleData failed:', err?.message || err);
+            });
+        }
     } catch (err) {
         if (generation !== __epLoadGeneration) return;
 
@@ -302,6 +315,16 @@ async function loadAndPushVacations(portalEl) {
     } catch (err) {
         console.error('[employee-portal] Failed to load vacations:', err?.message || err);
         pushActionResult(portalEl, { type: 'adminVacationsLoad', error: true, message: friendlyError(err) });
+    }
+}
+
+/** Managers only (manageScheduling) — see backend/rescheduleService.web.js. */
+async function loadAndPushRescheduleData(portalEl) {
+    try {
+        const items = await getPendingRescheduleRequests();
+        portalEl.setAttribute('reschedule-data', JSON.stringify({ items, __fetchedAt: Date.now() }));
+    } catch (err) {
+        console.error('[employee-portal] Failed to load reschedule requests:', err?.message || err);
     }
 }
 
@@ -899,6 +922,32 @@ async function handlePortalAction(portalEl, detail) {
             const result = await runSchedulingForEmployees(payload?.fromKey, payload?.toKey, payload?.employeeIds || []);
             pushActionResult(portalEl, { type, ...result });
             refreshAdmin = true;
+            break;
+        }
+
+        case 'rescheduleApprove': {
+            refreshPortal = false;
+            refreshAdmin = false;
+            try {
+                const result = await approveRescheduleRequest(payload?.orderId, payload?.manualActionConfirmed === true);
+                pushActionResult(portalEl, { type, ok: true, ...result });
+            } catch (err) {
+                pushActionResult(portalEl, { type, error: true, message: friendlyError(err) });
+            }
+            if (__epIsRescheduleManager) await loadAndPushRescheduleData(portalEl);
+            break;
+        }
+
+        case 'rescheduleReject': {
+            refreshPortal = false;
+            refreshAdmin = false;
+            try {
+                const result = await rejectRescheduleRequest(payload?.orderId, payload?.reason || '');
+                pushActionResult(portalEl, { type, ok: true, ...result });
+            } catch (err) {
+                pushActionResult(portalEl, { type, error: true, message: friendlyError(err) });
+            }
+            if (__epIsRescheduleManager) await loadAndPushRescheduleData(portalEl);
             break;
         }
 

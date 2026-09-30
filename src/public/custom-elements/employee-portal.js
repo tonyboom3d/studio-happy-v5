@@ -21,6 +21,7 @@
  * הרשאת manageEmployeeSystem. קלט נוסף: attribute בשם `admin-data`.
  */
 import { ADMIN_STYLE, renderAdminTab, handleAdminClick, handleAdminChange, handleAdminDragStart, handleAdminDragEnd, handleAdminDragOver, handleAdminDrop, captureEmployeeFormDraft, captureRuleFormDraft } from './employee-portal-admin.js';
+import { RR_STYLE, renderRescheduleRequestsPanel, handleRescheduleClick, handleRescheduleChange } from './reschedule-requests-panel.js';
 
 const EMPLOYEE_SAVE_HOLD_MS = 2000;
 
@@ -429,6 +430,7 @@ employee-portal * { box-sizing: border-box; }
   .ep-user-dropdown { inset-inline-start: auto; inset-inline-end: 0; width: min(300px, calc(100vw - 20px)); }
 }
 ${ADMIN_STYLE}
+${RR_STYLE}
 `;
 
 const HEBREW_DOW = ['א׳', 'ב׳', 'ג׳', 'ד׳', 'ה׳', 'ו׳', 'ש׳'];
@@ -626,7 +628,7 @@ function groupWorkshopsBySession(workshops) {
 }
 
 class EmployeePortal extends HTMLElement {
-    static get observedAttributes() { return ['portal-data', 'action-result', 'admin-data', 'hours-data', 'templates-data', 'staff-data', 'team-time-data', 'messages-data', 'messages-admin-data', 'vacations-data']; }
+    static get observedAttributes() { return ['portal-data', 'action-result', 'admin-data', 'hours-data', 'templates-data', 'staff-data', 'team-time-data', 'messages-data', 'messages-admin-data', 'vacations-data', 'reschedule-data']; }
 
     constructor() {
         super();
@@ -720,6 +722,10 @@ class EmployeePortal extends HTMLElement {
         // Hours tab state (Module E)
         this._hoursData = null;
         this._hoursMonth = todayKey().slice(0, 7);
+        // Reschedule-requests panel (managers only) — reschedule-requests-panel.js
+        this._rescheduleData = null;
+        this._rescheduleModal = null;           // { type: 'approve'|'reject', orderId }
+        this._rescheduleApproveConfirmed = false;
     }
 
     connectedCallback() {
@@ -963,6 +969,15 @@ class EmployeePortal extends HTMLElement {
             if (!this._messagesRequested) {
                 this._messagesRequested = true;
                 this._dispatch('loadMyMessages');
+            }
+            this._scheduleRender();
+        }
+        if (name === 'reschedule-data') {
+            try {
+                this._rescheduleData = JSON.parse(newVal);
+            } catch (err) {
+                console.error('[employee-portal] bad reschedule-data JSON:', err);
+                return;
             }
             this._scheduleRender();
         }
@@ -1447,6 +1462,12 @@ class EmployeePortal extends HTMLElement {
         if (result.type?.startsWith('admin') && result.ok) {
             this._toast('הפעולה בוצעה בהצלחה.', 'success');
         }
+        if (result.type === 'rescheduleApprove' && result.ok) {
+            this._toast('שינוי המועד אושר — הלקוח קיבל הודעה.', 'success');
+        }
+        if (result.type === 'rescheduleReject' && result.ok) {
+            this._toast('הבקשה נדחתה — הלקוח קיבל הודעה.', 'success');
+        }
         this._scheduleRender();
     }
 
@@ -1511,9 +1532,13 @@ class EmployeePortal extends HTMLElement {
             tabContent = portalTab;
         }
 
+        const isManager = !!d.user.permissions?.manageScheduling;
+        const reschedulePanel = isManager ? renderRescheduleRequestsPanel(this) : '';
+
         this.innerHTML = `
             <div class="ep-wrap${this._rowMenuOpen ? ' ep-row-menu-active' : ''}">
                 ${this._renderHeader()}
+                ${reschedulePanel}
                 ${tabs}
                 ${tabContent}
             </div>
@@ -2351,8 +2376,17 @@ class EmployeePortal extends HTMLElement {
         if (w.met) {
             return `<div class="ep-window-line ok">✔ הוגשה זמינות מלאה לתקופה ${range} (עד ${formatDateHe(deadlineKey)}).</div>`;
         }
+        // `missing` is only the raw shift-count gap. A window can have zero
+        // shifts left to submit and still be unmet, because every week also
+        // needs its afternoon/evening quota — say that explicitly instead of
+        // "submit 0 more shifts".
+        const gaps = [];
+        if (w.missing > 0) gaps.push(`עוד <b>${w.missing}</b> משמרות`);
+        if (w.aeMissing > 0) gaps.push(`עוד <b>${w.aeMissing}</b> משמרות צהריים/ערב`);
+        const what = gaps.length ? gaps.join(' ו') : 'את יתר דרישות התקופה';
+        const until = `עד <b>${formatDateHe(deadlineKey)}</b>${daysLeft >= 0 ? ` (עוד ${daysLeft} ימים)` : ''}`;
         return `<div class="ep-window-line ${daysLeft <= 3 ? 'urgent' : ''}">
-            ⏰ יש להגיש עוד <b>${w.missing}</b> משמרות לתקופה ${range} — עד <b>${formatDateHe(deadlineKey)}</b>${daysLeft >= 0 ? ` (עוד ${daysLeft} ימים)` : ''}.
+            ⏰ יש להגיש ${what} לתקופה ${range} — ${until}.
         </div>`;
     }
 
@@ -3156,6 +3190,10 @@ class EmployeePortal extends HTMLElement {
             if (handleAdminClick(this, action, target)) return;
         }
 
+        if (action.startsWith('reschedule-')) {
+            if (handleRescheduleClick(this, action, target)) return;
+        }
+
         switch (action) {
             case 'prompt-login':
                 this._dispatch('promptLogin');
@@ -3533,6 +3571,7 @@ class EmployeePortal extends HTMLElement {
     _onChange(e) {
         const input = e.target;
         if (input?.dataset?.action?.startsWith('admin-') && handleAdminChange(this, input)) return;
+        if (input?.dataset?.action?.startsWith('reschedule-') && handleRescheduleChange(this, input.dataset.action, input)) return;
         if (this._adminModal?.type === 'employee' && (input?.id?.startsWith('epaF_') || input?.classList?.contains('epa-skill') || input?.classList?.contains('epaPerm'))) {
             captureEmployeeFormDraft(this, this._adminData);
             return;

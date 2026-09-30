@@ -47,6 +47,12 @@ export const MC_FIELDS = {
     // Reschedule-workshop flow (see rescheduleService.web.js / http-functions.js)
     rescheduleLink: 'reschedule_link',
     rescheduleChosenDateLabel: 'reschedule_chosen_date_label',
+    // Manager approve/reject decision (see rescheduleDecision.js)
+    rescheduleRejectReason: 'reschedule_reject_reason',
+    // "מוכן לאיסוף" pickup notice (see dashboardService.web.js pickup flow)
+    pickupItemsLine: 'pickup_items_line',
+    pickupItemsCount: 'pickup_items_count',
+    pickupDeadlineDays: 'pickup_deadline_days',
 };
 
 // Custom field created manually in ManyChat (Settings > Custom Fields, type "Text")
@@ -752,6 +758,50 @@ export async function sendRescheduleSummary(subscriberId, chosenDateLabel) {
     }
 }
 
+/**
+ * Notifies the customer of the manager's decision on their reschedule
+ * request (see rescheduleDecision.js — approveReschedule/rejectReschedule).
+ * Reuses the order-confirmation subscriber/flow with notification_type
+ * 'reschedule_approved' / 'reschedule_rejected' — requires a matching branch
+ * + template in the ManyChat flow (content20260826091942_789880). Never
+ * throws — same contract as sendOrderConfirmationManyChat.
+ */
+export async function sendRescheduleDecisionManyChat(order, decision, { reason } = {}) {
+    try {
+        const phone = normalizeIsraeliPhone(order?.organizerPhone);
+        const email = order?.organizerEmail || '';
+        if (!phone) {
+            logManyChatSendError('sendRescheduleDecisionManyChat', { order, reason: 'no-phone' });
+            return { sent: false, reason: 'no-phone' };
+        }
+
+        const subscriber = await findSubscriber({ email, phone });
+        if (!subscriber?.id) {
+            logManyChatSendError('sendRescheduleDecisionManyChat', { order, phone, reason: 'subscriber-not-found' });
+            return { sent: false, reason: 'subscriber-not-found' };
+        }
+
+        const notificationType = decision === 'approved' ? 'reschedule_approved' : 'reschedule_rejected';
+        const sentFields = await setOrderCustomFields(subscriber.id, order, notificationType);
+        const extraFields = [
+            { name: MC_FIELDS.rescheduleChosenDateLabel, value: formatDateNumericIL(order?.pendingRescheduleDate) },
+        ];
+        if (decision !== 'approved') {
+            extraFields.push({ name: MC_FIELDS.rescheduleRejectReason, value: reason || '' });
+        }
+        await setCustomFieldsByName(subscriber.id, extraFields);
+        await sendFlow(subscriber.id, ORDER_CONFIRMATION_FLOW_NS);
+
+        logManyChatSendSuccess('sendRescheduleDecisionManyChat', {
+            order, phone, subscriberId: subscriber.id, notificationType, fields: [...sentFields, ...extraFields],
+        });
+        return { sent: true, subscriberId: subscriber.id };
+    } catch (err) {
+        logManyChatSendError('sendRescheduleDecisionManyChat', { order, error: err?.message || String(err) });
+        return { sent: false, reason: 'error', error: err?.message || String(err) };
+    }
+}
+
 // --- AI Assistant (Workshops) — free-text reply + human handoff ---
 // See http-functions.js post_manychatMessage. subscriberId here is the
 // ManyChat subscriber id passed directly by the External Request step
@@ -970,6 +1020,58 @@ export async function sendSketchSelectedManyChat(order, participantName) {
         return { sent: true, subscriberId: subscriber.id };
     } catch (err) {
         logManyChatSendError('sendSketchSelectedManyChat', { order, error: err?.message || String(err) });
+        return { sent: false, reason: 'error', error: err?.message || String(err) };
+    }
+}
+
+const PICKUP_DEADLINE_DAYS = 15;
+
+/**
+ * Sends the "מוכן לאיסוף" (ready-for-pickup) WhatsApp notice — one message
+ * covering every item marked ready in a single dashboard action (an order
+ * can have several rugs/pieces ready across different visits). Reuses the
+ * order-confirmation subscriber/flow with notification_type 'pickup_ready'
+ * — requires a matching branch + template in the ManyChat flow
+ * (content20260826091942_789880).
+ * Never throws — same contract as sendOrderConfirmationManyChat. Callers
+ * (pickupService.web.js) must check `.sent` and avoid persisting state on
+ * failure, since Meta doesn't allow a "ready for pickup" claim without the
+ * customer actually being notified.
+ */
+export async function sendPickupReadyManyChat(order, itemLabels) {
+    try {
+        const phone = normalizeIsraeliPhone(order?.organizerPhone);
+        if (!phone) {
+            logManyChatSendError('sendPickupReadyManyChat', { order, reason: 'no-phone' });
+            return { sent: false, reason: 'no-phone' };
+        }
+
+        const { firstName, lastName } = splitName(order?.organizerName);
+        const subscriber = await findOrCreateSubscriber({
+            phone, email: order?.organizerEmail, firstName, lastName,
+        });
+        if (!subscriber?.id) {
+            logManyChatSendError('sendPickupReadyManyChat', { order, phone, reason: 'subscriber-not-found' });
+            return { sent: false, reason: 'subscriber-not-found' };
+        }
+
+        const pickupFields = [
+            { name: NOTIFICATION_TYPE_FIELD, value: 'pickup_ready' },
+            { name: MC_FIELDS.organizerName, value: order?.organizerName },
+            { name: MC_FIELDS.pickupItemsLine, value: (itemLabels || []).join(', ') },
+            { name: MC_FIELDS.pickupItemsCount, value: (itemLabels || []).length },
+            { name: MC_FIELDS.pickupDeadlineDays, value: PICKUP_DEADLINE_DAYS },
+        ];
+        const sending = pickupFields.filter(f => hasManyChatFieldValue(f.value));
+        await setCustomFieldsByName(subscriber.id, sending);
+        await sendFlow(subscriber.id, ORDER_CONFIRMATION_FLOW_NS);
+
+        logManyChatSendSuccess('sendPickupReadyManyChat', {
+            order, phone, subscriberId: subscriber.id, notificationType: 'pickup_ready', fields: sending,
+        });
+        return { sent: true, subscriberId: subscriber.id };
+    } catch (err) {
+        logManyChatSendError('sendPickupReadyManyChat', { order, error: err?.message || String(err) });
         return { sent: false, reason: 'error', error: err?.message || String(err) };
     }
 }

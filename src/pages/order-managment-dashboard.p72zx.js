@@ -12,7 +12,14 @@ import {
     resendPromoCoupon,
     cancelPromoCouponNoShow,
     cancelRescheduleRequest,
+    approveRescheduleRequest,
+    rejectRescheduleRequest,
 } from 'backend/dashboardService.web.js';
+
+import {
+    markReadyForPickup,
+    markItemsCollected,
+} from 'backend/pickupService.web.js';
 
 import {
     getStaffAdminData,
@@ -398,6 +405,60 @@ async function handleDashboardAction(dashboardEl, detail) {
 
         break;
 
+    case 'approveRescheduleRequest':
+
+        await approveRescheduleRequest(payload.orderId, payload.manualActionConfirmed);
+
+        break;
+
+    case 'rejectRescheduleRequest':
+
+        await rejectRescheduleRequest(payload.orderId, payload.reason);
+
+        break;
+
+    case 'markReadyForPickup':
+
+        try {
+
+            await markReadyForPickup(payload.orderId, payload.items, {
+
+                organizerPhone: payload.organizerPhone,
+
+                organizerName: payload.organizerName,
+
+            });
+
+        } catch (err) {
+
+            reportPickupActionError(dashboardEl, 'markReadyForPickup', payload, err);
+
+            return;
+
+        }
+
+        break;
+
+    case 'markItemsCollected':
+
+        try {
+
+            await markItemsCollected(payload.orderId, payload.items, {
+
+                confirmedNotReady: !!payload.confirmedNotReady,
+
+            });
+
+        } catch (err) {
+
+            reportPickupActionError(dashboardEl, 'markItemsCollected', payload, err);
+
+            return;
+
+        }
+
+        break;
+
     case 'saveTemplate':
 
         await saveTemplate(payload);
@@ -497,5 +558,65 @@ async function handleDashboardAction(dashboardEl, detail) {
     }
 
     await loadAndPushData(dashboardEl, __wdLastFilters);
+
+}
+
+// --- Pickup ("מוכן לאיסוף" / "פריט נאסף") error reporting -----------------
+
+// pickupService throws plain Error objects with a `CODE:message` convention
+// (see pickupService.web.js). NOT_READY_CONFIRMATION_REQUIRED needs a
+// dedicated confirm-style popup (not a plain alert) — the CE inspects
+// `code`/`items`/`orderId` on the action-error payload to render it and,
+// if the user confirms, retries the same action with confirmedNotReady:true.
+
+function parsePickupError(err) {
+
+    const raw = err?.message || String(err);
+
+    const sepIndex = raw.indexOf(':');
+
+    if (sepIndex === -1) return { code: 'GENERIC', message: raw };
+
+    const code = raw.slice(0, sepIndex);
+
+    const rest = raw.slice(sepIndex + 1);
+
+    if (code === 'NOT_READY_CONFIRMATION_REQUIRED') {
+
+        return { code, message: `הפריטים הבאים לא סומנו כ"מוכן לאיסוף" קודם: ${rest}. להמשיך ולסמן כנאסף בכל זאת?` };
+
+    }
+
+    if (code === 'WORKSHOP_NOT_ENDED') {
+
+        return { code, message: rest || 'לא ניתן לסמן פריט כמוכן לאיסוף לפני שהסדנה הסתיימה.' };
+
+    }
+
+    return { code: 'GENERIC', message: raw };
+
+}
+
+function reportPickupActionError(dashboardEl, actionType, payload, err) {
+
+    const { code, message } = parsePickupError(err);
+
+    console.error(`[order-managment-dashboard-velo] ${actionType} failed:`, message);
+
+    dashboardEl.setAttribute('action-error', JSON.stringify({
+
+        type: actionType,
+
+        code,
+
+        message,
+
+        orderId: payload?.orderId || null,
+
+        items: payload?.items || null,
+
+        __ts: Date.now(),
+
+    }));
 
 }

@@ -109,6 +109,10 @@ export const EMPLOYEE_ACTION_KEYS = {
         label: 'התראה למנהלים על פריטים ממתינים לאישור (קישור מרוכז)',
         placeholders: ['count', 'pendingLink'],
     },
+    manager_reschedule_request: {
+        label: '🔴 בקשת שינוי מועד סדנה ממתינה לאישור מנהל',
+        placeholders: ['organizerName', 'organizerPhone', 'workshopName', 'currentDate', 'requestedDate', 'orderNumber', 'reviewLink'],
+    },
     addon_out_of_stock: {
         label: 'התראת מלאי — תוסף בסטודיו נגמר (אוטומטי)',
         placeholders: ['addOnTitle', 'workshopTitle', 'remainingStock'],

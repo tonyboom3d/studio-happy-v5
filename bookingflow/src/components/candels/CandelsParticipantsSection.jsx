@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { Minus, Plus, Users, Baby, MessageCircle, AlertTriangle, Flame } from 'lucide-react';
+import { Minus, Plus, Users, Baby, AlertTriangle, Flame } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { FIRST_ORDER_MIN_CANDLES_MESSAGE } from '@/lib/firstOrderMinimum';
 import {
@@ -43,7 +43,6 @@ export default function CandelsParticipantsSection({
   // מקומות תפוסים ב-Wix Bookings: כל אדם (מבוגר או ילד) = מקום אחד, בלי קשר
   // לכמה נרות/כרטיסים הם חולקים.
   const spotsUsed = seatsUsed;
-  const totalParticipants = adults + children;
 
   // ילדים בלי מספיק מבוגרים מלווים (מבוגר אחד עד MAX_CHILDREN_PER_ADULT ילדים)
   const childrenNeedAdult = children > adults * MAX_CHILDREN_PER_ADULT;
@@ -438,21 +437,6 @@ export default function CandelsParticipantsSection({
             )}
           </AnimatePresence>
         </div>
-
-      {/* לינק לקבוצות גדולות — מתחת לכפתור */}
-      {totalParticipants >= 5 && !spotsExceeded && (
-        <div className="mt-3">
-          <a
-            href="https://wa.link/jbfarf"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 text-xs text-[#5E2F88] underline hover:no-underline"
-          >
-            <MessageCircle className="w-3.5 h-3.5 text-[#25D366]" />
-            <span>אנחנו קבוצה גדולה - מעל ל 9 משתתפים</span>
-          </a>
-        </div>
-      )}
     </div>
   );
 }

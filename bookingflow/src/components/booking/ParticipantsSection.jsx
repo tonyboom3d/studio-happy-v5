@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
-import { Minus, Plus, Users, Baby, MessageCircle, AlertTriangle } from 'lucide-react';
+import { Minus, Plus, Users, Baby, AlertTriangle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { validateFirstOrderMinimum, FIRST_ORDER_MIN_TICKETS_MESSAGE } from '@/lib/firstOrderMinimum';
 import { resolveDisplayedPricing } from '@/lib/tuftingDatePricing';
@@ -21,7 +21,6 @@ export default function ParticipantsSection({
   const soloAdults = adults - parentChildPairs;
   // מקומות תפוסים: מבוגר ללא ילד = 1, הורה+ילד = 1
   const spotsUsed = adults;
-  const totalParticipants = adults + children;
   const totalCarpets = adults; // כל מבוגר = שטיח (ילד מצטרף)
 
   // ילדים בלי מספיק מבוגרים
@@ -271,21 +270,6 @@ export default function ParticipantsSection({
             )}
           </AnimatePresence>
         </div>
-
-      {/* לינק לקבוצות גדולות — מתחת לכפתור */}
-      {totalParticipants >= 5 && !spotsExceeded && (
-        <div className="mt-3">
-          <a
-            href="https://wa.link/jbfarf"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 text-xs text-[#5E2F88] underline hover:no-underline"
-          >
-            <MessageCircle className="w-3.5 h-3.5 text-[#25D366]" />
-            <span>אנחנו קבוצה גדולה - מעל ל 9 משתתפים</span>
-          </a>
-        </div>
-      )}
     </div>
   );
 }

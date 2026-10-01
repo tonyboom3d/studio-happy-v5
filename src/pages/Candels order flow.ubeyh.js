@@ -16,7 +16,7 @@ const CANDLES_SERVICE_ID_LIST = Object.values(CANDLES_SERVICE_IDS);
 
 // GitHub Pages caches index.html aggressively — bump v= when bookingflow changes.
 const BOOKINGFLOW_IFRAME_SRC =
-    'https://tonyboom3d.github.io/studio-happy-v5/?v=20261001-seat-stop#/candels';
+    'https://tonyboom3d.github.io/studio-happy-v5/?v=20261001-no-group-link#/candels';
 
 $w.onReady(function () {
     const mainIframe = $w('#htmlComponent1');

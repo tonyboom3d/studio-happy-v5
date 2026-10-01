@@ -198,7 +198,16 @@ export default function CeramicsParticipantsSection({
         <div className="w-full max-w-md mb-3 rounded-lg border border-amber-300 bg-amber-50 p-2.5">
           <div className="flex items-start gap-2">
             <AlertTriangle className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
-            <p className="text-xs font-medium text-amber-800">אין עוד מקומות פנויים לסדנה בתאריך שנבחר</p>
+            <div className="text-xs text-amber-800">
+              <p className="font-medium mb-1">צריכים מקום לקבוצה גדולה יותר מ-{maxParticipants}?</p>
+              <p>
+                התאריך הזה כבר כמעט מלא! מוזמנים לדבר איתנו{' '}
+                <a href="https://wa.link/jbfarf" target="_blank" rel="noopener noreferrer" className="underline font-medium">
+                  בוואטסאפ
+                </a>
+                {' '}או לבחור תאריך אחר.
+              </p>
+            </div>
           </div>
         </div>
       )}

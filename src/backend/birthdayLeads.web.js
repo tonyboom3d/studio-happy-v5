@@ -1,13 +1,31 @@
 // Public facade for the "ימי הולדת" landing page — workshop data + lead form.
-// Submissions are sent to the site's Wix Form (My Form 1).
+// Submissions are sent to the site's Wix Form (My Form 1), appended to the
+// "ימי הולדת" Google Sheet (via an Apps Script Web App), and announced to
+// the studio over WhatsApp (free text, via the existing ManyChat subscriber).
 import { Permissions, webMethod } from 'wix-web-module';
 import wixData from 'wix-data';
 import { submissions } from '@wix/forms';
 import { auth } from '@wix/essentials';
+import { fetch } from 'wix-fetch';
+import { findSubscriberIdByPhone, sendManyChatText } from 'backend/manychatService.jsw';
 
 const SA = { suppressAuth: true };
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const BIRTHDAY_FORM_ID = 'dfecbbfe-54a0-4003-9753-9aaaaf14fe5d';
+
+// Apps Script Web App URL for the "ימי הולדת" leads sheet — see
+// wix/apps-script/birthdayLeads.gs. Left blank until supplied; the sheet
+// append is skipped (no-op) while empty.
+const APPSCRIPT_ENDPOINT = 'https://script.google.com/macros/s/AKfycbxihgAz7rmdcztG4VlFmVn6OOyA1JIhVo6OhizVar3rNBENzsLSPn0ddVxIqA9v9kJp/exec';
+
+// Shared link to the leads spreadsheet — sent inside the WhatsApp notice so
+// the studio can jump straight to the consolidated list. Left blank until
+// supplied.
+const BIRTHDAY_LEADS_SHEET_URL = '';
+
+// Studio's WhatsApp number — already a standing ManyChat subscriber (regular
+// conversations keep the 24h window open), so a free-text send works here.
+const STUDIO_WHATSAPP_PHONE = '972522272270';
 
 /** Wix Form field targets — must match the form schema storage keys. */
 const FORM_FIELDS = {
@@ -85,6 +103,66 @@ async function submitToWixForm(row) {
     });
 }
 
+/** Appends one row to the "ימי הולדת" Google Sheet via the Apps Script Web App. No-op until APPSCRIPT_ENDPOINT is set. */
+async function appendBirthdayLeadToSheet(row) {
+    if (!APPSCRIPT_ENDPOINT) {
+        console.warn('[birthdayLeads.web] appendBirthdayLeadToSheet skipped — APPSCRIPT_ENDPOINT not configured yet.');
+        return { ok: false, reason: 'not-configured' };
+    }
+
+    try {
+        const response = await fetch(APPSCRIPT_ENDPOINT, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(buildWixFormSubmission(row)),
+        });
+        const json = await response.json().catch(() => null);
+        if (!response.ok || json?.ok === false) {
+            throw new Error(`Apps Script responded ${response.status}: ${JSON.stringify(json)}`);
+        }
+        return { ok: true };
+    } catch (err) {
+        console.error('[birthdayLeads.web] appendBirthdayLeadToSheet failed:', err?.message || err);
+        return { ok: false, reason: 'error', error: err?.message || String(err) };
+    }
+}
+
+/** Builds the free-text WhatsApp notice body sent to the studio for a new lead. */
+function buildWhatsAppLeadMessage(row) {
+    const lines = [
+        '📩 ליד חדש — ימי הולדת',
+        `שם: ${row.fullName}`,
+        `דוא"ל: ${row.email}`,
+        `טלפון: ${row.phone}`,
+        row.preferredDate ? `תאריך מועדף: ${row.preferredDate}` : null,
+        `סוג סדנה: ${(row.workshopTypes || []).join(', ') || '—'}`,
+        `מספר ילדים: ${row.childrenCount}`,
+        `מספר מבוגרים: ${row.adultsCount}`,
+        row.notes ? `הערות: ${row.notes}` : null,
+    ].filter(Boolean);
+
+    if (BIRTHDAY_LEADS_SHEET_URL) {
+        lines.push('', `כל הלידים: ${BIRTHDAY_LEADS_SHEET_URL}`);
+    }
+
+    return lines.join('\n');
+}
+
+/** Sends the studio a free-text WhatsApp notice (not a template) with the lead's details. */
+async function notifyBirthdayLeadWhatsApp(row) {
+    try {
+        const subscriberId = await findSubscriberIdByPhone(STUDIO_WHATSAPP_PHONE);
+        if (!subscriberId) {
+            console.error('[birthdayLeads.web] notifyBirthdayLeadWhatsApp — no ManyChat subscriber for', STUDIO_WHATSAPP_PHONE);
+            return { sent: false, reason: 'no-subscriber' };
+        }
+        return await sendManyChatText(subscriberId, buildWhatsAppLeadMessage(row));
+    } catch (err) {
+        console.error('[birthdayLeads.web] notifyBirthdayLeadWhatsApp failed:', err?.message || err);
+        return { sent: false, reason: 'error', error: err?.message || String(err) };
+    }
+}
+
 /**
  * CMS field `menuCardImage` (Image) — card thumbnail on /birthday menu.
  * Falls back to the first gallery image when empty.
@@ -129,9 +207,15 @@ export const submitBirthdayLead = webMethod(Permissions.Anyone, async (payload) 
 
     try {
         await submitToWixForm(row);
-        return { ok: true, message: 'הפנייה נשלחה בהצלחה! נחזור אליכם טלפונית או בוואטסאפ עם פרטים נוספים בהקדם האפשרי.' };
     } catch (err) {
         console.error('[birthdayLeads.web] Wix form submission failed:', err?.message || err, err?.details || '');
         return { ok: false, message: 'אירעה שגיאה בשליחת הפנייה. נסו שוב מאוחר יותר.' };
     }
+
+    // Best-effort side effects — never block the customer-facing success
+    // response if the sheet or WhatsApp notice fails.
+    appendBirthdayLeadToSheet(row).catch((err) => console.error('[birthdayLeads.web] sheet append errored:', err?.message || err));
+    notifyBirthdayLeadWhatsApp(row).catch((err) => console.error('[birthdayLeads.web] WhatsApp notice errored:', err?.message || err));
+
+    return { ok: true, message: 'הפנייה נשלחה בהצלחה! נחזור אליכם טלפונית או בוואטסאפ עם פרטים נוספים בהקדם האפשרי.' };
 });

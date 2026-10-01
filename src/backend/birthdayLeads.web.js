@@ -18,10 +18,7 @@ const BIRTHDAY_FORM_ID = 'dfecbbfe-54a0-4003-9753-9aaaaf14fe5d';
 // append is skipped (no-op) while empty.
 const APPSCRIPT_ENDPOINT = 'https://script.google.com/macros/s/AKfycbxihgAz7rmdcztG4VlFmVn6OOyA1JIhVo6OhizVar3rNBENzsLSPn0ddVxIqA9v9kJp/exec';
 
-// Shared link to the leads spreadsheet — sent inside the WhatsApp notice so
-// the studio can jump straight to the consolidated list. Left blank until
-// supplied.
-const BIRTHDAY_LEADS_SHEET_URL = '';
+const LEADS_SHEET_TITLE = 'ימי הולדת \\ אירועים \\ משרות- Studio Happy';
 
 // Studio's WhatsApp number — already a standing ManyChat subscriber (regular
 // conversations keep the 24h window open), so a free-text send works here.
@@ -114,7 +111,10 @@ async function appendBirthdayLeadToSheet(row) {
         const response = await fetch(APPSCRIPT_ENDPOINT, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(buildWixFormSubmission(row)),
+            body: JSON.stringify({
+                ...buildWixFormSubmission(row),
+                inquiry_date: formatInquiryDate(),
+            }),
         });
         const json = await response.json().catch(() => null);
         if (!response.ok || json?.ok === false) {
@@ -127,36 +127,35 @@ async function appendBirthdayLeadToSheet(row) {
     }
 }
 
-/** Builds the free-text WhatsApp notice body sent to the studio for a new lead. */
-function buildWhatsAppLeadMessage(row) {
-    const lines = [
-        '📩 ליד חדש — ימי הולדת',
-        `שם: ${row.fullName}`,
-        `דוא"ל: ${row.email}`,
-        `טלפון: ${row.phone}`,
-        row.preferredDate ? `תאריך מועדף: ${row.preferredDate}` : null,
-        `סוג סדנה: ${(row.workshopTypes || []).join(', ') || '—'}`,
-        `מספר ילדים: ${row.childrenCount}`,
-        `מספר מבוגרים: ${row.adultsCount}`,
-        row.notes ? `הערות: ${row.notes}` : null,
-    ].filter(Boolean);
-
-    if (BIRTHDAY_LEADS_SHEET_URL) {
-        lines.push('', `כל הלידים: ${BIRTHDAY_LEADS_SHEET_URL}`);
-    }
-
-    return lines.join('\n');
+/** Israel-local timestamp written to column I ("תאריך פנייה"). */
+function formatInquiryDate(date = new Date()) {
+    const parts = new Intl.DateTimeFormat('en-GB', {
+        timeZone: 'Asia/Jerusalem',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        hourCycle: 'h23',
+    }).formatToParts(date);
+    const get = (type) => parts.find((part) => part.type === type)?.value || '';
+    return `${get('day')}/${get('month')}/${get('year')} ${get('hour')}:${get('minute')}`;
 }
 
-/** Sends the studio a free-text WhatsApp notice (not a template) with the lead's details. */
-async function notifyBirthdayLeadWhatsApp(row) {
+/** Free-text WhatsApp notice — sheet name only, no lead details. */
+function buildWhatsAppLeadMessage() {
+    return `נכנס ליד חדש לגוגל שיטס "${LEADS_SHEET_TITLE}".`;
+}
+
+/** Sends the studio a free-text WhatsApp notice (not a template). */
+async function notifyBirthdayLeadWhatsApp() {
     try {
         const subscriberId = await findSubscriberIdByPhone(STUDIO_WHATSAPP_PHONE);
         if (!subscriberId) {
             console.error('[birthdayLeads.web] notifyBirthdayLeadWhatsApp — no ManyChat subscriber for', STUDIO_WHATSAPP_PHONE);
             return { sent: false, reason: 'no-subscriber' };
         }
-        return await sendManyChatText(subscriberId, buildWhatsAppLeadMessage(row));
+        return await sendManyChatText(subscriberId, buildWhatsAppLeadMessage());
     } catch (err) {
         console.error('[birthdayLeads.web] notifyBirthdayLeadWhatsApp failed:', err?.message || err);
         return { sent: false, reason: 'error', error: err?.message || String(err) };
@@ -215,7 +214,7 @@ export const submitBirthdayLead = webMethod(Permissions.Anyone, async (payload) 
     // Best-effort side effects — never block the customer-facing success
     // response if the sheet or WhatsApp notice fails.
     appendBirthdayLeadToSheet(row).catch((err) => console.error('[birthdayLeads.web] sheet append errored:', err?.message || err));
-    notifyBirthdayLeadWhatsApp(row).catch((err) => console.error('[birthdayLeads.web] WhatsApp notice errored:', err?.message || err));
+    notifyBirthdayLeadWhatsApp().catch((err) => console.error('[birthdayLeads.web] WhatsApp notice errored:', err?.message || err));
 
     return { ok: true, message: 'הפנייה נשלחה בהצלחה! נחזור אליכם טלפונית או בוואטסאפ עם פרטים נוספים בהקדם האפשרי.' };
 });

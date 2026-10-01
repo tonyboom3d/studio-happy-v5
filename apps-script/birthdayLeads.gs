@@ -9,7 +9,7 @@
  *    Who has access "Anyone" → Deploy. Copy the Web App URL.
  * 4. Send that URL back so the Velo code can be wired to it.
  *
- * Expected POST body (JSON), matching the sheet header A–H:
+ * Expected POST body (JSON), matching the sheet header A–I:
  *   {
  *     form_field:   string, // A — שם
  *     form_field_1: string, // B — דוא"ל
@@ -19,6 +19,7 @@
  *     num_of_kids:  number, // F — מספר ילדים
  *     melavim:      number, // G — מספר מבוגרים
  *     message:      string, // H — הערות
+ *     inquiry_date: string, // I — תאריך פנייה (dd/MM/yyyy HH:mm, Asia/Jerusalem)
  *   }
  */
 
@@ -33,11 +34,13 @@ const ROW_FIELD_ORDER = [
   'num_of_kids',
   'melavim',
   'message',
+  'inquiry_date',
 ];
 
 function doPost(e) {
   try {
     const body = JSON.parse((e && e.postData && e.postData.contents) || '{}');
+    if (!body.inquiry_date) body.inquiry_date = formatInquiryDate();
 
     const sheet = getSheet();
     const row = ROW_FIELD_ORDER.map((key) => body[key] == null ? '' : body[key]);
@@ -47,6 +50,10 @@ function doPost(e) {
   } catch (err) {
     return jsonResponse({ ok: false, error: String(err && err.message || err) }, 500);
   }
+}
+
+function formatInquiryDate() {
+  return Utilities.formatDate(new Date(), 'Asia/Jerusalem', 'dd/MM/yyyy HH:mm');
 }
 
 function getSheet() {

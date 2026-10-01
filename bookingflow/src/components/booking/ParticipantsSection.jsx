@@ -50,6 +50,7 @@ export default function ParticipantsSection({
     }
   };
   const handleAdultsIncrease = () => {
+    if (spotsUsed >= maxParticipants) return;
     setAdults(adults + 1);
     setValidationError(null);
   };
@@ -117,8 +118,10 @@ export default function ParticipantsSection({
             <button
               type="button"
               onClick={handleAdultsIncrease}
+              disabled={spotsUsed >= maxParticipants}
               className="w-8 h-8 rounded-full border-2 border-[#5E2F88] flex items-center justify-center
-                         text-[#5E2F88] hover:bg-[#5E2F88] hover:text-white transition-colors"
+                         text-[#5E2F88] hover:bg-[#5E2F88] hover:text-white transition-colors
+                         disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-[#5E2F88]"
             >
               <Plus className="w-3 h-3" />
             </button>
@@ -163,6 +166,14 @@ export default function ParticipantsSection({
         </div>
       </div>
 
+      {!spotsExceeded && spotsUsed >= maxParticipants && (
+        <div className="w-full max-w-md mb-3 rounded-lg border border-amber-300 bg-amber-50 p-2.5">
+          <div className="flex items-start gap-2">
+            <AlertTriangle className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
+            <p className="text-xs font-medium text-amber-800">אין עוד מקומות פנויים לסדנה בתאריך שנבחר</p>
+          </div>
+        </div>
+      )}
 
       {/* סיכום ויזואלי עם אייקונים — סדר: מבוגר | שטיח | ילד */}
       <div className="w-full max-w-md rounded-xl border border-[#e8e8e8] bg-[#fafafa] p-3 mb-3">

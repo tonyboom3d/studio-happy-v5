@@ -101,11 +101,6 @@ export function validateCandelsParticipantsStep({
   selectedSlot,
 }) {
   const { totalCandles, seatsUsed } = computeCandlesCounts({ adults, children });
-  const totalParticipants = adults + children;
-
-  if (totalParticipants > 9) {
-    return { ok: false, error: 'לקבוצות מעל 9 משתתפים יש ליצור קשר בוואטסאפ' };
-  }
 
   if (children > adults * MAX_CHILDREN_PER_ADULT) {
     const missingAdults = Math.ceil(children / MAX_CHILDREN_PER_ADULT) - adults;

@@ -44,7 +44,6 @@ export default function CandelsParticipantsSection({
   // לכמה נרות/כרטיסים הם חולקים.
   const spotsUsed = seatsUsed;
   const totalParticipants = adults + children;
-  const isGroupTooLarge = totalParticipants > 9;
 
   // ילדים בלי מספיק מבוגרים מלווים (מבוגר אחד עד MAX_CHILDREN_PER_ADULT ילדים)
   const childrenNeedAdult = children > adults * MAX_CHILDREN_PER_ADULT;
@@ -236,7 +235,7 @@ export default function CandelsParticipantsSection({
       </div>
 
       {/* אין עוד מקומות פנויים — מתחת לבחירת מבוגרים/ילדים */}
-      {!isGroupTooLarge && !spotsExceeded && seatsUsed >= maxParticipants && (
+      {!spotsExceeded && seatsUsed >= maxParticipants && (
         <div className="w-full max-w-md mb-3 rounded-lg border border-amber-300 bg-amber-50 p-2.5">
           <div className="flex items-start gap-2">
             <AlertTriangle className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
@@ -246,7 +245,7 @@ export default function CandelsParticipantsSection({
       )}
 
       {/* נר נוסף — מתחת לבחירת כמות הכרטיסים */}
-      {!isGroupTooLarge && maxExtraCandles > 0 && (
+      {maxExtraCandles > 0 && (
         <div className="w-full max-w-md rounded-xl border border-[#e8e8e8] bg-white p-3 mb-3">
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-1.5">
@@ -294,8 +293,7 @@ export default function CandelsParticipantsSection({
       )}
 
       {/* סיכום ויזואלי עם אייקונים — סדר: מבוגר | נר | ילד */}
-      {!isGroupTooLarge && (
-        <div className="w-full max-w-md rounded-xl border border-[#e8e8e8] bg-[#fafafa] p-3 mb-3">
+      <div className="w-full max-w-md rounded-xl border border-[#e8e8e8] bg-[#fafafa] p-3 mb-3">
           <div className="flex items-start justify-around text-center">
             {/* מבוגרים */}
             <div className="flex flex-col items-center gap-1">
@@ -386,7 +384,6 @@ export default function CandelsParticipantsSection({
             </div>
           )}
         </div>
-      )}
 
       {/* שגיאת חריגה מהמקומות הפנויים */}
       {spotsExceeded && (
@@ -420,8 +417,7 @@ export default function CandelsParticipantsSection({
       )}
 
       {/* כפתור המשך + שגיאת ולידציה */}
-      {!isGroupTooLarge && (
-        <div className="w-full max-w-md flex flex-col gap-2">
+      <div className="w-full max-w-md flex flex-col gap-2">
           <Button
             onClick={handleContinue}
             className="w-full bg-[#5E2F88] hover:bg-[#7B3DB0] text-white py-2.5 rounded-lg text-base"
@@ -442,10 +438,9 @@ export default function CandelsParticipantsSection({
             )}
           </AnimatePresence>
         </div>
-      )}
 
       {/* לינק לקבוצות גדולות — מתחת לכפתור */}
-      {!isGroupTooLarge && totalParticipants >= 5 && (
+      {totalParticipants >= 5 && !spotsExceeded && (
         <div className="mt-3">
           <a
             href="https://wa.link/jbfarf"
@@ -457,28 +452,6 @@ export default function CandelsParticipantsSection({
             <span>אנחנו קבוצה גדולה - מעל ל 9 משתתפים</span>
           </a>
         </div>
-      )}
-
-      {/* קבוצה גדולה מעל 9 */}
-      {isGroupTooLarge && (
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="mt-3 flex flex-col items-center gap-2 text-center"
-        >
-          <p className="text-sm text-[#464646]/80 max-w-[280px]">
-            לקבוצות מעל 9 משתתפים יש לנו הצעות מיוחדות!
-          </p>
-          <a
-            href="https://wa.link/jbfarf"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 rounded-lg bg-[#25D366] px-5 py-2 text-sm text-white font-medium hover:bg-[#20bd5a] transition-colors"
-          >
-            <MessageCircle className="w-4 h-4" />
-            אנחנו קבוצה גדולה - מעל ל 9 משתתפים
-          </a>
-        </motion.div>
       )}
     </div>
   );

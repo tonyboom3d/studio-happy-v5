@@ -10,12 +10,17 @@ import {
 const CERAMICS_SERVICE_ID = 'ad89914a-1845-48c6-804d-544cd17f179b';
 const CERAMICS_SERVICE_ID_LIST = [CERAMICS_SERVICE_ID];
 
+// GitHub Pages caches index.html — bump v= when bookingflow changes.
+const BOOKINGFLOW_IFRAME_SRC =
+    'https://tonyboom3d.github.io/studio-happy-v5/?v=20261001-seat-cap#/ceramics';
+
 $w.onReady(function () {
     const mainIframe = $w('#htmlComponent1');
     if (!mainIframe) {
         console.error('[Wix][ceramics] #htmlComponent1 not found on page!');
         return;
     }
+    mainIframe.src = BOOKINGFLOW_IFRAME_SRC;
     mainIframe.onMessage((event) => handleIframeMessage(event, mainIframe));
 });
 

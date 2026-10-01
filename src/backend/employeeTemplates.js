@@ -117,6 +117,10 @@ export const EMPLOYEE_ACTION_KEYS = {
         label: 'התראת מלאי — תוסף בסטודיו נגמר (אוטומטי)',
         placeholders: ['addOnTitle', 'workshopTitle', 'remainingStock'],
     },
+    employee_pickup_arrival: {
+        label: 'לקוח מגיע לאיסוף פריט בסדנה (תיאום איסוף, אוטומטי)',
+        placeholders: ['displayName', 'organizerName', 'organizerPhone', 'pickupItemsLine', 'workshopName', 'date', 'timeWindow'],
+    },
 };
 
 /** Replaces {{key}} tokens; unknown/missing vars render as empty string. */

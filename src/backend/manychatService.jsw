@@ -53,6 +53,9 @@ export const MC_FIELDS = {
     pickupItemsLine: 'pickup_items_line',
     pickupItemsCount: 'pickup_items_count',
     pickupDeadlineDays: 'pickup_deadline_days',
+    // "תיאום איסוף" scheduling flow (see pickupScheduling.js / http-functions.js get_startPickup)
+    pickupOrderId: 'pickup_order_id',
+    pickupLink: 'pickup_link',
 };
 
 // Custom field created manually in ManyChat (Settings > Custom Fields, type "Text")
@@ -740,6 +743,20 @@ export async function syncRescheduleLink(subscriberId, link) {
     }
 }
 
+/** Writes the "תיאום איסוף" page link so the flow can present it to the customer. */
+export async function syncPickupLink(subscriberId, link) {
+    if (!subscriberId) return { synced: false, reason: 'no-subscriberId' };
+    try {
+        await setCustomFieldsByName(subscriberId, [
+            { name: MC_FIELDS.pickupLink, value: link || '' },
+        ]);
+        return { synced: true };
+    } catch (err) {
+        console.warn('[ManyChat] syncPickupLink failed. subscriberId:', subscriberId, err?.message || err);
+        return { synced: false, error: err?.message || String(err) };
+    }
+}
+
 /**
  * Writes the chosen-date label and pushes the subscriber into the reschedule
  * summary flow (confirm / edit buttons live inside that ManyChat flow).
@@ -1061,6 +1078,9 @@ export async function sendPickupReadyManyChat(order, itemLabels) {
             { name: MC_FIELDS.pickupItemsLine, value: (itemLabels || []).join(', ') },
             { name: MC_FIELDS.pickupItemsCount, value: (itemLabels || []).length },
             { name: MC_FIELDS.pickupDeadlineDays, value: PICKUP_DEADLINE_DAYS },
+            // Lets the "תיאום איסוף" quick-reply button call
+            // _functions/startPickup?order_id={{pickup_order_id}} from the flow.
+            { name: MC_FIELDS.pickupOrderId, value: order?._id || '' },
         ];
         const sending = pickupFields.filter(f => hasManyChatFieldValue(f.value));
         await setCustomFieldsByName(subscriber.id, sending);
@@ -1224,6 +1244,34 @@ export async function sendAdminOtpManyChat(order, code) {
         return { sent: true, subscriberId: subscriber.id };
     } catch (err) {
         logManyChatSendError('sendAdminOtpManyChat', { order, error: err?.message || String(err) });
+        return { sent: false, reason: 'error', error: err?.message || String(err) };
+    }
+}
+
+// --- Birthday/events/jobs lead notice (approved template, works outside the 24h window) ---
+
+const BIRTHDAY_LEAD_NOTIFICATION_TYPE = 'birthday_lead';
+
+/**
+ * Notifies the studio of a new lead via the shared order-confirmation flow
+ * (notification_type = birthday_lead → needs a matching branch + approved
+ * template in ManyChat). Never throws.
+ */
+export async function sendBirthdayLeadNoticeManyChat(phone) {
+    try {
+        const normalizedPhone = normalizeIsraeliPhone(phone);
+        if (!normalizedPhone) return { sent: false, reason: 'no-phone' };
+
+        const subscriber = await findOrCreateSubscriber({ phone: normalizedPhone });
+        if (!subscriber?.id) throw new Error('No subscriber id after find/create');
+
+        await setCustomFieldsByName(subscriber.id, [
+            { name: NOTIFICATION_TYPE_FIELD, value: BIRTHDAY_LEAD_NOTIFICATION_TYPE },
+        ]);
+        await sendFlow(subscriber.id, ORDER_CONFIRMATION_FLOW_NS);
+        return { sent: true, subscriberId: subscriber.id };
+    } catch (err) {
+        console.error('[ManyChat] ❌ sendBirthdayLeadNoticeManyChat failed:', err?.message || err);
         return { sent: false, reason: 'error', error: err?.message || String(err) };
     }
 }

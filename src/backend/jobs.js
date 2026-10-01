@@ -9,6 +9,7 @@ import { flushOutbox } from 'backend/notificationOutbox.js';
 import { retryPendingPrintJobs } from 'backend/studioUpsell/printDispatch.js';
 import { retryUnsentPromoCoupons } from 'backend/promoSendDispatch.js';
 import { deleteConversation } from 'backend/openaiService.jsw';
+import { processPickupStaffNotifications } from 'backend/pickupScheduling.js';
 
 const SA = { suppressAuth: true, suppressHooks: true };
 
@@ -96,8 +97,14 @@ export async function processAlertsHourly() {
         return { retried: 0, sent: 0 };
     });
 
-    // console.log('[jobs] processAlertsHourly:', JSON.stringify({ holidays, reminders, confirmations, customerWorkshopReminders, staleEntries, outbox, promoRetries }));
-    return { holidays, reminders, confirmations, customerWorkshopReminders, staleEntries, outbox, promoRetries };
+    // "תיאום איסוף" — notifies staff once the scheduled pickup workshop is about to start.
+    const pickupStaffNotifications = await processPickupStaffNotifications(new Date()).catch(err => {
+        console.error('[jobs] processPickupStaffNotifications failed:', err?.message || err);
+        return { scanned: 0, sent: 0, skipped: 0, failed: 0 };
+    });
+
+    // console.log('[jobs] processAlertsHourly:', JSON.stringify({ holidays, reminders, confirmations, customerWorkshopReminders, staleEntries, outbox, promoRetries, pickupStaffNotifications }));
+    return { holidays, reminders, confirmations, customerWorkshopReminders, staleEntries, outbox, promoRetries, pickupStaffNotifications };
 }
 
 /** Closes TimeEntries left open longer than TIME_ENTRY_MAX_OPEN_HOURS. */

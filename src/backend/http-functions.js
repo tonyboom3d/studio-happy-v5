@@ -41,6 +41,8 @@ import {
 } from 'backend/orderLookupOtpService.js';
 import wixData from 'wix-data';
 import { issueRescheduleToken, confirmRescheduleRequest } from 'backend/rescheduleService.web.js';
+import { getPickupEligibility, issuePickupToken, PICKUP_WINDOW_DAYS, PICKUP_MAX_APPOINTMENTS } from 'backend/pickupScheduling.js';
+import { syncPickupLink } from 'backend/manychatService.jsw';
 
 // ============================================================
 // ManyChat availability endpoint
@@ -833,6 +835,102 @@ export async function get_confirmReschedule(request) {
       headers: { 'Content-Type': 'application/json' },
       body: { status: 'ok', ai_reply: 'false' },
     });
+  }
+}
+
+// ============================================================
+// Pickup-appointment flow — "תיאום איסוף" page
+// GET https://www.studiohappy.art/_functions/startPickup?order_id=...&subscriber_id=...
+// Header: X-API-KEY (manychat_webhook_apiKey)
+// Called from the "תיאום איסוף" quick-reply button on the pickup_ready
+// WhatsApp template (order_id comes from the pickup_order_id custom field
+// set in sendPickupReadyManyChat). Response drives the flow's branching via
+// pickup_status: ok | no_items | collected | expired | quota_exceeded.
+// ============================================================
+
+// NOTE: matches the page created in the Wix Editor for the
+// pickup-scheduler custom element (see pickup-scheduler.js / ce-page todo).
+const PICKUP_PAGE_URL = 'https://www.studiohappy.art/pickup-schedule';
+
+export async function get_startPickup(request) {
+  try {
+    if (!(await authorizeManyChatWebhook(request))) {
+      return response({
+        status: 401,
+        headers: { 'Content-Type': 'application/json' },
+        body: { status: 'error', error: 'unauthorized' },
+      });
+    }
+
+    const orderId = String(request.query?.order_id || '').trim();
+    const subscriberId = String(request.query?.subscriber_id || '').trim();
+    if (!orderId) {
+      return badRequest({ headers: { 'Content-Type': 'application/json' }, body: { status: 'error', error: 'missing_order_id' } });
+    }
+
+    const order = await wixData.get('WorkshopOrders', orderId, { suppressAuth: true, consistentRead: true }).catch(() => null);
+    if (!order) {
+      return ok({ headers: { 'Content-Type': 'application/json' }, body: { status: 'error', ai_reply: 'לא מצאנו את ההזמנה 🔍' } });
+    }
+
+    const eligibility = getPickupEligibility(order);
+
+    if (eligibility.status === 'expired') {
+      return ok({
+        headers: { 'Content-Type': 'application/json' },
+        body: {
+          status: 'ok',
+          pickup_status: 'expired',
+          ai_reply: `עברו ${PICKUP_WINDOW_DAYS} ימים מאז שהפריטים הוכרזו מוכנים לאיסוף. ניתן לפנות לשירות הלקוחות לבדיקת המשך 💬`,
+        },
+      });
+    }
+    if (eligibility.status === 'quota_exceeded') {
+      return ok({
+        headers: { 'Content-Type': 'application/json' },
+        body: {
+          status: 'ok',
+          pickup_status: 'quota_exceeded',
+          ai_reply: `נוצלו כל ${PICKUP_MAX_APPOINTMENTS} התיאומים האפשריים להזמנה זו. ניתן לפנות לשירות הלקוחות להמשך תיאום 💬`,
+        },
+      });
+    }
+    if (eligibility.status === 'no_items' || eligibility.status === 'collected') {
+      return ok({
+        headers: { 'Content-Type': 'application/json' },
+        body: {
+          status: 'ok',
+          pickup_status: eligibility.status,
+          ai_reply: eligibility.status === 'collected'
+            ? 'כל הפריטים בהזמנה זו נאספו כבר 🎉'
+            : 'לא נמצאו פריטים מוכנים לאיסוף להזמנה זו כרגע.',
+        },
+      });
+    }
+
+    const { token, expiresAt } = await issuePickupToken(orderId);
+    const link = `${PICKUP_PAGE_URL}?orderId=${encodeURIComponent(orderId)}&token=${encodeURIComponent(token)}&sid=${encodeURIComponent(subscriberId)}`;
+
+    if (subscriberId) {
+      await syncPickupLink(subscriberId, link).catch(() => {});
+    }
+
+    return ok({
+      headers: { 'Content-Type': 'application/json' },
+      body: {
+        status: 'ok',
+        pickup_status: 'ok',
+        pickup_link: link,
+        pickup_days_left: Math.max(0, Math.ceil((eligibility.deadline.getTime() - Date.now()) / 86400000)),
+        pickup_appointments_used: eligibility.used,
+        pickup_appointments_remaining: eligibility.remaining,
+        expires_at: expiresAt.toISOString(),
+        ai_reply: 'הנה קישור לתיאום מועד איסוף — הקישור בתוקף ל-30 דקות ⏱️',
+      },
+    });
+  } catch (err) {
+    console.error('[http-functions] get_startPickup failed:', err?.message || err);
+    return serverError({ body: { status: 'error', error: String(err?.message || err) } });
   }
 }
 

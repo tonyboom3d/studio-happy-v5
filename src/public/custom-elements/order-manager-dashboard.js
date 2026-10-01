@@ -2386,12 +2386,41 @@ function __wdInjectGlobalAssets() {
             openModal('pickupModal');
         }
 
+        function formatPickupDateTimeHe(iso) {
+            if (!iso) return '';
+            const d = new Date(iso);
+            if (Number.isNaN(d.getTime())) return '';
+            const datePart = d.toLocaleDateString('he-IL', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'Asia/Jerusalem' });
+            const timePart = d.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Jerusalem' });
+            return `${datePart} ${timePart}`;
+        }
+
+        function renderPickupAppointmentInfo(order) {
+            const appointments = Array.isArray(order.pickupAppointments) ? order.pickupAppointments : [];
+            const active = [...appointments].reverse().find(a => a.status === 'active' || a.status === 'pending' || a.status === 'sent');
+            if (!active) return '';
+            const statusLabel = active.status === 'sent'
+                ? '<span class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 border border-emerald-200">נשלחה התראה לצוות</span>'
+                : '<span class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 border border-amber-200">ממתין להתראת צוות</span>';
+            const usedCount = appointments.length;
+            return `
+                <div class="mt-1.5 text-xs bg-blue-50 border border-blue-100 rounded-lg px-2.5 py-1.5 flex items-center justify-between gap-2">
+                    <span class="text-blue-800">
+                        <i class="ph ph-calendar-check"></i>
+                        הלקוח תיאם איסוף ל-${formatPickupDateTimeHe(active.start)}${active.end ? `–${new Date(active.end).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Jerusalem' })}` : ''}
+                        (${active.workshopName || 'סדנה'})${active.staffRecipient ? ` · הודע ל-${active.staffRecipient}` : ''}
+                    </span>
+                    <span class="flex items-center gap-1.5 shrink-0">${statusLabel}<span class="text-gray-400">${usedCount}/3</span></span>
+                </div>`;
+        }
+
         function renderPickupModalBody(order, workshop) {
             const metaEl = document.getElementById('pickupOrderMeta');
             if (metaEl) {
                 metaEl.innerHTML = `
                     <div class="text-sm text-gray-700"><strong>${order.organizerName || 'ללא שם'}</strong> · <span dir="ltr">${order.organizerPhone || '—'}</span></div>
                     <div class="text-xs text-gray-500 mt-0.5">${workshop ? `${workshop.title || ''} · ${workshop.date || ''} ${workshop.time || ''}` : ''}</div>
+                    ${renderPickupAppointmentInfo(order)}
                 `;
             }
             const items = getPickupItemsState(order);

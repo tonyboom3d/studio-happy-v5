@@ -1252,6 +1252,8 @@ export const getInitialDashboardData = webMethod(Permissions.SiteMember, async (
                 sketches,
                 selectedProducts,
                 pickupItems: Array.isArray(order.pickupItems) ? order.pickupItems : [],
+                pickupReadyNotifiedAt: order.pickupReadyNotifiedAt || null,
+                pickupAppointments: Array.isArray(order.pickupAppointments) ? order.pickupAppointments : [],
                 participantGroups: orderParticipants.map(p => ({
                     id: p._id,
                     name: p.name || '',

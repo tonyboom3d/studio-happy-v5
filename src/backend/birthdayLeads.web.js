@@ -7,7 +7,7 @@ import wixData from 'wix-data';
 import { submissions } from '@wix/forms';
 import { auth } from '@wix/essentials';
 import { fetch } from 'wix-fetch';
-import { findSubscriberIdByPhone, sendManyChatText } from 'backend/manychatService.jsw';
+import { sendBirthdayLeadNoticeManyChat } from 'backend/manychatService.jsw';
 
 const SA = { suppressAuth: true };
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -18,10 +18,7 @@ const BIRTHDAY_FORM_ID = 'dfecbbfe-54a0-4003-9753-9aaaaf14fe5d';
 // append is skipped (no-op) while empty.
 const APPSCRIPT_ENDPOINT = 'https://script.google.com/macros/s/AKfycbxihgAz7rmdcztG4VlFmVn6OOyA1JIhVo6OhizVar3rNBENzsLSPn0ddVxIqA9v9kJp/exec';
 
-const LEADS_SHEET_TITLE = 'ימי הולדת \\ אירועים \\ משרות- Studio Happy';
-
-// Studio's WhatsApp number — already a standing ManyChat subscriber (regular
-// conversations keep the 24h window open), so a free-text send works here.
+// Studio's WhatsApp number — receives the "new lead" template via ManyChat.
 const STUDIO_WHATSAPP_PHONE = '972522272270';
 
 /** Wix Form field targets — must match the form schema storage keys. */
@@ -142,20 +139,10 @@ function formatInquiryDate(date = new Date()) {
     return `${get('day')}/${get('month')}/${get('year')} ${get('hour')}:${get('minute')}`;
 }
 
-/** Free-text WhatsApp notice — sheet name only, no lead details. */
-function buildWhatsAppLeadMessage() {
-    return `נכנס ליד חדש לגוגל שיטס "${LEADS_SHEET_TITLE}".`;
-}
-
-/** Sends the studio a free-text WhatsApp notice (not a template). */
+/** Sends the studio the approved WhatsApp template (notification_type = birthday_lead) — works outside the 24h window. */
 async function notifyBirthdayLeadWhatsApp() {
     try {
-        const subscriberId = await findSubscriberIdByPhone(STUDIO_WHATSAPP_PHONE);
-        if (!subscriberId) {
-            console.error('[birthdayLeads.web] notifyBirthdayLeadWhatsApp — no ManyChat subscriber for', STUDIO_WHATSAPP_PHONE);
-            return { sent: false, reason: 'no-subscriber' };
-        }
-        return await sendManyChatText(subscriberId, buildWhatsAppLeadMessage());
+        return await sendBirthdayLeadNoticeManyChat(STUDIO_WHATSAPP_PHONE);
     } catch (err) {
         console.error('[birthdayLeads.web] notifyBirthdayLeadWhatsApp failed:', err?.message || err);
         return { sent: false, reason: 'error', error: err?.message || String(err) };
@@ -213,8 +200,15 @@ export const submitBirthdayLead = webMethod(Permissions.Anyone, async (payload) 
 
     // Best-effort side effects — never block the customer-facing success
     // response if the sheet or WhatsApp notice fails.
-    appendBirthdayLeadToSheet(row).catch((err) => console.error('[birthdayLeads.web] sheet append errored:', err?.message || err));
-    notifyBirthdayLeadWhatsApp().catch((err) => console.error('[birthdayLeads.web] WhatsApp notice errored:', err?.message || err));
+    // Awaited: un-awaited promises can be cut off once the web method returns.
+    const [sheetResult, waResult] = await Promise.allSettled([
+        appendBirthdayLeadToSheet(row),
+        notifyBirthdayLeadWhatsApp(),
+    ]);
+    console.log('[birthdayLeads.web] side effects:', JSON.stringify({
+        sheet: sheetResult.status === 'fulfilled' ? sheetResult.value : String(sheetResult.reason),
+        whatsapp: waResult.status === 'fulfilled' ? waResult.value : String(waResult.reason),
+    }));
 
     return { ok: true, message: 'הפנייה נשלחה בהצלחה! נחזור אליכם טלפונית או בוואטסאפ עם פרטים נוספים בהקדם האפשרי.' };
 });

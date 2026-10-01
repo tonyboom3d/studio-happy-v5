@@ -11,13 +11,11 @@
  * template) covering every item marked ready in that action — see
  * sendPickupReadyManyChat in manychatService.jsw.
  */
-import wixData from 'wix-data';
 import { Permissions, webMethod } from 'wix-web-module';
 import { getItemWithRetry } from 'backend/wixDataRetry.js';
 import { sendPickupReadyManyChat } from 'backend/manychatService.jsw';
 import { assertPermission, logOrderAction } from 'backend/dashboardService.web.js';
-
-const SA = { suppressAuth: true };
+import { mergePatchWorkshopOrder } from 'backend/workshopOrderPatch.js';
 
 function normalizeItemsInput(items) {
     return (Array.isArray(items) ? items : [])
@@ -79,7 +77,9 @@ export const markReadyForPickup = webMethod(Permissions.SiteMember, async (order
         notifiedAt: now,
     }));
     const pickupItems = mergePickupItems(order.pickupItems, updates);
-    await wixData.update('WorkshopOrders', { ...order, pickupItems }, SA);
+    // pickupReadyNotifiedAt anchors the 20-day "תיאום איסוף" booking window
+    // (see pickupScheduling.js) — refreshed on every new ready-notice.
+    await mergePatchWorkshopOrder(orderId, { pickupItems, pickupReadyNotifiedAt: now }, 'pickupService.markReadyForPickup');
 
     await logOrderAction(
         orderId,
@@ -121,13 +121,25 @@ export const markItemsCollected = webMethod(Permissions.SiteMember, async (order
         skippedReadyStatus: existingByKey.get(it.key)?.state !== 'ready',
     }));
     const pickupItems = mergePickupItems(order.pickupItems, updates);
-    await wixData.update('WorkshopOrders', { ...order, pickupItems }, SA);
+
+    // If nothing is left in "ready" state, a pending pickup-scheduling staff
+    // notification (see pickupScheduling.js processPickupStaffNotifications)
+    // is now moot — cancel it so no one gets pinged for an already-closed order.
+    const stillHasReadyItems = pickupItems.some((it) => it.state === 'ready');
+    const patch = { pickupItems };
+    const cancelNotify = !stillHasReadyItems && order.pickupStaffNotifyStatus === 'pending';
+    if (cancelNotify) patch.pickupStaffNotifyStatus = 'none';
+
+    await mergePatchWorkshopOrder(orderId, patch, 'pickupService.markItemsCollected');
 
     const labelsLine = requestedItems.map((it) => it.label).join(', ');
     const warnSuffix = notReadyBefore.length
         ? ` — שים לב: ${notReadyBefore.map((it) => it.label).join(', ')} לא היו בסטטוס "מוכן לאיסוף" לפני כן`
         : '';
     await logOrderAction(orderId, `פריט נאסף: ${labelsLine}${warnSuffix}`, options?.user);
+    if (cancelNotify) {
+        await logOrderAction(orderId, 'התראת צוות לאיסוף בוטלה — כל הפריטים נאספו', options?.user);
+    }
 
     return { success: true, pickupItems };
 });

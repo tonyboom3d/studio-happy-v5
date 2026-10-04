@@ -65,9 +65,10 @@ async function appendCompanyEventLead(fieldValues) {
         headers: [...COLUMNS.map((column) => column.header), 'תאריך פנייה'],
         values: buildRow(fieldValues),
     };
-    // Query string: Apps Script turns an external POST into a GET and drops the body.
-    const response = await fetch(`${APPSCRIPT_ENDPOINT}?payload=${encodeURIComponent(JSON.stringify(payload))}`, {
-        method: 'get',
+    const response = await fetch(APPSCRIPT_ENDPOINT, {
+        method: 'post',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
     });
     const text = await response.text();
     const json = (() => { try { return JSON.parse(text); } catch (_) { return null; } })();

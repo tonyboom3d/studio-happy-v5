@@ -23,6 +23,7 @@ import {
   formatOrderMessage,
   filterActiveOrders,
   filterPickupOrders,
+  hasReadyPickupItems,
   selectActiveOrder,
   NO_ACTIVE_ORDER_MESSAGE,
   ORDER_NOT_FOUND_MESSAGE,
@@ -46,7 +47,7 @@ import {
   getPickupEligibility, issuePickupToken, extendPickupTokenUntil, findUpcomingAppointment,
   formatPickupSlotLabel, PICKUP_PAGE_URL, PICKUP_WINDOW_DAYS, PICKUP_MAX_APPOINTMENTS,
 } from 'backend/pickupScheduling.js';
-import { syncPickupLink } from 'backend/manychatService.jsw';
+import { syncPickupLink, syncPickupStatus } from 'backend/manychatService.jsw';
 
 // ============================================================
 // ManyChat availability endpoint
@@ -426,6 +427,7 @@ export async function get_identifyOrder(request) {
     const selection = selectActiveOrder(activeOrders, excludeOrderId);
     const { primary, hasMore } = selection;
     const found = !!primary;
+    const pickupReadyText = (found && hasReadyPickupItems(primary)) ? 'true' : 'false';
     const rescheduleEligibility = found ? getRescheduleEligibility(primary) : {
       reschedule_blocked_48h: false,
       reschedule_already_used: false,
@@ -471,6 +473,7 @@ export async function get_identifyOrder(request) {
         attempts: lookupAttempts,
         rescheduleBlocked48h: rescheduleEligibility.reschedule_blocked_48h,
         rescheduleAlreadyUsed: rescheduleEligibility.reschedule_already_used,
+        pickupReady: pickupReadyText === 'true',
       }).catch(() => {});
     } else {
       console.warn('[get_identifyOrder] no subscriber_id — skipping ManyChat field sync');
@@ -514,7 +517,8 @@ export async function get_identifyOrder(request) {
       ...rescheduleEligibility,
       lookup_attempts: lookupAttempts,
       lookup_handoff: lookupHandoff,
-      pickup_ready: found && (primary?.pickupItems || []).some((i) => i.state === 'ready'),
+      pickup_ready: pickupReadyText,
+      pickup_status: pickupReadyText,
       ai_reply: text,
       content: { messages: [{ type: 'text', text }] },
     };
@@ -853,7 +857,8 @@ export async function get_confirmReschedule(request) {
 // Called from the "תיאום איסוף" quick-reply button on the pickup_ready
 // WhatsApp template (order_id comes from the pickup_order_id custom field
 // set in sendPickupReadyManyChat). Response drives the flow's branching via
-// pickup_status: ok | no_items | collected | expired | quota_exceeded.
+// pickup_status (text): "true" when the customer can book a slot.
+// Other values: already_scheduled | no_items | collected | expired | quota_exceeded.
 // ============================================================
 
 export async function get_startPickup(request) {
@@ -889,6 +894,7 @@ export async function get_startPickup(request) {
         const link = `${PICKUP_PAGE_URL}?orderId=${encodeURIComponent(orderId)}&token=${encodeURIComponent(token)}&sid=${encodeURIComponent(subscriberId)}`;
         const slotLabel = `${formatPickupSlotLabel(upcoming)} (${upcoming.workshopName || 'סדנה'})`;
         if (subscriberId) {
+          await syncPickupStatus(subscriberId, 'already_scheduled').catch(() => {});
           await syncPickupLink(subscriberId, link, slotLabel).catch(() => {});
         }
         return ok({
@@ -906,6 +912,7 @@ export async function get_startPickup(request) {
     }
 
     if (eligibility.status === 'expired') {
+      if (subscriberId) await syncPickupStatus(subscriberId, 'expired').catch(() => {});
       return ok({
         headers: { 'Content-Type': 'application/json' },
         body: {
@@ -916,6 +923,7 @@ export async function get_startPickup(request) {
       });
     }
     if (eligibility.status === 'quota_exceeded') {
+      if (subscriberId) await syncPickupStatus(subscriberId, 'quota_exceeded').catch(() => {});
       return ok({
         headers: { 'Content-Type': 'application/json' },
         body: {
@@ -926,6 +934,7 @@ export async function get_startPickup(request) {
       });
     }
     if (eligibility.status === 'no_items' || eligibility.status === 'collected') {
+      if (subscriberId) await syncPickupStatus(subscriberId, eligibility.status).catch(() => {});
       return ok({
         headers: { 'Content-Type': 'application/json' },
         body: {
@@ -942,6 +951,7 @@ export async function get_startPickup(request) {
     const link = `${PICKUP_PAGE_URL}?orderId=${encodeURIComponent(orderId)}&token=${encodeURIComponent(token)}&sid=${encodeURIComponent(subscriberId)}`;
 
     if (subscriberId) {
+      await syncPickupStatus(subscriberId, 'true').catch(() => {});
       await syncPickupLink(subscriberId, link).catch(() => {});
     }
 
@@ -949,7 +959,7 @@ export async function get_startPickup(request) {
       headers: { 'Content-Type': 'application/json' },
       body: {
         status: 'ok',
-        pickup_status: 'ok',
+        pickup_status: 'true',
         pickup_link: link,
         pickup_days_left: Math.max(0, Math.ceil((eligibility.deadline.getTime() - Date.now()) / 86400000)),
         pickup_appointments_used: eligibility.used,

@@ -57,6 +57,7 @@ export const MC_FIELDS = {
     pickupOrderId: 'pickup_order_id',
     pickupLink: 'pickup_link',
     pickupSlotLabel: 'pickup_slot_label',
+    pickupStatus: 'pickup_status',
 };
 
 // Custom field created manually in ManyChat (Settings > Custom Fields, type "Text")
@@ -684,7 +685,7 @@ export async function incrementOrderLookupAttempts(subscriberId, passedAttempts)
  */
 export async function syncOrderLookupFields(subscriberId, {
     status, hasMore, unavailable, rescheduleBlocked48h, rescheduleAlreadyUsed,
-    orderId, source, orderUrl, attempts, verifiedAt,
+    orderId, source, orderUrl, attempts, verifiedAt, pickupReady,
 } = {}) {
     if (!subscriberId) return { synced: false, reason: 'no-subscriberId' };
     try {
@@ -706,6 +707,12 @@ export async function syncOrderLookupFields(subscriberId, {
         ];
         if (verifiedAt != null) {
             textFields.push({ name: ORDER_LOOKUP_MC_FIELDS.verifiedAt, value: verifiedAt || '' });
+        }
+        if (pickupReady != null) {
+            textFields.push({ name: MC_FIELDS.pickupStatus, value: pickupReady ? 'true' : 'false' });
+            if (pickupReady && orderId) {
+                textFields.push({ name: MC_FIELDS.pickupOrderId, value: orderId });
+            }
         }
         await setCustomFieldsByName(subscriberId, textFields);
         if (attempts != null) {
@@ -740,6 +747,20 @@ export async function syncRescheduleLink(subscriberId, link) {
         return { synced: true };
     } catch (err) {
         console.warn('[ManyChat] syncRescheduleLink failed. subscriberId:', subscriberId, err?.message || err);
+        return { synced: false, error: err?.message || String(err) };
+    }
+}
+
+/** Text field. Success is the string "true", never a boolean. */
+export async function syncPickupStatus(subscriberId, status) {
+    if (!subscriberId || status == null || status === '') return { synced: false, reason: 'no-subscriberId' };
+    try {
+        await setCustomFieldsByName(subscriberId, [
+            { name: MC_FIELDS.pickupStatus, value: String(status) },
+        ]);
+        return { synced: true };
+    } catch (err) {
+        console.warn('[ManyChat] syncPickupStatus failed. subscriberId:', subscriberId, err?.message || err);
         return { synced: false, error: err?.message || String(err) };
     }
 }

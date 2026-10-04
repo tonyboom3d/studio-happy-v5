@@ -4,6 +4,8 @@ import { computeSketchEditingDeadline } from 'backend/sketchEditingPolicy.js';
 import { reconcileEcomOrder } from 'backend/orderReconciliation.js';
 import { reconcileAddOnEcomOrder, getAddOnOrderByCheckoutId, getAddOnOrderByEcomOrderId } from 'backend/studioUpsell/reconcile.js';
 import { cancelPromoCouponsForOrder, reschedulePromoCouponsForOrder } from 'backend/promoCouponService.js';
+import { submissions } from '@wix/forms';
+import { handleCompanyEventSubmission } from 'backend/companyEventLeads.js';
 
 const SA = { suppressAuth: true, suppressHooks: true };
 
@@ -89,6 +91,12 @@ async function removeDashboardRole(staffMemberId) {
         // console.log(`[events] Dashboard_Roles: deactivated role(s) for staff ${staffMemberId}`);
     }
 }
+
+submissions.onSubmissionCreated((event) => {
+    handleCompanyEventSubmission(event).catch((err) => {
+        console.error('[events] company event lead failed:', err?.message || err);
+    });
+});
 
 staffMembers.onStaffMemberCreated((event) => {
     upsertDashboardRole(event?.entity?._id).catch(err => {

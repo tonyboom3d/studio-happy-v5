@@ -40,9 +40,14 @@ const ROW_FIELD_ORDER = [
 function doPost(e) {
   try {
     const body = JSON.parse((e && e.postData && e.postData.contents) || '{}');
-    if (!body.inquiry_date) body.inquiry_date = formatInquiryDate();
 
-    const sheet = getSheet();
+    if (body.sheet && Array.isArray(body.values)) {
+      appendLabeledRow(body.sheet, body.headers, body.values);
+      return jsonResponse({ ok: true });
+    }
+
+    if (!body.inquiry_date) body.inquiry_date = formatInquiryDate();
+    const sheet = getSheet(SHEET_NAME);
     const row = ROW_FIELD_ORDER.map((key) => body[key] == null ? '' : body[key]);
     sheet.appendRow(row);
 
@@ -52,17 +57,30 @@ function doPost(e) {
   }
 }
 
+/** Creates the tab if needed, writes the header once, then appends the lead. */
+function appendLabeledRow(sheetName, headers, values) {
+  const sheet = getOrCreateSheet(sheetName);
+  const headerRow = Array.isArray(headers) ? headers : [];
+  if (headerRow.length && sheet.getLastRow() === 0) {
+    sheet.appendRow(headerRow);
+    sheet.setFrozenRows(1);
+  }
+  sheet.appendRow(values);
+}
+
 function formatInquiryDate() {
   return Utilities.formatDate(new Date(), 'Asia/Jerusalem', 'dd/MM/yyyy HH:mm');
 }
 
-function getSheet() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const sheet = ss.getSheetByName(SHEET_NAME);
-  if (!sheet) {
-    throw new Error('Sheet "' + SHEET_NAME + '" not found');
-  }
+function getSheet(name) {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(name);
+  if (!sheet) throw new Error('Sheet "' + name + '" not found');
   return sheet;
+}
+
+function getOrCreateSheet(name) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  return ss.getSheetByName(name) || ss.insertSheet(name);
 }
 
 function jsonResponse(obj, statusCode) {

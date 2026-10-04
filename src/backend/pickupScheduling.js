@@ -35,7 +35,7 @@ import { sendPickupScheduledManyChat } from 'backend/manychatService.jsw';
 import { getOrderPickupDisplayItems, getCurrentStaffName } from 'backend/dashboardService.web.js';
 import { getSecret } from 'wix-secrets-backend';
 import { randomBytes } from 'crypto';
-import QRCode from 'qrcode';
+import qrcode from './vendor/qrcode-generator.js';
 import { WORKSHOP_SERVICE_IDS, ALL_CANDLES_SERVICE_IDS } from 'backend/workshopServiceIds.js';
 const SA = { suppressAuth: true };
 const SAC = { suppressAuth: true, consistentRead: true };
@@ -76,10 +76,14 @@ export function buildPassLink(orderId, passToken) {
     return `${PICKUP_CONFIRM_URL}?orderId=${encodeURIComponent(orderId)}&pass=${encodeURIComponent(passToken)}`;
 }
 
-/** QR (PNG data URL) encoding the staff confirmation link for an appointment. */
+/** QR (GIF data URL) encoding the staff confirmation link. Local library, no npm package. */
 export async function generatePassQr(orderId, passToken) {
     if (!orderId || !passToken) return null;
-    return QRCode.toDataURL(buildPassLink(orderId, passToken), { margin: 1, width: 320, errorCorrectionLevel: 'M' });
+    qrcode.stringToBytes = qrcode.stringToBytesFuncs['UTF-8'];
+    const qr = qrcode(0, 'M');
+    qr.addData(buildPassLink(orderId, passToken));
+    qr.make();
+    return qr.createDataURL(6, 2);
 }
 
 export function formatPickupSlotLabel(appointment) {

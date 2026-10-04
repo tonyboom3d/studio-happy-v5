@@ -3,8 +3,8 @@
  * ------------------------------------
  * עמוד "תיאום איסוף" — הלקוח מגיע מקישור חד-פעמי בוואטסאפ (טוקן בתוקף 30
  * דקות, נוצר ע"י http-functions.js get_startPickup) ובוחר מועד/שעת סדנה
- * שבה יגיע לאסוף את ההזמנה. רק סדנאות עם 2+ הזמנות שונות מוצגות (כדי
- * שיהיה מי לקבל את הלקוח), עד 20 יום ממועד הודעת "מוכן לאיסוף".
+ * שבה יגיע לאסוף את ההזמנה. כל הסדנאות ביומן מוצגות, עד 25 יום
+ * ממועד הודעת "מוכן לאיסוף".
  *
  * התקנה בוויקס (לביצוע ע"י המשתמש):
  * 1. יצירת עמוד חדש "תיאום איסוף" (יקבל סיומת קובץ אוטומטית, למשל .xxxxx.js).
@@ -363,6 +363,7 @@ class PickupScheduler extends HTMLElement {
             byDay.get(k).push(s);
         });
         const dayKeys = [...byDay.keys()].sort();
+        if (!this._selectedDay && dayKeys.length === 1) this._selectedDay = dayKeys[0];
         const firstKey = dayKeys[0];
         const lastKey = dayKeys[dayKeys.length - 1];
         const [fy, fm] = firstKey.split('-').map(Number);
@@ -391,6 +392,7 @@ class PickupScheduler extends HTMLElement {
         let timesBlock = '';
         if (this._selectedDay && byDay.has(this._selectedDay)) {
             const daySlots = byDay.get(this._selectedDay).slice().sort((a, b) => new Date(a.start) - new Date(b.start));
+            if (daySlots.length === 1) this._selectedSlotKey = daySlots[0].slotKey;
             timesBlock = `
                 <div class="ps-times">
                     <div class="ps-times-title">${psEsc(formatSlotDate(daySlots[0].start))} — בחרו שעה:</div>

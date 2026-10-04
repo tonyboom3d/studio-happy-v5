@@ -3,10 +3,9 @@
  * pickupSchedulingService.web.js for the customer-facing page API and
  * http-functions.js get_startPickup for the ManyChat entry point).
  *
- * A workshop session is offered as a pickup slot only when it has at least
- * PICKUP_MIN_ORDERS distinct WorkshopOrders rows (paid, not cancelled) —
- * this makes it very likely someone from staff is actually present to hand
- * over the item, regardless of workshop type.
+ * Every Bookings session in the pickup window is offered, including sessions
+ * that have no paid orders yet. Paid orders whose session is missing from
+ * availability (for example a full workshop) are added as well.
  *
  * Staff notification timing: scheduled for (slot start − 30min); if that
  * moment is already in the past when the appointment is created (customer
@@ -36,6 +35,8 @@ import { sendPickupScheduledManyChat } from 'backend/manychatService.jsw';
 import { getOrderPickupDisplayItems, getCurrentStaffName } from 'backend/dashboardService.web.js';
 import { getSecret } from 'wix-secrets-backend';
 import { randomBytes } from 'crypto';
+import QRCode from 'qrcode';
+import { WORKSHOP_SERVICE_IDS, ALL_CANDLES_SERVICE_IDS } from 'backend/workshopServiceIds.js';
 const SA = { suppressAuth: true };
 const SAC = { suppressAuth: true, consistentRead: true };
 const ISRAEL_TZ = 'Asia/Jerusalem';
@@ -78,8 +79,6 @@ export function buildPassLink(orderId, passToken) {
 /** QR (PNG data URL) encoding the staff confirmation link for an appointment. */
 export async function generatePassQr(orderId, passToken) {
     if (!orderId || !passToken) return null;
-    const mod = await import('qrcode'); // lazy: don't break module load if package missing
-    const QRCode = mod.default || mod;
     return QRCode.toDataURL(buildPassLink(orderId, passToken), { margin: 1, width: 320, errorCorrectionLevel: 'M' });
 }
 
@@ -132,9 +131,18 @@ function slotKeyForOrder(order) {
     return null;
 }
 
-/** Batched availability lookup for slot end times — mirrors dashboardService.web.js loadSessions. */
-async function loadSlotEndTimes(serviceIds, startDate, endDate) {
-    const endByKey = {};
+function collectPickupServiceIds(serviceIdToTypeId) {
+    const ids = new Set(Object.keys(serviceIdToTypeId || {}));
+    for (const list of Object.values(WORKSHOP_SERVICE_IDS)) {
+        for (const id of list || []) ids.add(id);
+    }
+    for (const id of ALL_CANDLES_SERVICE_IDS) ids.add(id);
+    return [...ids];
+}
+
+/** Every bookable session Wix returns for these services in the window. */
+async function loadAvailabilitySlots(serviceIds, startDate, endDate) {
+    const slots = [];
     await Promise.all([...new Set(serviceIds)].map(async (serviceId) => {
         try {
             const query = { filter: { serviceId, startDate: startDate.toISOString(), endDate: endDate.toISOString() } };
@@ -142,23 +150,23 @@ async function loadSlotEndTimes(serviceIds, startDate, endDate) {
             for (const entry of (availability.availabilityEntries || [])) {
                 const slot = entry.slot || {};
                 if (!slot.startDate || !slot.endDate) continue;
-                const key = `${serviceId}_${new Date(slot.startDate).getTime()}`;
-                endByKey[key] = new Date(slot.endDate);
+                const start = new Date(slot.startDate);
+                if (Number.isNaN(start.getTime()) || start.getTime() <= Date.now() || start.getTime() > endDate.getTime()) continue;
+                slots.push({
+                    serviceId: slot.serviceId || serviceId,
+                    start,
+                    end: new Date(slot.endDate),
+                });
             }
         } catch (err) {
-            console.warn('[pickupScheduling] loadSlotEndTimes failed for service', serviceId, err?.message || err);
+            console.warn('[pickupScheduling] loadAvailabilitySlots failed for service', serviceId, err?.message || err);
         }
     }));
-    return endByKey;
+    return slots;
 }
 
-/**
- * Loads pickup-eligible workshop sessions (>= PICKUP_MIN_ORDERS distinct
- * paid orders) starting in (now, toDate]. Returns one entry per physical
- * session, sorted by start time.
- */
-export async function loadPickupSlots(toDate) {
-    const now = new Date();
+/** Paid, not-cancelled orders in the window, grouped by physical session. */
+async function loadOrderSessionGroups(now, toDate) {
     const items = [];
     let result = await wixData.query('WorkshopOrders')
         .eq('status', 'paid')
@@ -188,29 +196,64 @@ export async function loadPickupSlots(toDate) {
         }
         groups.get(key).orderIds.add(order._id);
     }
+    return [...groups.values()];
+}
 
-    const eligible = [...groups.values()].filter((g) => g.orderIds.size >= PICKUP_MIN_ORDERS);
-    if (!eligible.length) return [];
-
-    const [{ serviceIdToTypeId, typesById }, endByKey] = await Promise.all([
-        loadWorkshopTypeMap(),
-        loadSlotEndTimes(eligible.map((g) => g.serviceId).filter(Boolean), now, toDate),
+/**
+ * Every workshop session starting in (now, toDate]. Bookings availability is
+ * the source of the calendar; paid orders fill in sessions availability omits.
+ */
+export async function loadPickupSlots(toDate) {
+    const now = new Date();
+    const { serviceIdToTypeId, typesById } = await loadWorkshopTypeMap();
+    const [availabilitySlots, orderGroups] = await Promise.all([
+        loadAvailabilitySlots(collectPickupServiceIds(serviceIdToTypeId), now, toDate),
+        loadOrderSessionGroups(now, toDate),
     ]);
 
-    return eligible
+    const byStart = new Map();
+    const put = (slot) => {
+        const startMs = slot.start.getTime();
+        const dedupeKey = `${slot.serviceId || ''}_${startMs}`;
+        const existing = byStart.get(dedupeKey);
+        if (existing) {
+            existing.ordersCount = Math.max(existing.ordersCount || 0, slot.ordersCount || 0);
+            if (!existing.end && slot.end) existing.end = slot.end;
+            return;
+        }
+        byStart.set(dedupeKey, slot);
+    };
+
+    for (const slot of availabilitySlots) {
+        put({
+            slotKey: `slot:${slot.serviceId}_${slot.start.getTime()}`,
+            start: slot.start,
+            end: slot.end,
+            serviceId: slot.serviceId,
+            ordersCount: 0,
+        });
+    }
+    for (const g of orderGroups) {
+        put({
+            slotKey: g.serviceId ? `slot:${g.serviceId}_${g.start.getTime()}` : g.slotKey,
+            start: g.start,
+            end: new Date(g.start.getTime() + 3 * 60 * 60 * 1000),
+            serviceId: g.serviceId,
+            ordersCount: g.orderIds.size,
+        });
+    }
+
+    return [...byStart.values()]
         .map((g) => {
-            const endKey = g.serviceId ? `${g.serviceId}_${g.start.getTime()}` : null;
-            const end = (endKey && endByKey[endKey]) || new Date(g.start.getTime() + 3 * 60 * 60 * 1000);
             const workshopTypeId = g.serviceId ? serviceIdToTypeId[g.serviceId] || null : null;
-            const workshopName = (workshopTypeId && typesById[workshopTypeId]?.name) || 'סדנה';
             return {
                 slotKey: g.slotKey,
                 start: g.start,
-                end,
+                end: g.end || new Date(g.start.getTime() + 3 * 60 * 60 * 1000),
                 serviceId: g.serviceId,
                 workshopTypeId,
-                workshopName,
-                ordersCount: g.orderIds.size,
+                workshopName: (workshopTypeId && typesById[workshopTypeId]?.name) || 'סדנה',
+                ordersCount: g.ordersCount || 0,
             };
         })
         .sort((a, b) => a.start.getTime() - b.start.getTime());

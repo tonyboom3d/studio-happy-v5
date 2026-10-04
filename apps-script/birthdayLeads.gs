@@ -81,16 +81,56 @@ function readBody(e) {
   return JSON.parse(raw);
 }
 
+const COMPANY_EVENT_HEADERS = [
+  'שם',
+  'שם משפחה',
+  'דוא"ל',
+  'טלפון',
+  'שם חברה',
+  'תפקיד בחברה',
+  'כמה משתתפים ?',
+  'סוג סדנה רצוייה',
+  'תאריך האירוע',
+  'שעה',
+  'איפה תרצו לעשות את הסדנה ?',
+  'כתובת המשרדים',
+  'הערות נוספות ?',
+  'הסכמה לתנאי השימוש',
+  'תאריך פנייה',
+];
+
+/** Run once from the Apps Script editor to add the header above existing leads. */
+function fixCompanyEventHeader() {
+  const sheet = getOrCreateSheet('אירועי חברה');
+  ensureHeader(sheet, COMPANY_EVENT_HEADERS);
+}
+
 /** Creates the tab if needed, writes the header once, then appends the lead. */
 function appendLabeledRow(sheetName, headers, values) {
   const sheet = getOrCreateSheet(sheetName);
-  const headerRow = Array.isArray(headers) ? headers : [];
-  if (headerRow.length && sheet.getLastRow() === 0) {
-    sheet.appendRow(headerRow);
-    sheet.setFrozenRows(1);
-  }
+  const headerRow = Array.isArray(headers) && headers.length ? headers : [];
+  if (headerRow.length) ensureHeader(sheet, headerRow);
   sheet.appendRow(values);
   return sheet;
+}
+
+function ensureHeader(sheet, headerRow) {
+  const width = headerRow.length;
+  if (sheet.getLastRow() === 0) {
+    sheet.appendRow(headerRow);
+    sheet.setFrozenRows(1);
+    return;
+  }
+  const current = sheet.getRange(1, 1, 1, width).getDisplayValues()[0];
+  const same = headerRow.every(function (cell, i) { return String(current[i] || '') === String(cell); });
+  if (same) {
+    sheet.setFrozenRows(1);
+    return;
+  }
+  const first = String(current[0] || '');
+  if (first !== String(headerRow[0])) sheet.insertRowBefore(1);
+  sheet.getRange(1, 1, 1, width).setValues([headerRow]);
+  sheet.setFrozenRows(1);
 }
 
 function formatInquiryDate() {

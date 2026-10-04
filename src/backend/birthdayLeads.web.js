@@ -6,8 +6,8 @@ import { Permissions, webMethod } from 'wix-web-module';
 import wixData from 'wix-data';
 import { submissions } from '@wix/forms';
 import { auth } from '@wix/essentials';
-import { fetch } from 'wix-fetch';
 import { sendBirthdayLeadNoticeManyChat } from 'backend/manychatService.jsw';
+import { postSheetWebhook } from 'backend/sheetWebhook.js';
 
 const SA = { suppressAuth: true };
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -105,15 +105,10 @@ async function appendBirthdayLeadToSheet(row) {
     }
 
     try {
-        const response = await fetch(APPSCRIPT_ENDPOINT, {
-            method: 'post',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ ...buildWixFormSubmission(row), inquiry_date: formatInquiryDate() }),
+        await postSheetWebhook(APPSCRIPT_ENDPOINT, {
+            ...buildWixFormSubmission(row),
+            inquiry_date: formatInquiryDate(),
         });
-        const json = await response.json().catch(() => null);
-        if (!response.ok || json?.ok === false) {
-            throw new Error(`Apps Script responded ${response.status}: ${JSON.stringify(json)}`);
-        }
         return { ok: true };
     } catch (err) {
         console.error('[birthdayLeads.web] appendBirthdayLeadToSheet failed:', err?.message || err);

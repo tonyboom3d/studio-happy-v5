@@ -62,6 +62,7 @@ function handleRequest(e) {
     const sheet = getSheet(SHEET_NAME);
     const row = ROW_FIELD_ORDER.map((key) => body[key] == null ? '' : body[key]);
     sheet.appendRow(row);
+    SpreadsheetApp.flush();
 
     return jsonResponse({ ok: true, sheet: SHEET_NAME, lastRow: sheet.getLastRow() });
   } catch (err) {
@@ -111,6 +112,7 @@ function appendLabeledRow(sheetName, headers, values) {
   const headerRow = Array.isArray(headers) && headers.length ? headers : [];
   if (headerRow.length) ensureHeader(sheet, headerRow);
   sheet.appendRow(values);
+  SpreadsheetApp.flush();
   return sheet;
 }
 

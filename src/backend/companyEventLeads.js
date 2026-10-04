@@ -1,7 +1,7 @@
 // Company-event form (dc59834f) → sheet "אירועי חברה" on the shared leads
 // spreadsheet, then the same studio WhatsApp template used for birthday leads.
-import { fetch } from 'wix-fetch';
 import { sendBirthdayLeadNoticeManyChat } from 'backend/manychatService.jsw';
+import { postSheetWebhook } from 'backend/sheetWebhook.js';
 
 const COMPANY_FORM_ID = 'dc59834f-f944-42e1-a576-9b304c87be92';
 const SHEET_NAME = 'אירועי חברה';
@@ -65,18 +65,7 @@ async function appendCompanyEventLead(fieldValues) {
         headers: [...COLUMNS.map((column) => column.header), 'תאריך פנייה'],
         values: buildRow(fieldValues),
     };
-    const response = await fetch(APPSCRIPT_ENDPOINT, {
-        method: 'post',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-    });
-    const text = await response.text();
-    const json = (() => { try { return JSON.parse(text); } catch (_) { return null; } })();
-    console.log('[companyEventLeads] sheet response:', text.slice(0, 500));
-    if (!response.ok || !json?.ok) {
-        throw new Error(`Apps Script responded ${response.status}: ${text.slice(0, 500)}`);
-    }
-    return json;
+    return postSheetWebhook(APPSCRIPT_ENDPOINT, payload);
 }
 
 /** Sheet first, then the existing studio WhatsApp template. */

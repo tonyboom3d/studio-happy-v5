@@ -2439,10 +2439,14 @@ function __wdInjectGlobalAssets() {
                         ? '<span class="text-[10px] font-bold px-2 py-0.5 rounded bg-amber-100 text-amber-700 border border-amber-200 whitespace-nowrap">ממתין לאיסוף</span>'
                         : '<span class="text-[10px] font-bold px-2 py-0.5 rounded bg-gray-100 text-gray-600 border border-gray-200 whitespace-nowrap">לא סומן</span>';
                 const safeLabel = String(item.label).replace(/'/g, "\\'");
+                const thumb = item.img
+                    ? `<img src="${String(item.img).replace(/"/g, '&quot;')}" alt="" class="w-11 h-11 rounded-md object-cover border border-gray-200 shrink-0 bg-gray-50">`
+                    : `<div class="w-11 h-11 rounded-md border border-dashed border-gray-200 bg-gray-50 shrink-0"></div>`;
                 return `
                     <div class="flex items-center justify-between gap-3 border border-gray-200 rounded-lg p-2.5">
                         <label class="flex items-center gap-2.5 flex-1 min-w-0 ${isCollected ? 'opacity-50' : 'cursor-pointer'}">
                             <input type="checkbox" data-pickup-key="${item.key}" data-pickup-label="${safeLabel}" ${isCollected ? 'disabled' : ''} ${isReady ? 'checked' : ''} class="w-4 h-4 accent-primary shrink-0">
+                            ${thumb}
                             <span class="text-sm font-medium text-gray-800 truncate">${item.label}</span>
                         </label>
                         ${badge}

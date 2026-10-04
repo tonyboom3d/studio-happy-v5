@@ -255,17 +255,35 @@ export function getPickupEligibility(order) {
     };
 }
 
-export async function issuePickupToken(orderId) {
+export async function issuePickupToken(orderId, expiresAt) {
     const order = await getItemWithRetry('WorkshopOrders', orderId, { callerLabel: 'pickupScheduling.issuePickupToken' });
     if (!order) throw new Error('NOT_FOUND: ההזמנה לא נמצאה.');
 
     const token = randomToken();
-    const expiresAt = new Date(Date.now() + PICKUP_TOKEN_TTL_MS);
+    const expiry = expiresAt instanceof Date && !Number.isNaN(expiresAt.getTime())
+        ? expiresAt
+        : new Date(Date.now() + PICKUP_TOKEN_TTL_MS);
     await patchWorkshopOrderFields(orderId, {
         pickupToken: token,
-        pickupTokenExpiresAt: expiresAt,
+        pickupTokenExpiresAt: expiry,
     }, 'pickupScheduling.issuePickupToken');
-    return { token, expiresAt };
+    return { token, expiresAt: expiry };
+}
+
+/**
+ * Keeps the existing booking-page token (the URL that shows the QR) and
+ * sets its expiry to the chosen pickup window end. Issues a token only
+ * when the order has none yet.
+ */
+export async function extendPickupTokenUntil(orderId, expiresAt) {
+    const order = await getItemWithRetry('WorkshopOrders', orderId, { callerLabel: 'pickupScheduling.extendPickupTokenUntil' });
+    if (!order) throw new Error('NOT_FOUND: ההזמנה לא נמצאה.');
+    const expiry = expiresAt instanceof Date ? expiresAt : new Date(expiresAt);
+    if (order.pickupToken) {
+        await patchWorkshopOrderFields(orderId, { pickupTokenExpiresAt: expiry }, 'pickupScheduling.extendPickupTokenUntil');
+        return { token: order.pickupToken, expiresAt: expiry };
+    }
+    return issuePickupToken(orderId, expiry);
 }
 
 export async function loadOrderByPickupToken(orderId, token) {
@@ -397,6 +415,16 @@ export async function createPickupAppointment(orderId, slotKey) {
         pickupStaffNotifyStatus: 'pending',
     }, 'pickupScheduling.createPickupAppointment');
 
+    // The page link that shows the QR stays valid until the pickup window ends
+    // (not the 30-minute pre-booking TTL).
+    const extended = await extendPickupTokenUntil(orderId, slot.end).catch((err) => {
+        console.warn('[pickupScheduling] extendPickupTokenUntil failed:', err?.message || err);
+        return null;
+    });
+    const viewLink = extended?.token
+        ? `${PICKUP_PAGE_URL}?orderId=${encodeURIComponent(orderId)}&token=${encodeURIComponent(extended.token)}`
+        : '';
+
     await appendOrderActionLog(
         orderId,
         `הלקוח תיאם איסוף ל-${formatDateHe(slot.start)} (${formatTimeHe(slot.start)}-${formatTimeHe(slot.end)}) — תיאום ${usedCount} מתוך ${PICKUP_MAX_APPOINTMENTS}`,
@@ -408,6 +436,7 @@ export async function createPickupAppointment(orderId, slotKey) {
     const customerMsg = await sendPickupScheduledManyChat(order, {
         slotLabel: `${slotLabel} (${slot.workshopName})`,
         itemsLine: readyItems.map((i) => i.label).join(', '),
+        viewLink,
     }).catch((err) => ({ sent: false, reason: 'error', error: err?.message || String(err) }));
     await appendOrderActionLog(
         orderId,

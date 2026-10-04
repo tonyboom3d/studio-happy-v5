@@ -42,7 +42,7 @@ import {
 import wixData from 'wix-data';
 import { issueRescheduleToken, confirmRescheduleRequest } from 'backend/rescheduleService.web.js';
 import {
-  getPickupEligibility, issuePickupToken, findUpcomingAppointment,
+  getPickupEligibility, issuePickupToken, extendPickupTokenUntil, findUpcomingAppointment,
   formatPickupSlotLabel, PICKUP_PAGE_URL, PICKUP_WINDOW_DAYS, PICKUP_MAX_APPOINTMENTS,
 } from 'backend/pickupScheduling.js';
 import { syncPickupLink } from 'backend/manychatService.jsw';
@@ -878,8 +878,9 @@ export async function get_startPickup(request) {
     if (eligibility.status !== 'no_items' && eligibility.status !== 'collected') {
       const upcoming = findUpcomingAppointment(order);
       if (upcoming) {
-        // The booking page shows the open appointment + its staff QR.
-        const { token, expiresAt } = await issuePickupToken(orderId);
+        // Same booking-page link, valid until the chosen pickup window ends.
+        const slotEnd = new Date(upcoming.end);
+        const { token, expiresAt } = await extendPickupTokenUntil(orderId, slotEnd);
         const link = `${PICKUP_PAGE_URL}?orderId=${encodeURIComponent(orderId)}&token=${encodeURIComponent(token)}&sid=${encodeURIComponent(subscriberId)}`;
         const slotLabel = `${formatPickupSlotLabel(upcoming)} (${upcoming.workshopName || 'סדנה'})`;
         if (subscriberId) {

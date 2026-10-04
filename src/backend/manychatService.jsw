@@ -1103,9 +1103,10 @@ export async function sendPickupReadyManyChat(order, itemLabels) {
  * pickup slot — valid because they just interacted (24h window). Reuses the
  * order-confirmation flow with notification_type 'pickup_scheduled'; the flow
  * needs a branch with a plain text message using pickup_slot_label,
- * pickup_pass_link and pickup_items_line. Never throws.
+ * pickup_link (the page that shows the staff QR) and pickup_items_line.
+ * Never throws.
  */
-export async function sendPickupScheduledManyChat(order, { slotLabel, itemsLine }) {
+export async function sendPickupScheduledManyChat(order, { slotLabel, itemsLine, viewLink }) {
     try {
         const phone = normalizeIsraeliPhone(order?.organizerPhone);
         if (!phone) return { sent: false, reason: 'no-phone' };
@@ -1120,6 +1121,7 @@ export async function sendPickupScheduledManyChat(order, { slotLabel, itemsLine 
             { name: NOTIFICATION_TYPE_FIELD, value: 'pickup_scheduled' },
             { name: MC_FIELDS.organizerName, value: order?.organizerName },
             { name: MC_FIELDS.pickupSlotLabel, value: slotLabel },
+            { name: MC_FIELDS.pickupLink, value: viewLink },
             { name: MC_FIELDS.pickupItemsLine, value: itemsLine },
         ].filter(f => hasManyChatFieldValue(f.value));
         await setCustomFieldsByName(subscriber.id, fields);

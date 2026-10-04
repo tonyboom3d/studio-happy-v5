@@ -80,9 +80,8 @@ export async function handleCompanyEventSubmission(event) {
         await appendCompanyEventLead(submission.submissions || {});
     } catch (err) {
         console.error('[companyEventLeads] sheet append failed:', err?.message || err);
-        return;
     }
 
     const wa = await sendBirthdayLeadNoticeManyChat(STUDIO_MANYCHAT_SUBSCRIBER_ID);
-    if (!wa?.sent) console.error('[companyEventLeads] WhatsApp notice failed:', JSON.stringify(wa));
+    console.log('[companyEventLeads] WhatsApp result:', JSON.stringify(wa));
 }

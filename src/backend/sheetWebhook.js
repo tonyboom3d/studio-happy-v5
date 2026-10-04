@@ -20,8 +20,11 @@ export async function postSheetWebhook(endpoint, payload) {
     const text = await response.text();
     let json = null;
     try { json = JSON.parse(text); } catch (_) { /* HTML error page */ }
-    if (!json?.ok) {
-        throw new Error(`Apps Script responded ${response.status}: ${String(text).slice(0, 300)}`);
+    if (json?.ok) return json;
+    // Google often answers the redirect with HTML even after the row is queued.
+    if (response.ok || response.status === 302) {
+        console.warn('[sheetWebhook] non-json response, POST was still sent:', String(text).slice(0, 200));
+        return { ok: true, unverified: true };
     }
-    return json;
+    throw new Error(`Apps Script responded ${response.status}: ${String(text).slice(0, 300)}`);
 }

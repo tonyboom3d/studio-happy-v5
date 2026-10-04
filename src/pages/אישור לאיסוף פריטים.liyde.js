@@ -64,15 +64,17 @@ $w.onReady(async function () {
         }
     });
 
-    // Not logged in → prompt before loading (page is Members-only, this is a safety net).
+    // Show a login screen first, then open the login window. A camera/QR
+    // browser often never draws the modal if we wait on it before any UI.
     if (!authentication.loggedIn()) {
+        setContext({ error: true, code: 'ACCESS_DENIED', message: 'נדרשת התחברות של עובד כדי לאשר את האיסוף.' });
         try {
             await authentication.promptLogin({ mode: 'login', modal: true });
         } catch (err) {
             console.warn('[pickup-confirm] promptLogin cancelled/failed:', err?.message || err);
-            setContext({ error: true, code: 'ACCESS_DENIED', message: 'נדרשת התחברות.' });
             return;
         }
+        if (!authentication.loggedIn()) return;
     }
 
     await loadScan();

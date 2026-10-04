@@ -3408,7 +3408,11 @@ function __wdInjectGlobalAssets() {
                             'פתוח לשינויים': 'bg-gray-100 text-gray-700 border-gray-200',
                             'לא מאושרת לביצוע': 'bg-red-100 text-red-700 border-red-300 font-bold'
                         };
-                        const badgeClass = statusColors[s.status] || 'bg-gray-100 text-gray-700 border-gray-200';
+                        const sketchCollected = (o.pickupItems || []).some(pi => pi.key === `sketch:${s.id}` && pi.state === 'collected');
+                        const badgeClass = sketchCollected
+                            ? 'bg-emerald-100 text-emerald-700 border-emerald-200'
+                            : (statusColors[s.status] || 'bg-gray-100 text-gray-700 border-gray-200');
+                        const statusLabel = sketchCollected ? 'נאסף' : s.status;
                         const sketchNum = getSketchDisplayNumber(s, idx);
                         const sketchLabel = getSketchGroupLabel(s, idx, o);
                         const childBadge = buildChildSketchBadge(s);
@@ -3450,16 +3454,18 @@ function __wdInjectGlobalAssets() {
                                 <div class="relative w-full aspect-square rounded-lg overflow-hidden group cursor-pointer border border-gray-200 shadow-sm z-10">
                                     ${imgHtml}
                                     <div class="absolute top-2 right-2 px-1.5 py-0.5 rounded text-[10px] font-bold border shadow-sm z-20 opacity-95 ${badgeClass}">
-                                        ${s.status}
+                                        ${statusLabel}
                                     </div>
                                 </div>
                                 <div class="z-10">
-                                    <select onchange="updateSketchStatus('${o.id}', '${s.id}', this.value, this)" class="compact-input w-full py-1.5 text-xs bg-gray-50 font-medium ${(isCancelled||!canEditSketchStatus)?'pointer-events-none':''}" ${(isCancelled||!canEditSketchStatus)?'disabled':''} title="${!canEditSketchStatus?'אין לך הרשאה לעדכן סטטוס סקיצה':''}">
+                                    ${sketchCollected
+                                        ? `<select disabled class="compact-input w-full py-1.5 text-xs bg-emerald-50 font-medium text-emerald-800 pointer-events-none" title="הפריט נאסף"><option selected>נאסף</option></select>`
+                                        : `<select onchange="updateSketchStatus('${o.id}', '${s.id}', this.value, this)" class="compact-input w-full py-1.5 text-xs bg-gray-50 font-medium ${(isCancelled||!canEditSketchStatus)?'pointer-events-none':''}" ${(isCancelled||!canEditSketchStatus)?'disabled':''} title="${!canEditSketchStatus?'אין לך הרשאה לעדכן סטטוס סקיצה':''}">
                                         <option value="פתוח לשינויים" ${s.status==='פתוח לשינויים'?'selected':''}>פתוח לשינויים</option>
                                         <option value="בהכנה" ${s.status==='בהכנה'?'selected':''}>בהכנה</option>
                                         <option value="מוכנה" ${s.status==='מוכנה'?'selected':''}>מוכנה</option>
                                         <option value="לא מאושרת לביצוע" ${s.status==='לא מאושרת לביצוע'?'selected':''} ${!canRejectSketchStatus?'disabled':''}>לא מאושרת לביצוע</option>
-                                    </select>
+                                    </select>`}
                                 </div>
                             </div>
                         `;
@@ -3979,6 +3985,12 @@ function __wdInjectGlobalAssets() {
         }
 
         function updateSketchStatus(orderId, sketchId, newStatus, selectElement) {
+            const order = mockOrders.find(o => o.id === orderId);
+            if ((order?.pickupItems || []).some(pi => pi.key === `sketch:${sketchId}` && pi.state === 'collected')) {
+                alert('הפריט נאסף ולא ניתן לשנות את הסטטוס.');
+                if (selectElement) selectElement.value = 'נאסף';
+                return;
+            }
             if (!hasDashboardPermission('editSketchStatus')) {
                 alert('אין לך הרשאה לעדכן סטטוס סקיצה.');
                 if (selectElement) renderCurrentSketchStatusSelect(selectElement, orderId, sketchId);

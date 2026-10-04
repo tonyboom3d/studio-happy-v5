@@ -1752,6 +1752,10 @@ export const updateSketchState = webMethod(Permissions.SiteMember, async (orderI
     const sel = await wixData.get('SketchSelections', sketchId, SA);
     if (!sel) throw new Error('Sketch not found');
 
+    const orderForPickup = await getItemWithRetry('WorkshopOrders', orderId, { callerLabel: 'updateSketchState' });
+    const collected = (orderForPickup?.pickupItems || []).some((item) => item.key === `sketch:${sketchId}` && item.state === 'collected');
+    if (collected) throw new Error('COLLECTED:הפריט נאסף ולא ניתן לשנות את הסטטוס.');
+
     if (options?.expectedUpdatedDate && sel._updatedDate) {
         const expected = new Date(options.expectedUpdatedDate).getTime();
         const actual = new Date(sel._updatedDate).getTime();

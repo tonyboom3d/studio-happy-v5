@@ -105,13 +105,9 @@ async function appendBirthdayLeadToSheet(row) {
     }
 
     try {
-        const response = await fetch(APPSCRIPT_ENDPOINT, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                ...buildWixFormSubmission(row),
-                inquiry_date: formatInquiryDate(),
-            }),
+        const payload = { ...buildWixFormSubmission(row), inquiry_date: formatInquiryDate() };
+        const response = await fetch(`${APPSCRIPT_ENDPOINT}?payload=${encodeURIComponent(JSON.stringify(payload))}`, {
+            method: 'get',
         });
         const json = await response.json().catch(() => null);
         if (!response.ok || json?.ok === false) {

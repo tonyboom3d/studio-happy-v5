@@ -37,13 +37,25 @@ const ROW_FIELD_ORDER = [
   'inquiry_date',
 ];
 
+function doGet(e) {
+  return handleRequest(e);
+}
+
 function doPost(e) {
+  return handleRequest(e);
+}
+
+function handleRequest(e) {
   try {
-    const body = JSON.parse((e && e.postData && e.postData.contents) || '{}');
+    const body = readBody(e);
 
     if (body.sheet && Array.isArray(body.values)) {
-      appendLabeledRow(body.sheet, body.headers, body.values);
-      return jsonResponse({ ok: true });
+      const sheet = appendLabeledRow(body.sheet, body.headers, body.values);
+      return jsonResponse({ ok: true, sheet: body.sheet, lastRow: sheet.getLastRow() });
+    }
+
+    if (!body.form_field && !body.inquiry_date) {
+      return jsonResponse({ ok: false, error: 'empty body' });
     }
 
     if (!body.inquiry_date) body.inquiry_date = formatInquiryDate();
@@ -51,10 +63,22 @@ function doPost(e) {
     const row = ROW_FIELD_ORDER.map((key) => body[key] == null ? '' : body[key]);
     sheet.appendRow(row);
 
-    return jsonResponse({ ok: true });
+    return jsonResponse({ ok: true, sheet: SHEET_NAME, lastRow: sheet.getLastRow() });
   } catch (err) {
-    return jsonResponse({ ok: false, error: String(err && err.message || err) }, 500);
+    return jsonResponse({ ok: false, error: String(err && err.message || err) });
   }
+}
+
+function readBody(e) {
+  const param = e && e.parameter && e.parameter.payload;
+  if (param) return JSON.parse(param);
+
+  const raw = (e && e.postData && e.postData.contents) || '';
+  if (!raw) return {};
+  if (raw.indexOf('payload=') === 0) {
+    return JSON.parse(decodeURIComponent(raw.slice('payload='.length).replace(/\+/g, ' ')));
+  }
+  return JSON.parse(raw);
 }
 
 /** Creates the tab if needed, writes the header once, then appends the lead. */
@@ -66,6 +90,7 @@ function appendLabeledRow(sheetName, headers, values) {
     sheet.setFrozenRows(1);
   }
   sheet.appendRow(values);
+  return sheet;
 }
 
 function formatInquiryDate() {

@@ -59,18 +59,20 @@ function buildRow(fieldValues) {
 }
 
 async function appendCompanyEventLead(fieldValues) {
-    const response = await fetch(APPSCRIPT_ENDPOINT, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            sheet: SHEET_NAME,
-            headers: [...COLUMNS.map((column) => column.header), 'תאריך פנייה'],
-            values: buildRow(fieldValues),
-        }),
+    const payload = {
+        sheet: SHEET_NAME,
+        headers: [...COLUMNS.map((column) => column.header), 'תאריך פנייה'],
+        values: buildRow(fieldValues),
+    };
+    // Query string: Apps Script turns an external POST into a GET and drops the body.
+    const response = await fetch(`${APPSCRIPT_ENDPOINT}?payload=${encodeURIComponent(JSON.stringify(payload))}`, {
+        method: 'get',
     });
-    const json = await response.json().catch(() => null);
-    if (!response.ok || json?.ok === false) {
-        throw new Error(`Apps Script responded ${response.status}: ${JSON.stringify(json)}`);
+    const text = await response.text();
+    const json = (() => { try { return JSON.parse(text); } catch (_) { return null; } })();
+    console.log('[companyEventLeads] sheet response:', text.slice(0, 500));
+    if (!response.ok || !json?.ok) {
+        throw new Error(`Apps Script responded ${response.status}: ${text.slice(0, 500)}`);
     }
     return json;
 }

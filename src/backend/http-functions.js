@@ -22,6 +22,7 @@ import {
   findOrdersByPhone,
   formatOrderMessage,
   filterActiveOrders,
+  filterPickupOrders,
   selectActiveOrder,
   NO_ACTIVE_ORDER_MESSAGE,
   ORDER_NOT_FOUND_MESSAGE,
@@ -418,8 +419,9 @@ export async function get_identifyOrder(request) {
       return [];
     });
 
-    const activeOrders = filterActiveOrders(allOrders);
-    const hadUnavailableOnly = allOrders.length > 0 && activeOrders.length === 0;
+    const isPickupPurpose = String(rawQuery.purpose || '').trim() === 'pickup';
+    const activeOrders = isPickupPurpose ? filterPickupOrders(allOrders) : filterActiveOrders(allOrders);
+    const hadUnavailableOnly = !isPickupPurpose && allOrders.length > 0 && activeOrders.length === 0;
     const orderLookupUnavailable = hadUnavailableOnly && !isNextOrderRequest;
     const selection = selectActiveOrder(activeOrders, excludeOrderId);
     const { primary, hasMore } = selection;
@@ -436,6 +438,8 @@ export async function get_identifyOrder(request) {
       text = activeOrders.length > 0 ? NO_MORE_ORDERS_MESSAGE : ORDER_NOT_FOUND_MESSAGE;
     } else if (found) {
       text = formatOrderMessage(primary);
+    } else if (isPickupPurpose) {
+      text = 'לא נמצאו פריטים מוכנים לאיסוף תחת המספר הזה ❌';
     } else {
       text = ORDER_NOT_FOUND_MESSAGE;
     }
@@ -510,6 +514,7 @@ export async function get_identifyOrder(request) {
       ...rescheduleEligibility,
       lookup_attempts: lookupAttempts,
       lookup_handoff: lookupHandoff,
+      pickup_ready: found && (primary?.pickupItems || []).some((i) => i.state === 'ready'),
       ai_reply: text,
       content: { messages: [{ type: 'text', text }] },
     };

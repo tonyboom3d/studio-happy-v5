@@ -36,8 +36,6 @@ import { sendPickupScheduledManyChat } from 'backend/manychatService.jsw';
 import { getOrderPickupDisplayItems, getCurrentStaffName } from 'backend/dashboardService.web.js';
 import { getSecret } from 'wix-secrets-backend';
 import { randomBytes } from 'crypto';
-import QRCode from 'qrcode';
-
 const SA = { suppressAuth: true };
 const SAC = { suppressAuth: true, consistentRead: true };
 const ISRAEL_TZ = 'Asia/Jerusalem';
@@ -80,6 +78,8 @@ export function buildPassLink(orderId, passToken) {
 /** QR (PNG data URL) encoding the staff confirmation link for an appointment. */
 export async function generatePassQr(orderId, passToken) {
     if (!orderId || !passToken) return null;
+    const mod = await import('qrcode'); // lazy: don't break module load if package missing
+    const QRCode = mod.default || mod;
     return QRCode.toDataURL(buildPassLink(orderId, passToken), { margin: 1, width: 320, errorCorrectionLevel: 'M' });
 }
 

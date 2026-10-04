@@ -2436,8 +2436,8 @@ function __wdInjectGlobalAssets() {
                 const badge = isCollected
                     ? '<span class="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-100 text-emerald-700 border border-emerald-200 whitespace-nowrap">נאסף</span>'
                     : isReady
-                        ? '<span class="text-[10px] font-bold px-2 py-0.5 rounded bg-amber-100 text-amber-700 border border-amber-200 whitespace-nowrap">מוכן לאיסוף</span>'
-                        : '<span class="text-[10px] font-bold px-2 py-0.5 rounded bg-gray-100 text-gray-600 border border-gray-200 whitespace-nowrap">ממתין</span>';
+                        ? '<span class="text-[10px] font-bold px-2 py-0.5 rounded bg-amber-100 text-amber-700 border border-amber-200 whitespace-nowrap">ממתין לאיסוף</span>'
+                        : '<span class="text-[10px] font-bold px-2 py-0.5 rounded bg-gray-100 text-gray-600 border border-gray-200 whitespace-nowrap">לא סומן</span>';
                 const safeLabel = String(item.label).replace(/'/g, "\\'");
                 return `
                     <div class="flex items-center justify-between gap-3 border border-gray-200 rounded-lg p-2.5">

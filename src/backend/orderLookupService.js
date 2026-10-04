@@ -221,6 +221,7 @@ function mapCmsOrder(order, bookingsById) {
         customerRescheduleCount: Number(order.customerRescheduleCount) || 0,
         cancelledAt: order.cancelledAt ? parseWorkshopDate(order.cancelledAt) : null,
         bookingsCancelled: allLinkedCancelled,
+        pickupItems: Array.isArray(order.pickupItems) ? order.pickupItems : [],
     };
     mapped.orderUrl = buildOrderViewUrl(mapped);
     return mapped;
@@ -385,7 +386,20 @@ export function isCancelledOrder(order) {
 /** Expired (past grace window) or cancelled — not shown as a valid lookup result. */
 export function isUnavailableOrder(order, nowMs = Date.now()) {
     if (isCancelledOrder(order)) return true;
+    if (hasReadyPickupItems(order)) return false;
     return !isActiveOrder(order, nowMs);
+}
+
+/** True when at least one item was marked ready for pickup and not yet collected. */
+export function hasReadyPickupItems(order) {
+    return (order?.pickupItems || []).some((i) => i.state === 'ready');
+}
+
+/** Pickup lookup: CMS orders with at least one item marked ready (ignores the 2-day workshop grace). */
+export function filterPickupOrders(orders) {
+    return (orders || []).filter((o) => o.source === 'cms'
+        && !isCancelledOrder(o)
+        && (o.pickupItems || []).some((i) => i.state === 'ready'));
 }
 
 export function filterActiveOrders(orders, nowMs = Date.now()) {

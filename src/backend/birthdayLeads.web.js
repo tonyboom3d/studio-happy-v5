@@ -16,7 +16,7 @@ const BIRTHDAY_FORM_ID = 'dfecbbfe-54a0-4003-9753-9aaaaf14fe5d';
 // Apps Script Web App URL for the "ימי הולדת" leads sheet — see
 // wix/apps-script/birthdayLeads.gs. Left blank until supplied; the sheet
 // append is skipped (no-op) while empty.
-const APPSCRIPT_ENDPOINT = 'https://script.google.com/macros/s/AKfycbxihgAz7rmdcztG4VlFmVn6OOyA1JIhVo6OhizVar3rNBENzsLSPn0ddVxIqA9v9kJp/exec';
+const APPSCRIPT_ENDPOINT = 'https://script.google.com/macros/s/AKfycbxKJW63NHuDBDn-xGBtrZGVuyJ_Wp85WS3bhybV4MYTb-2bUGb64MRpJxklw4AroZYy/exec';
 
 // Studio ManyChat subscriber that receives the "new lead" template.
 const STUDIO_MANYCHAT_SUBSCRIBER_ID = '1613710579';

@@ -5,7 +5,7 @@ import { sendBirthdayLeadNoticeManyChat } from 'backend/manychatService.jsw';
 
 const COMPANY_FORM_ID = 'dc59834f-f944-42e1-a576-9b304c87be92';
 const SHEET_NAME = 'אירועי חברה';
-const APPSCRIPT_ENDPOINT = 'https://script.google.com/macros/s/AKfycbxihgAz7rmdcztG4VlFmVn6OOyA1JIhVo6OhizVar3rNBENzsLSPn0ddVxIqA9v9kJp/exec';
+const APPSCRIPT_ENDPOINT = 'https://script.google.com/macros/s/AKfycbxKJW63NHuDBDn-xGBtrZGVuyJ_Wp85WS3bhybV4MYTb-2bUGb64MRpJxklw4AroZYy/exec';
 const STUDIO_MANYCHAT_SUBSCRIBER_ID = '1613710579';
 
 /** Column order matches the form summary, plus the inquiry timestamp. */

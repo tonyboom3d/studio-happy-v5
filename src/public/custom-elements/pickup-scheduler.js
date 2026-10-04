@@ -43,6 +43,17 @@ pickup-scheduler * { box-sizing: border-box; font-family: inherit; }
 .ps-msg { border-radius: 12px; padding: 20px 16px; font-size: 14.5px; font-weight: 600; text-align: center; }
 .ps-msg.ps-bad { background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; }
 .ps-msg.ps-good { background: #f3ecfb; border: 1px solid #cbb2e6; color: #581E83; }
+.ps-qr { background: #fff; border: 1px solid #e5e7eb; border-radius: 14px; padding: 16px; margin: 14px 0; text-align: center; }
+.ps-qr img { display: block; margin: 0 auto 8px; max-width: 100%; height: auto; }
+.ps-qr-note { font-size: 13px; color: #374151; font-weight: 600; }
+.ps-card { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 14px; margin-bottom: 14px; font-size: 14px; line-height: 1.6; }
+.ps-items { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+.ps-item { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 13.5px; }
+.ps-badge { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px; }
+.ps-badge-ready { background: #fef3c7; color: #92400e; }
+.ps-badge-done { background: #d1fae5; color: #065f46; }
+.ps-field { display: block; width: 100%; border: 1px solid #d1d5db; border-radius: 10px; padding: 11px 12px; font-size: 15px; margin-top: 8px; font-family: inherit; }
+.ps-inline-error { color: #b91c1c; font-size: 13px; margin-top: 8px; font-weight: 600; }
 .ps-spinner { width: 34px; height: 34px; border: 3px solid #e5e7eb; border-top-color: #5E2F88; border-radius: 50%; margin: 30px auto; animation: ps-spin .8s linear infinite; }
 .ps-loading-block { text-align: center; padding: 24px 12px 32px; }
 .ps-loading-text { color: #6b7280; font-size: 14px; line-height: 1.5; margin-top: 8px; }
@@ -63,6 +74,8 @@ const ERROR_MESSAGES = {
     QUOTA_EXCEEDED: 'נוצלו כל 3 התיאומים האפשריים להזמנה זו. ניתן לפנות לשירות הלקוחות להמשך תיאום.',
     SLOT_UNAVAILABLE: 'המועד שנבחר אינו זמין יותר. בחרו מועד אחר מהרשימה.',
     BAD_REQUEST: 'לא נבחר מועד. יש לבחור מועד מהרשימה.',
+    PASS_EXPIRED: 'הקישור פג תוקף. ניתן לתאם איסוף מחדש דרך הבוט בוואטסאפ.',
+    REPLACED: 'תיאום האיסוף הזה הוחלף במועד אחר, ולכן הקישור אינו פעיל.',
 };
 
 function psEsc(str) {
@@ -98,6 +111,15 @@ class PickupScheduler extends HTMLElement {
         this._sending = false;
         this._submitResult = null;
         this._clickBound = false;
+    }
+
+    _renderQr(qrDataUrl) {
+        if (!qrDataUrl) return '';
+        return `
+            <div class="ps-qr">
+                <img src="${psEsc(qrDataUrl)}" alt="קוד QR לאישור איסוף" width="240" height="240">
+                <div class="ps-qr-note">הציגו את הקוד לעובד/ת הסטודיו בעת האיסוף. אפשר לשמור צילום מסך.</div>
+            </div>`;
     }
 
     _ensureStyles() {
@@ -193,9 +215,13 @@ class PickupScheduler extends HTMLElement {
         if (this._submitResult?.ok) {
             const a = this._submitResult.appointment;
             const label = a ? `${formatSlotDate(a.start)}, ${formatSlotTime(a.start, a.end)}` : '';
+            const followUp = this._submitResult.messageSent === false
+                ? 'לא הצלחנו לשלוח הודעת אישור בוואטסאפ, אבל התיאום נשמר.'
+                : 'שלחנו לך הודעה בוואטסאפ עם פרטי האיסוף.';
             this.innerHTML = `
                 <div class="ps-wrap">
-                    <div class="ps-msg ps-good">✅ תיאום האיסוף נקבע ל-${psEsc(label)} (${psEsc(a?.workshopName || 'סדנה')})!<br/><br/>נתראה בסטודיו 🤍</div>
+                    <div class="ps-msg ps-good">✅ תיאום האיסוף נקבע ל-${psEsc(label)} (${psEsc(a?.workshopName || 'סדנה')})!<br/><br/>${followUp}</div>
+                    ${this._renderQr(this._submitResult.qrDataUrl)}
                 </div>`;
             return;
         }
@@ -211,13 +237,24 @@ class PickupScheduler extends HTMLElement {
             return;
         }
 
-        const { slots, used, remaining, currentAppointment } = this._context;
+        const { slots, used, remaining, currentAppointment, qrDataUrl, canBook } = this._context;
 
         const currentBlock = currentAppointment ? `
             <div class="ps-current">
                 📅 כבר תואם איסוף עבורך ל-${psEsc(formatSlotDate(currentAppointment.start))}, ${psEsc(formatSlotTime(currentAppointment.start, currentAppointment.end))}.
-                ניתן לבחור מועד אחר מהרשימה למטה כדי להחליף.
-            </div>` : '';
+                ${canBook === false ? '' : 'ניתן לבחור מועד אחר מהרשימה למטה כדי להחליף.'}
+            </div>
+            ${this._renderQr(qrDataUrl)}` : '';
+
+        if (canBook === false) {
+            this.innerHTML = `
+                <div class="ps-wrap">
+                    <div class="ps-head"><h1>תיאום איסוף</h1></div>
+                    ${currentBlock}
+                    <div class="ps-quota">נוצלו ${used ?? 0} מתוך 3 תיאומים אפשריים — לשינוי מועד יש לפנות לשירות הלקוחות.</div>
+                </div>`;
+            return;
+        }
 
         let listBody;
         if (!Array.isArray(slots) || !slots.length) {

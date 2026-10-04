@@ -732,6 +732,37 @@ function sortSketchesByRugIndex(sketches) {
     });
 }
 
+/**
+ * Sketch images (tufting) + selected products (ceramics) for a single order,
+ * fully resolved (images, prices, child-flags) — used by the pickup-scan
+ * confirmation page (pickupScheduling.js getPickupScan) so staff can see what
+ * the customer actually ordered without re-deriving the logic there.
+ */
+export async function getOrderPickupDisplayItems(order) {
+    if (!order?._id) return { sketches: [], selectedProducts: [] };
+
+    const [sketchesByOrderId, participantsByOrderId] = await Promise.all([
+        loadSketchesForOrders([order._id]),
+        loadParticipantsForOrders([order._id]),
+    ]);
+    const rawSketches = sketchesByOrderId[order._id] || [];
+    const participants = participantsByOrderId[order._id] || [];
+    const rawSelected = parseSelectedProductsField(order.selectedProducts);
+
+    const productIds = [
+        ...rawSketches.map((sel) => sel.productId),
+        ...rawSelected.map((sel) => sel.productId),
+    ].filter(Boolean);
+    const productWixImageById = await loadProductWixImagesById(productIds);
+
+    const sketches = sortSketchesByRugIndex(
+        rawSketches.map((sel) => mapSketch(sel, participants, order, productWixImageById)),
+    );
+    const selectedProducts = mapSelectedProductsForOrder(order, productWixImageById);
+
+    return { sketches, selectedProducts };
+}
+
 function buildSketchLogContext(sel, participantsForOrder, order) {
     const participants = participantsForOrder || [];
     const sketchNum = sel.rugIndex != null && sel.rugIndex !== ''
@@ -890,6 +921,15 @@ export async function assertPermission(key) {
         throw new Error(`PERMISSION_DENIED:${key}`);
     }
     return role;
+}
+
+/** Name of the logged-in dashboard user — for stamping "who did this" without trusting caller input. */
+export async function getCurrentStaffName() {
+    const member = await getLoggedInMember();
+    const role = await getCurrentDashboardRoleRecord(member);
+    if (!role) return null;
+    const staffName = await resolveStaffName(role.connectedStaff);
+    return staffName || extractMemberName(member, extractMemberEmail(member)) || null;
 }
 
 /** Paginated load — default wixData.find() caps at 50 rows. */
@@ -1253,7 +1293,9 @@ export const getInitialDashboardData = webMethod(Permissions.SiteMember, async (
                 selectedProducts,
                 pickupItems: Array.isArray(order.pickupItems) ? order.pickupItems : [],
                 pickupReadyNotifiedAt: order.pickupReadyNotifiedAt || null,
-                pickupAppointments: Array.isArray(order.pickupAppointments) ? order.pickupAppointments : [],
+                pickupAppointments: Array.isArray(order.pickupAppointments)
+                    ? order.pickupAppointments.map(({ passToken, ...appointment }) => appointment)
+                    : [],
                 participantGroups: orderParticipants.map(p => ({
                     id: p._id,
                     name: p.name || '',

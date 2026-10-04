@@ -28,7 +28,6 @@ $w.onReady(async function () {
 
     const orderId = wixLocation.query?.orderId || null;
     const token = wixLocation.query?.token || null;
-
     if (!orderId || !token) {
         el.setAttribute('context-data', JSON.stringify({ error: true, code: 'NOT_FOUND', message: 'קישור לא תקין.', __ts: Date.now() }));
         return;

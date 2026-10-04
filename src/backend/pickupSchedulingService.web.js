@@ -10,11 +10,17 @@
  * once a slot is chosen.
  */
 import { Permissions, webMethod } from 'wix-web-module';
+import { assertPermission } from 'backend/dashboardService.web.js';
 import {
     getPickupEligibility,
     loadPickupSlots,
     loadOrderByPickupToken,
     createPickupAppointment,
+    findUpcomingAppointment,
+    ensureAppointmentPass,
+    generatePassQr,
+    getPickupScan,
+    confirmPickupHandover,
     PICKUP_WINDOW_DAYS,
     PICKUP_MAX_APPOINTMENTS,
 } from 'backend/pickupScheduling.js';
@@ -72,7 +78,17 @@ export const getPickupContext = webMethod(Permissions.Anyone, async (orderId, to
     }
 
     const eligibility = getPickupEligibility(order);
-    if (eligibility.status !== 'ok') {
+    const upcoming = ['no_items', 'collected'].includes(eligibility.status) ? null : findUpcomingAppointment(order);
+
+    // Open appointment → show it with its QR (even if the quota/window rules block booking another).
+    let currentAppointment = null;
+    let qrDataUrl = null;
+    if (upcoming) {
+        currentAppointment = await ensureAppointmentPass(order, upcoming);
+        qrDataUrl = await generatePassQr(order._id, currentAppointment.passToken).catch(() => null);
+    }
+
+    if (eligibility.status !== 'ok' && !upcoming) {
         return {
             error: true,
             code: eligibility.status.toUpperCase(),
@@ -81,18 +97,41 @@ export const getPickupContext = webMethod(Permissions.Anyone, async (orderId, to
         };
     }
 
-    const slots = await loadPickupSlots(eligibility.deadline);
+    const canBook = eligibility.status === 'ok';
+    const slots = canBook ? await loadPickupSlots(eligibility.deadline) : [];
 
     return {
         orderId: order._id,
         organizerName: order.organizerName || '',
-        deadline: eligibility.deadline.toISOString(),
-        used: eligibility.used,
-        remaining: eligibility.remaining,
-        readyCount: eligibility.readyCount,
-        currentAppointment: mapAppointmentForClient(eligibility.currentAppointment),
+        deadline: eligibility.deadline ? eligibility.deadline.toISOString() : null,
+        used: eligibility.used ?? (order.pickupAppointments || []).length,
+        remaining: eligibility.remaining ?? 0,
+        readyCount: eligibility.readyCount ?? 0,
+        canBook,
+        currentAppointment: mapAppointmentForClient(currentAppointment),
+        qrDataUrl,
         slots: slots.map(mapSlotForClient),
     };
+});
+
+/** Staff scan page (QR target) — members only, requires dashboard access. */
+export const getPickupScanContext = webMethod(Permissions.SiteMember, async (orderId, pass) => {
+    try {
+        await assertPermission('viewDashboard');
+        return await getPickupScan(orderId, pass);
+    } catch (err) {
+        return toClientError(err);
+    }
+});
+
+/** Staff confirm handover with the verification code; identity comes from the logged-in member. */
+export const confirmPickupHandoverScan = webMethod(Permissions.SiteMember, async (orderId, pass, code) => {
+    try {
+        await assertPermission('viewDashboard');
+        return await confirmPickupHandover(orderId, pass, code);
+    } catch (err) {
+        return { ok: false, ...toClientError(err) };
+    }
 });
 
 /** Confirms a chosen pickup slot — one WhatsApp-style flow step, no confirmation email/SMS needed. */
@@ -112,6 +151,8 @@ export const submitPickupAppointment = webMethod(Permissions.Anyone, async (orde
         return {
             ok: true,
             appointment: mapAppointmentForClient(result.appointment),
+            qrDataUrl: result.qrDataUrl,
+            messageSent: result.messageSent,
             used: result.used,
             remaining: result.remaining,
         };

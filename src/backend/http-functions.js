@@ -41,7 +41,10 @@ import {
 } from 'backend/orderLookupOtpService.js';
 import wixData from 'wix-data';
 import { issueRescheduleToken, confirmRescheduleRequest } from 'backend/rescheduleService.web.js';
-import { getPickupEligibility, issuePickupToken, PICKUP_WINDOW_DAYS, PICKUP_MAX_APPOINTMENTS } from 'backend/pickupScheduling.js';
+import {
+  getPickupEligibility, issuePickupToken, findUpcomingAppointment,
+  formatPickupSlotLabel, PICKUP_PAGE_URL, PICKUP_WINDOW_DAYS, PICKUP_MAX_APPOINTMENTS,
+} from 'backend/pickupScheduling.js';
 import { syncPickupLink } from 'backend/manychatService.jsw';
 
 // ============================================================
@@ -848,10 +851,6 @@ export async function get_confirmReschedule(request) {
 // pickup_status: ok | no_items | collected | expired | quota_exceeded.
 // ============================================================
 
-// NOTE: matches the page created in the Wix Editor for the
-// pickup-scheduler custom element (see pickup-scheduler.js / ce-page todo).
-const PICKUP_PAGE_URL = 'https://www.studiohappy.art/pickup-schedule';
-
 export async function get_startPickup(request) {
   try {
     if (!(await authorizeManyChatWebhook(request))) {
@@ -874,6 +873,31 @@ export async function get_startPickup(request) {
     }
 
     const eligibility = getPickupEligibility(order);
+
+    // Already booked a pickup slot that hasn't passed yet → don't issue a new booking link.
+    if (eligibility.status !== 'no_items' && eligibility.status !== 'collected') {
+      const upcoming = findUpcomingAppointment(order);
+      if (upcoming) {
+        // The booking page shows the open appointment + its staff QR.
+        const { token, expiresAt } = await issuePickupToken(orderId);
+        const link = `${PICKUP_PAGE_URL}?orderId=${encodeURIComponent(orderId)}&token=${encodeURIComponent(token)}&sid=${encodeURIComponent(subscriberId)}`;
+        const slotLabel = `${formatPickupSlotLabel(upcoming)} (${upcoming.workshopName || 'סדנה'})`;
+        if (subscriberId) {
+          await syncPickupLink(subscriberId, link, slotLabel).catch(() => {});
+        }
+        return ok({
+          headers: { 'Content-Type': 'application/json' },
+          body: {
+            status: 'ok',
+            pickup_status: 'already_scheduled',
+            pickup_link: link,
+            pickup_slot_label: slotLabel,
+            expires_at: expiresAt.toISOString(),
+            ai_reply: `כבר תואם לך איסוף למועד: ${slotLabel} 🤍`,
+          },
+        });
+      }
+    }
 
     if (eligibility.status === 'expired') {
       return ok({

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * pickupScheduling.js — "תיאום איסוף" core logic (no webMethods here; see
  * pickupSchedulingService.web.js for the customer-facing page API and
  * http-functions.js get_startPickup for the ManyChat entry point).
@@ -32,7 +32,11 @@ import { mergePatchWorkshopOrder, patchWorkshopOrderFields } from 'backend/works
 import { toDateKey } from 'backend/availabilityRules.js';
 import { loadWorkshopTypeMap, ASSIGNMENT_STATUS } from 'backend/schedulingEngine.js';
 import { sendEmployeeTemplateMessage, sendEmployeeTemplateToManagers } from 'backend/employeeTemplates.js';
+import { sendPickupScheduledManyChat } from 'backend/manychatService.jsw';
+import { getOrderPickupDisplayItems, getCurrentStaffName } from 'backend/dashboardService.web.js';
+import { getSecret } from 'wix-secrets-backend';
 import { randomBytes } from 'crypto';
+import QRCode from 'qrcode';
 
 const SA = { suppressAuth: true };
 const SAC = { suppressAuth: true, consistentRead: true };
@@ -43,6 +47,15 @@ export const PICKUP_MAX_APPOINTMENTS = 3;
 export const PICKUP_MIN_ORDERS = 2;
 export const PICKUP_TOKEN_TTL_MS = 30 * 60 * 1000;
 const STAFF_NOTIFY_LEAD_MS = 30 * 60 * 1000;
+const PASS_TTL_AFTER_END_MS = 24 * 60 * 60 * 1000;
+const HANDOVER_MAX_ATTEMPTS = 5;
+const HANDOVER_LOCK_MS = 10 * 60 * 1000;
+const HANDOVER_CODE_FALLBACK = '1326';
+const OPEN_APPOINTMENT_STATUSES = ['pending', 'sent', 'active'];
+
+export const PICKUP_PAGE_URL = 'https://www.studiohappy.art/pickup-schedule';
+// Members-only staff page the QR points to (אישור לאיסוף פריטים).
+export const PICKUP_CONFIRM_URL = 'https://www.studiohappy.art/pickup-confirm';
 
 function formatDateHe(dateKeyOrDate) {
     const dateKey = dateKeyOrDate instanceof Date ? toDateKey(dateKeyOrDate) : dateKeyOrDate;
@@ -60,11 +73,50 @@ function randomToken() {
     return randomBytes(24).toString('hex');
 }
 
-async function appendOrderActionLog(orderId, action, order) {
+export function buildPassLink(orderId, passToken) {
+    return `${PICKUP_CONFIRM_URL}?orderId=${encodeURIComponent(orderId)}&pass=${encodeURIComponent(passToken)}`;
+}
+
+/** QR (PNG data URL) encoding the staff confirmation link for an appointment. */
+export async function generatePassQr(orderId, passToken) {
+    if (!orderId || !passToken) return null;
+    return QRCode.toDataURL(buildPassLink(orderId, passToken), { margin: 1, width: 320, errorCorrectionLevel: 'M' });
+}
+
+export function formatPickupSlotLabel(appointment) {
+    return `${formatDateHe(new Date(appointment.start))}, ${formatTimeHe(appointment.start)}-${formatTimeHe(appointment.end)}`;
+}
+
+/** Appointment that is still open and whose window hasn't ended yet. */
+export function findUpcomingAppointment(order) {
+    const now = Date.now();
+    return [...(order?.pickupAppointments || [])]
+        .reverse()
+        .find((a) => OPEN_APPOINTMENT_STATUSES.includes(a.status) && new Date(a.end).getTime() > now) || null;
+}
+
+function newPassFields(endIso) {
+    return {
+        passToken: randomToken(),
+        passExpiresAt: new Date(new Date(endIso).getTime() + PASS_TTL_AFTER_END_MS).toISOString(),
+        failedAttempts: 0,
+    };
+}
+
+/** Back-fills a pass on appointments created before passes existed. */
+export async function ensureAppointmentPass(order, appointment) {
+    if (appointment.passToken) return appointment;
+    const updated = { ...appointment, ...newPassFields(appointment.end) };
+    const pickupAppointments = (order.pickupAppointments || []).map((a) => (a === appointment ? updated : a));
+    await mergePatchWorkshopOrder(order._id, { pickupAppointments }, 'pickupScheduling.ensureAppointmentPass');
+    return updated;
+}
+
+async function appendOrderActionLog(orderId, action, order, user = 'מערכת (תיאום איסוף)') {
     try {
         const current = order || await getItemWithRetry('WorkshopOrders', orderId, { callerLabel: 'pickupScheduling.appendOrderActionLog' });
         if (!current) return null;
-        const actionLog = [{ timestamp: new Date().toISOString(), user: 'מערכת (תיאום איסוף)', action }, ...(current.actionLog || [])].slice(0, 200);
+        const actionLog = [{ timestamp: new Date().toISOString(), user, action }, ...(current.actionLog || [])].slice(0, 200);
         return mergePatchWorkshopOrder(orderId, { actionLog }, 'pickupScheduling.appendOrderActionLog');
     } catch (err) {
         console.warn('[pickupScheduling] appendOrderActionLog failed. orderId:', orderId, 'error:', err?.message || err);
@@ -333,6 +385,7 @@ export async function createPickupAppointment(orderId, slotKey) {
         status: 'pending',
         staffNotifiedAt: null,
         staffRecipient: null,
+        ...newPassFields(slot.end.toISOString()),
     };
 
     let pickupAppointments = [...previousAppointments, newAppointment];
@@ -347,6 +400,20 @@ export async function createPickupAppointment(orderId, slotKey) {
     await appendOrderActionLog(
         orderId,
         `הלקוח תיאם איסוף ל-${formatDateHe(slot.start)} (${formatTimeHe(slot.start)}-${formatTimeHe(slot.end)}) — תיאום ${usedCount} מתוך ${PICKUP_MAX_APPOINTMENTS}`,
+    );
+
+    // Free-form (non-template) WhatsApp reply — the customer just interacted, so we're inside the 24h window.
+    const slotLabel = formatPickupSlotLabel(newAppointment);
+    const readyItems = (order.pickupItems || []).filter((i) => i.state === 'ready');
+    const customerMsg = await sendPickupScheduledManyChat(order, {
+        slotLabel: `${slotLabel} (${slot.workshopName})`,
+        itemsLine: readyItems.map((i) => i.label).join(', '),
+    }).catch((err) => ({ sent: false, reason: 'error', error: err?.message || String(err) }));
+    await appendOrderActionLog(
+        orderId,
+        customerMsg.sent
+            ? 'נשלחה ללקוח הודעה עם פרטי האיסוף (ה-QR מוצג בדף התיאום)'
+            : `❌ שליחת פרטי האיסוף ללקוח נכשלה (${customerMsg.reason || 'unknown'})`,
     );
 
     if (shouldSendNow) {
@@ -364,7 +431,12 @@ export async function createPickupAppointment(orderId, slotKey) {
         );
     }
 
-    return { ok: true, appointment: newAppointment, used: usedCount, remaining: Math.max(0, PICKUP_MAX_APPOINTMENTS - usedCount) };
+    const qrDataUrl = await generatePassQr(orderId, newAppointment.passToken).catch((err) => {
+        console.error('[pickupScheduling] generatePassQr failed:', err?.message || err);
+        return null;
+    });
+
+    return { ok: true, appointment: newAppointment, qrDataUrl, messageSent: !!customerMsg.sent, used: usedCount, remaining: Math.max(0, PICKUP_MAX_APPOINTMENTS - usedCount) };
 }
 
 /**
@@ -425,4 +497,141 @@ export async function processPickupStaffNotifications(now = new Date()) {
     }
 
     return report;
+}
+
+// ------------------------------------------------------------------
+// Staff handover via QR — the customer shows the QR (pickup-scheduler page),
+// staff scan it, land on the members-only "pickup-confirm" page, review the
+// items and confirm with the handover code. Staff identity comes from the
+// logged-in member (never from client input).
+// ------------------------------------------------------------------
+
+async function getHandoverCode() {
+    const secret = await getSecret('pickup_handover_code').catch(() => null);
+    return String(secret || HANDOVER_CODE_FALLBACK).trim();
+}
+
+async function loadOrderByPass(orderId, pass) {
+    if (!orderId || !pass) throw new Error('NOT_FOUND: קישור לא תקין.');
+    const order = await getItemWithRetry('WorkshopOrders', orderId, { callerLabel: 'pickupScheduling.loadOrderByPass' });
+    const appointment = order && (order.pickupAppointments || []).find((a) => a.passToken && a.passToken === pass);
+    if (!appointment) throw new Error('NOT_FOUND: קישור לא תקין.');
+    return { order, appointment };
+}
+
+function assertPassUsable(appointment) {
+    if (appointment.status === 'replaced') {
+        throw new Error('REPLACED: תיאום האיסוף הזה הוחלף במועד אחר, ולכן הקוד אינו פעיל.');
+    }
+    const expiresAt = appointment.passExpiresAt ? new Date(appointment.passExpiresAt).getTime() : 0;
+    if (appointment.status !== 'completed' && Date.now() > expiresAt) {
+        throw new Error('PASS_EXPIRED: הקוד פג תוקף. ניתן לתאם איסוף מחדש דרך הבוט בוואטסאפ.');
+    }
+}
+
+/** Every item in the order (sketch / ceramic piece) with its image and pickup state. */
+function buildScanItems(order, display) {
+    const stateByKey = new Map((order.pickupItems || []).map((i) => [i.key, i]));
+    const toItem = (key, label, img) => {
+        const pi = stateByKey.get(key);
+        return {
+            key,
+            label,
+            img: img || null,
+            state: pi?.state || 'pending',
+            collectedBy: pi?.collectedBy || null,
+            collectedAt: pi?.collectedAt || null,
+        };
+    };
+
+    if (display.sketches.length) {
+        return display.sketches.map((s, idx) => toItem(`sketch:${s.id}`, `שטיח ${idx + 1}`, s.img));
+    }
+
+    const seenByProduct = {};
+    const items = [];
+    display.selectedProducts.forEach((p) => {
+        const productKey = p.productId || 'unknown';
+        for (let q = 0; q < p.quantity; q++) {
+            const n = (seenByProduct[productKey] = (seenByProduct[productKey] || 0) + 1);
+            items.push(toItem(`cup:${productKey}:${n}`, `כלי קרמיקה ${items.length + 1}`, p.image));
+        }
+    });
+    return items;
+}
+
+/** Staff scan view: order details, all items with images, ready ones flagged. */
+export async function getPickupScan(orderId, pass) {
+    const { order, appointment } = await loadOrderByPass(orderId, pass);
+    assertPassUsable(appointment);
+    const completed = appointment.status === 'completed';
+
+    const display = await getOrderPickupDisplayItems(order);
+    const staffName = await getCurrentStaffName();
+
+    return {
+        state: completed ? 'collected' : 'ready',
+        staffName: staffName || '',
+        organizerName: order.organizerName || '',
+        organizerPhone: order.organizerPhone || '',
+        workshopName: appointment.workshopName || 'סדנה',
+        slotLabel: formatPickupSlotLabel(appointment),
+        items: buildScanItems(order, display),
+        collectedAt: completed ? appointment.completedAt || null : null,
+        collectedBy: completed ? appointment.completedBy || null : null,
+    };
+}
+
+/** Marks every "ready" item collected after a correct handover code; logs the staff member. */
+export async function confirmPickupHandover(orderId, pass, code) {
+    const { order, appointment } = await loadOrderByPass(orderId, pass);
+    if (appointment.status === 'completed') {
+        throw new Error('ALREADY_COLLECTED: הפריטים כבר נאספו והקוד אינו פעיל עוד.');
+    }
+    assertPassUsable(appointment);
+
+    const staffName = await getCurrentStaffName();
+    if (!staffName) throw new Error('ACCESS_DENIED: לא ניתן לזהות את העובד המחובר.');
+
+    const now = Date.now();
+    let attempts = appointment.failedAttempts || 0;
+    const lastFailedAt = appointment.lastFailedAt ? new Date(appointment.lastFailedAt).getTime() : 0;
+    if (attempts >= HANDOVER_MAX_ATTEMPTS) {
+        if (now - lastFailedAt < HANDOVER_LOCK_MS) {
+            throw new Error('LOCKED: בוצעו יותר מדי ניסיונות שגויים. נסו שוב בעוד מספר דקות.');
+        }
+        attempts = 0;
+    }
+
+    const expected = await getHandoverCode();
+    if (String(code || '').trim() !== expected) {
+        const pickupAppointments = order.pickupAppointments.map((a) => (
+            a === appointment ? { ...a, failedAttempts: attempts + 1, lastFailedAt: new Date(now).toISOString() } : a
+        ));
+        await mergePatchWorkshopOrder(orderId, { pickupAppointments }, 'pickupScheduling.confirmPickupHandover.badCode');
+        throw new Error('BAD_CODE: הקוד שהוזן שגוי.');
+    }
+
+    const readyItems = (order.pickupItems || []).filter((i) => i.state === 'ready');
+    if (!readyItems.length) throw new Error('NO_ITEMS: אין פריטים הממתינים לאיסוף בהזמנה זו.');
+
+    const nowIso = new Date(now).toISOString();
+    const pickupItems = (order.pickupItems || []).map((i) => (
+        i.state === 'ready' ? { ...i, state: 'collected', collectedAt: nowIso, collectedBy: staffName, collectedVia: 'pickup_qr' } : i
+    ));
+    const pickupAppointments = order.pickupAppointments.map((a) => (
+        a === appointment ? { ...a, status: 'completed', completedAt: nowIso, completedBy: staffName, failedAttempts: 0 } : a
+    ));
+    const patch = { pickupItems, pickupAppointments };
+    if (order.pickupStaffNotifyStatus === 'pending') patch.pickupStaffNotifyStatus = 'none';
+
+    await mergePatchWorkshopOrder(orderId, patch, 'pickupScheduling.confirmPickupHandover');
+    await appendOrderActionLog(
+        orderId,
+        `פריט נאסף: ${readyItems.map((i) => i.label).join(', ')} — אושר ע"י ${staffName} (סריקת QR וקוד מסירה)`,
+        null,
+        staffName,
+    );
+
+    return { ok: true, state: 'collected', collectedBy: staffName, collectedAt: nowIso };
 }

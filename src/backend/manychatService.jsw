@@ -56,6 +56,7 @@ export const MC_FIELDS = {
     // "תיאום איסוף" scheduling flow (see pickupScheduling.js / http-functions.js get_startPickup)
     pickupOrderId: 'pickup_order_id',
     pickupLink: 'pickup_link',
+    pickupSlotLabel: 'pickup_slot_label',
 };
 
 // Custom field created manually in ManyChat (Settings > Custom Fields, type "Text")
@@ -744,11 +745,12 @@ export async function syncRescheduleLink(subscriberId, link) {
 }
 
 /** Writes the "תיאום איסוף" page link so the flow can present it to the customer. */
-export async function syncPickupLink(subscriberId, link) {
+export async function syncPickupLink(subscriberId, link, slotLabel) {
     if (!subscriberId) return { synced: false, reason: 'no-subscriberId' };
     try {
         await setCustomFieldsByName(subscriberId, [
             { name: MC_FIELDS.pickupLink, value: link || '' },
+            { name: MC_FIELDS.pickupSlotLabel, value: slotLabel },
         ]);
         return { synced: true };
     } catch (err) {
@@ -1092,6 +1094,43 @@ export async function sendPickupReadyManyChat(order, itemLabels) {
         return { sent: true, subscriberId: subscriber.id };
     } catch (err) {
         logManyChatSendError('sendPickupReadyManyChat', { order, error: err?.message || String(err) });
+        return { sent: false, reason: 'error', error: err?.message || String(err) };
+    }
+}
+
+/**
+ * Free-form (NOT a Meta template) reply sent right after the customer books a
+ * pickup slot — valid because they just interacted (24h window). Reuses the
+ * order-confirmation flow with notification_type 'pickup_scheduled'; the flow
+ * needs a branch with a plain text message using pickup_slot_label,
+ * pickup_pass_link and pickup_items_line. Never throws.
+ */
+export async function sendPickupScheduledManyChat(order, { slotLabel, itemsLine }) {
+    try {
+        const phone = normalizeIsraeliPhone(order?.organizerPhone);
+        if (!phone) return { sent: false, reason: 'no-phone' };
+
+        const { firstName, lastName } = splitName(order?.organizerName);
+        const subscriber = await findOrCreateSubscriber({
+            phone, email: order?.organizerEmail, firstName, lastName,
+        });
+        if (!subscriber?.id) return { sent: false, reason: 'subscriber-not-found' };
+
+        const fields = [
+            { name: NOTIFICATION_TYPE_FIELD, value: 'pickup_scheduled' },
+            { name: MC_FIELDS.organizerName, value: order?.organizerName },
+            { name: MC_FIELDS.pickupSlotLabel, value: slotLabel },
+            { name: MC_FIELDS.pickupItemsLine, value: itemsLine },
+        ].filter(f => hasManyChatFieldValue(f.value));
+        await setCustomFieldsByName(subscriber.id, fields);
+        await sendFlow(subscriber.id, ORDER_CONFIRMATION_FLOW_NS);
+
+        logManyChatSendSuccess('sendPickupScheduledManyChat', {
+            order, phone, subscriberId: subscriber.id, notificationType: 'pickup_scheduled', fields,
+        });
+        return { sent: true, subscriberId: subscriber.id };
+    } catch (err) {
+        logManyChatSendError('sendPickupScheduledManyChat', { order, error: err?.message || String(err) });
         return { sent: false, reason: 'error', error: err?.message || String(err) };
     }
 }

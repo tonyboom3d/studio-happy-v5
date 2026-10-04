@@ -78,7 +78,10 @@ async function appendCompanyEventLead(fieldValues) {
 /** Sheet first, then the existing studio WhatsApp template. */
 export async function handleCompanyEventSubmission(event) {
     const submission = event?.entity || event;
+    console.log('[companyEventLeads] onSubmissionCreated fired. formId:', submission?.formId, 'expected:', COMPANY_FORM_ID);
     if (submission?.formId !== COMPANY_FORM_ID) return;
+
+    console.log('[companyEventLeads] matched company form. submissions:', JSON.stringify(submission.submissions || {}));
 
     try {
         await appendCompanyEventLead(submission.submissions || {});

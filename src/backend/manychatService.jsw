@@ -1257,19 +1257,15 @@ const BIRTHDAY_LEAD_NOTIFICATION_TYPE = 'birthday_lead';
  * (notification_type = birthday_lead → needs a matching branch + approved
  * template in ManyChat). Never throws.
  */
-export async function sendBirthdayLeadNoticeManyChat(phone) {
+export async function sendBirthdayLeadNoticeManyChat(subscriberId) {
     try {
-        const normalizedPhone = normalizeIsraeliPhone(phone);
-        if (!normalizedPhone) return { sent: false, reason: 'no-phone' };
+        if (!subscriberId) return { sent: false, reason: 'no-subscriberId' };
 
-        const subscriber = await findOrCreateSubscriber({ phone: normalizedPhone });
-        if (!subscriber?.id) throw new Error('No subscriber id after find/create');
-
-        await setCustomFieldsByName(subscriber.id, [
+        await setCustomFieldsByName(subscriberId, [
             { name: NOTIFICATION_TYPE_FIELD, value: BIRTHDAY_LEAD_NOTIFICATION_TYPE },
         ]);
-        await sendFlow(subscriber.id, ORDER_CONFIRMATION_FLOW_NS);
-        return { sent: true, subscriberId: subscriber.id };
+        await sendFlow(subscriberId, ORDER_CONFIRMATION_FLOW_NS);
+        return { sent: true, subscriberId };
     } catch (err) {
         console.error('[ManyChat] ❌ sendBirthdayLeadNoticeManyChat failed:', err?.message || err);
         return { sent: false, reason: 'error', error: err?.message || String(err) };

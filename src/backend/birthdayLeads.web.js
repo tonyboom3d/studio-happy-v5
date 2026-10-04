@@ -18,8 +18,8 @@ const BIRTHDAY_FORM_ID = 'dfecbbfe-54a0-4003-9753-9aaaaf14fe5d';
 // append is skipped (no-op) while empty.
 const APPSCRIPT_ENDPOINT = 'https://script.google.com/macros/s/AKfycbxihgAz7rmdcztG4VlFmVn6OOyA1JIhVo6OhizVar3rNBENzsLSPn0ddVxIqA9v9kJp/exec';
 
-// Studio's WhatsApp number — receives the "new lead" template via ManyChat.
-const STUDIO_WHATSAPP_PHONE = '972522272270';
+// Studio ManyChat subscriber that receives the "new lead" template.
+const STUDIO_MANYCHAT_SUBSCRIBER_ID = '1613710579';
 
 /** Wix Form field targets — must match the form schema storage keys. */
 const FORM_FIELDS = {
@@ -142,7 +142,7 @@ function formatInquiryDate(date = new Date()) {
 /** Sends the studio the approved WhatsApp template (notification_type = birthday_lead) — works outside the 24h window. */
 async function notifyBirthdayLeadWhatsApp() {
     try {
-        return await sendBirthdayLeadNoticeManyChat(STUDIO_WHATSAPP_PHONE);
+        return await sendBirthdayLeadNoticeManyChat(STUDIO_MANYCHAT_SUBSCRIBER_ID);
     } catch (err) {
         console.error('[birthdayLeads.web] notifyBirthdayLeadWhatsApp failed:', err?.message || err);
         return { sent: false, reason: 'error', error: err?.message || String(err) };

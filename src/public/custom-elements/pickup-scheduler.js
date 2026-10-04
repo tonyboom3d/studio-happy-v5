@@ -57,6 +57,25 @@ pickup-scheduler * { box-sizing: border-box; font-family: inherit; }
 .ps-spinner { width: 34px; height: 34px; border: 3px solid #e5e7eb; border-top-color: #5E2F88; border-radius: 50%; margin: 30px auto; animation: ps-spin .8s linear infinite; }
 .ps-loading-block { text-align: center; padding: 24px 12px 32px; }
 .ps-loading-text { color: #6b7280; font-size: 14px; line-height: 1.5; margin-top: 8px; }
+.ps-cal { background: #fff; border: 1px solid #e5e7eb; border-radius: 14px; padding: 12px; }
+.ps-cal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.ps-cal-title { font-weight: 700; font-size: 15px; color: #374151; }
+.ps-cal-nav { border: 1px solid #e5e7eb; background: #fff; border-radius: 8px; width: 34px; height: 34px; font-size: 16px; cursor: pointer; color: #581E83; }
+.ps-cal-nav:disabled { opacity: .3; cursor: default; }
+.ps-cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.ps-cal-dow { text-align: center; font-size: 11.5px; color: #9ca3af; padding: 4px 0; }
+.ps-cal-day { aspect-ratio: 1; display: flex; align-items: center; justify-content: center; border-radius: 10px; font-size: 14px; color: #c4c7cc; border: 1px solid transparent; background: transparent; padding: 0; }
+.ps-cal-day.ps-avail { color: #581E83; font-weight: 700; background: #f3ecfb; border-color: #d9c3ee; cursor: pointer; }
+.ps-cal-day.ps-avail:hover { border-color: #5E2F88; }
+.ps-cal-day.ps-day-sel { background: #5E2F88; color: #fff; border-color: #5E2F88; }
+.ps-times { margin-top: 14px; }
+.ps-times-title { font-size: 13.5px; font-weight: 700; color: #374151; margin-bottom: 8px; }
+.ps-times-list { display: flex; flex-wrap: wrap; gap: 8px; }
+.ps-time { border: 1px solid #d9c3ee; background: #fff; color: #581E83; border-radius: 10px; padding: 9px 14px; font-size: 14px; font-weight: 700; cursor: pointer; font-family: inherit; }
+.ps-time.ps-selected { background: #5E2F88; color: #fff; border-color: #5E2F88; }
+.ps-overlay { position: fixed; inset: 0; background: rgba(255,255,255,.92); z-index: 9999; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 24px; }
+.ps-overlay-text { font-size: 16px; font-weight: 700; color: #581E83; margin-top: 6px; }
+.ps-overlay-sub { font-size: 14px; color: #b91c1c; font-weight: 600; margin-top: 8px; }
 @keyframes ps-spin { to { transform: rotate(360deg); } }
 `;
 
@@ -70,7 +89,7 @@ const ERROR_MESSAGES = {
     EXPIRED: 'הקישור פג תוקף. לקבלת קישור חדש — חזרו לשיחה עם הבוט בוואטסאפ ובקשו שוב לתאם איסוף.',
     NO_ITEMS: 'לא נמצאו פריטים מוכנים לאיסוף להזמנה זו כרגע.',
     COLLECTED: 'כל הפריטים בהזמנה זו נאספו כבר 🎉',
-    EXPIRED_WINDOW: 'עברו 20 ימים מאז שהפריטים הוכרזו מוכנים לאיסוף. ניתן לפנות לשירות הלקוחות.',
+    EXPIRED_WINDOW: 'עברו 25 ימים מאז שהפריטים הוכרזו מוכנים לאיסוף. ניתן לפנות לשירות הלקוחות.',
     QUOTA_EXCEEDED: 'נוצלו כל 3 התיאומים האפשריים להזמנה זו. ניתן לפנות לשירות הלקוחות להמשך תיאום.',
     SLOT_UNAVAILABLE: 'המועד שנבחר אינו זמין יותר. בחרו מועד אחר מהרשימה.',
     BAD_REQUEST: 'לא נבחר מועד. יש לבחור מועד מהרשימה.',
@@ -99,6 +118,14 @@ function formatSlotTime(startIso, endIso) {
     return `${start}-${end}`;
 }
 
+const HE_MONTHS = ['ינואר', 'פברואר', 'מרץ', 'אפריל', 'מאי', 'יוני', 'יולי', 'אוגוסט', 'ספטמבר', 'אוקטובר', 'נובמבר', 'דצמבר'];
+const HE_DOW_SHORT = ['א׳', 'ב׳', 'ג׳', 'ד׳', 'ה׳', 'ו׳', 'ש׳'];
+
+/** YYYY-MM-DD in Israel time. */
+function ilDateKey(iso) {
+    return new Intl.DateTimeFormat('en-CA', { timeZone: IL_TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(iso));
+}
+
 class PickupScheduler extends HTMLElement {
     static get observedAttributes() { return ['context-data', 'submit-result']; }
 
@@ -108,6 +135,9 @@ class PickupScheduler extends HTMLElement {
         this._contextError = null;
         this._bootstrapMessage = 'טוענים את עמוד תיאום האיסוף…';
         this._selectedSlotKey = null;
+        this._selectedDay = null;
+        this._changeMode = false;
+        this._viewMonth = null; // { y, m } (m 0-11)
         this._sending = false;
         this._submitResult = null;
         this._clickBound = false;
@@ -160,6 +190,29 @@ class PickupScheduler extends HTMLElement {
 
         this.addEventListener('click', (e) => {
             if (this._sending || this._submitResult?.ok) return;
+
+            if (e.target.closest('[data-change]')) {
+                this._changeMode = true;
+                this.render();
+                return;
+            }
+
+            const navEl = e.target.closest('[data-nav]');
+            if (navEl && this._viewMonth && !navEl.disabled) {
+                const delta = Number(navEl.dataset.nav);
+                const d = new Date(Date.UTC(this._viewMonth.y, this._viewMonth.m + delta, 1));
+                this._viewMonth = { y: d.getUTCFullYear(), m: d.getUTCMonth() };
+                this.render();
+                return;
+            }
+
+            const dayEl = e.target.closest('[data-day]');
+            if (dayEl) {
+                this._selectedDay = dayEl.dataset.day;
+                this._selectedSlotKey = null;
+                this.render();
+                return;
+            }
 
             const slotEl = e.target.closest('[data-slot-key]');
             if (slotEl) {
@@ -220,7 +273,7 @@ class PickupScheduler extends HTMLElement {
                 : 'שלחנו לך הודעה בוואטסאפ עם פרטי האיסוף.';
             this.innerHTML = `
                 <div class="ps-wrap">
-                    <div class="ps-msg ps-good">✅ תיאום האיסוף נקבע ל-${psEsc(label)} (${psEsc(a?.workshopName || 'סדנה')})!<br/><br/>${followUp}</div>
+                    <div class="ps-msg ps-good">✅ תיאום האיסוף נקבע ל-${psEsc(label)}!<br/><br/>${followUp}</div>
                     ${this._renderQr(this._submitResult.qrDataUrl)}
                 </div>`;
             return;
@@ -256,24 +309,37 @@ class PickupScheduler extends HTMLElement {
             return;
         }
 
+        // Existing appointment → QR view first (calendar only after "change").
+        if (currentAppointment && qrDataUrl && !this._changeMode) {
+            this.innerHTML = `
+                <div class="ps-wrap">
+                    <div class="ps-head">
+                        <h1>קוד QR לאיסוף</h1>
+                        <div class="ps-sub">הציגו את הקוד לעובד/ת הסטודיו בעת האיסוף</div>
+                    </div>
+                    ${currentBlock}
+                    ${canBook ? '<button type="button" class="ps-submit" style="background:#fff;color:#581E83;border:1px solid #cbb2e6" data-change>שינוי מועד האיסוף</button>' : ''}
+                </div>`;
+            return;
+        }
+
         let listBody;
         if (!Array.isArray(slots) || !slots.length) {
             listBody = `<div class="ps-empty">לא נמצאו מועדי סדנה פעילים לאיסוף בטווח הזמן הקרוב. יש לפנות לשירות הלקוחות לתיאום ידני.</div>`;
         } else {
-            listBody = `<div class="ps-list">${slots.map((slot) => {
-                const isSelected = this._selectedSlotKey === slot.slotKey;
-                return `
-                    <label class="ps-slot ${isSelected ? 'ps-selected' : ''}" data-slot-key="${psEsc(slot.slotKey)}">
-                        <span>
-                            <div class="ps-slot-main">${psEsc(formatSlotDate(slot.start))} · ${psEsc(formatSlotTime(slot.start, slot.end))}</div>
-                            <div class="ps-slot-sub">${psEsc(slot.workshopName || 'סדנה')}</div>
-                        </span>
-                        <input type="radio" class="ps-radio" name="ps-slot" ${isSelected ? 'checked' : ''} readonly>
-                    </label>`;
-            }).join('')}</div>`;
+            listBody = this._renderCalendar(slots);
         }
 
         const canSubmit = !!this._selectedSlotKey && !this._sending;
+        const quotaBlock = (used ?? 0) >= 1
+            ? `<div class="ps-quota">נוצלו ${used} מתוך 3 תיאומים אפשריים להזמנה זו (${remaining ?? 0} נותרו)</div>`
+            : '';
+        const overlay = this._sending ? `
+            <div class="ps-overlay">
+                <div class="ps-spinner"></div>
+                <div class="ps-overlay-text">קובעים את מועד האיסוף…</div>
+                <div class="ps-overlay-sub">נא לא לסגור את החלון עד להשלמת התהליך</div>
+            </div>` : '';
 
         this.innerHTML = `
             <div class="ps-wrap">
@@ -281,11 +347,74 @@ class PickupScheduler extends HTMLElement {
                     <h1>תיאום איסוף</h1>
                     <div class="ps-sub">בחרו מועד סדנה שבו תגיעו לאסוף את ההזמנה</div>
                 </div>
-                <div class="ps-quota">נוצלו ${used ?? 0} מתוך 3 תיאומים אפשריים להזמנה זו (${remaining ?? 0} נותרו)</div>
+                ${quotaBlock}
                 ${currentBlock}
                 ${listBody}
-                <button type="button" class="ps-submit" data-submit ${canSubmit ? '' : 'disabled'}>${this._sending ? 'שולח…' : 'אישור מועד איסוף'}</button>
-            </div>`;
+                <button type="button" class="ps-submit" data-submit ${canSubmit ? '' : 'disabled'}>אישור מועד איסוף</button>
+            </div>
+            ${overlay}`;
+    }
+
+    _renderCalendar(slots) {
+        const byDay = new Map();
+        slots.forEach((s) => {
+            const k = ilDateKey(s.start);
+            if (!byDay.has(k)) byDay.set(k, []);
+            byDay.get(k).push(s);
+        });
+        const dayKeys = [...byDay.keys()].sort();
+        const firstKey = dayKeys[0];
+        const lastKey = dayKeys[dayKeys.length - 1];
+        const [fy, fm] = firstKey.split('-').map(Number);
+        const [ly, lm] = lastKey.split('-').map(Number);
+        if (!this._viewMonth) this._viewMonth = { y: fy, m: fm - 1 };
+        const { y, m } = this._viewMonth;
+
+        const firstOfMonth = new Date(Date.UTC(y, m, 1));
+        const offset = firstOfMonth.getUTCDay(); // Sunday = 0 (first column in RTL = right)
+        const daysInMonth = new Date(Date.UTC(y, m + 1, 0)).getUTCDate();
+        const cells = [];
+        for (let i = 0; i < offset; i++) cells.push('<div></div>');
+        for (let d = 1; d <= daysInMonth; d++) {
+            const key = `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+            if (byDay.has(key)) {
+                const sel = this._selectedDay === key ? 'ps-day-sel' : '';
+                cells.push(`<button type="button" class="ps-cal-day ps-avail ${sel}" data-day="${key}">${d}</button>`);
+            } else {
+                cells.push(`<div class="ps-cal-day">${d}</div>`);
+            }
+        }
+
+        const atStart = y === fy && m === fm - 1;
+        const atEnd = y === ly && m === lm - 1;
+
+        let timesBlock = '';
+        if (this._selectedDay && byDay.has(this._selectedDay)) {
+            const daySlots = byDay.get(this._selectedDay).slice().sort((a, b) => new Date(a.start) - new Date(b.start));
+            timesBlock = `
+                <div class="ps-times">
+                    <div class="ps-times-title">${psEsc(formatSlotDate(daySlots[0].start))} — בחרו שעה:</div>
+                    <div class="ps-times-list">${daySlots.map((s) => `
+                        <button type="button" class="ps-time ${this._selectedSlotKey === s.slotKey ? 'ps-selected' : ''}" data-slot-key="${psEsc(s.slotKey)}">${psEsc(formatSlotTime(s.start, s.end))}</button>`).join('')}
+                    </div>
+                </div>`;
+        } else {
+            timesBlock = `<div class="ps-sub" style="text-align:center;margin-top:12px">לחצו על תאריך מסומן כדי לראות שעות איסוף</div>`;
+        }
+
+        return `
+            <div class="ps-cal">
+                <div class="ps-cal-head">
+                    <button type="button" class="ps-cal-nav" data-nav="-1" ${atStart ? 'disabled' : ''} aria-label="החודש הקודם">›</button>
+                    <div class="ps-cal-title">${HE_MONTHS[m]} ${y}</div>
+                    <button type="button" class="ps-cal-nav" data-nav="1" ${atEnd ? 'disabled' : ''} aria-label="החודש הבא">‹</button>
+                </div>
+                <div class="ps-cal-grid">
+                    ${HE_DOW_SHORT.map((d) => `<div class="ps-cal-dow">${d}</div>`).join('')}
+                    ${cells.join('')}
+                </div>
+            </div>
+            ${timesBlock}`;
     }
 }
 

@@ -40,7 +40,7 @@ const SA = { suppressAuth: true };
 const SAC = { suppressAuth: true, consistentRead: true };
 const ISRAEL_TZ = 'Asia/Jerusalem';
 
-export const PICKUP_WINDOW_DAYS = 20;
+export const PICKUP_WINDOW_DAYS = 25;
 export const PICKUP_MAX_APPOINTMENTS = 3;
 export const PICKUP_MIN_ORDERS = 2;
 export const PICKUP_TOKEN_TTL_MS = 30 * 60 * 1000;

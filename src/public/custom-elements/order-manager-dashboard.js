@@ -2439,7 +2439,7 @@ function __wdInjectGlobalAssets() {
         function getOrderSketchTotals(order) {
             const sketches = order.sketches || [];
             const total = Math.max(sketches.length, order.rugCount || 0);
-            const ready = sketches.filter(s => s.status === 'מוכנה').length;
+            const ready = sketches.filter(s => s.status === 'מוכנה' || s.status === 'מוכנה לאיסוף').length;
             const selected = sketches.filter(s => !!s.img).length;
             return {
                 total,
@@ -2662,6 +2662,7 @@ function __wdInjectGlobalAssets() {
                 return;
             }
             const items = pendingPickupReadyItems;
+            markSelectedSketchesReadyForPickup(order, items);
             addLog(order.id, `מוכן לאיסוף: ${items.map(i => i.label).join(', ')} — הודעת וואטסאפ נשלחה ל-${order.organizerPhone || ''}`);
             dispatchDashboardAction('markReadyForPickup', {
                 orderId: order.id,
@@ -3863,6 +3864,7 @@ function __wdInjectGlobalAssets() {
                     existingSketches.forEach((s, idx) => {
                         const statusColors = {
                             'מוכנה': 'bg-green-100 text-green-700 border-green-200',
+                            'מוכנה לאיסוף': 'bg-amber-100 text-amber-800 border-amber-300',
                             'בהכנה': 'bg-orange-100 text-orange-700 border-orange-200',
                             'פתוח לשינויים': 'bg-gray-100 text-gray-700 border-gray-200',
                             'לא מאושרת לביצוע': 'bg-red-100 text-red-700 border-red-300 font-bold'
@@ -3923,6 +3925,7 @@ function __wdInjectGlobalAssets() {
                                         <option value="פתוח לשינויים" ${s.status==='פתוח לשינויים'?'selected':''}>פתוח לשינויים</option>
                                         <option value="בהכנה" ${s.status==='בהכנה'?'selected':''}>בהכנה</option>
                                         <option value="מוכנה" ${s.status==='מוכנה'?'selected':''}>מוכנה</option>
+                                        <option value="מוכנה לאיסוף" ${s.status==='מוכנה לאיסוף'?'selected':''}>מוכנה לאיסוף</option>
                                         <option value="לא מאושרת לביצוע" ${s.status==='לא מאושרת לביצוע'?'selected':''} ${!canRejectSketchStatus?'disabled':''}>לא מאושרת לביצוע</option>
                                     </select>`}
                                 </div>
@@ -4517,7 +4520,7 @@ function __wdInjectGlobalAssets() {
             const w = mockWorkshops.find(x => x.id === currentWorkshopId);
             let readySum = 0;
             mockOrders.filter(o => o.workshopId === w.id).forEach(o => {
-                if(o.sketches) readySum += o.sketches.filter(s => s.status === 'מוכנה').length;
+                if(o.sketches) readySum += o.sketches.filter(s => s.status === 'מוכנה' || s.status === 'מוכנה לאיסוף').length;
             });
             w.sketchesReady = readySum;
 
@@ -4550,7 +4553,7 @@ function __wdInjectGlobalAssets() {
             const w = mockWorkshops.find(x => x.id === currentWorkshopId);
             let readySum = 0;
             mockOrders.filter(o => o.workshopId === w.id).forEach(o => {
-                if(o.sketches) readySum += o.sketches.filter(s => s.status === 'מוכנה').length;
+                if(o.sketches) readySum += o.sketches.filter(s => s.status === 'מוכנה' || s.status === 'מוכנה לאיסוף').length;
             });
             w.sketchesReady = readySum;
 
@@ -4578,7 +4581,7 @@ function __wdInjectGlobalAssets() {
             const w = mockWorkshops.find(x => x.id === currentWorkshopId);
             let readySum = 0;
             mockOrders.filter(o => o.workshopId === w.id).forEach(o => {
-                if(o.sketches) readySum += o.sketches.filter(s => s.status === 'מוכנה').length;
+                if(o.sketches) readySum += o.sketches.filter(s => s.status === 'מוכנה' || s.status === 'מוכנה לאיסוף').length;
             });
             w.sketchesReady = readySum;
 
@@ -4593,18 +4596,18 @@ function __wdInjectGlobalAssets() {
         }
 
         /**
-         * When the last tufting sketch becomes "מוכנה", every rug in the order
-         * is ready for pickup. Reuse the existing WhatsApp confirm popup
-         * (executeSendPickupReady → markReadyForPickup) instead of a new flow.
+         * When the last tufting sketch becomes "מוכנה לאיסוף", ask whether to
+         * send the existing pickup WhatsApp (executeSendPickupReady).
+         * "מוכנה" stays the prepared/locked status and does not open this popup.
          */
         function maybePromptPickupReadyMessage(order, newStatus) {
-            if (newStatus !== 'מוכנה' || !order) return;
+            if (newStatus !== 'מוכנה לאיסוף' || !order) return;
             if (order.workshopType && order.workshopType !== 'tufting') return;
             if (!hasDashboardPermission('sendWhatsApp')) return;
             const sketches = order.sketches || [];
             const needed = Math.max(sketches.length, Number(order.rugCount) || 0);
             if (!sketches.length || sketches.length < needed) return;
-            if (!sketches.every((s) => s.status === 'מוכנה')) return;
+            if (!sketches.every((s) => s.status === 'מוכנה לאיסוף')) return;
             const workshop = mockWorkshops.find((w) => w.id === order.workshopId);
             if (!workshop || Date.now() < getWorkshopEndTimestamp(workshop)) return;
             const pending = getPickupItemsState(order).filter((item) => item.state === 'pending');
@@ -4616,6 +4619,32 @@ function __wdInjectGlobalAssets() {
                 textEl.textContent = 'כל הסקיצות בהזמנה מוכנות לאיסוף - האם לשלוח הודעה לאיסוף ללקוח?';
             }
             openModal('pickupConfirmModal');
+        }
+
+        /** Pickup-send path: selected sketch items become "מוכנה לאיסוף" without re-opening the confirm popup. */
+        function markSelectedSketchesReadyForPickup(order, items) {
+            (items || []).forEach((item) => {
+                const key = String(item.key || '');
+                if (!key.startsWith('sketch:')) return;
+                const sketchId = key.slice('sketch:'.length);
+                const sketch = (order.sketches || []).find((s) => s.id === sketchId);
+                if (!sketch || sketch.status === 'מוכנה לאיסוף') return;
+                const expectedUpdatedDate = sketch.updatedDate || null;
+                sketch.status = 'מוכנה לאיסוף';
+                dispatchDashboardAction('updateSketchState', {
+                    orderId: order.id,
+                    sketchId,
+                    newStatus: 'מוכנה לאיסוף',
+                    expectedUpdatedDate,
+                });
+            });
+            const workshop = mockWorkshops.find((w) => w.id === order.workshopId);
+            if (!workshop) return;
+            let readySum = 0;
+            mockOrders.filter((o) => o.workshopId === workshop.id).forEach((o) => {
+                if (o.sketches) readySum += o.sketches.filter((s) => s.status === 'מוכנה' || s.status === 'מוכנה לאיסוף').length;
+            });
+            workshop.sketchesReady = readySum;
         }
 
         function openPickupQueueOrder(orderId) {

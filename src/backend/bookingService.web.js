@@ -3247,7 +3247,7 @@ export const saveSketchSelection = webMethod(Permissions.Anyone, async (selectio
 
         const status = normalizeSketchStatus(prev.sketchStatus);
         if (isLockedStatus(status)) {
-            throw new Error(status === SKETCH_STATUS.READY ? 'SKETCH_READY_LOCKED' : `SKETCH_STATUS_LOCKED:${status}`);
+            throw new Error(status === SKETCH_STATUS.READY || status === SKETCH_STATUS.READY_FOR_PICKUP ? 'SKETCH_READY_LOCKED' : `SKETCH_STATUS_LOCKED:${status}`);
         }
         if (prev.selectionStatus === 'preparing' || prev.selectionStatus === 'ready') {
             throw new Error('Cannot change a sketch that is already being prepared');
@@ -3770,7 +3770,7 @@ export const checkEditingAllowed = webMethod(Permissions.Anyone, async (orderId,
 /**
  * Authoritative pre-edit check for a single sketch (consistentRead).
  * Used when the customer taps "עריכה" so stale client state cannot bypass
- * dashboard-owned statuses (בהכנה / מוכנה).
+ * dashboard-owned statuses (בהכנה / מוכנה / מוכנה לאיסוף).
  */
 export const verifySketchForEdit = webMethod(Permissions.Anyone, async (orderId, rugIndex, participantId) => {
     if (!orderId || rugIndex == null) throw new Error('orderId and rugIndex are required');

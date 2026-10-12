@@ -39,7 +39,7 @@ function getSelectionStatusBadge(sel, editingWindowClosed) {
       label: staffLabel,
       bg: style.bg,
       text: style.text,
-      icon: status === SKETCH_STATUS.READY || status === SKETCH_STATUS.PREPARING || status === SKETCH_STATUS.REJECTED,
+      icon: status === SKETCH_STATUS.READY || status === SKETCH_STATUS.READY_FOR_PICKUP || status === SKETCH_STATUS.PREPARING || status === SKETCH_STATUS.REJECTED,
     };
   }
   if (editingWindowClosed)

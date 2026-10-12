@@ -1074,7 +1074,7 @@ export default function OrganizerSelfSelectionView({
                                 {sketch.size === '90x90' ? '90×90 ס"מ' : '60×60 ס"מ'}
                               </span>
                               <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full flex items-center gap-0.5 ${badge.bg} ${badge.text}`}>
-                                {(badge.label === 'לא ניתן לשינוי' || badge.label === 'סקיצה מוכנה' || badge.label === 'סקיצה בהכנה') && <Lock className="w-2.5 h-2.5" />}
+                                {(badge.label === 'לא ניתן לשינוי' || badge.label === 'סקיצה מוכנה' || badge.label === 'סקיצה בהכנה' || badge.label === 'סקיצה מוכנה לאיסוף') && <Lock className="w-2.5 h-2.5" />}
                                 {badge.label}
                               </span>
                             </div>

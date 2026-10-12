@@ -7,6 +7,7 @@ export const SKETCH_STATUS = {
   OPEN: 'פתוח לשינויים',
   PREPARING: 'בהכנה',
   READY: 'מוכנה',
+  READY_FOR_PICKUP: 'מוכנה לאיסוף',
   REJECTED: 'לא מאושרת לביצוע',
 };
 
@@ -27,7 +28,9 @@ export function normalizeSketchStatus(status) {
 /** Statuses where staff already owns the sketch — selection mode can no longer change. */
 export function isLockedStatus(status) {
   const normalized = normalizeSketchStatus(status);
-  return normalized === SKETCH_STATUS.READY || normalized === SKETCH_STATUS.PREPARING;
+  return normalized === SKETCH_STATUS.READY
+    || normalized === SKETCH_STATUS.PREPARING
+    || normalized === SKETCH_STATUS.READY_FOR_PICKUP;
 }
 
 /** True if any selection in the list is locked (בהכנה / מוכנה). */
@@ -124,6 +127,7 @@ export function computeLockedCatalogCounts(sketches) {
 
 export function getSketchStatusLabel(status) {
   const normalized = normalizeSketchStatus(status);
+  if (normalized === SKETCH_STATUS.READY_FOR_PICKUP) return 'מוכנה לאיסוף';
   if (normalized === SKETCH_STATUS.READY) return 'מוכנה';
   if (normalized === SKETCH_STATUS.PREPARING) return 'בהכנה';
   if (normalized === SKETCH_STATUS.REJECTED) return 'לא מאושרת';
@@ -132,6 +136,7 @@ export function getSketchStatusLabel(status) {
 
 export function getSketchStatusShortLabel(status) {
   const normalized = normalizeSketchStatus(status);
+  if (normalized === SKETCH_STATUS.READY_FOR_PICKUP) return 'סקיצה מוכנה לאיסוף';
   if (normalized === SKETCH_STATUS.READY) return 'סקיצה מוכנה';
   if (normalized === SKETCH_STATUS.PREPARING) return 'סקיצה בהכנה';
   if (normalized === SKETCH_STATUS.REJECTED) return 'לא מאושרת לביצוע';
@@ -140,6 +145,7 @@ export function getSketchStatusShortLabel(status) {
 
 export function getSketchStatusBadgeStyle(status) {
   const normalized = normalizeSketchStatus(status);
+  if (normalized === SKETCH_STATUS.READY_FOR_PICKUP) return { bg: 'bg-amber-100', text: 'text-amber-800' };
   if (normalized === SKETCH_STATUS.READY) return { bg: 'bg-green-100', text: 'text-green-700' };
   if (normalized === SKETCH_STATUS.PREPARING) return { bg: 'bg-blue-100', text: 'text-blue-700' };
   if (normalized === SKETCH_STATUS.REJECTED) return { bg: 'bg-red-100', text: 'text-red-700' };

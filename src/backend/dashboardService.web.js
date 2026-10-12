@@ -1265,7 +1265,7 @@ export const getInitialDashboardData = webMethod(Permissions.SiteMember, async (
                     // sketches.length only reflects selections created so far.
                     totalSketchesNeeded += Math.max(sketches.length, order.rugCount || 0);
                     sketchesSelected += sketches.filter(s => !!s.img).length;
-                    sketchesReady += sketches.filter(s => s.status === SKETCH_STATUS.READY).length;
+                    sketchesReady += sketches.filter(s => s.status === SKETCH_STATUS.READY || s.status === SKETCH_STATUS.READY_FOR_PICKUP).length;
                 }
             }
 
@@ -2169,7 +2169,7 @@ async function enrichOrdersIntoDashboardPayload(rawOrders, { typesMap, serviceId
                 } else if (typeInfo.requiresSketch) {
                     totalSketchesNeeded += Math.max(sketches.length, order.rugCount || 0);
                     sketchesSelected += sketches.filter((s) => !!s.img).length;
-                    sketchesReady += sketches.filter((s) => s.status === SKETCH_STATUS.READY).length;
+                    sketchesReady += sketches.filter((s) => s.status === SKETCH_STATUS.READY || s.status === SKETCH_STATUS.READY_FOR_PICKUP).length;
                 }
             }
 

@@ -16,7 +16,13 @@
  * תקשורת:
  * - קלט:  attribute `context-data` — תוצאת getPickupContext (או {loading}/{error}).
  * - קלט:  attribute `submit-result` — תוצאת submitPickupAppointment.
+ * - קלט:  attribute `confirm-result` — תוצאת confirmCustomerPickup (כפתור "אישור איסוף" העצמי).
  * - פלט:  CustomEvent `submit-request` עם detail = { slotKey }.
+ * - פלט:  CustomEvent `confirm-pickup-request` (ללא detail) — לקוח מאשר שאסף את הפריטים.
+ *
+ * אין יותר הצגת QR — במקום זאת מוצג טיימר למועד האיסוף, הוראות הגעה
+ * (כתובת הסטודיו), וכפתור "אישור איסוף הפריטים" שנפתח רק החל מתאריך
+ * האיסוף שנקבע (ולא משעתו המדויקת).
  */
 
 const PS_STYLE = `
@@ -43,10 +49,11 @@ pickup-scheduler * { box-sizing: border-box; font-family: inherit; }
 .ps-msg { border-radius: 12px; padding: 20px 16px; font-size: 14.5px; font-weight: 600; text-align: center; }
 .ps-msg.ps-bad { background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; }
 .ps-msg.ps-good { background: #f3ecfb; border: 1px solid #cbb2e6; color: #581E83; }
-.ps-qr { background: #fff; border: 1px solid #e5e7eb; border-radius: 14px; padding: 16px; margin: 14px 0; text-align: center; }
-.ps-qr img { display: block; margin: 0 auto 8px; max-width: 100%; height: auto; }
-.ps-qr-note { font-size: 13px; color: #374151; font-weight: 600; }
 .ps-card { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 14px; margin-bottom: 14px; font-size: 14px; line-height: 1.6; }
+.ps-countdown { font-size: 16px; font-weight: 800; color: #581E83; margin-top: 10px; }
+.ps-items-line { margin-top: 6px; font-size: 14px; }
+.ps-address-title { font-weight: 700; margin-bottom: 4px; }
+.ps-confirm-note { font-size: 12.5px; color: #6b7280; margin-top: 8px; text-align: center; }
 .ps-items { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
 .ps-item { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 13.5px; }
 .ps-badge { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px; }
@@ -95,6 +102,8 @@ const ERROR_MESSAGES = {
     BAD_REQUEST: 'לא נבחר מועד. יש לבחור מועד מהרשימה.',
     PASS_EXPIRED: 'הקישור פג תוקף. ניתן לתאם איסוף מחדש דרך הבוט בוואטסאפ.',
     REPLACED: 'תיאום האיסוף הזה הוחלף במועד אחר, ולכן הקישור אינו פעיל.',
+    TOO_EARLY: 'אפשר לאשר איסוף רק החל מיום המועד שנקבע.',
+    NO_APPOINTMENT: 'לא נמצא תיאום איסוף פעיל.',
 };
 
 function psEsc(str) {
@@ -126,8 +135,38 @@ function ilDateKey(iso) {
     return new Intl.DateTimeFormat('en-CA', { timeZone: IL_TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(iso));
 }
 
+const STUDIO_ADDRESS = 'הדובדבן 7, קריית אונו, קומה 5';
+
+/** Date-only gate (Israel time) — ignores the appointment's exact hour. */
+function canConfirmPickupNow(startIso) {
+    return ilDateKey(new Date().toISOString()) >= ilDateKey(startIso);
+}
+
+function formatCountdown(startIso) {
+    const diffMs = new Date(startIso).getTime() - Date.now();
+    if (diffMs <= 0) return 'מועד האיסוף הגיע';
+    const totalMinutes = Math.floor(diffMs / 60000);
+    const days = Math.floor(totalMinutes / 1440);
+    const hours = Math.floor((totalMinutes % 1440) / 60);
+    const minutes = totalMinutes % 60;
+    const parts = [];
+    if (days > 0) parts.push(`${days} ${days === 1 ? 'יום' : 'ימים'}`);
+    if (hours > 0) parts.push(`${hours} ${hours === 1 ? 'שעה' : 'שעות'}`);
+    if (!days && minutes > 0) parts.push(`${minutes} ${minutes === 1 ? 'דקה' : 'דקות'}`);
+    return parts.length ? `בעוד ${parts.join(' ו-')}` : 'בקרוב';
+}
+
+function formatItemsSummaryLine(summary) {
+    if (!summary) return '';
+    const parts = [];
+    if (summary.rugs) parts.push(`${summary.rugs} ${summary.rugs === 1 ? 'שטיח' : 'שטיחים'}`);
+    if (summary.ceramics) parts.push(`${summary.ceramics} ${summary.ceramics === 1 ? 'כלי קרמיקה' : 'כלי קרמיקה'}`);
+    if (summary.other) parts.push(`${summary.other} ${summary.other === 1 ? 'פריט' : 'פריטים'}`);
+    return parts.join(' + ');
+}
+
 class PickupScheduler extends HTMLElement {
-    static get observedAttributes() { return ['context-data', 'submit-result']; }
+    static get observedAttributes() { return ['context-data', 'submit-result', 'confirm-result']; }
 
     constructor() {
         super();
@@ -140,16 +179,31 @@ class PickupScheduler extends HTMLElement {
         this._viewMonth = null; // { y, m } (m 0-11)
         this._sending = false;
         this._submitResult = null;
+        this._confirmBusy = false;
+        this._confirmResult = null;
         this._clickBound = false;
+        this._countdownTimer = null;
     }
 
-    _renderQr(qrDataUrl) {
-        if (!qrDataUrl) return '';
+    /** Items + countdown + arrival address + self-confirm "אישור איסוף" button. */
+    _renderPickupReadyPanel(appointment, itemsSummary) {
+        const itemsLine = formatItemsSummaryLine(itemsSummary);
+        const canConfirm = canConfirmPickupNow(appointment.start);
+        const dateLabel = formatSlotDate(appointment.start);
         return `
-            <div class="ps-qr">
-                <img src="${psEsc(qrDataUrl)}" alt="קוד QR לאישור איסוף" width="240" height="240">
-                <div class="ps-qr-note">הציגו את הקוד לעובד/ת הסטודיו בעת האיסוף. אפשר לשמור צילום מסך.</div>
-            </div>`;
+            <div class="ps-card">
+                <div><strong>מועד האיסוף שנקבע:</strong> ${psEsc(dateLabel)}, ${psEsc(formatSlotTime(appointment.start, appointment.end))}</div>
+                ${itemsLine ? `<div class="ps-items-line">לאיסוף: <strong>${psEsc(itemsLine)}</strong></div>` : ''}
+                <div class="ps-countdown">${psEsc(formatCountdown(appointment.start))}</div>
+            </div>
+            <div class="ps-card">
+                <div class="ps-address-title">הוראות הגעה</div>
+                <div>כתובת: ${psEsc(STUDIO_ADDRESS)}</div>
+            </div>
+            <button type="button" class="ps-submit" data-confirm-pickup ${canConfirm && !this._confirmBusy ? '' : 'disabled'}>
+                ${this._confirmBusy ? 'מאשר…' : 'אישור איסוף הפריטים'}
+            </button>
+            ${!canConfirm ? `<div class="ps-confirm-note">כפתור האישור ייפתח ביום האיסוף (${psEsc(dateLabel)})</div>` : ''}`;
     }
 
     _ensureStyles() {
@@ -181,15 +235,43 @@ class PickupScheduler extends HTMLElement {
             </div>`;
     }
 
+    disconnectedCallback() {
+        if (this._countdownTimer) {
+            clearInterval(this._countdownTimer);
+            this._countdownTimer = null;
+        }
+    }
+
+    /** Refreshes the "בעוד X ימים/שעות" countdown text without a full re-render. */
+    _startCountdownTicker() {
+        if (this._countdownTimer) return;
+        this._countdownTimer = setInterval(() => {
+            const el = this.querySelector('.ps-countdown');
+            const appointment = this._submitResult?.appointment || this._context?.currentAppointment;
+            if (!el || !appointment) return;
+            el.textContent = formatCountdown(appointment.start);
+        }, 30000);
+    }
+
     connectedCallback() {
         this._ensureStyles();
         this.render();
+        this._startCountdownTicker();
 
         if (this._clickBound) return;
         this._clickBound = true;
 
         this.addEventListener('click', (e) => {
-            if (this._sending || this._submitResult?.ok) return;
+            const confirmBtn = e.target.closest('[data-confirm-pickup]');
+            if (confirmBtn) {
+                if (confirmBtn.disabled || this._confirmBusy) return;
+                this._confirmBusy = true;
+                this.render();
+                this.dispatchEvent(new CustomEvent('confirm-pickup-request', { bubbles: true }));
+                return;
+            }
+
+            if (this._sending || this._submitResult?.ok || this._confirmResult?.ok) return;
 
             if (e.target.closest('[data-change]')) {
                 this._changeMode = true;
@@ -250,6 +332,11 @@ class PickupScheduler extends HTMLElement {
             if (name === 'submit-result') {
                 this._sending = false;
                 this._submitResult = JSON.parse(newVal);
+                this._confirmResult = null;
+            }
+            if (name === 'confirm-result') {
+                this._confirmBusy = false;
+                this._confirmResult = JSON.parse(newVal);
             }
         } catch (err) {
             console.error('[pickup-scheduler] bad JSON attribute:', err);
@@ -265,6 +352,39 @@ class PickupScheduler extends HTMLElement {
             return;
         }
 
+        if (this._confirmResult?.ok) {
+            this.innerHTML = `
+                <div class="ps-wrap">
+                    <div class="ps-msg ps-good">✅ אישרת שאספת את הפריטים. תודה ולהתראות בסדנה הבאה!</div>
+                </div>`;
+            return;
+        }
+
+        if (this._confirmResult && this._confirmResult.ok === false) {
+            const msg = ERROR_MESSAGES[this._confirmResult.code] || this._confirmResult.message || 'האישור נכשל. נסו שוב.';
+            this._confirmResult = null; // allow retry on next render instead of getting stuck on the error
+            if (this._submitResult?.ok) {
+                const a = this._submitResult.appointment;
+                this.innerHTML = `
+                    <div class="ps-wrap">
+                        <div class="ps-msg ps-bad">${psEsc(msg)}</div>
+                        ${this._renderPickupReadyPanel(a, this._submitResult.itemsSummary)}
+                    </div>`;
+                return;
+            }
+            if (this._context?.currentAppointment) {
+                const a = this._context.currentAppointment;
+                this.innerHTML = `
+                    <div class="ps-wrap">
+                        <div class="ps-msg ps-bad">${psEsc(msg)}</div>
+                        ${this._renderPickupReadyPanel(a, this._context.itemsSummary)}
+                    </div>`;
+                return;
+            }
+            this.innerHTML = `<div class="ps-wrap"><div class="ps-msg ps-bad">${psEsc(msg)}</div></div>`;
+            return;
+        }
+
         if (this._submitResult?.ok) {
             const a = this._submitResult.appointment;
             const label = a ? `${formatSlotDate(a.start)}, ${formatSlotTime(a.start, a.end)}` : '';
@@ -274,7 +394,7 @@ class PickupScheduler extends HTMLElement {
             this.innerHTML = `
                 <div class="ps-wrap">
                     <div class="ps-msg ps-good">✅ תיאום האיסוף נקבע ל-${psEsc(label)}!<br/><br/>${followUp}</div>
-                    ${this._renderQr(this._submitResult.qrDataUrl)}
+                    ${a ? this._renderPickupReadyPanel(a, this._submitResult.itemsSummary) : ''}
                 </div>`;
             return;
         }
@@ -290,34 +410,31 @@ class PickupScheduler extends HTMLElement {
             return;
         }
 
-        const { slots, used, remaining, currentAppointment, qrDataUrl, canBook } = this._context;
+        const { slots, used, remaining, currentAppointment, itemsSummary, canBook } = this._context;
 
         const currentBlock = currentAppointment ? `
             <div class="ps-current">
                 📅 כבר תואם איסוף עבורך ל-${psEsc(formatSlotDate(currentAppointment.start))}, ${psEsc(formatSlotTime(currentAppointment.start, currentAppointment.end))}.
                 ${canBook === false ? '' : 'ניתן לבחור מועד אחר מהרשימה למטה כדי להחליף.'}
-            </div>
-            ${this._renderQr(qrDataUrl)}` : '';
+            </div>` : '';
 
         if (canBook === false) {
             this.innerHTML = `
                 <div class="ps-wrap">
                     <div class="ps-head"><h1>תיאום איסוף</h1></div>
                     ${currentBlock}
+                    ${currentAppointment ? this._renderPickupReadyPanel(currentAppointment, itemsSummary) : ''}
                     <div class="ps-quota">נוצלו ${used ?? 0} מתוך 3 תיאומים אפשריים — לשינוי מועד יש לפנות לשירות הלקוחות.</div>
                 </div>`;
             return;
         }
 
-        // Existing appointment → QR view first (calendar only after "change").
-        if (currentAppointment && qrDataUrl && !this._changeMode) {
+        // Existing appointment → ready panel first (calendar only after "change").
+        if (currentAppointment && !this._changeMode) {
             this.innerHTML = `
                 <div class="ps-wrap">
-                    <div class="ps-head">
-                        <h1>קוד QR לאיסוף</h1>
-                        <div class="ps-sub">הציגו את הקוד לעובד/ת הסטודיו בעת האיסוף</div>
-                    </div>
-                    ${currentBlock}
+                    <div class="ps-head"><h1>תיאום האיסוף שלך</h1></div>
+                    ${this._renderPickupReadyPanel(currentAppointment, itemsSummary)}
                     ${canBook ? '<button type="button" class="ps-submit" style="background:#fff;color:#581E83;border:1px solid #cbb2e6" data-change>שינוי מועד האיסוף</button>' : ''}
                 </div>`;
             return;

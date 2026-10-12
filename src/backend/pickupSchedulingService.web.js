@@ -21,6 +21,8 @@ import {
     generatePassQr,
     getPickupScan,
     confirmPickupHandover,
+    getPickupItemsSummary,
+    markOrderPickupCollectedByCustomer,
     PICKUP_WINDOW_DAYS,
     PICKUP_MAX_APPOINTMENTS,
 } from 'backend/pickupScheduling.js';
@@ -110,6 +112,7 @@ export const getPickupContext = webMethod(Permissions.Anyone, async (orderId, to
         canBook,
         currentAppointment: mapAppointmentForClient(currentAppointment),
         qrDataUrl,
+        itemsSummary: getPickupItemsSummary(order),
         slots: slots.map(mapSlotForClient),
     };
 });
@@ -152,10 +155,30 @@ export const submitPickupAppointment = webMethod(Permissions.Anyone, async (orde
             ok: true,
             appointment: mapAppointmentForClient(result.appointment),
             qrDataUrl: result.qrDataUrl,
+            itemsSummary: result.itemsSummary,
             messageSent: result.messageSent,
             used: result.used,
             remaining: result.remaining,
         };
+    } catch (err) {
+        return { ok: false, ...toClientError(err) };
+    }
+});
+
+/**
+ * Customer self-confirm "אישור איסוף" button on the תיאום איסוף page —
+ * replaces the staff QR-scan handover. Gated by calendar date (not exact
+ * hour) inside markOrderPickupCollectedByCustomer.
+ */
+export const confirmCustomerPickup = webMethod(Permissions.Anyone, async (orderId, token) => {
+    try {
+        await loadOrderByPickupToken(orderId, token);
+    } catch (err) {
+        return { ok: false, ...toClientError(err) };
+    }
+    try {
+        const result = await markOrderPickupCollectedByCustomer(orderId);
+        return { ok: true, ...result };
     } catch (err) {
         return { ok: false, ...toClientError(err) };
     }

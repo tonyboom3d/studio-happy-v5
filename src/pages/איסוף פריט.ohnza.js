@@ -12,10 +12,12 @@
  *
  * Flow: reads ?orderId=...&token=...&sid=... → getPickupContext →
  * pushes `context-data`; `submit-request` event ({ slotKey }) →
- * submitPickupAppointment → pushes `submit-result`.
+ * submitPickupAppointment → pushes `submit-result`; `confirm-pickup-request`
+ * event (customer self-confirms pickup, no QR) → confirmCustomerPickup →
+ * pushes `confirm-result`.
  */
 import wixLocation from 'wix-location';
-import { getPickupContext, submitPickupAppointment } from 'backend/pickupSchedulingService.web.js';
+import { getPickupContext, submitPickupAppointment, confirmCustomerPickup } from 'backend/pickupSchedulingService.web.js';
 
 const ELEMENT_ID = '#pickupScheduler1';
 
@@ -48,6 +50,17 @@ $w.onReady(async function () {
             const message = err?.message || String(err);
             console.error('[pickup-scheduler] submitPickupAppointment failed:', message);
             el.setAttribute('submit-result', JSON.stringify({ ok: false, code: 'ERROR', message, __ts: Date.now() }));
+        }
+    });
+
+    el.on('confirm-pickup-request', async () => {
+        try {
+            const result = await confirmCustomerPickup(orderId, token);
+            el.setAttribute('confirm-result', JSON.stringify({ ...result, __ts: Date.now() }));
+        } catch (err) {
+            const message = err?.message || String(err);
+            console.error('[pickup-scheduler] confirmCustomerPickup failed:', message);
+            el.setAttribute('confirm-result', JSON.stringify({ ok: false, code: 'ERROR', message: 'האישור נכשל. נסו שוב.', __ts: Date.now() }));
         }
     });
 

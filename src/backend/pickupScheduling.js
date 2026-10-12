@@ -86,6 +86,15 @@ export async function generatePassQr(orderId, passToken) {
     return qr.createDataURL(6, 2);
 }
 
+/** Ready-for-pickup item counts by type, for display on the "תיאום איסוף" page. */
+export function getPickupItemsSummary(order) {
+    const items = (order?.pickupItems || []).filter((i) => i.state === 'ready');
+    const rugs = items.filter((i) => String(i.key || '').startsWith('sketch:')).length;
+    const ceramics = items.filter((i) => String(i.key || '').startsWith('cup:')).length;
+    const other = items.length - rugs - ceramics;
+    return { rugs, ceramics, other, total: items.length };
+}
+
 export function formatPickupSlotLabel(appointment) {
     return `${formatDateHe(new Date(appointment.start))}, ${formatTimeHe(appointment.start)}-${formatTimeHe(appointment.end)}`;
 }
@@ -512,7 +521,65 @@ export async function createPickupAppointment(orderId, slotKey) {
         return null;
     });
 
-    return { ok: true, appointment: newAppointment, qrDataUrl, messageSent: !!customerMsg.sent, used: usedCount, remaining: Math.max(0, PICKUP_MAX_APPOINTMENTS - usedCount) };
+    return {
+        ok: true,
+        appointment: newAppointment,
+        qrDataUrl,
+        itemsSummary: getPickupItemsSummary(order),
+        messageSent: !!customerMsg.sent,
+        used: usedCount,
+        remaining: Math.max(0, PICKUP_MAX_APPOINTMENTS - usedCount),
+    };
+}
+
+/**
+ * Customer self-service "אישור איסוף" button (replaces the staff QR-scan
+ * handover) — marks every "ready" item on the current appointment as
+ * collected. Gated by calendar date only (Israel time), not the exact slot
+ * hour, so the button unlocks at local midnight on the appointment day.
+ */
+export async function markOrderPickupCollectedByCustomer(orderId) {
+    const order = await getItemWithRetry('WorkshopOrders', orderId, { callerLabel: 'pickupScheduling.markOrderPickupCollectedByCustomer' });
+    if (!order) throw new Error('NOT_FOUND: ההזמנה לא נמצאה.');
+
+    const upcoming = findUpcomingAppointment(order);
+    if (!upcoming) throw new Error('NO_APPOINTMENT: לא נמצא תיאום איסוף פעיל.');
+
+    const todayKey = toDateKey(new Date());
+    const apptDateKey = toDateKey(new Date(upcoming.start));
+    if (todayKey < apptDateKey) {
+        throw new Error('TOO_EARLY: ניתן לאשר איסוף רק החל מיום האיסוף שנקבע.');
+    }
+
+    const readyItems = (order.pickupItems || []).filter((i) => i.state === 'ready');
+    if (!readyItems.length) {
+        throw new Error('NO_ITEMS: אין פריטים הממתינים לאיסוף.');
+    }
+
+    const now = new Date().toISOString();
+    const pickupItems = (order.pickupItems || []).map((i) => (
+        i.state === 'ready' ? { ...i, state: 'collected', collectedAt: now, collectedBy: 'customer' } : i
+    ));
+    const pickupAppointments = (order.pickupAppointments || []).map((a) => (
+        a === upcoming || (a.slotKey === upcoming.slotKey && a.chosenAt === upcoming.chosenAt)
+            ? { ...a, status: 'collected' }
+            : a
+    ));
+
+    await mergePatchWorkshopOrder(orderId, {
+        pickupItems,
+        pickupAppointments,
+        pickupStaffNotifyStatus: order.pickupStaffNotifyStatus === 'pending' ? 'none' : order.pickupStaffNotifyStatus,
+    }, 'pickupScheduling.markOrderPickupCollectedByCustomer');
+
+    await appendOrderActionLog(
+        orderId,
+        `הלקוח אישר בעצמו באתר שאסף: ${readyItems.map((i) => i.label).join(', ')}`,
+        order,
+        order.organizerName || 'לקוח',
+    );
+
+    return { collectedAt: now, items: readyItems.map((i) => i.label) };
 }
 
 /**

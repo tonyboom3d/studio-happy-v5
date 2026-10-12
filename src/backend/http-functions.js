@@ -893,9 +893,13 @@ export async function get_startPickup(request) {
         const { token, expiresAt } = await extendPickupTokenUntil(orderId, slotEnd);
         const link = `${PICKUP_PAGE_URL}?orderId=${encodeURIComponent(orderId)}&token=${encodeURIComponent(token)}&sid=${encodeURIComponent(subscriberId)}`;
         const slotLabel = `${formatPickupSlotLabel(upcoming)} (${upcoming.workshopName || 'סדנה'})`;
+        // Fire-and-forget: the response body below already carries pickup_status/
+        // pickup_link directly, so the ManyChat flow doesn't need to wait for this
+        // field sync. Awaiting it here would block our reply on a second ManyChat
+        // API round-trip — exactly what makes the bot "get stuck" with no answer.
         if (subscriberId) {
-          await syncPickupStatus(subscriberId, 'already_scheduled').catch(() => {});
-          await syncPickupLink(subscriberId, link, slotLabel).catch(() => {});
+          syncPickupStatus(subscriberId, 'already_scheduled').catch(() => {});
+          syncPickupLink(subscriberId, link, slotLabel).catch(() => {});
         }
         return ok({
           headers: { 'Content-Type': 'application/json' },
@@ -912,7 +916,7 @@ export async function get_startPickup(request) {
     }
 
     if (eligibility.status === 'expired') {
-      if (subscriberId) await syncPickupStatus(subscriberId, 'expired').catch(() => {});
+      if (subscriberId) syncPickupStatus(subscriberId, 'expired').catch(() => {});
       return ok({
         headers: { 'Content-Type': 'application/json' },
         body: {
@@ -923,7 +927,7 @@ export async function get_startPickup(request) {
       });
     }
     if (eligibility.status === 'quota_exceeded') {
-      if (subscriberId) await syncPickupStatus(subscriberId, 'quota_exceeded').catch(() => {});
+      if (subscriberId) syncPickupStatus(subscriberId, 'quota_exceeded').catch(() => {});
       return ok({
         headers: { 'Content-Type': 'application/json' },
         body: {
@@ -934,7 +938,7 @@ export async function get_startPickup(request) {
       });
     }
     if (eligibility.status === 'no_items' || eligibility.status === 'collected') {
-      if (subscriberId) await syncPickupStatus(subscriberId, eligibility.status).catch(() => {});
+      if (subscriberId) syncPickupStatus(subscriberId, eligibility.status).catch(() => {});
       return ok({
         headers: { 'Content-Type': 'application/json' },
         body: {
@@ -951,8 +955,8 @@ export async function get_startPickup(request) {
     const link = `${PICKUP_PAGE_URL}?orderId=${encodeURIComponent(orderId)}&token=${encodeURIComponent(token)}&sid=${encodeURIComponent(subscriberId)}`;
 
     if (subscriberId) {
-      await syncPickupStatus(subscriberId, 'true').catch(() => {});
-      await syncPickupLink(subscriberId, link).catch(() => {});
+      syncPickupStatus(subscriberId, 'true').catch(() => {});
+      syncPickupLink(subscriberId, link).catch(() => {});
     }
 
     return ok({

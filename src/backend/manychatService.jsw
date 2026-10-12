@@ -97,6 +97,12 @@ async function getManyChatApiKey() {
     return apiKey;
 }
 
+// Hard cap on any single ManyChat API call — without this, a slow/hanging
+// ManyChat response blocks the whole caller indefinitely (e.g. get_startPickup
+// in http-functions.js), which looks like "the bot gets stuck with no reply"
+// from the customer's side even though our own code has no bug.
+const MANYCHAT_REQUEST_TIMEOUT_MS = 8000;
+
 async function manychatRequest(path, { method = 'GET', query, body } = {}) {
     const apiKey = await getManyChatApiKey();
 
@@ -108,14 +114,28 @@ async function manychatRequest(path, { method = 'GET', query, body } = {}) {
         if (qs) url += `?${qs}`;
     }
 
-    const response = await fetch(url, {
-        method,
-        headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${apiKey}`,
-        },
-        body: body ? JSON.stringify(body) : undefined,
-    });
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), MANYCHAT_REQUEST_TIMEOUT_MS);
+
+    let response;
+    try {
+        response = await fetch(url, {
+            method,
+            headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${apiKey}`,
+            },
+            body: body ? JSON.stringify(body) : undefined,
+            signal: controller.signal,
+        });
+    } catch (err) {
+        if (err?.name === 'AbortError') {
+            throw new Error(`[ManyChat] ${method} ${path} timed out after ${MANYCHAT_REQUEST_TIMEOUT_MS}ms`);
+        }
+        throw err;
+    } finally {
+        clearTimeout(timeoutId);
+    }
 
     const json = await response.json().catch(() => null);
 

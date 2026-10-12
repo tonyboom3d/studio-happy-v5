@@ -19,11 +19,6 @@ import { PERMISSION_KEYS, PERMISSION_DEFAULTS, refId } from 'backend/staffRoles.
 import { getItemWithRetry } from 'backend/wixDataRetry.js';
 import { TUFTING_SERVICE_IDS } from 'backend/sketchEditingPolicy.js';
 import { toDateKey } from 'backend/availabilityRules.js';
-import {
-    getExpandedPhoneLookupVariants,
-    getIsraeliMobileCoreDigits,
-    phonesMatch,
-} from 'backend/orderUtils.js';
 import { cancelRescheduleRequest as cancelRescheduleRequestCore } from 'backend/rescheduleService.web.js';
 import {
     listPendingRescheduleRequests,
@@ -2269,11 +2264,45 @@ async function enrichOrdersIntoDashboardPayload(rawOrders, { typesMap, serviceId
 }
 
 /**
- * Global order search — matches organizerName, organizerPhone (any Israeli
- * format: 05x / 0; / +972 / 972, with or without dashes/spaces), the
- * ecomOrderNumber, and WorkshopParticipants.name/phone (a participant match
- * surfaces the whole order). Not limited to any date range — always searches
- * every PAID WorkshopOrders record.
+ * Digits safe to pass to contains() on a phone field.
+ * Empty for trunk/operator prefixes only: 0, 05, 050–059, and the +972 / 972 forms of those.
+ * Anything longer (0523, 3813929, +97252381…) is returned without the country code and leading 0,
+ * so it matches 052… and +97252… storage.
+ */
+function getPhoneContainsNeedle(raw) {
+    const digits = String(raw || '').replace(/\D/g, '');
+    if (!digits) return '';
+    let core = digits;
+    if (core.startsWith('972')) core = core.slice(3);
+    if (core.startsWith('0')) core = core.slice(1);
+    if (!core || core === '5' || /^5\d$/.test(core) || core.length < 3) return '';
+    return core;
+}
+
+function isOnlyBlockedPhonePrefix(raw) {
+    const trimmed = String(raw || '').trim();
+    if (!trimmed || !/^[\d\s+\-().]+$/.test(trimmed)) return false;
+    const digits = trimmed.replace(/\D/g, '');
+    if (!digits) return false;
+    let core = digits;
+    if (core.startsWith('972')) core = core.slice(3);
+    if (core.startsWith('0')) core = core.slice(1);
+    return core === '' || core === '5' || /^5\d$/.test(core);
+}
+
+function storedPhoneContainsNeedle(storedPhone, needle) {
+    if (!storedPhone || !needle) return false;
+    let core = String(storedPhone).replace(/\D/g, '');
+    if (core.startsWith('972')) core = core.slice(3);
+    if (core.startsWith('0')) core = core.slice(1);
+    return core.includes(needle);
+}
+
+/**
+ * Global order search — matches organizerName, a partial organizerPhone
+ * (contains, any Israeli format), the ecomOrderNumber, and
+ * WorkshopParticipants.name/phone. Prefix-only input (0 / 05 / 05x) is ignored.
+ * Not limited to any date range — always searches every PAID WorkshopOrders record.
  */
 export const searchDashboardOrders = webMethod(Permissions.SiteMember, async (rawQuery) => {
     const dashboardRole = await assertDashboardAccess();
@@ -2282,9 +2311,10 @@ export const searchDashboardOrders = webMethod(Permissions.SiteMember, async (ra
     const myEmployeeId = dashboardRole._id;
 
     const query = String(rawQuery || '').trim();
-    if (query.length < 2) return { workshops: [], orders: [] };
+    if (query.length < 2 || isOnlyBlockedPhonePrefix(query)) return { workshops: [], orders: [] };
 
     const digits = query.replace(/\D/g, '');
+    const phoneNeedle = getPhoneContainsNeedle(query);
     const lowerQuery = query.toLowerCase();
     const byId = new Map();
 
@@ -2305,11 +2335,9 @@ export const searchDashboardOrders = webMethod(Permissions.SiteMember, async (ra
         const participantQueries = [
             wixData.query('WorkshopParticipants').contains('name', query).limit(SEARCH_RAW_LIMIT).find(SA),
         ];
-        if (digits.length >= 2) {
-            for (const variant of getExpandedPhoneLookupVariants(query)) {
-                participantQueries.push(wixData.query('WorkshopParticipants').eq('phone', variant).limit(SEARCH_RAW_LIMIT).find(SA));
-                participantQueries.push(wixData.query('WorkshopParticipants').eq('rawPhone', variant).limit(SEARCH_RAW_LIMIT).find(SA));
-            }
+        if (phoneNeedle) {
+            participantQueries.push(wixData.query('WorkshopParticipants').contains('phone', phoneNeedle).limit(SEARCH_RAW_LIMIT).find(SA));
+            participantQueries.push(wixData.query('WorkshopParticipants').contains('rawPhone', phoneNeedle).limit(SEARCH_RAW_LIMIT).find(SA));
         }
         const participantResults = await Promise.all(participantQueries);
         participantResults.forEach((r) => (r.items || []).forEach((p) => {
@@ -2319,17 +2347,11 @@ export const searchDashboardOrders = webMethod(Permissions.SiteMember, async (ra
         console.warn('[dashboardService] searchDashboardOrders participant query failed:', err?.message || err);
     }
 
-    if (digits.length >= 2) {
+    if (phoneNeedle || digits.length >= 2) {
         try {
-            for (const variant of getExpandedPhoneLookupVariants(query)) {
+            if (phoneNeedle) {
                 const r = await wixData.query('WorkshopOrders')
-                    .eq('status', 'paid').eq('organizerPhone', variant).limit(SEARCH_RAW_LIMIT).find(SA);
-                r.items.forEach((it) => byId.set(it._id, it));
-            }
-            const core = getIsraeliMobileCoreDigits(query);
-            if (core.length >= 8) {
-                const r = await wixData.query('WorkshopOrders')
-                    .eq('status', 'paid').contains('organizerPhone', core).limit(SEARCH_RAW_LIMIT).find(SA);
+                    .eq('status', 'paid').contains('organizerPhone', phoneNeedle).limit(SEARCH_RAW_LIMIT).find(SA);
                 r.items.forEach((it) => byId.set(it._id, it));
             }
             const r1 = await wixData.query('WorkshopOrders')
@@ -2358,7 +2380,7 @@ export const searchDashboardOrders = webMethod(Permissions.SiteMember, async (ra
 
     let matched = [...byId.values()].filter((o) => {
         const nameMatch = (o.organizerName || '').toLowerCase().includes(lowerQuery);
-        const phoneMatch = digits.length >= 2 && !!o.organizerPhone && phonesMatch(o.organizerPhone, query);
+        const phoneMatch = !!phoneNeedle && storedPhoneContainsNeedle(o.organizerPhone, phoneNeedle);
         const orderNumMatch = digits.length >= 2 && String(o.ecomOrderNumber || '').includes(digits);
         return nameMatch || phoneMatch || orderNumMatch || participantOrderIds.has(o._id);
     });

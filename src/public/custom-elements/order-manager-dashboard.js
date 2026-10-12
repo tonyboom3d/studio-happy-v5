@@ -2388,7 +2388,7 @@ function __wdInjectGlobalAssets() {
                 __wdSearchDebounceTimer = null;
             }
 
-            if (query.length < __wdSearchMinChars) {
+            if (query.length < __wdSearchMinChars || isOnlyBlockedPhonePrefix(query)) {
                 setSearchBusy(false);
                 if (__wdSearchActive) {
                     exitOrderSearch();
@@ -2411,7 +2411,7 @@ function __wdInjectGlobalAssets() {
             const currentQuery = ((input && input.value) || '').trim();
             // Stale-response guard: the box may have changed (or been cleared)
             // while this request was in flight.
-            if (currentQuery.length < __wdSearchMinChars) return;
+            if (currentQuery.length < __wdSearchMinChars || isOnlyBlockedPhonePrefix(currentQuery)) return;
             if (!data || data.query !== currentQuery) return;
 
             setSearchBusy(false);
@@ -2746,16 +2746,43 @@ function __wdInjectGlobalAssets() {
         }
 
         /** Local (already-loaded) search within the pickup tab — name / phone / order number, not a backend round-trip. */
+        function isOnlyBlockedPhonePrefix(raw) {
+            const trimmed = String(raw || '').trim();
+            if (!trimmed || !/^[\d\s+\-().]+$/.test(trimmed)) return false;
+            const digits = trimmed.replace(/\D/g, '');
+            if (!digits) return false;
+            let core = digits;
+            if (core.startsWith('972')) core = core.slice(3);
+            if (core.startsWith('0')) core = core.slice(1);
+            return core === '' || core === '5' || /^5\d$/.test(core);
+        }
+
+        function getPhoneContainsNeedle(raw) {
+            if (isOnlyBlockedPhonePrefix(raw)) return '';
+            const digits = String(raw || '').replace(/\D/g, '');
+            if (!digits) return '';
+            let core = digits;
+            if (core.startsWith('972')) core = core.slice(3);
+            if (core.startsWith('0')) core = core.slice(1);
+            if (core.length < 3) return '';
+            return core;
+        }
+
         function pickupQueueMatchesSearch(order, query) {
             const q = (query || '').trim().toLowerCase();
             if (!q) return true;
+            if (isOnlyBlockedPhonePrefix(q)) return false;
             const digits = q.replace(/\D/g, '');
             const nameMatch = (order.organizerName || '').toLowerCase().includes(q);
             if (nameMatch) return true;
+            const needle = getPhoneContainsNeedle(q);
+            if (needle) {
+                let phoneCore = String(order.organizerPhone || '').replace(/\D/g, '');
+                if (phoneCore.startsWith('972')) phoneCore = phoneCore.slice(3);
+                if (phoneCore.startsWith('0')) phoneCore = phoneCore.slice(1);
+                if (phoneCore.includes(needle)) return true;
+            }
             if (digits.length < 2) return false;
-            const phoneDigits = String(order.organizerPhone || '').replace(/\D/g, '');
-            const phoneCore = digits.length > 9 ? digits.slice(-9) : digits;
-            if (phoneDigits && phoneCore && phoneDigits.includes(phoneCore)) return true;
             return !!order.ecomOrderNumber && String(order.ecomOrderNumber).includes(digits);
         }
 

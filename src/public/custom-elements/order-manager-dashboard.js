@@ -2840,7 +2840,7 @@ function __wdInjectGlobalAssets() {
                 }
 
                 return `
-                    <div class="flex items-center justify-between gap-4 bg-white border border-gray-200 rounded-xl px-4 py-3 shadow-sm">
+                    <div onclick="openPickupQueueOrder('${order.id}')" class="flex items-center justify-between gap-4 bg-white border border-gray-200 rounded-xl px-4 py-3 shadow-sm cursor-pointer hover:border-amber-300 hover:bg-amber-50/40 transition-colors">
                         <div class="flex flex-col gap-1 min-w-0">
                             <div class="flex items-center gap-2 flex-wrap">
                                 <span class="font-bold text-gray-900 text-sm">${escapeHtml(order.organizerName || 'ללא שם')}</span>
@@ -2854,7 +2854,7 @@ function __wdInjectGlobalAssets() {
                         </div>
                         <div class="flex items-center gap-3 shrink-0">
                             ${statusBadge}
-                            <button onclick="openPickupModal('${order.id}')" class="w-9 h-9 flex items-center justify-center rounded-full bg-amber-50 text-amber-600 border border-amber-200 hover:bg-amber-500 hover:text-white transition-colors shadow-sm shrink-0" title="איסוף פריטים">
+                            <button onclick="event.stopPropagation(); openPickupModal('${order.id}')" class="w-9 h-9 flex items-center justify-center rounded-full bg-amber-50 text-amber-600 border border-amber-200 hover:bg-amber-500 hover:text-white transition-colors shadow-sm shrink-0" title="איסוף פריטים">
                                 <i class="ph-fill ph-package text-xl"></i>
                             </button>
                         </div>
@@ -4589,6 +4589,45 @@ function __wdInjectGlobalAssets() {
                 row.classList.remove('hidden');
                 icon.classList.add('-rotate-90');
             }
+            maybePromptPickupReadyMessage(order, newStatus);
+        }
+
+        /**
+         * When the last tufting sketch becomes "מוכנה", every rug in the order
+         * is ready for pickup. Reuse the existing WhatsApp confirm popup
+         * (executeSendPickupReady → markReadyForPickup) instead of a new flow.
+         */
+        function maybePromptPickupReadyMessage(order, newStatus) {
+            if (newStatus !== 'מוכנה' || !order) return;
+            if (order.workshopType && order.workshopType !== 'tufting') return;
+            if (!hasDashboardPermission('sendWhatsApp')) return;
+            const sketches = order.sketches || [];
+            const needed = Math.max(sketches.length, Number(order.rugCount) || 0);
+            if (!sketches.length || sketches.length < needed) return;
+            if (!sketches.every((s) => s.status === 'מוכנה')) return;
+            const workshop = mockWorkshops.find((w) => w.id === order.workshopId);
+            if (!workshop || Date.now() < getWorkshopEndTimestamp(workshop)) return;
+            const pending = getPickupItemsState(order).filter((item) => item.state === 'pending');
+            if (!pending.length) return;
+            currentPickupOrderId = order.id;
+            pendingPickupReadyItems = pending.map((item) => ({ key: item.key, label: item.label }));
+            const textEl = document.getElementById('pickupConfirmText');
+            if (textEl) {
+                textEl.textContent = 'כל הסקיצות בהזמנה מוכנות לאיסוף - האם לשלוח הודעה לאיסוף ללקוח?';
+            }
+            openModal('pickupConfirmModal');
+        }
+
+        function openPickupQueueOrder(orderId) {
+            const order = mockOrders.find((o) => o.id === orderId);
+            if (!order) return;
+            const workshop = mockWorkshops.find((w) => w.id === order.workshopId);
+            if (!workshop) return;
+            openSidePanel(workshop.id);
+            const row = document.getElementById(`detail-${orderId}`);
+            const icon = document.getElementById(`icon-${orderId}`);
+            if (row) row.classList.remove('hidden');
+            if (icon) icon.classList.add('-rotate-90');
         }
 
         // Meta doesn't allow sending admin-typed free text — only approved
@@ -5131,6 +5170,7 @@ window.openRescheduleRejectModal = openRescheduleRejectModal;
 window.confirmRescheduleReject = confirmRescheduleReject;
 window.toggleInstructorsTooltip = toggleInstructorsTooltip;
 window.openPickupModal = openPickupModal;
+window.openPickupQueueOrder = openPickupQueueOrder;
 window.copyPromoCouponTag = copyPromoCouponTag;
 window.confirmSendPickupReady = confirmSendPickupReady;
 window.executeSendPickupReady = executeSendPickupReady;

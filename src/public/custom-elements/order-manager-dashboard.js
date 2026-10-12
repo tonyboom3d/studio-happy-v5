@@ -1710,6 +1710,12 @@ function __wdInjectGlobalAssets() {
             return workshop.startTimestamp + durationMs;
         }
 
+        function workshopHasEnded(workshop) {
+            if (!workshop) return false;
+            const end = getWorkshopEndTimestamp(workshop);
+            return typeof end === 'number' && Date.now() >= end;
+        }
+
         function computeWorkshopTimeStatuses(workshops) {
             const now = Date.now();
             const todayKey = getIsraelDateKey(new Date());
@@ -3944,7 +3950,7 @@ function __wdInjectGlobalAssets() {
                                         <option value="פתוח לשינויים" ${s.status==='פתוח לשינויים'?'selected':''}>פתוח לשינויים</option>
                                         <option value="בהכנה" ${s.status==='בהכנה'?'selected':''}>בהכנה</option>
                                         <option value="מוכנה" ${s.status==='מוכנה'?'selected':''}>מוכנה</option>
-                                        <option value="מוכנה לאיסוף" ${s.status==='מוכנה לאיסוף'?'selected':''}>מוכנה לאיסוף</option>
+                                        ${(workshopHasEnded(mockWorkshops.find(w => w.id === o.workshopId)) || s.status==='מוכנה לאיסוף') ? `<option value="מוכנה לאיסוף" ${s.status==='מוכנה לאיסוף'?'selected':''}>מוכנה לאיסוף</option>` : ''}
                                         <option value="לא מאושרת לביצוע" ${s.status==='לא מאושרת לביצוע'?'selected':''} ${!canRejectSketchStatus?'disabled':''}>לא מאושרת לביצוע</option>
                                     </select>`}
                                 </div>
@@ -4476,6 +4482,14 @@ function __wdInjectGlobalAssets() {
                 alert('אין לך הרשאה לעדכן סטטוס סקיצה.');
                 if (selectElement) renderCurrentSketchStatusSelect(selectElement, orderId, sketchId);
                 return;
+            }
+            if (newStatus === 'מוכנה לאיסוף') {
+                const workshop = mockWorkshops.find(w => w.id === order.workshopId);
+                if (!workshopHasEnded(workshop)) {
+                    alert('ניתן לסמן "מוכנה לאיסוף" רק לאחר שתאריך הסדנה עבר.');
+                    if (selectElement) renderCurrentSketchStatusSelect(selectElement, orderId, sketchId);
+                    return;
+                }
             }
             if (newStatus === 'לא מאושרת לביצוע') {
                 if (!hasDashboardPermission('rejectSketchStatus')) {

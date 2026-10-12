@@ -361,11 +361,25 @@ export async function getPromoCouponForOrder(orderId) {
 /** Batch lookup for the dashboard's order list — { [orderId]: couponRow }. */
 export async function getPromoCouponsByOrderIds(orderIds) {
     const byOrderId = {};
-    if (!orderIds || !orderIds.length) return byOrderId;
-    const result = await wixData.query('PromoCoupons').hasSome('orderId', orderIds).find(SA);
-    for (const row of (result.items || [])) {
-        // last one wins if somehow duplicated — shouldn't happen (issuance checks for existing).
-        byOrderId[row.orderId] = row;
+    const ids = [...new Set((orderIds || []).map((id) => String(id || '').trim()).filter(Boolean))];
+    if (!ids.length) return byOrderId;
+
+    // orderId is a text field (WorkshopOrders._id). Match it with eq/or —
+    // hasSome is for array fields and misses these rows.
+    const CHUNK = 20;
+    for (let i = 0; i < ids.length; i += CHUNK) {
+        const chunk = ids.slice(i, i + CHUNK);
+        let query = wixData.query('PromoCoupons').eq('orderId', chunk[0]);
+        for (let j = 1; j < chunk.length; j++) {
+            query = query.or(wixData.query('PromoCoupons').eq('orderId', chunk[j]));
+        }
+        const result = await query.limit(Math.max(chunk.length * 2, 20)).find(SA);
+        for (const row of (result.items || [])) {
+            const key = String(row.orderId || '').trim();
+            if (!key) continue;
+            const prev = byOrderId[key];
+            if (!prev || (row.status === 'issued' && prev.status !== 'issued')) byOrderId[key] = row;
+        }
     }
     return byOrderId;
 }

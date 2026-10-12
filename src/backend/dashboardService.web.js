@@ -99,7 +99,11 @@ function mapPromoCouponForDashboard(row) {
     };
 }
 
-/** Convert Wix media URLs to browser-displayable HTTPS URLs. */
+function issuedPromoCouponCode(row) {
+    const mapped = mapPromoCouponForDashboard(row);
+    if (!mapped || mapped.status !== 'issued' || !mapped.code) return null;
+    return String(mapped.code);
+}
 function convertWixImageUrl(wixUrl, width = 400, height = 400, quality = 80) {
     if (!wixUrl) return null;
     const raw = String(wixUrl).trim();
@@ -1311,6 +1315,7 @@ export const getInitialDashboardData = webMethod(Permissions.SiteMember, async (
                 couponCode: order.couponCode || null,
                 couponName: order.couponName || null,
                 promoCoupon: mapPromoCouponForDashboard(promoCouponsByOrderId[order._id]),
+                promoCouponCode: issuedPromoCouponCode(promoCouponsByOrderId[order._id]),
                 addOns: (addOnsByWorkshopOrderId[order._id] || []).map(mapAddOnOrderForDashboard),
                 addOnsTotal: (addOnsByWorkshopOrderId[order._id] || []).reduce((sum, r) => sum + (Number(r.total) || 0), 0),
             });
@@ -2216,6 +2221,7 @@ async function enrichOrdersIntoDashboardPayload(rawOrders, { typesMap, serviceId
                 couponCode: order.couponCode || null,
                 couponName: order.couponName || null,
                 promoCoupon: mapPromoCouponForDashboard(promoCouponsByOrderId[order._id]),
+                promoCouponCode: issuedPromoCouponCode(promoCouponsByOrderId[order._id]),
                 addOns: [],
                 addOnsTotal: 0,
             });
@@ -2477,7 +2483,7 @@ export const getOrderPromoCouponTags = webMethod(Permissions.SiteMember, async (
     const byOrderId = await getPromoCouponsByOrderIds(ids);
     const coupons = {};
     for (const [orderId, row] of Object.entries(byOrderId)) {
-        if (!row || row.status !== 'issued' || !row.code) continue;
+        if (!row || String(row.status || '').toLowerCase() !== 'issued' || !row.code) continue;
         coupons[orderId] = { code: String(row.code) };
     }
     return { coupons };

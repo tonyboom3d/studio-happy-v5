@@ -2969,7 +2969,7 @@ function __wdInjectGlobalAssets() {
                             <span class="text-[10px] font-bold px-1.5 py-0.5 rounded border ${statusClass}">${statusLabel}</span>
                         </div>
                         <div class="mt-1.5 flex flex-wrap items-center gap-1.5 text-[11px] text-gray-700">
-                            <span class="font-mono font-bold bg-white border border-orange-200 px-1.5 py-0.5 rounded">${coupon.code}</span>
+                            <button type="button" onclick="copyPromoCouponTag(event, '${order.id}')" class="font-mono font-bold bg-white border border-orange-200 px-1.5 py-0.5 rounded hover:bg-orange-100" title="לחצו להעתקת הקופון">${coupon.code}</button><span id="promo-coupon-copied-${order.id}" class="hidden text-[10px] font-bold text-emerald-600">הועתק בהצלחה</span>
                             <span>${coupon.giftPieces} שטיח/ים · ₪${coupon.discountAmountNis || (coupon.giftPieces || 0) * 170} הנחה</span>
                             ${coupon.redeemFrom ? `<span>ניתן לממש מ-${formatShortDate(coupon.redeemFrom)}</span>` : ''}
                             ${coupon.expiresAt ? `<span>עד ${formatShortDate(coupon.expiresAt)}</span>` : ''}
@@ -3057,14 +3057,30 @@ function __wdInjectGlobalAssets() {
         const promoCouponTagCache = {};
         let promoCouponTagRequestSeq = 0;
 
+        function issuedCodeOnOrder(order) {
+            if (!order) return '';
+            const fromPayload = order.promoCoupon && order.promoCoupon.status === 'issued' && order.promoCoupon.code
+                ? String(order.promoCoupon.code)
+                : (order.promoCouponCode ? String(order.promoCouponCode) : '');
+            return fromPayload;
+        }
+
+        function couponCodeForOrder(orderId) {
+            const cached = promoCouponTagCache[orderId];
+            if (cached && cached.code) return String(cached.code);
+            return issuedCodeOnOrder(mockOrders.find((o) => o.id === orderId));
+        }
+
         function renderPromoCouponSlotInner(orderId) {
+            const code = couponCodeForOrder(orderId);
+            if (code) {
+                const safe = escapeHtml(code);
+                return `<button type="button" onclick="copyPromoCouponTag(event, '${orderId}')" class="inline-flex items-center gap-1 text-[11px] font-bold font-mono px-2 py-0.5 rounded bg-orange-50 text-orange-700 border border-orange-200 hover:bg-orange-100 transition-colors" title="לחצו להעתקת הקופון"><i class="ph-fill ph-gift"></i>${safe}</button><span id="promo-coupon-copied-${orderId}" class="hidden text-[10px] font-bold text-emerald-600">הועתק בהצלחה</span>`;
+            }
             if (!Object.prototype.hasOwnProperty.call(promoCouponTagCache, orderId)) {
                 return `<i class="ph ph-circle-notch wd-spin text-gray-400 text-xs" title="טוען קופון"></i>`;
             }
-            const entry = promoCouponTagCache[orderId];
-            if (!entry || !entry.code) return '';
-            const code = escapeHtml(entry.code);
-            return `<button type="button" onclick="copyPromoCouponTag(event, '${orderId}')" class="inline-flex items-center gap-1 text-[10px] font-bold font-mono px-1.5 py-0.5 rounded bg-orange-50 text-orange-700 border border-orange-200 hover:bg-orange-100 transition-colors" title="לחצו להעתקת הקופון"><i class="ph-fill ph-gift"></i>${code}</button><span id="promo-coupon-copied-${orderId}" class="hidden text-[10px] font-bold text-emerald-600">הועתק בהצלחה</span>`;
+            return '';
         }
 
         function buildPromoCouponSlotHtml(order) {
@@ -3090,7 +3106,7 @@ function __wdInjectGlobalAssets() {
         function copyPromoCouponTag(event, orderId) {
             if (event) event.stopPropagation();
             const entry = promoCouponTagCache[orderId];
-            const code = entry && entry.code;
+            const code = (entry && entry.code) || couponCodeForOrder(orderId);
             if (!code) return;
             const showCopied = () => {
                 const note = document.getElementById(`promo-coupon-copied-${orderId}`);
@@ -3126,7 +3142,10 @@ function __wdInjectGlobalAssets() {
             }
             const coupons = data.coupons || {};
             ids.forEach((id) => {
-                promoCouponTagCache[id] = coupons[id] && coupons[id].code ? { code: String(coupons[id].code) } : null;
+                const fromCms = coupons[id] && coupons[id].code ? String(coupons[id].code) : '';
+                const fromOrder = issuedCodeOnOrder(mockOrders.find((o) => o.id === id));
+                const code = fromCms || fromOrder;
+                promoCouponTagCache[id] = code ? { code } : null;
                 paintPromoCouponSlot(id);
             });
         };

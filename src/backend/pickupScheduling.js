@@ -35,7 +35,6 @@ import { sendPickupScheduledManyChat } from 'backend/manychatService.jsw';
 import { getOrderPickupDisplayItems, getCurrentStaffName } from 'backend/dashboardService.web.js';
 import { getSecret } from 'wix-secrets-backend';
 import { randomBytes } from 'crypto';
-import qrcode from './vendor/qrcode-generator.js';
 import { WORKSHOP_SERVICE_IDS, ALL_CANDLES_SERVICE_IDS } from 'backend/workshopServiceIds.js';
 const SA = { suppressAuth: true };
 const SAC = { suppressAuth: true, consistentRead: true };
@@ -76,9 +75,10 @@ export function buildPassLink(orderId, passToken) {
     return `${PICKUP_CONFIRM_URL}?orderId=${encodeURIComponent(orderId)}&pass=${encodeURIComponent(passToken)}`;
 }
 
-/** QR (GIF data URL) encoding the staff confirmation link. Local library, no npm package. */
+/** QR (GIF data URL) encoding the staff confirmation link. Loaded on use so a QR failure cannot block jobs.js. */
 export async function generatePassQr(orderId, passToken) {
     if (!orderId || !passToken) return null;
+    const { default: qrcode } = await import('./vendor/qrcode-generator.js');
     qrcode.stringToBytes = qrcode.stringToBytesFuncs['UTF-8'];
     const qr = qrcode(0, 'M');
     qr.addData(buildPassLink(orderId, passToken));

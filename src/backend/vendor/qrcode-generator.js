@@ -2286,6 +2286,4 @@ var qrcode = function() {
 
 }();
 
-if (typeof exports === 'object') {
-  module.exports = qrcode;
-}
+export default qrcode;

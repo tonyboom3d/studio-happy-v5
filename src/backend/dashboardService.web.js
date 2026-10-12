@@ -19,6 +19,11 @@ import { PERMISSION_KEYS, PERMISSION_DEFAULTS, refId } from 'backend/staffRoles.
 import { getItemWithRetry } from 'backend/wixDataRetry.js';
 import { TUFTING_SERVICE_IDS } from 'backend/sketchEditingPolicy.js';
 import { toDateKey } from 'backend/availabilityRules.js';
+import {
+    getExpandedPhoneLookupVariants,
+    getIsraeliMobileCoreDigits,
+    phonesMatch,
+} from 'backend/orderUtils.js';
 import { cancelRescheduleRequest as cancelRescheduleRequestCore } from 'backend/rescheduleService.web.js';
 import {
     listPendingRescheduleRequests,
@@ -1304,6 +1309,8 @@ export const getInitialDashboardData = webMethod(Permissions.SiteMember, async (
                     hasChildren: !!p.hasChildren,
                 })),
                 ecomOrderId: order.ecomOrderId || null,
+                ecomOrderNumber: order.ecomOrderNumber || null,
+                orderUrl: order.orderUrl || '',
                 paidTotal: order.paidTotal || order.basePrice || 0,
                 paidDiscount: order.paidDiscount || 0,
                 couponCode: order.couponCode || null,
@@ -2061,4 +2068,395 @@ export const backfillOrderSketchesReferences = webMethod(Permissions.SiteMember,
         }
     }
     return { linked, failed };
+});
+
+// ------------------------------------------------------------------------
+// Global order search ("חיפוש לפי שם / טלפון / מספר הזמנה") + the "איסוף
+// פריטים" pickup-queue tab. Both need the same shape as
+// getInitialDashboardData's { workshops, orders } so the dashboard's
+// existing table/side-panel/pickup-modal rendering can display them as-is —
+// enrichOrdersIntoDashboardPayload() below re-implements that mapping for an
+// arbitrary (date-range-independent) set of raw WorkshopOrders rows, reusing
+// every per-order helper already used by the main loader.
+//
+// Limitation: non-managers are scoped here by sketchSewingSkill (tufting
+// only) and ShiftAssignments (staff-scheduling), same as the main loader —
+// but WITHOUT the Wix Bookings calendar staffId check (isOwnSession), since
+// that requires loading calendar sessions we deliberately skip here for
+// speed. In practice this only narrows access slightly for instructors who
+// are the booked Bookings staff member but have no ShiftAssignments row.
+// ------------------------------------------------------------------------
+
+const SEARCH_RAW_LIMIT = 60;
+const SEARCH_RESULT_LIMIT = 40;
+const PICKUP_QUEUE_LOOKBACK_DAYS = 60;
+
+/** Non-managers only see tufting (with sketchSewingSkill) or their own shift-assigned workshops. */
+function scopeRawOrdersForRole(rawOrders, ctx) {
+    const { canManageOrdersSystem, hasSketchSewingSkill, myEmployeeId, serviceIdToTypeId, tuftingTypeIds, assignmentsByKey } = ctx;
+    if (canManageOrdersSystem) return rawOrders;
+    return rawOrders.filter((order) => {
+        const typeId = serviceIdToTypeId[order.serviceId] || 'unknown';
+        if (hasSketchSewingSkill && tuftingTypeIds.has(typeId)) return true;
+        const dateKey = order.workshopStart ? toDateKey(new Date(order.workshopStart)) : null;
+        const assignedIds = (dateKey && assignmentsByKey[`${dateKey}|${typeId}`]) || [];
+        return !!myEmployeeId && assignedIds.includes(myEmployeeId);
+    });
+}
+
+/**
+ * Maps a flat list of raw WorkshopOrders rows (already permission-scoped)
+ * into { workshops, orders } — same shape getInitialDashboardData returns,
+ * but grouped purely from each order's own workshopStart/workshopEnd/serviceId
+ * (no Wix Bookings calendar lookup), so results can come from any date range.
+ */
+async function enrichOrdersIntoDashboardPayload(rawOrders, { typesMap, serviceIdToTypeId, canManageOrdersSystem }) {
+    if (!rawOrders.length) return { workshops: [], orders: [] };
+
+    const orderIds = rawOrders.map((o) => o._id);
+    const [sketchesByOrderId, participantsByOrderId, promoCouponsByOrderId, ecomBuyerByOrderId] = await Promise.all([
+        loadSketchesForOrders(orderIds),
+        loadParticipantsForOrders(orderIds),
+        getPromoCouponsByOrderIds(orderIds),
+        loadEcomBuyerByOrderId(rawOrders),
+    ]);
+
+    const allSketchSelections = Object.values(sketchesByOrderId).flat();
+    const allProductIds = [
+        ...allSketchSelections.map((sel) => sel.productId),
+        ...rawOrders.flatMap((order) => parseSelectedProductsField(order.selectedProducts).map((sel) => sel.productId)),
+    ];
+    const productWixImageById = await loadProductWixImagesById(allProductIds);
+
+    const ordersByCmsKey = {};
+    for (const order of rawOrders) {
+        const cmsKey = cmsWorkshopKey(order);
+        if (!cmsKey) continue;
+        if (!ordersByCmsKey[cmsKey]) ordersByCmsKey[cmsKey] = [];
+        ordersByCmsKey[cmsKey].push(order);
+    }
+
+    const dashboardOrders = [];
+    const workshopRows = [];
+
+    for (const [cmsKey, groupOrders] of Object.entries(ordersByCmsKey)) {
+        const sample = groupOrders[0];
+        const workshopId = workshopIdFromCmsKey(cmsKey, sample);
+        const typeId = serviceIdToTypeId[sample.serviceId] || 'unknown';
+        const typeInfo = typesMap[typeId] || typesMap.unknown;
+        const start = sample.workshopStart ? new Date(sample.workshopStart) : null;
+        const end = sample.workshopEnd ? new Date(sample.workshopEnd) : null;
+
+        let totalSketchesNeeded = 0;
+        let sketchesReady = 0;
+        let sketchesSelected = 0;
+        let cmsCapacity = 0;
+
+        for (const order of groupOrders) {
+            const isCancelled = !!order.cancelledAt;
+            const isCandles = isCandlesOrder(order);
+            const isCeramics = isCeramicsOrder(order);
+            const orderParticipants = participantsByOrderId[order._id] || [];
+            const organizer = enrichOrganizerFields(order, orderParticipants, ecomBuyerByOrderId[order._id]);
+            const adults = order.adults || 0;
+            const children = order.children || 0;
+            const selectedProducts = mapSelectedProductsForOrder(order, productWixImageById);
+            const sketches = sortSketchesByRugIndex(
+                (sketchesByOrderId[order._id] || []).map((sel) => mapSketch(sel, orderParticipants, order, productWixImageById))
+            );
+            if (!isCancelled) {
+                cmsCapacity += adults + children;
+                if (isCandles) {
+                    const cupQty = selectedProducts.reduce((sum, cup) => sum + (Number(cup.quantity) || 1), 0);
+                    totalSketchesNeeded += order.rugCount || 0;
+                    sketchesSelected += cupQty;
+                    sketchesReady += cupQty;
+                } else if (typeInfo.requiresSketch) {
+                    totalSketchesNeeded += Math.max(sketches.length, order.rugCount || 0);
+                    sketchesSelected += sketches.filter((s) => !!s.img).length;
+                    sketchesReady += sketches.filter((s) => s.status === SKETCH_STATUS.READY).length;
+                }
+            }
+
+            dashboardOrders.push({
+                id: order._id,
+                workshopId,
+                workshopType: order.workshopType || (isCandles ? 'candles' : isCeramics ? 'ceramics' : 'tufting'),
+                selectionMode: order.selectionMode || null,
+                organizerName: organizer.organizerName,
+                organizerEmail: organizer.organizerEmail,
+                organizerPhone: organizer.organizerPhone,
+                adults,
+                children,
+                hasAdultAndChild: adults > 0 && children > 0,
+                quantity: adults + children,
+                rugCount: order.rugCount || 0,
+                orderStatus: order.cancelledAt ? 'cancelled' : 'active',
+                pendingRescheduleStatus: order.pendingRescheduleStatus || null,
+                pendingRescheduleDate: order.pendingRescheduleDate || null,
+                customerRescheduleCount: order.customerRescheduleCount || 0,
+                customerNotes: order.customerNotes || '',
+                notes: order.internalNotes || '',
+                logs: mapOrderLog(order.actionLog),
+                sketches,
+                selectedProducts,
+                pickupItems: Array.isArray(order.pickupItems) ? order.pickupItems : [],
+                pickupReadyNotifiedAt: order.pickupReadyNotifiedAt || null,
+                pickupAppointments: Array.isArray(order.pickupAppointments)
+                    ? order.pickupAppointments.map(({ passToken, ...appointment }) => appointment)
+                    : [],
+                participantGroups: orderParticipants.map((p) => ({
+                    id: p._id,
+                    name: p.name || '',
+                    phone: p.phone || p.rawPhone || '',
+                    childrenCount: p.childrenCount || 0,
+                    hasChildren: !!p.hasChildren,
+                })),
+                workshopStart: start ? start.toISOString() : null,
+                ecomOrderId: order.ecomOrderId || null,
+                ecomOrderNumber: order.ecomOrderNumber || null,
+                orderUrl: order.orderUrl || '',
+                paidTotal: order.paidTotal || order.basePrice || 0,
+                paidDiscount: order.paidDiscount || 0,
+                couponCode: order.couponCode || null,
+                couponName: order.couponName || null,
+                promoCoupon: mapPromoCouponForDashboard(promoCouponsByOrderId[order._id]),
+                addOns: [],
+                addOnsTotal: 0,
+            });
+        }
+
+        const groupsCount = countSessionGroups(groupOrders, participantsByOrderId);
+        const hoursToStart = start ? hoursUntil(start) : null;
+        const tracksSelectionProgress = typeInfo.requiresSketch || totalSketchesNeeded > 0;
+        const inAlertWindow = tracksSelectionProgress && hoursToStart !== null && hoursToStart >= 0 && hoursToStart <= 6 * 24;
+        const hasMissingAlert = inAlertWindow && sketchesSelected < totalSketchesNeeded;
+        const hasNotReadyAlert = typeInfo.requiresSketch && inAlertWindow && sketchesReady < totalSketchesNeeded;
+
+        workshopRows.push({
+            id: workshopId,
+            type: typeId,
+            title: typeInfo.title,
+            date: start ? formatDateIL(start) : '',
+            time: start ? formatTimeIL(start) : '',
+            endTime: end ? formatTimeIL(end) : '',
+            startTimestamp: start ? start.getTime() : null,
+            maxCapacity: cmsCapacity,
+            currentCapacity: cmsCapacity,
+            cmsCapacity,
+            groupsCount,
+            allGroupsCount: groupsCount,
+            waitlist: 0,
+            instructors: [],
+            totalSketchesNeeded,
+            sketchesSelected,
+            sketchesReady,
+            hasAlert: hasMissingAlert,
+            hasNotReadyAlert,
+            isUrgent: (hasMissingAlert || hasNotReadyAlert) && hoursToStart !== null && hoursToStart <= 48,
+            unlinkedAddOns: [],
+        });
+    }
+
+    let orders = dashboardOrders;
+    let workshops = workshopRows;
+    if (!canManageOrdersSystem) {
+        orders = orders.map(({ paidTotal, paidDiscount, couponCode, couponName, promoCoupon, ecomOrderId, addOns, addOnsTotal, ...rest }) => rest);
+        workshops = workshops.map(({ unlinkedAddOns, ...rest }) => rest);
+    }
+
+    return { workshops, orders };
+}
+
+/**
+ * Global order search — matches organizerName, organizerPhone (any Israeli
+ * format: 05x / 0; / +972 / 972, with or without dashes/spaces), the
+ * ecomOrderNumber, and WorkshopParticipants.name/phone (a participant match
+ * surfaces the whole order). Not limited to any date range — always searches
+ * every PAID WorkshopOrders record.
+ */
+export const searchDashboardOrders = webMethod(Permissions.SiteMember, async (rawQuery) => {
+    const dashboardRole = await assertDashboardAccess();
+    const canManageOrdersSystem = hasPermission(dashboardRole, 'manageOrdersSystem');
+    const hasSketchSewingSkill = hasPermission(dashboardRole, 'sketchSewingSkill');
+    const myEmployeeId = dashboardRole._id;
+
+    const query = String(rawQuery || '').trim();
+    if (query.length < 2) return { workshops: [], orders: [] };
+
+    const digits = query.replace(/\D/g, '');
+    const lowerQuery = query.toLowerCase();
+    const byId = new Map();
+
+    try {
+        const nameResult = await wixData.query('WorkshopOrders')
+            .eq('status', 'paid')
+            .contains('organizerName', query)
+            .descending('workshopStart')
+            .limit(SEARCH_RAW_LIMIT)
+            .find(SA);
+        nameResult.items.forEach((it) => byId.set(it._id, it));
+    } catch (err) {
+        console.warn('[dashboardService] searchDashboardOrders name query failed:', err?.message || err);
+    }
+
+    const participantOrderIds = new Set();
+    try {
+        const participantQueries = [
+            wixData.query('WorkshopParticipants').contains('name', query).limit(SEARCH_RAW_LIMIT).find(SA),
+        ];
+        if (digits.length >= 2) {
+            for (const variant of getExpandedPhoneLookupVariants(query)) {
+                participantQueries.push(wixData.query('WorkshopParticipants').eq('phone', variant).limit(SEARCH_RAW_LIMIT).find(SA));
+                participantQueries.push(wixData.query('WorkshopParticipants').eq('rawPhone', variant).limit(SEARCH_RAW_LIMIT).find(SA));
+            }
+        }
+        const participantResults = await Promise.all(participantQueries);
+        participantResults.forEach((r) => (r.items || []).forEach((p) => {
+            if (p.orderId) participantOrderIds.add(p.orderId);
+        }));
+    } catch (err) {
+        console.warn('[dashboardService] searchDashboardOrders participant query failed:', err?.message || err);
+    }
+
+    if (digits.length >= 2) {
+        try {
+            for (const variant of getExpandedPhoneLookupVariants(query)) {
+                const r = await wixData.query('WorkshopOrders')
+                    .eq('status', 'paid').eq('organizerPhone', variant).limit(SEARCH_RAW_LIMIT).find(SA);
+                r.items.forEach((it) => byId.set(it._id, it));
+            }
+            const core = getIsraeliMobileCoreDigits(query);
+            if (core.length >= 8) {
+                const r = await wixData.query('WorkshopOrders')
+                    .eq('status', 'paid').contains('organizerPhone', core).limit(SEARCH_RAW_LIMIT).find(SA);
+                r.items.forEach((it) => byId.set(it._id, it));
+            }
+            const r1 = await wixData.query('WorkshopOrders')
+                .eq('status', 'paid').eq('ecomOrderNumber', digits).limit(SEARCH_RAW_LIMIT).find(SA);
+            r1.items.forEach((it) => byId.set(it._id, it));
+            const numeric = Number(digits);
+            if (Number.isFinite(numeric)) {
+                const r2 = await wixData.query('WorkshopOrders')
+                    .eq('status', 'paid').eq('ecomOrderNumber', numeric).limit(SEARCH_RAW_LIMIT).find(SA);
+                r2.items.forEach((it) => byId.set(it._id, it));
+            }
+        } catch (err) {
+            console.warn('[dashboardService] searchDashboardOrders phone/orderNumber query failed:', err?.message || err);
+        }
+    }
+
+    if (participantOrderIds.size) {
+        try {
+            const r = await wixData.query('WorkshopOrders')
+                .eq('status', 'paid').hasSome('_id', [...participantOrderIds]).limit(SEARCH_RAW_LIMIT).find(SA);
+            r.items.forEach((it) => byId.set(it._id, it));
+        } catch (err) {
+            console.warn('[dashboardService] searchDashboardOrders participant→order query failed:', err?.message || err);
+        }
+    }
+
+    let matched = [...byId.values()].filter((o) => {
+        const nameMatch = (o.organizerName || '').toLowerCase().includes(lowerQuery);
+        const phoneMatch = digits.length >= 2 && !!o.organizerPhone && phonesMatch(o.organizerPhone, query);
+        const orderNumMatch = digits.length >= 2 && String(o.ecomOrderNumber || '').includes(digits);
+        return nameMatch || phoneMatch || orderNumMatch || participantOrderIds.has(o._id);
+    });
+
+    matched.sort((a, b) => {
+        const at = a.workshopStart ? new Date(a.workshopStart).getTime() : 0;
+        const bt = b.workshopStart ? new Date(b.workshopStart).getTime() : 0;
+        return bt - at;
+    });
+
+    const { typesMap, serviceIdToTypeId } = await loadWorkshopTypes();
+    const tuftingTypeIds = new Set(
+        Object.values(TUFTING_SERVICE_IDS).map((sid) => serviceIdToTypeId[sid]).filter(Boolean)
+    );
+
+    let assignmentsByKey = {};
+    if (!canManageOrdersSystem && matched.length) {
+        const starts = matched.map((o) => (o.workshopStart ? new Date(o.workshopStart).getTime() : null)).filter(Boolean);
+        if (starts.length) {
+            const minDate = new Date(Math.min(...starts));
+            const maxDate = new Date(Math.max(...starts));
+            assignmentsByKey = (await loadShiftInstructorsMap(minDate, maxDate)).assignmentsByKey;
+        }
+    }
+
+    const scoped = scopeRawOrdersForRole(matched, {
+        canManageOrdersSystem, hasSketchSewingSkill, myEmployeeId, serviceIdToTypeId, tuftingTypeIds, assignmentsByKey,
+    }).slice(0, SEARCH_RESULT_LIMIT);
+
+    return enrichOrdersIntoDashboardPayload(scoped, { typesMap, serviceIdToTypeId, canManageOrdersSystem });
+});
+
+/**
+ * "איסוף פריטים" tab — every paid, non-cancelled tufting (incl. טאפטינג שבת)
+ * / ceramics order whose workshop already ended, within the last
+ * PICKUP_QUEUE_LOOKBACK_DAYS days. Candles orders have no per-item pickup
+ * flow and are excluded (see order-manager-dashboard.js supportsPickup).
+ */
+export const getPickupQueue = webMethod(Permissions.SiteMember, async () => {
+    const dashboardRole = await assertDashboardAccess();
+    const canManageOrdersSystem = hasPermission(dashboardRole, 'manageOrdersSystem');
+    const hasSketchSewingSkill = hasPermission(dashboardRole, 'sketchSewingSkill');
+    const myEmployeeId = dashboardRole._id;
+
+    const now = new Date();
+    const startDate = new Date(now.getTime() - PICKUP_QUEUE_LOOKBACK_DAYS * 24 * 60 * 60 * 1000);
+
+    const items = [];
+    let result = await wixData.query('WorkshopOrders')
+        .eq('status', 'paid')
+        .ge('workshopStart', startDate)
+        .le('workshopStart', now)
+        .descending('workshopStart')
+        .limit(100)
+        .find(SA);
+    items.push(...(result.items || []));
+    while (typeof result.hasNext === 'function' && result.hasNext()) {
+        result = await result.next();
+        items.push(...(result.items || []));
+    }
+
+    const candidateOrders = items.filter((order) => {
+        if (order.cancelledAt) return false;
+        const type = order.workshopType || (isCandlesOrder(order) ? 'candles' : isCeramicsOrder(order) ? 'ceramics' : 'tufting');
+        return type === 'tufting' || type === 'ceramics';
+    });
+
+    const { typesMap, serviceIdToTypeId } = await loadWorkshopTypes();
+    const tuftingTypeIds = new Set(
+        Object.values(TUFTING_SERVICE_IDS).map((sid) => serviceIdToTypeId[sid]).filter(Boolean)
+    );
+
+    let assignmentsByKey = {};
+    if (!canManageOrdersSystem && candidateOrders.length) {
+        assignmentsByKey = (await loadShiftInstructorsMap(startDate, now)).assignmentsByKey;
+    }
+
+    const scoped = scopeRawOrdersForRole(candidateOrders, {
+        canManageOrdersSystem, hasSketchSewingSkill, myEmployeeId, serviceIdToTypeId, tuftingTypeIds, assignmentsByKey,
+    });
+
+    return enrichOrdersIntoDashboardPayload(scoped, { typesMap, serviceIdToTypeId, canManageOrdersSystem });
+});
+
+/**
+ * Issued PromoCoupons for the orders currently open in the side panel.
+ * Called after the panel is already rendered — never part of the panel-open path.
+ * Only status "issued" counts as available (redeemed/cancelled are omitted).
+ */
+export const getOrderPromoCouponTags = webMethod(Permissions.SiteMember, async (orderIds) => {
+    await assertDashboardAccess();
+    const ids = [...new Set((Array.isArray(orderIds) ? orderIds : []).map((id) => String(id || '').trim()).filter(Boolean))].slice(0, 80);
+    if (!ids.length) return { coupons: {} };
+    const byOrderId = await getPromoCouponsByOrderIds(ids);
+    const coupons = {};
+    for (const [orderId, row] of Object.entries(byOrderId)) {
+        if (!row || row.status !== 'issued' || !row.code) continue;
+        coupons[orderId] = { code: String(row.code) };
+    }
+    return { coupons };
 });

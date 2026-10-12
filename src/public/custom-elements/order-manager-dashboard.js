@@ -35,6 +35,7 @@ var __wdTemplateHtml = `
             <h1 class="wd-header-title text-xl font-bold text-gray-900">ניהול סדנאות</h1>
             <nav class="wd-header-tabs flex items-center gap-1 mr-4 bg-gray-100 p-1 rounded-lg" id="wdMainTabsNav">
                 <button id="wdTabOrdersBtn" onclick="switchDashboardTab('orders')" class="px-3 py-1.5 rounded-md text-sm font-semibold bg-white text-primary shadow-sm">הזמנות</button>
+                <button id="wdTabPickupBtn" onclick="switchDashboardTab('pickup')" class="px-3 py-1.5 rounded-md text-sm font-semibold text-gray-600 hover:bg-white/60 transition-colors">איסוף פריטים</button>
                 <button id="wdTabStaffBtn" onclick="switchDashboardTab('staff')" class="hidden px-3 py-1.5 rounded-md text-sm font-semibold text-gray-600 hover:bg-white/60 transition-colors">צוות ומשמרות</button>
             </nav>
         </div>
@@ -107,10 +108,10 @@ var __wdTemplateHtml = `
             <div class="wd-filters-body" id="wdFiltersBody">
             <div class="wd-filters-grid">
                 <label class="wd-filter-field wd-filter-search">
-                    <span>חיפוש</span>
+                    <span>חיפוש הזמנות (שם / טלפון / מס׳ הזמנה)</span>
                     <div class="wd-filter-control">
-                        <i class="ph ph-magnifying-glass"></i>
-                        <input type="text" id="searchInput" placeholder="סוג סדנה..." onkeyup="onFilterInputChange()">
+                        <i class="ph ph-magnifying-glass" id="searchInputIcon"></i>
+                        <input type="text" id="searchInput" placeholder="שם, טלפון או מספר הזמנה..." onkeyup="onSearchInputChange()">
                     </div>
                 </label>
 
@@ -214,6 +215,32 @@ var __wdTemplateHtml = `
             </div>
         </div>
     </main>
+
+    <!-- "איסוף פריטים" tab — paid tufting (incl. טאפטינג שבת) / ceramics orders
+         whose workshop already ended, within the last 60 days -->
+    <section id="wdPickupSection" class="hidden flex-1 overflow-hidden flex flex-col p-6 bg-gray-100 relative gap-4">
+        <div class="flex items-center justify-between shrink-0 flex-wrap gap-3">
+            <div>
+                <h2 class="text-lg font-bold text-gray-900 flex items-center gap-2"><i class="ph-fill ph-package text-amber-500"></i> איסוף פריטים</h2>
+                <p class="text-xs text-gray-500 mt-0.5" id="pickupQueueCount">טוען…</p>
+            </div>
+            <div class="flex items-center gap-3 flex-wrap">
+                <label class="wd-toggle" title="הצג גם הזמנות שכל הפריטים שלהן כבר נאספו">
+                    <input type="checkbox" id="pickupQueueIncludeCollectedToggle" onchange="onPickupQueueIncludeCollectedChange()">
+                    <span class="wd-toggle-track"></span>
+                    <span>כולל שנאספו</span>
+                </label>
+                <div class="wd-filter-control" style="min-width:220px;">
+                    <i class="ph ph-magnifying-glass"></i>
+                    <input type="text" id="pickupQueueSearchInput" placeholder="חיפוש: שם / טלפון / מס׳ הזמנה" onkeyup="onPickupQueueSearchChange()">
+                </div>
+                <button onclick="refreshPickupQueueTab()" class="text-sm font-medium text-gray-600 hover:text-primary flex items-center gap-1.5 bg-white px-3 py-1.5 rounded-md border border-gray-200">
+                    <i id="pickupQueueRefreshIcon" class="ph ph-arrows-clockwise"></i> רענן
+                </button>
+            </div>
+        </div>
+        <div class="flex-1 overflow-auto flex flex-col gap-2.5" id="pickupQueueList"></div>
+    </section>
 
     <!-- Staff & Shifts tab (Phase 2, Module B core) -->
     <section id="wdStaffAdminSection" class="wd-staff-section hidden flex-1 overflow-hidden flex flex-col p-6 bg-gray-100 relative gap-4">
@@ -1183,6 +1210,7 @@ var __wdCustomCss = `
 
         /* --- Main layout / alerts --- */
         ${__wdTagName} #wdOrdersMain,
+        ${__wdTagName} #wdPickupSection,
         ${__wdTagName} #wdStaffAdminSection {
             padding: 8px !important;
         }
@@ -1449,6 +1477,40 @@ function __wdInjectGlobalAssets() {
         let isAlertFilterActive = false;
 
         const __wdPageSize = 15;
+
+        // --- Global order search ("חיפוש לפי שם / טלפון / מספר הזמנה") ------
+        // Independent of the date-range filters above — searches every paid
+        // order regardless of date. Matched workshops/orders that aren't
+        // already loaded (outside the current date range) are merged directly
+        // into mockWorkshops/mockOrders so every existing lookup
+        // (mockWorkshops.find/mockOrders.find — side panel, pickup modal, etc.)
+        // keeps working unmodified; __wdSearchWorkshopIds narrows the visible
+        // table to just the matches while active, and __wdSearchMerged*Ids
+        // tracks what to remove again once the search is cleared.
+        let __wdSearchActive = false;
+        let __wdSearchWorkshopIds = new Set();
+        let __wdSearchMergedWorkshopIds = new Set();
+        let __wdSearchMergedOrderIds = new Set();
+        // Cached last successful search response — background auto-refreshes
+        // (every __wdAutoRefreshMs) overwrite mockWorkshops/mockOrders wholesale,
+        // so applyDashboardData re-merges this back in to keep an active search
+        // visible across a refresh instead of silently emptying the table.
+        let __wdLastSearchResult = null;
+        let __wdSearchDebounceTimer = null;
+        const __wdSearchDebounceMs = 350;
+        const __wdSearchMinChars = 2;
+
+        // --- "איסוף פריטים" tab — separate from the global search above. Raw
+        // { workshops, orders } from getPickupQueue() is merged into
+        // mockWorkshops/mockOrders (its own tracking sets, so it isn't touched
+        // by exitOrderSearch) purely so the existing openPickupModal/
+        // getWorkshopEndTimestamp logic keeps working unmodified; the tab's own
+        // list is rendered directly from __wdPickupQueueData.
+        let __wdPickupQueueData = null; // { workshops, orders } | null (not yet loaded) 
+        let __wdPickupMergedWorkshopIds = new Set();
+        let __wdPickupMergedOrderIds = new Set();
+        let __wdPickupQueueIncludeCollected = false;
+        let __wdPickupQueueSearchQuery = '';
         let __wdCurrentPage = 1;
 
         const __wdAutoRefreshMs = 5 * 60 * 1000;
@@ -1880,6 +1942,8 @@ function __wdInjectGlobalAssets() {
             if (data.workshopTypes) workshopTypes = data.workshopTypes;
             if (data.workshops) mockWorkshops = data.workshops;
             if (data.orders) mockOrders = data.orders;
+            reapplyActiveSearchAfterDataReload();
+            reapplyPickupQueueAfterDataReload();
             if (data.ordersDebug) ordersDebug = data.ordersDebug;
             if (data.templates) waTemplates = data.templates;
             if (data.currentUser) currentDashboardUser = data.currentUser;
@@ -2250,6 +2314,123 @@ function __wdInjectGlobalAssets() {
             applyFilters();
         }
 
+        /** Toggles the small spinner on the search field's icon while a search request is in flight. */
+        function setSearchBusy(isBusy) {
+            const icon = document.getElementById('searchInputIcon');
+            if (!icon) return;
+            icon.classList.toggle('wd-spin', isBusy);
+            icon.classList.toggle('ph-magnifying-glass', !isBusy);
+            icon.classList.toggle('ph-circle-notch', isBusy);
+        }
+
+        /** Merges a {workshops, orders} result into mockWorkshops/mockOrders (skipping ids already present), tracking additions into the given sets. */
+        function mergeDashboardResultIntoMockData(result, trackedWorkshopIds, trackedOrderIds) {
+            const existingWorkshopIds = new Set(mockWorkshops.map(w => w.id));
+            const existingOrderIds = new Set(mockOrders.map(o => o.id));
+            const newWorkshops = (result.workshops || []).filter(w => !existingWorkshopIds.has(w.id));
+            const newOrders = (result.orders || []).filter(o => !existingOrderIds.has(o.id));
+
+            if (newWorkshops.length) {
+                mockWorkshops = mockWorkshops.concat(newWorkshops);
+                newWorkshops.forEach(w => trackedWorkshopIds.add(w.id));
+            }
+            if (newOrders.length) {
+                mockOrders = mockOrders.concat(newOrders);
+                newOrders.forEach(o => trackedOrderIds.add(o.id));
+            }
+        }
+
+        /** Re-applies the last search result after a background refresh replaces mockWorkshops/mockOrders wholesale — keeps an active search visible. */
+        function reapplyActiveSearchAfterDataReload() {
+            if (!__wdSearchActive || !__wdLastSearchResult) return;
+            __wdSearchMergedWorkshopIds = new Set();
+            __wdSearchMergedOrderIds = new Set();
+            mergeDashboardResultIntoMockData(__wdLastSearchResult, __wdSearchMergedWorkshopIds, __wdSearchMergedOrderIds);
+            __wdSearchWorkshopIds = new Set((__wdLastSearchResult.workshops || []).map(w => w.id));
+        }
+
+        /** Re-merges the pickup queue after a background refresh replaces mockWorkshops/mockOrders wholesale. */
+        function reapplyPickupQueueAfterDataReload() {
+            if (!__wdPickupQueueData) return;
+            __wdPickupMergedWorkshopIds = new Set();
+            __wdPickupMergedOrderIds = new Set();
+            mergeDashboardResultIntoMockData(__wdPickupQueueData, __wdPickupMergedWorkshopIds, __wdPickupMergedOrderIds);
+        }
+
+        /** Removes whatever searchDashboardOrders() merged into mockWorkshops/mockOrders and clears the active-search state. */
+        function exitOrderSearch() {
+            if (__wdSearchMergedWorkshopIds.size) {
+                mockWorkshops = mockWorkshops.filter(w => !__wdSearchMergedWorkshopIds.has(w.id));
+                __wdSearchMergedWorkshopIds = new Set();
+            }
+            if (__wdSearchMergedOrderIds.size) {
+                mockOrders = mockOrders.filter(o => !__wdSearchMergedOrderIds.has(o.id));
+                __wdSearchMergedOrderIds = new Set();
+            }
+            __wdSearchActive = false;
+            __wdSearchWorkshopIds = new Set();
+            __wdLastSearchResult = null;
+            setSearchBusy(false);
+        }
+
+        /**
+         * Wired to searchInput's onkeyup — debounces, then (for 2+ chars)
+         * dispatches a global, date-range-independent order search by name /
+         * phone / order number to the backend (searchDashboardOrders). Clearing
+         * the box (or typing <2 chars) restores the normal date-range view.
+         */
+        function onSearchInputChange() {
+            const input = document.getElementById('searchInput');
+            const query = ((input && input.value) || '').trim();
+
+            if (__wdSearchDebounceTimer) {
+                clearTimeout(__wdSearchDebounceTimer);
+                __wdSearchDebounceTimer = null;
+            }
+
+            if (query.length < __wdSearchMinChars) {
+                setSearchBusy(false);
+                if (__wdSearchActive) {
+                    exitOrderSearch();
+                    __wdCurrentPage = 1;
+                    applyFilters();
+                }
+                return;
+            }
+
+            setSearchBusy(true);
+            __wdSearchDebounceTimer = setTimeout(() => {
+                __wdSearchDebounceTimer = null;
+                dispatchDashboardAction('searchOrders', { query });
+            }, __wdSearchDebounceMs);
+        }
+
+        /** Called by the Velo page (order-search-results attribute) with the raw searchDashboardOrders() result. */
+        window.__wdHandleOrderSearchResults = function (data) {
+            const input = document.getElementById('searchInput');
+            const currentQuery = ((input && input.value) || '').trim();
+            // Stale-response guard: the box may have changed (or been cleared)
+            // while this request was in flight.
+            if (currentQuery.length < __wdSearchMinChars) return;
+            if (!data || data.query !== currentQuery) return;
+
+            setSearchBusy(false);
+
+            if (data.error) {
+                console.error('[workshops-dashboard] searchDashboardOrders failed:', data.error);
+                alert('חיפוש ההזמנות נכשל, נסו שוב.');
+                return;
+            }
+
+            __wdLastSearchResult = { workshops: data.workshops || [], orders: data.orders || [] };
+            mergeDashboardResultIntoMockData(__wdLastSearchResult, __wdSearchMergedWorkshopIds, __wdSearchMergedOrderIds);
+            __wdSearchWorkshopIds = new Set((__wdLastSearchResult.workshops || []).map(w => w.id));
+
+            __wdSearchActive = true;
+            __wdCurrentPage = 1;
+            applyFilters();
+        };
+
         /**
          * Authoritative per-order sketch counts.
          * `rugCount` = how many rugs the group ordered; `sketches.length` may be
@@ -2548,6 +2729,150 @@ function __wdInjectGlobalAssets() {
             openModal('pickupNotReadyModal');
         }
 
+        // --- "איסוף פריטים" tab -------------------------------------------
+        // Lists every paid tufting (incl. טאפטינג שבת) / ceramics order whose
+        // workshop already ended in the last 60 days, so staff can mark items
+        // ready/collected without hunting through the per-workshop table.
+        // Reuses getPickupItemsState/openPickupModal above — the actual
+        // "מוכן לאיסוף"/"נאסף" flow is identical, this tab is just an
+        // alternative entry point into it.
+
+        function getPickupQueueOrderStatus(order) {
+            const items = getPickupItemsState(order);
+            const total = items.length;
+            const ready = items.filter(i => i.state === 'ready').length;
+            const collected = items.filter(i => i.state === 'collected').length;
+            return { items, total, ready, collected, fullyCollected: total > 0 && collected === total };
+        }
+
+        /** Local (already-loaded) search within the pickup tab — name / phone / order number, not a backend round-trip. */
+        function pickupQueueMatchesSearch(order, query) {
+            const q = (query || '').trim().toLowerCase();
+            if (!q) return true;
+            const digits = q.replace(/\D/g, '');
+            const nameMatch = (order.organizerName || '').toLowerCase().includes(q);
+            if (nameMatch) return true;
+            if (digits.length < 2) return false;
+            const phoneDigits = String(order.organizerPhone || '').replace(/\D/g, '');
+            const phoneCore = digits.length > 9 ? digits.slice(-9) : digits;
+            if (phoneDigits && phoneCore && phoneDigits.includes(phoneCore)) return true;
+            return !!order.ecomOrderNumber && String(order.ecomOrderNumber).includes(digits);
+        }
+
+        function renderPickupQueueList() {
+            const container = document.getElementById('pickupQueueList');
+            const countEl = document.getElementById('pickupQueueCount');
+            if (!container) return;
+
+            if (!__wdPickupQueueData) {
+                container.innerHTML = '<div class="text-sm text-gray-400 py-10 text-center">טוען נתונים…</div>';
+                if (countEl) countEl.innerText = 'טוען…';
+                return;
+            }
+
+            const rows = (__wdPickupQueueData.orders || [])
+                .filter(o => o.orderStatus !== 'cancelled')
+                .map(order => ({ order, status: getPickupQueueOrderStatus(order) }))
+                .filter(({ status }) => __wdPickupQueueIncludeCollected || !status.fullyCollected)
+                .filter(({ order }) => pickupQueueMatchesSearch(order, __wdPickupQueueSearchQuery));
+
+            rows.sort((a, b) => {
+                const wa = mockWorkshops.find(w => w.id === a.order.workshopId);
+                const wb = mockWorkshops.find(w => w.id === b.order.workshopId);
+                return (wb?.startTimestamp || 0) - (wa?.startTimestamp || 0);
+            });
+
+            if (countEl) {
+                countEl.innerText = `מציג ${rows.length} הזמנות${__wdPickupQueueSearchQuery ? ' (מסונן)' : ''} · 60 הימים האחרונים`;
+            }
+
+            if (!rows.length) {
+                container.innerHTML = `<div class="text-sm text-gray-400 py-10 text-center">לא נמצאו הזמנות ${__wdPickupQueueSearchQuery ? 'התואמות לחיפוש' : 'הממתינות לאיסוף'}.</div>`;
+                return;
+            }
+
+            container.innerHTML = rows.map(({ order, status }) => {
+                const workshop = mockWorkshops.find(w => w.id === order.workshopId);
+                const typeInfo = workshop ? workshopTypes[workshop.type] : null;
+                const badgeStyle = typeInfo ? colorHexToBadgeStyle(typeInfo.colorHex) : '';
+                const title = typeInfo ? typeInfo.title : (order.workshopType === 'ceramics' ? 'קרמיקה' : 'טאפטינג');
+                const dateLabel = workshop ? `${workshop.date} · ${workshop.time}` : '';
+                const orderNumHtml = order.ecomOrderNumber
+                    ? `<span class="text-[11px] text-gray-400">#${escapeHtml(String(order.ecomOrderNumber))}</span>`
+                    : '';
+
+                let statusBadge;
+                if (status.total === 0) {
+                    statusBadge = '<span class="text-[10px] font-bold px-2 py-0.5 rounded bg-gray-100 text-gray-500 border border-gray-200 whitespace-nowrap">אין פריטים</span>';
+                } else if (status.collected === status.total) {
+                    statusBadge = `<span class="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-100 text-emerald-700 border border-emerald-200 whitespace-nowrap">נאסף (${status.collected}/${status.total})</span>`;
+                } else if (status.ready > 0) {
+                    statusBadge = `<span class="text-[10px] font-bold px-2 py-0.5 rounded bg-amber-100 text-amber-700 border border-amber-200 whitespace-nowrap">מוכן לאיסוף (${status.ready}/${status.total})</span>`;
+                } else {
+                    statusBadge = `<span class="text-[10px] font-bold px-2 py-0.5 rounded bg-gray-100 text-gray-600 border border-gray-200 whitespace-nowrap">טרם סומן (0/${status.total})</span>`;
+                }
+
+                return `
+                    <div class="flex items-center justify-between gap-4 bg-white border border-gray-200 rounded-xl px-4 py-3 shadow-sm">
+                        <div class="flex flex-col gap-1 min-w-0">
+                            <div class="flex items-center gap-2 flex-wrap">
+                                <span class="font-bold text-gray-900 text-sm">${escapeHtml(order.organizerName || 'ללא שם')}</span>
+                                ${orderNumHtml}
+                            </div>
+                            <div class="text-xs text-gray-500 flex items-center gap-3 flex-wrap">
+                                <span dir="ltr"><i class="ph ph-phone mr-1"></i>${escapeHtml(order.organizerPhone || '—')}</span>
+                                <span class="px-1.5 py-0.5 rounded text-[10px] font-bold" style="${badgeStyle}">${escapeHtml(title)}</span>
+                                <span>${escapeHtml(dateLabel)}</span>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-3 shrink-0">
+                            ${statusBadge}
+                            <button onclick="openPickupModal('${order.id}')" class="w-9 h-9 flex items-center justify-center rounded-full bg-amber-50 text-amber-600 border border-amber-200 hover:bg-amber-500 hover:text-white transition-colors shadow-sm shrink-0" title="איסוף פריטים">
+                                <i class="ph-fill ph-package text-xl"></i>
+                            </button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        /** Dispatches the backend load (first open, or explicit refresh). */
+        function loadPickupQueueTab() {
+            const icon = document.getElementById('pickupQueueRefreshIcon');
+            if (icon) icon.classList.add('wd-spin');
+            dispatchDashboardAction('loadPickupQueue', {});
+        }
+        window.refreshPickupQueueTab = loadPickupQueueTab;
+
+        window.onPickupQueueIncludeCollectedChange = function () {
+            const checkbox = document.getElementById('pickupQueueIncludeCollectedToggle');
+            __wdPickupQueueIncludeCollected = !!(checkbox && checkbox.checked);
+            renderPickupQueueList();
+        };
+
+        window.onPickupQueueSearchChange = function () {
+            const input = document.getElementById('pickupQueueSearchInput');
+            __wdPickupQueueSearchQuery = (input && input.value) || '';
+            renderPickupQueueList();
+        };
+
+        /** Called by the Velo page (pickup-queue-data attribute) with the raw getPickupQueue() result. */
+        window.__wdHandlePickupQueueData = function (data) {
+            const icon = document.getElementById('pickupQueueRefreshIcon');
+            if (icon) icon.classList.remove('wd-spin');
+
+            if (!data || data.error) {
+                console.error('[workshops-dashboard] getPickupQueue failed:', data && data.error);
+                const countEl = document.getElementById('pickupQueueCount');
+                if (countEl) countEl.innerText = 'שגיאה בטעינת תור האיסוף';
+                return;
+            }
+
+            __wdPickupQueueData = { workshops: data.workshops || [], orders: data.orders || [] };
+            mergeDashboardResultIntoMockData(__wdPickupQueueData, __wdPickupMergedWorkshopIds, __wdPickupMergedOrderIds);
+            renderPickupQueueList();
+        };
+
         function formatIls(amount) {
             const n = Number(amount) || 0;
             return `₪${n.toLocaleString('he-IL', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
@@ -2691,6 +3016,93 @@ function __wdInjectGlobalAssets() {
             return `<a href="${url}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()" class="inline-flex items-center gap-1 text-[10px] font-bold text-indigo-600 hover:text-indigo-800 mt-1" title="פתיחת הזמנה בלוח הבקרה"><i class="ph ph-arrow-square-out"></i>הזמנה ב-Wix</a>`;
         }
 
+        // Tufting only — CMS WorkshopOrders.orderUrl (customer order hub).
+        function buildCustomerOrderLinkHtml(order) {
+            if (order.workshopType !== 'tufting' || order.isLegacyOrder) return '';
+            const url = String(order.orderUrl || '').trim();
+            if (!/^https?:\/\//i.test(url)) return '';
+            return `<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()" class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-indigo-50 text-indigo-600 border border-indigo-200 hover:bg-indigo-500 hover:text-white transition-colors shrink-0" title="קישור להזמנת הלקוח"><i class="ph ph-link text-sm"></i></a>`;
+        }
+
+        // Issued PromoCoupons, fetched after the side panel is already open.
+        // undefined = not loaded yet (spinner). null = loaded, no available coupon.
+        const promoCouponTagCache = {};
+        let promoCouponTagRequestSeq = 0;
+
+        function renderPromoCouponSlotInner(orderId) {
+            if (!Object.prototype.hasOwnProperty.call(promoCouponTagCache, orderId)) {
+                return `<i class="ph ph-circle-notch wd-spin text-gray-400 text-xs" title="טוען קופון"></i>`;
+            }
+            const entry = promoCouponTagCache[orderId];
+            if (!entry || !entry.code) return '';
+            const code = escapeHtml(entry.code);
+            return `<button type="button" onclick="copyPromoCouponTag(event, '${orderId}')" class="inline-flex items-center gap-1 text-[10px] font-bold font-mono px-1.5 py-0.5 rounded bg-orange-50 text-orange-700 border border-orange-200 hover:bg-orange-100 transition-colors" title="לחצו להעתקת הקופון"><i class="ph-fill ph-gift"></i>${code}</button><span id="promo-coupon-copied-${orderId}" class="hidden text-[10px] font-bold text-emerald-600">הועתק בהצלחה</span>`;
+        }
+
+        function buildPromoCouponSlotHtml(order) {
+            if (order.workshopType !== 'tufting' || order.isLegacyOrder) return '';
+            return `<span id="promo-coupon-slot-${order.id}" class="inline-flex items-center gap-1.5 mt-1">${renderPromoCouponSlotInner(order.id)}</span>`;
+        }
+
+        function paintPromoCouponSlot(orderId) {
+            const slot = document.getElementById(`promo-coupon-slot-${orderId}`);
+            if (slot) slot.innerHTML = renderPromoCouponSlotInner(orderId);
+        }
+
+        /** Background fetch — does not block openSidePanel. Cached tags stay visible while a refresh is in flight. */
+        function requestPromoCouponTags(orders) {
+            const ids = (orders || [])
+                .filter((o) => o.workshopType === 'tufting' && !o.isLegacyOrder)
+                .map((o) => o.id);
+            if (!ids.length) return;
+            const requestId = ++promoCouponTagRequestSeq;
+            dispatchDashboardAction('loadPromoCouponTags', { orderIds: ids, requestId });
+        }
+
+        function copyPromoCouponTag(event, orderId) {
+            if (event) event.stopPropagation();
+            const entry = promoCouponTagCache[orderId];
+            const code = entry && entry.code;
+            if (!code) return;
+            const showCopied = () => {
+                const note = document.getElementById(`promo-coupon-copied-${orderId}`);
+                if (!note) return;
+                note.classList.remove('hidden');
+                setTimeout(() => note.classList.add('hidden'), 3000);
+            };
+            const fallbackCopy = () => {
+                const input = document.createElement('textarea');
+                input.value = code;
+                input.setAttribute('readonly', '');
+                input.style.position = 'fixed';
+                input.style.opacity = '0';
+                document.body.appendChild(input);
+                input.select();
+                try { document.execCommand('copy'); } catch (_) { /* ignore */ }
+                document.body.removeChild(input);
+                showCopied();
+            };
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(code).then(showCopied).catch(fallbackCopy);
+            } else {
+                fallbackCopy();
+            }
+        }
+
+        window.__wdHandlePromoCouponTags = function (data) {
+            if (!data) return;
+            const ids = Array.isArray(data.orderIds) ? data.orderIds : [];
+            if (data.error) {
+                ids.forEach((id) => { promoCouponTagCache[id] = null; paintPromoCouponSlot(id); });
+                return;
+            }
+            const coupons = data.coupons || {};
+            ids.forEach((id) => {
+                promoCouponTagCache[id] = coupons[id] && coupons[id].code ? { code: String(coupons[id].code) } : null;
+                paintPromoCouponSlot(id);
+            });
+        };
+
         function buildCupProgressBarHtml(selected, total, opts) {
             const options = opts || {};
             const barHeight = options.barHeight || 'h-2';
@@ -2820,7 +3232,6 @@ function __wdInjectGlobalAssets() {
 
         function applyFilters() {
             checkAlerts();
-            const search = document.getElementById('searchInput').value.toLowerCase();
             const type = document.getElementById('typeFilter').value;
             const instructor = document.getElementById('instructorFilter').value;
             const onlyMissingSketches = document.getElementById('missingSketchesFilter').checked;
@@ -2829,18 +3240,27 @@ function __wdInjectGlobalAssets() {
 
             let filtered = mockWorkshops;
 
-            // Safety net: main table shows only workshops with CMS orders by default.
-            if (!showAllOrders) {
-                filtered = filtered.filter(w => (w.groupsCount || 0) > 0);
+            if (__wdSearchActive) {
+                // Global order search (see onSearchInputChange) narrows the table
+                // to exactly the matched workshops, bypassing the date-range /
+                // "show all orders" safety net below entirely.
+                filtered = filtered.filter(w => __wdSearchWorkshopIds.has(w.id));
             } else {
-                filtered = filtered.filter(w => (w.allGroupsCount || w.groupsCount || 0) > 0);
+                // Safety net: main table shows only workshops with CMS orders by default.
+                if (!showAllOrders) {
+                    filtered = filtered.filter(w => (w.groupsCount || 0) > 0);
+                } else {
+                    filtered = filtered.filter(w => (w.allGroupsCount || w.groupsCount || 0) > 0);
+                }
+                // Workshops merged in purely for the "איסוף פריטים" tab (see
+                // loadPickupQueueTab) belong to that tab only — never the main table.
+                if (__wdPickupMergedWorkshopIds.size) {
+                    filtered = filtered.filter(w => !__wdPickupMergedWorkshopIds.has(w.id));
+                }
             }
 
             if (isAlertFilterActive) {
                 filtered = filtered.filter(w => w.hasAlert || w.hasNotReadyAlert);
-            }
-            if (search) {
-                filtered = filtered.filter(w => workshopTypes[w.type].title.toLowerCase().includes(search));
             }
             if (type) {
                 filtered = filtered.filter(w => w.type === type);
@@ -2866,7 +3286,7 @@ function __wdInjectGlobalAssets() {
                 return a.startTimestamp - b.startTimestamp;
             });
 
-            if (search || type || instructor || onlyMissingSketches || isAlertFilterActive
+            if (__wdSearchActive || type || instructor || onlyMissingSketches || isAlertFilterActive
                 || !isDefaultDateRange() || showPastWorkshops) {
                 clearBtn.classList.remove('hidden');
             } else {
@@ -2889,6 +3309,11 @@ function __wdInjectGlobalAssets() {
         function clearFilters() {
             __wdCurrentPage = 1;
             document.getElementById('searchInput').value = '';
+            if (__wdSearchDebounceTimer) {
+                clearTimeout(__wdSearchDebounceTimer);
+                __wdSearchDebounceTimer = null;
+            }
+            exitOrderSearch();
             document.getElementById('typeFilter').value = '';
             document.getElementById('instructorFilter').value = '';
             document.getElementById('missingSketchesFilter').checked = false;
@@ -3110,6 +3535,7 @@ function __wdInjectGlobalAssets() {
             if (itemsHeader) itemsHeader.innerText = isCupsWs ? 'כוסות' : 'סקיצות';
 
             renderOrdersTable(w.id, typeInfo.requiresSketch);
+            requestPromoCouponTags(wOrders);
 
             // Show Panel
             const overlay = document.getElementById('sidePanelOverlay');
@@ -3355,9 +3781,11 @@ function __wdInjectGlobalAssets() {
                             <div class="flex flex-col">
                                 <div class="font-bold text-gray-900 text-sm flex items-center gap-2 flex-wrap">
                                     ${groupName}
+                                    ${buildCustomerOrderLinkHtml(o)}
                                     ${legacyBadge}
                                     ${isCancelled ? '<span class="bg-red-100 text-red-600 px-2 py-0.5 rounded-md text-[10px] font-bold">בוטל</span>' : ''}
                                 </div>
+                                ${buildPromoCouponSlotHtml(o)}
                                 <div class="text-xs text-gray-500 mt-1 flex gap-3 font-medium">
                                     <span><i class="ph ph-phone mr-1"></i>${groupPhone}</span>
                                     <span><i class="ph ph-envelope-simple mr-1"></i>${groupEmail}</span>
@@ -4397,31 +4825,41 @@ function __wdInjectGlobalAssets() {
 
     window.switchDashboardTab = function (tab) {
         const ordersMain = document.getElementById('wdOrdersMain');
+        const pickupSection = document.getElementById('wdPickupSection');
         const staffSection = document.getElementById('wdStaffAdminSection');
         const ordersBtn = document.getElementById('wdTabOrdersBtn');
+        const pickupBtn = document.getElementById('wdTabPickupBtn');
         const staffBtn = document.getElementById('wdTabStaffBtn');
         if (!ordersMain || !staffSection) return;
 
         const showStaff = tab === 'staff';
-        ordersMain.classList.toggle('hidden', showStaff);
+        const showPickup = tab === 'pickup';
+        const showOrders = !showStaff && !showPickup;
+
+        ordersMain.classList.toggle('hidden', !showOrders);
+        if (pickupSection) pickupSection.classList.toggle('hidden', !showPickup);
         staffSection.classList.toggle('hidden', !showStaff);
-        if (ordersBtn) {
-            ordersBtn.classList.toggle('bg-white', !showStaff);
-            ordersBtn.classList.toggle('shadow-sm', !showStaff);
-            ordersBtn.classList.toggle('text-primary', !showStaff);
-            ordersBtn.classList.toggle('text-gray-600', showStaff);
-        }
-        if (staffBtn) {
-            staffBtn.classList.toggle('bg-white', showStaff);
-            staffBtn.classList.toggle('shadow-sm', showStaff);
-            staffBtn.classList.toggle('text-primary', showStaff);
-            staffBtn.classList.toggle('text-gray-600', !showStaff);
-        }
+
+        [[ordersBtn, showOrders], [pickupBtn, showPickup], [staffBtn, showStaff]].forEach(([btn, active]) => {
+            if (!btn) return;
+            btn.classList.toggle('bg-white', active);
+            btn.classList.toggle('shadow-sm', active);
+            btn.classList.toggle('text-primary', active);
+            btn.classList.toggle('text-gray-600', !active);
+        });
 
         if (showStaff && !saData) {
             const monthEl = document.getElementById('saMonthPicker');
             if (monthEl && !monthEl.value) monthEl.value = saMonthKey;
             loadStaffAdminTab();
+        }
+
+        if (showPickup) {
+            if (!__wdPickupQueueData) {
+                loadPickupQueueTab();
+            } else {
+                renderPickupQueueList();
+            }
         }
     };
 
@@ -4627,6 +5065,7 @@ function __wdInjectGlobalAssets() {
 // ============================================================
 window.applyFilters = applyFilters;
 window.onFilterInputChange = onFilterInputChange;
+window.onSearchInputChange = onSearchInputChange;
 window.clearFilters = clearFilters;
 window.toggleFiltersPanel = toggleFiltersPanel;
 window.__wdGoToPage = __wdGoToPage;
@@ -4665,6 +5104,7 @@ window.openRescheduleRejectModal = openRescheduleRejectModal;
 window.confirmRescheduleReject = confirmRescheduleReject;
 window.toggleInstructorsTooltip = toggleInstructorsTooltip;
 window.openPickupModal = openPickupModal;
+window.copyPromoCouponTag = copyPromoCouponTag;
 window.confirmSendPickupReady = confirmSendPickupReady;
 window.executeSendPickupReady = executeSendPickupReady;
 window.collectPickupItem = collectPickupItem;
@@ -4678,7 +5118,7 @@ window.handlePickupNotReadyError = handlePickupNotReadyError;
 // ============================================================
 class WorkshopsDashboardElement extends HTMLElement {
     static get observedAttributes() {
-        return ['dashboard-data', 'sketch-download', 'action-error', 'staff-admin-data', 'staff-admin-action-result', 'order-debug'];
+        return ['dashboard-data', 'sketch-download', 'action-error', 'staff-admin-data', 'staff-admin-action-result', 'order-debug', 'order-search-results', 'pickup-queue-data', 'order-promo-coupons'];
     }
 
     connectedCallback() {
@@ -4776,6 +5216,36 @@ class WorkshopsDashboardElement extends HTMLElement {
                 if (typeof window.handleStaffAdminActionResult === 'function') window.handleStaffAdminActionResult(JSON.parse(newValue));
             } catch (err) {
                 console.error('[workshops-dashboard] Failed to parse staff-admin-action-result attribute:', err);
+            }
+            return;
+        }
+
+        if (name === 'order-search-results') {
+            if (!newValue || newValue === oldValue) return;
+            try {
+                if (typeof window.__wdHandleOrderSearchResults === 'function') window.__wdHandleOrderSearchResults(JSON.parse(newValue));
+            } catch (err) {
+                console.error('[workshops-dashboard] Failed to parse order-search-results attribute:', err);
+            }
+            return;
+        }
+
+        if (name === 'pickup-queue-data') {
+            if (!newValue || newValue === oldValue) return;
+            try {
+                if (typeof window.__wdHandlePickupQueueData === 'function') window.__wdHandlePickupQueueData(JSON.parse(newValue));
+            } catch (err) {
+                console.error('[workshops-dashboard] Failed to parse pickup-queue-data attribute:', err);
+            }
+            return;
+        }
+
+        if (name === 'order-promo-coupons') {
+            if (!newValue || newValue === oldValue) return;
+            try {
+                if (typeof window.__wdHandlePromoCouponTags === 'function') window.__wdHandlePromoCouponTags(JSON.parse(newValue));
+            } catch (err) {
+                console.error('[workshops-dashboard] Failed to parse order-promo-coupons attribute:', err);
             }
             return;
         }

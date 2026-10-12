@@ -14,6 +14,9 @@ import {
     cancelRescheduleRequest,
     approveRescheduleRequest,
     rejectRescheduleRequest,
+    searchDashboardOrders,
+    getPickupQueue,
+    getOrderPromoCouponTags,
 } from 'backend/dashboardService.web.js';
 
 import {
@@ -52,6 +55,16 @@ let __wdLoadGeneration = 0;
 // user's current toggle state instead of silently resetting it.
 
 let __wdLastFilters = {};
+
+// --- Global order search ("חיפוש לפי שם / טלפון / מספר הזמנה") ------------
+let __wdSearchGeneration = 0;
+
+// --- "איסוף פריטים" pickup queue — __wdPickupQueueLoaded tracks whether the
+// tab has been opened at least once, so markReadyForPickup/markItemsCollected
+// know whether to also refresh it (avoids an unnecessary call when the tab
+// was never opened).
+let __wdPickupQueueLoaded = false;
+let __wdPickupQueueGeneration = 0;
 
 $w.onReady(function () {
 
@@ -205,6 +218,73 @@ async function loadAndPushData(dashboardEl, filters) {
 
 }
 
+async function runOrderSearch(dashboardEl, query) {
+    const generation = ++__wdSearchGeneration;
+    try {
+        veloStaffDebug('searchDashboardOrders start', { query });
+        const data = await searchDashboardOrders(query);
+        if (generation !== __wdSearchGeneration) return;
+        dashboardEl.setAttribute('order-search-results', JSON.stringify({
+            query,
+            ...data,
+            __fetchedAt: Date.now(),
+        }));
+    } catch (err) {
+        if (generation !== __wdSearchGeneration) return;
+        console.error('[order-managment-dashboard-velo] searchDashboardOrders failed:', err?.message || err);
+        dashboardEl.setAttribute('order-search-results', JSON.stringify({
+            query,
+            error: err?.message || String(err),
+            __fetchedAt: Date.now(),
+        }));
+    }
+}
+
+let __wdPromoTagGeneration = 0;
+
+async function loadAndPushPromoCouponTags(dashboardEl, orderIds, requestId) {
+    const generation = ++__wdPromoTagGeneration;
+    try {
+        const data = await getOrderPromoCouponTags(orderIds);
+        if (generation !== __wdPromoTagGeneration) return;
+        dashboardEl.setAttribute('order-promo-coupons', JSON.stringify({
+            requestId: requestId || null,
+            coupons: data?.coupons || {},
+            orderIds: orderIds || [],
+            __fetchedAt: Date.now(),
+        }));
+    } catch (err) {
+        if (generation !== __wdPromoTagGeneration) return;
+        console.error('[order-managment-dashboard-velo] getOrderPromoCouponTags failed:', err?.message || err);
+        dashboardEl.setAttribute('order-promo-coupons', JSON.stringify({
+            requestId: requestId || null,
+            error: err?.message || String(err),
+            orderIds: orderIds || [],
+            __fetchedAt: Date.now(),
+        }));
+    }
+}
+
+async function loadAndPushPickupQueue(dashboardEl) {
+    const generation = ++__wdPickupQueueGeneration;
+    try {
+        veloStaffDebug('getPickupQueue start', {});
+        const data = await getPickupQueue();
+        if (generation !== __wdPickupQueueGeneration) return;
+        dashboardEl.setAttribute('pickup-queue-data', JSON.stringify({
+            ...data,
+            __fetchedAt: Date.now(),
+        }));
+    } catch (err) {
+        if (generation !== __wdPickupQueueGeneration) return;
+        console.error('[order-managment-dashboard-velo] getPickupQueue failed:', err?.message || err);
+        dashboardEl.setAttribute('pickup-queue-data', JSON.stringify({
+            error: err?.message || String(err),
+            __fetchedAt: Date.now(),
+        }));
+    }
+}
+
 // --- Staff & Shifts tab (Phase 2, Module B core) — isolated from the order
 
 // dashboard's data flow: separate attributes, no interaction with __wdLastFilters.
@@ -318,6 +398,26 @@ async function handleDashboardAction(dashboardEl, detail) {
             refreshOnly: true,
 
         });
+
+        return;
+
+    case 'searchOrders':
+
+        await runOrderSearch(dashboardEl, payload?.query || '');
+
+        return;
+
+    case 'loadPickupQueue':
+
+        __wdPickupQueueLoaded = true;
+
+        await loadAndPushPickupQueue(dashboardEl);
+
+        return;
+
+    case 'loadPromoCouponTags':
+
+        await loadAndPushPromoCouponTags(dashboardEl, payload?.orderIds || [], payload?.requestId);
 
         return;
 
@@ -437,6 +537,8 @@ async function handleDashboardAction(dashboardEl, detail) {
 
         }
 
+        if (__wdPickupQueueLoaded) loadAndPushPickupQueue(dashboardEl).catch(() => {});
+
         break;
 
     case 'markItemsCollected':
@@ -456,6 +558,8 @@ async function handleDashboardAction(dashboardEl, detail) {
             return;
 
         }
+
+        if (__wdPickupQueueLoaded) loadAndPushPickupQueue(dashboardEl).catch(() => {});
 
         break;
 

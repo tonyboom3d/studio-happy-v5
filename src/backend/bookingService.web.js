@@ -21,6 +21,7 @@ import {
     isTuftingServiceId,
 } from 'backend/sketchEditingPolicy.js';
 import { normalizeIsraeliPhone, getPhoneLookupVariants, phonesMatch, extractBookingIdsFromEcomOrder } from 'backend/orderUtils.js';
+import { buildOrderViewUrl } from 'backend/orderLookupService.js';
 import * as orderReconciliation from 'backend/orderReconciliation.js';
 import {
     ALL_CANDLES_SERVICE_IDS,
@@ -1111,11 +1112,14 @@ export const createAndCheckout = webMethod(Permissions.Anyone, async (orderData)
     const newCheckout = await elevatedCreateCheckout(checkoutOptions);
     // console.log('[createAndCheckout] Checkout created:', newCheckout?._id);
 
-    // --- שלב 4: עדכון WorkshopOrders עם checkoutId ---
+    // --- שלב 4: עדכון WorkshopOrders עם checkoutId וקישור ישיר להזמנה ---
+    // orderUrl נבנה פעם אחת לפי _id שחזר מה-insert — נשמר ב-CMS כך שלצוות
+    // יהיה קישור מוכן להעתקה בלי לבנות אותו ידנית בכל פעם.
     await wixData.update('WorkshopOrders', {
         ...workshopOrder,
         checkoutId: newCheckout._id,
         status: 'checkout_created',
+        orderUrl: buildOrderViewUrl({ source: 'cms', id: workshopOrder._id }),
     }, { suppressAuth: true });
 
     return {

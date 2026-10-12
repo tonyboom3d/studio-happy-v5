@@ -861,28 +861,80 @@ export async function get_confirmReschedule(request) {
 // Other values: already_scheduled | no_items | collected | expired | quota_exceeded.
 // ============================================================
 
-export async function get_startPickup(request) {
+function logStartPickup(step, details) {
+  console.log(`[startPickup] ${step}`, details ? JSON.stringify(details) : '');
+}
+
+async function readStartPickupParams(request) {
+  const query = request?.query || {};
+  let body = {};
   try {
+    body = (await request.body?.json()) || {};
+  } catch (_) {
+    body = {};
+  }
+  const orderId = String(query.order_id || body.order_id || body.orderId || '').trim();
+  const subscriberId = String(query.subscriber_id || body.subscriber_id || body.subscriberId || '').trim();
+  return {
+    orderId,
+    subscriberId,
+    method: request?.method || request?.httpMethod || '',
+    queryKeys: Object.keys(query),
+    bodyKeys: Object.keys(body || {}),
+    unresolvedTag: /\{\{|\}\}/.test(orderId) || /^cuf_\d+$/i.test(orderId),
+    hasApiKey: !!getHeader(request, 'X-API-KEY'),
+  };
+}
+
+function startPickupResponse(body) {
+  logStartPickup('response', {
+    status: body.status,
+    pickup_status: body.pickup_status || null,
+    ai_reply: body.ai_reply || body.error || null,
+    hasLink: !!body.pickup_link,
+  });
+  return ok({ headers: { 'Content-Type': 'application/json' }, body });
+}
+
+async function runStartPickup(request, label) {
+  const started = Date.now();
+  try {
+    const params = await readStartPickupParams(request);
+    logStartPickup('hit', { label, ...params, ms: 0 });
+
     if (!(await authorizeManyChatWebhook(request))) {
+      logStartPickup('unauthorized', { label, hasApiKey: params.hasApiKey, ms: Date.now() - started });
       return response({
         status: 401,
         headers: { 'Content-Type': 'application/json' },
-        body: { status: 'error', error: 'unauthorized' },
+        body: { status: 'error', error: 'unauthorized', ai_reply: 'unauthorized' },
       });
     }
 
-    const orderId = String(request.query?.order_id || '').trim();
-    const subscriberId = String(request.query?.subscriber_id || '').trim();
-    if (!orderId) {
-      return badRequest({ headers: { 'Content-Type': 'application/json' }, body: { status: 'error', error: 'missing_order_id' } });
+    const { orderId, subscriberId } = params;
+    if (!orderId || params.unresolvedTag) {
+      logStartPickup('missing-order-id', { label, orderId, unresolvedTag: params.unresolvedTag, ms: Date.now() - started });
+      return startPickupResponse({ status: 'error', error: 'missing_order_id', ai_reply: 'חסר מזהה הזמנה לבדיקת האיסוף.' });
     }
 
-    const order = await wixData.get('WorkshopOrders', orderId, { suppressAuth: true, consistentRead: true }).catch(() => null);
+    const order = await wixData.get('WorkshopOrders', orderId, { suppressAuth: true, consistentRead: true }).catch((err) => {
+      logStartPickup('order-get-failed', { orderId, error: err?.message || String(err) });
+      return null;
+    });
     if (!order) {
-      return ok({ headers: { 'Content-Type': 'application/json' }, body: { status: 'error', ai_reply: 'לא מצאנו את ההזמנה 🔍' } });
+      logStartPickup('order-not-found', { orderId, ms: Date.now() - started });
+      return startPickupResponse({ status: 'error', ai_reply: 'לא מצאנו את ההזמנה 🔍' });
     }
 
     const eligibility = getPickupEligibility(order);
+    logStartPickup('eligibility', {
+      orderId,
+      subscriberId: subscriberId || null,
+      status: eligibility.status,
+      readyItems: (order.pickupItems || []).filter((i) => i.state === 'ready').length,
+      hasNotifiedAt: !!order.pickupReadyNotifiedAt,
+      ms: Date.now() - started,
+    });
 
     // Already booked a pickup slot that hasn't passed yet → don't issue a new booking link.
     if (eligibility.status !== 'no_items' && eligibility.status !== 'collected') {
@@ -901,53 +953,41 @@ export async function get_startPickup(request) {
           syncPickupStatus(subscriberId, 'already_scheduled').catch(() => {});
           syncPickupLink(subscriberId, link, slotLabel).catch(() => {});
         }
-        return ok({
-          headers: { 'Content-Type': 'application/json' },
-          body: {
-            status: 'ok',
-            pickup_status: 'already_scheduled',
-            pickup_link: link,
-            pickup_slot_label: slotLabel,
-            expires_at: expiresAt.toISOString(),
-            ai_reply: `כבר תואם לך איסוף למועד: ${slotLabel} 🤍`,
-          },
+        return startPickupResponse({
+          status: 'ok',
+          pickup_status: 'already_scheduled',
+          pickup_link: link,
+          pickup_slot_label: slotLabel,
+          expires_at: expiresAt.toISOString(),
+          ai_reply: `כבר תואם לך איסוף למועד: ${slotLabel} 🤍`,
         });
       }
     }
 
     if (eligibility.status === 'expired') {
       if (subscriberId) syncPickupStatus(subscriberId, 'expired').catch(() => {});
-      return ok({
-        headers: { 'Content-Type': 'application/json' },
-        body: {
-          status: 'ok',
-          pickup_status: 'expired',
-          ai_reply: `עברו ${PICKUP_WINDOW_DAYS} ימים מאז שהפריטים הוכרזו מוכנים לאיסוף. ניתן לפנות לשירות הלקוחות לבדיקת המשך 💬`,
-        },
+      return startPickupResponse({
+        status: 'ok',
+        pickup_status: 'expired',
+        ai_reply: `עברו ${PICKUP_WINDOW_DAYS} ימים מאז שהפריטים הוכרזו מוכנים לאיסוף. ניתן לפנות לשירות הלקוחות לבדיקת המשך 💬`,
       });
     }
     if (eligibility.status === 'quota_exceeded') {
       if (subscriberId) syncPickupStatus(subscriberId, 'quota_exceeded').catch(() => {});
-      return ok({
-        headers: { 'Content-Type': 'application/json' },
-        body: {
-          status: 'ok',
-          pickup_status: 'quota_exceeded',
-          ai_reply: `נוצלו כל ${PICKUP_MAX_APPOINTMENTS} התיאומים האפשריים להזמנה זו. ניתן לפנות לשירות הלקוחות להמשך תיאום 💬`,
-        },
+      return startPickupResponse({
+        status: 'ok',
+        pickup_status: 'quota_exceeded',
+        ai_reply: `נוצלו כל ${PICKUP_MAX_APPOINTMENTS} התיאומים האפשריים להזמנה זו. ניתן לפנות לשירות הלקוחות להמשך תיאום 💬`,
       });
     }
     if (eligibility.status === 'no_items' || eligibility.status === 'collected') {
       if (subscriberId) syncPickupStatus(subscriberId, eligibility.status).catch(() => {});
-      return ok({
-        headers: { 'Content-Type': 'application/json' },
-        body: {
-          status: 'ok',
-          pickup_status: eligibility.status,
-          ai_reply: eligibility.status === 'collected'
-            ? 'כל הפריטים בהזמנה זו נאספו כבר 🎉'
-            : 'לא נמצאו פריטים מוכנים לאיסוף להזמנה זו כרגע.',
-        },
+      return startPickupResponse({
+        status: 'ok',
+        pickup_status: eligibility.status,
+        ai_reply: eligibility.status === 'collected'
+          ? 'כל הפריטים בהזמנה זו נאספו כבר 🎉'
+          : 'לא נמצאו פריטים מוכנים לאיסוף להזמנה זו כרגע.',
       });
     }
 
@@ -959,23 +999,35 @@ export async function get_startPickup(request) {
       syncPickupLink(subscriberId, link).catch(() => {});
     }
 
-    return ok({
-      headers: { 'Content-Type': 'application/json' },
-      body: {
-        status: 'ok',
-        pickup_status: 'true',
-        pickup_link: link,
-        pickup_days_left: Math.max(0, Math.ceil((eligibility.deadline.getTime() - Date.now()) / 86400000)),
-        pickup_appointments_used: eligibility.used,
-        pickup_appointments_remaining: eligibility.remaining,
-        expires_at: expiresAt.toISOString(),
-        ai_reply: 'הנה קישור לתיאום מועד איסוף — הקישור בתוקף ל-30 דקות ⏱️',
-      },
+    logStartPickup('issuing-link', { orderId, ms: Date.now() - started });
+    return startPickupResponse({
+      status: 'ok',
+      pickup_status: 'true',
+      pickup_link: link,
+      pickup_days_left: Math.max(0, Math.ceil((eligibility.deadline.getTime() - Date.now()) / 86400000)),
+      pickup_appointments_used: eligibility.used,
+      pickup_appointments_remaining: eligibility.remaining,
+      expires_at: expiresAt.toISOString(),
+      ai_reply: 'הנה קישור לתיאום מועד איסוף — הקישור בתוקף ל-30 דקות ⏱️',
     });
   } catch (err) {
-    console.error('[http-functions] get_startPickup failed:', err?.message || err);
-    return serverError({ body: { status: 'error', error: String(err?.message || err) } });
+    console.error('[startPickup] failed', label, err?.message || err);
+    return startPickupResponse({
+      status: 'error',
+      error: String(err?.message || err),
+      ai_reply: 'לא הצלחנו לבדוק את האיסוף כרגע. נסו שוב בעוד רגע.',
+    });
   }
+}
+
+/** GET — ManyChat External Request set to GET */
+export async function get_startPickup(request) {
+  return runStartPickup(request, 'get_startPickup');
+}
+
+/** POST and any other method — ManyChat External Request defaults to POST */
+export async function use_startPickup(request) {
+  return runStartPickup(request, 'use_startPickup');
 }
 
 // ============================================================

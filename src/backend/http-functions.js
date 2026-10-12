@@ -857,8 +857,9 @@ export async function get_confirmReschedule(request) {
 // Called from the "תיאום איסוף" quick-reply button on the pickup_ready
 // WhatsApp template (order_id comes from the pickup_order_id custom field
 // set in sendPickupReadyManyChat). Response drives the flow's branching via
-// pickup_status (text): "true" when the customer can book a slot.
-// Other values: already_scheduled | no_items | collected | expired | quota_exceeded.
+// pickup_status (text) matches the ManyChat Condition:
+// ok | expired | quota_exceeded | collected | no_items | already_scheduled.
+// pickup_scheduled is not returned by this endpoint.
 // ============================================================
 
 function logStartPickup(step, details) {
@@ -995,14 +996,14 @@ async function runStartPickup(request, label) {
     const link = `${PICKUP_PAGE_URL}?orderId=${encodeURIComponent(orderId)}&token=${encodeURIComponent(token)}&sid=${encodeURIComponent(subscriberId)}`;
 
     if (subscriberId) {
-      syncPickupStatus(subscriberId, 'true').catch(() => {});
+      syncPickupStatus(subscriberId, 'ok').catch(() => {});
       syncPickupLink(subscriberId, link).catch(() => {});
     }
 
     logStartPickup('issuing-link', { orderId, ms: Date.now() - started });
     return startPickupResponse({
       status: 'ok',
-      pickup_status: 'true',
+      pickup_status: 'ok',
       pickup_link: link,
       pickup_days_left: Math.max(0, Math.ceil((eligibility.deadline.getTime() - Date.now()) / 86400000)),
       pickup_appointments_used: eligibility.used,

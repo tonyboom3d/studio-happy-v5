@@ -20,8 +20,9 @@
  * - פלט:  CustomEvent `submit-request` עם detail = { slotKey }.
  * - פלט:  CustomEvent `confirm-pickup-request` (ללא detail) — לקוח מאשר שאסף את הפריטים.
  *
- * אין יותר הצגת QR — במקום זאת מוצג טיימר למועד האיסוף, הוראות הגעה
- * (כתובת הסטודיו), וכפתור "אישור איסוף הפריטים" שנפתח רק החל מתאריך
+ * אין יותר הצגת QR — במקום זאת מוצג טיימר (ימים/שעות/דקות/שניות, בלי יחידות
+ * שהערך שלהן 0), הוראות הגעה (כתובת הסטודיו), כפתורי יומן Google / Apple
+ * (תזכורת שעה לפני), וכפתור "אישור איסוף הפריטים" שנפתח רק החל מתאריך
  * האיסוף שנקבע (ולא משעתו המדויקת).
  */
 
@@ -50,7 +51,15 @@ pickup-scheduler * { box-sizing: border-box; font-family: inherit; }
 .ps-msg.ps-bad { background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; }
 .ps-msg.ps-good { background: #f3ecfb; border: 1px solid #cbb2e6; color: #581E83; }
 .ps-card { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 14px; margin-bottom: 14px; font-size: 14px; line-height: 1.6; }
-.ps-countdown { font-size: 16px; font-weight: 800; color: #581E83; margin-top: 10px; }
+.ps-countdown { margin-top: 12px; }
+.ps-timer { display: flex; justify-content: center; gap: 8px; }
+.ps-timer-unit { min-width: 64px; background: #f3ecfb; border: 1px solid #d9c3ee; border-radius: 12px; padding: 8px 6px; text-align: center; }
+.ps-timer-num { display: block; font-size: 22px; font-weight: 800; color: #581E83; line-height: 1.1; }
+.ps-timer-lbl { display: block; font-size: 11px; color: #6b7280; margin-top: 2px; }
+.ps-timer-due { font-size: 16px; font-weight: 800; color: #581E83; text-align: center; }
+.ps-remind { display: flex; gap: 8px; margin-top: 10px; }
+.ps-remind a, .ps-remind button { flex: 1; display: block; text-align: center; text-decoration: none; border-radius: 10px; padding: 10px 8px; font-size: 13px; font-weight: 700; cursor: pointer; font-family: inherit; background: #fff; color: #581E83; border: 1px solid #cbb2e6; }
+.ps-remind a:hover, .ps-remind button:hover { background: #f3ecfb; }
 .ps-items-line { margin-top: 6px; font-size: 14px; }
 .ps-address-title { font-weight: 700; margin-bottom: 4px; }
 .ps-confirm-note { font-size: 12.5px; color: #6b7280; margin-top: 8px; text-align: center; }
@@ -142,18 +151,107 @@ function canConfirmPickupNow(startIso) {
     return ilDateKey(new Date().toISOString()) >= ilDateKey(startIso);
 }
 
-function formatCountdown(startIso) {
+function countdownUnits(startIso) {
     const diffMs = new Date(startIso).getTime() - Date.now();
-    if (diffMs <= 0) return 'מועד האיסוף הגיע';
-    const totalMinutes = Math.floor(diffMs / 60000);
-    const days = Math.floor(totalMinutes / 1440);
-    const hours = Math.floor((totalMinutes % 1440) / 60);
-    const minutes = totalMinutes % 60;
-    const parts = [];
-    if (days > 0) parts.push(`${days} ${days === 1 ? 'יום' : 'ימים'}`);
-    if (hours > 0) parts.push(`${hours} ${hours === 1 ? 'שעה' : 'שעות'}`);
-    if (!days && minutes > 0) parts.push(`${minutes} ${minutes === 1 ? 'דקה' : 'דקות'}`);
-    return parts.length ? `בעוד ${parts.join(' ו-')}` : 'בקרוב';
+    if (diffMs <= 0) return null;
+    const totalSeconds = Math.floor(diffMs / 1000);
+    const days = Math.floor(totalSeconds / 86400);
+    const hours = Math.floor((totalSeconds % 86400) / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+    const units = [];
+    if (days) units.push({ n: days, label: days === 1 ? 'יום' : 'ימים' });
+    if (hours) units.push({ n: hours, label: hours === 1 ? 'שעה' : 'שעות' });
+    if (minutes) units.push({ n: minutes, label: minutes === 1 ? 'דקה' : 'דקות' });
+    if (seconds) units.push({ n: seconds, label: seconds === 1 ? 'שנייה' : 'שניות' });
+    return units;
+}
+
+function countdownHtml(startIso) {
+    const units = countdownUnits(startIso);
+    if (!units || !units.length) return '<div class="ps-timer-due">מועד האיסוף הגיע</div>';
+    return `<div class="ps-timer">${units.map((u) => `
+        <div class="ps-timer-unit">
+            <span class="ps-timer-num">${String(u.n).padStart(2, '0')}</span>
+            <span class="ps-timer-lbl">${u.label}</span>
+        </div>`).join('')}</div>`;
+}
+
+function toIcsUtc(iso) {
+    const d = new Date(iso);
+    const p = (n) => String(n).padStart(2, '0');
+    return `${d.getUTCFullYear()}${p(d.getUTCMonth() + 1)}${p(d.getUTCDate())}T${p(d.getUTCHours())}${p(d.getUTCMinutes())}${p(d.getUTCSeconds())}Z`;
+}
+
+function icsEscape(value) {
+    return String(value ?? '').replace(/\\/g, '\\\\').replace(/\r?\n/g, '\\n').replace(/,/g, '\\,').replace(/;/g, '\\;');
+}
+
+function pickupEventDetails(appointment, itemsSummary) {
+    const itemsLine = formatItemsSummaryLine(itemsSummary);
+    const title = 'איסוף בסטודיו הפי';
+    const description = [
+        itemsLine ? `לאיסוף: ${itemsLine}` : '',
+        `כתובת: ${STUDIO_ADDRESS}`,
+    ].filter(Boolean).join('\n');
+    return { title, description, location: STUDIO_ADDRESS, start: appointment.start, end: appointment.end };
+}
+
+function googleCalendarUrl(appointment, itemsSummary) {
+    const ev = pickupEventDetails(appointment, itemsSummary);
+    const params = new URLSearchParams({
+        action: 'TEMPLATE',
+        text: ev.title,
+        dates: `${toIcsUtc(ev.start)}/${toIcsUtc(ev.end)}`,
+        details: ev.description,
+        location: ev.location,
+    });
+    return `https://calendar.google.com/calendar/render?${params.toString()}`;
+}
+
+function buildPickupIcs(appointment, itemsSummary) {
+    const ev = pickupEventDetails(appointment, itemsSummary);
+    const uid = `${icsEscape(appointment.slotKey || toIcsUtc(ev.start))}@studiohappy.art`;
+    return [
+        'BEGIN:VCALENDAR',
+        'VERSION:2.0',
+        'PRODID:-//Studio Happy//Pickup//HE',
+        'CALSCALE:GREGORIAN',
+        'METHOD:PUBLISH',
+        'BEGIN:VEVENT',
+        `UID:${uid}`,
+        `DTSTAMP:${toIcsUtc(new Date().toISOString())}`,
+        `DTSTART:${toIcsUtc(ev.start)}`,
+        `DTEND:${toIcsUtc(ev.end)}`,
+        `SUMMARY:${icsEscape(ev.title)}`,
+        `LOCATION:${icsEscape(ev.location)}`,
+        `DESCRIPTION:${icsEscape(ev.description)}`,
+        'BEGIN:VALARM',
+        'TRIGGER:-PT1H',
+        'ACTION:DISPLAY',
+        'DESCRIPTION:תזכורת: איסוף בסטודיו הפי',
+        'END:VALARM',
+        'END:VEVENT',
+        'END:VCALENDAR',
+    ].join('\r\n');
+}
+
+function downloadPickupIcs(appointment, itemsSummary) {
+    const ics = buildPickupIcs(appointment, itemsSummary);
+    const blob = new Blob([ics], { type: 'text/calendar;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const appleMobile = /iPad|iPhone|iPod/.test(navigator.userAgent);
+    if (appleMobile) {
+        window.location.href = url;
+        return;
+    }
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'studio-happy-pickup.ics';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1500);
 }
 
 function formatItemsSummaryLine(summary) {
@@ -194,7 +292,11 @@ class PickupScheduler extends HTMLElement {
             <div class="ps-card">
                 <div><strong>מועד האיסוף שנקבע:</strong> ${psEsc(dateLabel)}, ${psEsc(formatSlotTime(appointment.start, appointment.end))}</div>
                 ${itemsLine ? `<div class="ps-items-line">לאיסוף: <strong>${psEsc(itemsLine)}</strong></div>` : ''}
-                <div class="ps-countdown">${psEsc(formatCountdown(appointment.start))}</div>
+                <div class="ps-countdown">${countdownHtml(appointment.start)}</div>
+                <div class="ps-remind">
+                    <a href="${psEsc(googleCalendarUrl(appointment, itemsSummary))}" target="_blank" rel="noopener noreferrer">יומן Google</a>
+                    <button type="button" data-apple-cal>יומן Apple</button>
+                </div>
             </div>
             <div class="ps-card">
                 <div class="ps-address-title">הוראות הגעה</div>
@@ -249,8 +351,8 @@ class PickupScheduler extends HTMLElement {
             const el = this.querySelector('.ps-countdown');
             const appointment = this._submitResult?.appointment || this._context?.currentAppointment;
             if (!el || !appointment) return;
-            el.textContent = formatCountdown(appointment.start);
-        }, 30000);
+            el.innerHTML = countdownHtml(appointment.start);
+        }, 1000);
     }
 
     connectedCallback() {
@@ -262,6 +364,14 @@ class PickupScheduler extends HTMLElement {
         this._clickBound = true;
 
         this.addEventListener('click', (e) => {
+            const appleBtn = e.target.closest('[data-apple-cal]');
+            if (appleBtn) {
+                const appointment = this._submitResult?.appointment || this._context?.currentAppointment;
+                const itemsSummary = this._submitResult?.itemsSummary || this._context?.itemsSummary;
+                if (appointment) downloadPickupIcs(appointment, itemsSummary);
+                return;
+            }
+
             const confirmBtn = e.target.closest('[data-confirm-pickup]');
             if (confirmBtn) {
                 if (confirmBtn.disabled || this._confirmBusy) return;

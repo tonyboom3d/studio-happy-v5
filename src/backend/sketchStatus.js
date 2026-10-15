@@ -12,6 +12,7 @@ export const SKETCH_STATUS = {
     PREPARING: 'בהכנה',
     READY: 'מוכנה',
     READY_FOR_PICKUP: 'מוכנה לאיסוף',
+    COLLECTED: 'נאסף',
     REJECTED: 'לא מאושרת לביצוע',
 };
 
@@ -34,7 +35,8 @@ export function isLockedStatus(status) {
     const normalized = normalizeSketchStatus(status);
     return normalized === SKETCH_STATUS.READY
         || normalized === SKETCH_STATUS.PREPARING
-        || normalized === SKETCH_STATUS.READY_FOR_PICKUP;
+        || normalized === SKETCH_STATUS.READY_FOR_PICKUP
+        || normalized === SKETCH_STATUS.COLLECTED;
 }
 
 /** Statuses where the customer is allowed to (re-)select a sketch. */

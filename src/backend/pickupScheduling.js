@@ -36,6 +36,7 @@ import { getOrderPickupDisplayItems, getCurrentStaffName } from 'backend/dashboa
 import { getSecret } from 'wix-secrets-backend';
 import { randomBytes } from 'crypto';
 import { WORKSHOP_SERVICE_IDS, ALL_CANDLES_SERVICE_IDS } from 'backend/workshopServiceIds.js';
+import { SKETCH_STATUS } from 'backend/sketchStatus.js';
 const SA = { suppressAuth: true };
 const SAC = { suppressAuth: true, consistentRead: true };
 const ISRAEL_TZ = 'Asia/Jerusalem';
@@ -533,6 +534,30 @@ export async function createPickupAppointment(orderId, slotKey) {
 }
 
 /**
+ * Sets SketchSelections.sketchStatus to "נאסף" for tufting items that were
+ * just collected. Pickup state on the order alone left the sketch field on
+ * "מוכנה לאיסוף".
+ */
+export async function markCollectedSketchStatuses(items) {
+    const ids = [...new Set((items || [])
+        .map((item) => String(item?.key || ''))
+        .filter((key) => key.startsWith('sketch:'))
+        .map((key) => key.slice('sketch:'.length))
+        .filter(Boolean))];
+    if (!ids.length) return;
+
+    const found = await wixData.query('SketchSelections')
+        .hasSome('_id', ids)
+        .limit(ids.length)
+        .find(SA);
+    const toUpdate = (found.items || [])
+        .filter((sel) => sel.sketchStatus !== SKETCH_STATUS.COLLECTED)
+        .map((sel) => ({ ...sel, sketchStatus: SKETCH_STATUS.COLLECTED, isLocked: true }));
+    if (!toUpdate.length) return;
+    await wixData.bulkUpdate('SketchSelections', toUpdate, SA);
+}
+
+/**
  * Customer self-service "אישור איסוף" button (replaces the staff QR-scan
  * handover) — marks every "ready" item on the current appointment as
  * collected. Gated by calendar date only (Israel time), not the exact slot
@@ -555,6 +580,8 @@ export async function markOrderPickupCollectedByCustomer(orderId) {
     if (!readyItems.length) {
         throw new Error('NO_ITEMS: אין פריטים הממתינים לאיסוף.');
     }
+
+    await markCollectedSketchStatuses(readyItems);
 
     const now = new Date().toISOString();
     const pickupItems = (order.pickupItems || []).map((i) => (
@@ -757,6 +784,8 @@ export async function confirmPickupHandover(orderId, pass, code) {
 
     const readyItems = (order.pickupItems || []).filter((i) => i.state === 'ready');
     if (!readyItems.length) throw new Error('NO_ITEMS: אין פריטים הממתינים לאיסוף בהזמנה זו.');
+
+    await markCollectedSketchStatuses(readyItems);
 
     const nowIso = new Date(now).toISOString();
     const pickupItems = (order.pickupItems || []).map((i) => (

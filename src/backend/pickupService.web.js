@@ -2,10 +2,8 @@
  * pickupService.web.js — "מוכן לאיסוף" / "פריט נאסף" flow (order dashboard).
  *
  * Item-level pickup state for tufting rugs / ceramics pieces is stored on
- * WorkshopOrders.pickupItems (array of { key, label, state, readyAt,
- * collectedAt, notifiedAt }) — no CMS schema for the sketches/products
- * themselves is touched. The UI (order-manager-dashboard.js) computes the
- * item catalog (key + label) per order and passes only the checked items in.
+ * WorkshopOrders.pickupItems. Marking a rug collected also sets
+ * SketchSelections.sketchStatus to "נאסף".
  *
  * "מוכן לאיסוף" sends exactly one WhatsApp message per action (ManyChat
  * template) covering every item marked ready in that action — see
@@ -15,6 +13,7 @@ import { Permissions, webMethod } from 'wix-web-module';
 import { getItemWithRetry } from 'backend/wixDataRetry.js';
 import { sendPickupReadyManyChat } from 'backend/manychatService.jsw';
 import { assertPermission, logOrderAction } from 'backend/dashboardService.web.js';
+import { markCollectedSketchStatuses } from 'backend/pickupScheduling.js';
 import { mergePatchWorkshopOrder } from 'backend/workshopOrderPatch.js';
 
 function normalizeItemsInput(items) {
@@ -130,6 +129,7 @@ export const markItemsCollected = webMethod(Permissions.SiteMember, async (order
     const cancelNotify = !stillHasReadyItems && order.pickupStaffNotifyStatus === 'pending';
     if (cancelNotify) patch.pickupStaffNotifyStatus = 'none';
 
+    await markCollectedSketchStatuses(requestedItems);
     await mergePatchWorkshopOrder(orderId, patch, 'pickupService.markItemsCollected');
 
     const labelsLine = requestedItems.map((it) => it.label).join(', ');

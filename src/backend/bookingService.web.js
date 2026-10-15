@@ -2225,7 +2225,7 @@ async function _fetchServicePricingInternal(serviceIds) {
         filter: { "serviceId": { "$in": targetServiceIds } }
     };
 
-    const response = await serviceOptionsAndVariants.queryServiceOptionsAndVariants(query);
+    const response = await auth.elevate(serviceOptionsAndVariants.queryServiceOptionsAndVariants)(query);
     const list = response?.serviceOptionsAndVariantsList || [];
 
     const result = {};
@@ -2330,7 +2330,7 @@ async function _fetchCeramicsPricingInternal(serviceId) {
     const ALL_DAYS = ['SUNDAY', 'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY'];
     const byDay = ALL_DAYS.reduce((acc, day) => { acc[day] = { solo: null, parentChild: null, extraItem: null }; return acc; }, {});
 
-    const response = await serviceOptionsAndVariants.queryServiceOptionsAndVariants({
+    const response = await auth.elevate(serviceOptionsAndVariants.queryServiceOptionsAndVariants)({
         filter: { serviceId: { $in: [serviceId] } },
     });
     const list = response?.serviceOptionsAndVariantsList || [];

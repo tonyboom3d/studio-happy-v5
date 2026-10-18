@@ -14,7 +14,7 @@ import wixLocation from 'wix-location';
 
 const ELEMENT_ID = '#customElement2';
 const FORM_ID = '#form1';
-const PHONE_FIELD = 'form_field_2';
+const PHONE_FIELD = 'phone';
 const WORKSHOP_QUERY_KEY = 'workshop';
 
 $w.onReady(function () {

@@ -1287,7 +1287,7 @@ const STYLE = `
     .bl-field input:focus, .bl-field textarea:focus, .bl-date-trigger:focus {
         box-shadow: 0 0 0 3px rgba(255,255,255,0.7);
     }
-    .bl-field input[type="tel"] { direction: ltr; text-align: right; }
+    #blPhone { direction: ltr; text-align: right; }
     .bl-field textarea { resize: vertical; min-height: 96px; }
     .bl-date-trigger {
         display: flex;
@@ -2138,7 +2138,7 @@ class BirthdayLandingElement extends HTMLElement {
                     </div>
                     <div class="bl-field">
                         <label for="blPhone">טלפון${req}</label>
-                        <input type="tel" id="blPhone" name="phone" inputmode="tel" placeholder="050-0000000" autocomplete="tel" />
+                        <input type="text" id="blPhone" name="phone" inputmode="tel" placeholder="050-0000000" autocomplete="tel" />
                     </div>
                     <div class="bl-field">
                         <label for="blDateTrigger">תאריך מועדף${req}</label>
@@ -2522,9 +2522,9 @@ class BirthdayLandingElement extends HTMLElement {
         cal.setAttribute('role', 'dialog');
         cal.innerHTML = `
             <div class="bl-cal-head">
-                <button type="button" class="bl-cal-nav" data-cal-shift="-1" aria-label="חודש קודם">›</button>
+                <button type="button" class="bl-cal-nav" data-cal-shift="-1" aria-label="חודש קודם">‹</button>
                 <strong>${HE_MONTHS[m]} ${y}</strong>
-                <button type="button" class="bl-cal-nav" data-cal-shift="1" aria-label="חודש הבא">‹</button>
+                <button type="button" class="bl-cal-nav" data-cal-shift="1" aria-label="חודש הבא">›</button>
             </div>
             <div class="bl-cal-week">${HE_WEEKDAYS.map((d) => `<span>${d}</span>`).join('')}</div>
             <div class="bl-cal-grid">${cells.join('')}</div>

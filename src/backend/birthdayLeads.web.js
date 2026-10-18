@@ -47,7 +47,7 @@ const STUDIO_MANYCHAT_SUBSCRIBER_ID = '1613710579';
 const FORM_FIELDS = {
     fullName: 'form_field',
     email: 'form_field_1',
-    phone: 'form_field_2',
+    phone: 'phone',
     preferredDate: 'form_field_3',
     workshopType: 'form_field_4',
     childrenCount: 'num_of_kids',

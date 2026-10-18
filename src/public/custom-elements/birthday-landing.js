@@ -1310,11 +1310,14 @@ const STYLE = `
     .bl-cal-week, .bl-cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
     .bl-cal-week span { text-align: center; font-size: 12px; font-weight: 800; color: #A56AF0; padding: 4px 0; }
     .bl-cal-day {
-        height: 34px; border: none; border-radius: 10px; background: transparent;
-        font-weight: 700; font-size: 13px; color: #262626;
+        width: 34px; height: 34px; margin: 0 auto; border: none; border-radius: 50%;
+        background: transparent; font-weight: 700; font-size: 13px; color: #262626;
     }
     .bl-cal-day:hover { background: #f4eefe; }
-    .bl-cal-day.is-selected { background: #A56AF0; color: #fff; }
+    .bl-cal-day.is-past { color: #c5c5c5; cursor: default; }
+    .bl-cal-day.is-past:hover { background: transparent; }
+    .bl-cal-day.is-today { box-shadow: inset 0 0 0 2px #A56AF0; }
+    .bl-cal-day.is-selected { background: #A56AF0; color: #fff; box-shadow: none; }
     .bl-cal-empty { height: 34px; }
     .bl-multiselect { display: flex; flex-wrap: wrap; gap: 8px; }
     .bl-chip-option {
@@ -2452,12 +2455,10 @@ class BirthdayLandingElement extends HTMLElement {
     }
 
     _shiftCalendar(delta) {
-        const today = todayParts();
         let { y, m } = this._calView;
         m += delta;
         if (m < 0) { m = 11; y -= 1; }
         if (m > 11) { m = 0; y += 1; }
-        if (y < today.y || (y === today.y && m < today.m)) return;
         this._calView = { y, m };
         this._renderCalendar();
     }
@@ -2476,19 +2477,20 @@ class BirthdayLandingElement extends HTMLElement {
     _renderCalendar() {
         const { y, m } = this._calView;
         const today = todayParts();
-        const canPrev = y > today.y || m > today.m;
         const selected = this._state.form.preferredDate;
         const firstWeekday = new Date(y, m, 1).getDay();
         const daysInMonth = new Date(y, m + 1, 0).getDate();
         const cells = [];
         for (let i = 0; i < firstWeekday; i++) cells.push('<span class="bl-cal-empty"></span>');
         for (let day = 1; day <= daysInMonth; day++) {
+            const iso = toIsoDate(y, m, day);
+            const isToday = y === today.y && m === today.m && day === today.day;
             if (isBeforeToday(y, m, day)) {
-                cells.push('<span class="bl-cal-empty"></span>');
+                cells.push(`<button type="button" class="bl-cal-day is-past" disabled>${day}</button>`);
                 continue;
             }
-            const iso = toIsoDate(y, m, day);
-            cells.push(`<button type="button" class="bl-cal-day ${iso === selected ? 'is-selected' : ''}" data-cal-day="${iso}">${day}</button>`);
+            const classes = ['bl-cal-day', iso === selected ? 'is-selected' : '', isToday ? 'is-today' : ''].filter(Boolean).join(' ');
+            cells.push(`<button type="button" class="${classes}" data-cal-day="${iso}">${day}</button>`);
         }
         const prevCal = this.querySelector('#blCalendar');
         if (prevCal) prevCal.remove();
@@ -2498,7 +2500,7 @@ class BirthdayLandingElement extends HTMLElement {
         cal.setAttribute('role', 'dialog');
         cal.innerHTML = `
             <div class="bl-cal-head">
-                <button type="button" class="bl-cal-nav" data-cal-shift="-1" ${canPrev ? '' : 'disabled'} aria-label="חודש קודם">›</button>
+                <button type="button" class="bl-cal-nav" data-cal-shift="-1" aria-label="חודש קודם">›</button>
                 <strong>${HE_MONTHS[m]} ${y}</strong>
                 <button type="button" class="bl-cal-nav" data-cal-shift="1" aria-label="חודש הבא">‹</button>
             </div>

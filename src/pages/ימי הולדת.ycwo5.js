@@ -14,6 +14,7 @@ import wixLocation from 'wix-location';
 
 const ELEMENT_ID = '#customElement2';
 const FORM_ID = '#form1';
+const PHONE_FIELD = 'form_field_2';
 const WORKSHOP_QUERY_KEY = 'workshop';
 
 $w.onReady(function () {
@@ -74,6 +75,7 @@ async function handleSubmitLead(el, detail) {
     } catch (err) {
         console.error('[birthday-landing][velo] real form submit error:', err?.message || err);
         const formRejected = /validation failed|doesn't satisfy form requirements/i.test(String(err?.message || err || ''));
+        if (formRejected) clearFormPhone();
         pushLeadResult(el, requestId, {
             ok: false,
             message: formRejected
@@ -89,6 +91,15 @@ async function handleSubmitLead(el, detail) {
     });
 
     pushLeadResult(el, requestId, { ok: true, message: prep.message });
+}
+
+/** Drops an invalid phone from #form1. The next submit writes it again. */
+function clearFormPhone() {
+    try {
+        $w(FORM_ID).setFieldValues({ [PHONE_FIELD]: '' });
+    } catch (err) {
+        console.error('[birthday-landing][velo] clear phone error:', err?.message || err);
+    }
 }
 
 function pushLeadResult(el, requestId, result) {

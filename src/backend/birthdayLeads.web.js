@@ -38,7 +38,7 @@ function isIsraeliMobile(value) {
 const APPSCRIPT_ENDPOINT = 'https://script.google.com/macros/s/AKfycbzt0sQ1UAJxCrnskKuUxEAVFyajx2vT8HvXvZ9HIwCpgixtVoqMSE_Mz_ZvBGZjBrFg/exec';
 
 // Studio ManyChat subscriber that receives the "new lead" template.
-const STUDIO_MANYCHAT_SUBSCRIBER_ID = '774142748';
+const STUDIO_MANYCHAT_SUBSCRIBER_ID = '888329524';
 
 /**
  * Wix Form (#form1) field target keys — must match the form schema's default

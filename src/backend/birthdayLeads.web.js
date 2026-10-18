@@ -16,6 +16,21 @@ import { resolveBirthdayAddons } from 'backend/birthdayAddons.js';
 
 const SA = { suppressAuth: true };
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const PHONE_HINT = 'נא לוודא שמספר הפלאפון תקין, מתחיל ב-05 ומכיל 10 ספרות.';
+
+/** 0523813929 → 972523813929. Drops one leading 0, then prefixes 972. */
+function toIsraeliInternationalPhone(value) {
+    let digits = String(value || '').replace(/\D/g, '');
+    if (digits.startsWith('9720')) digits = '972' + digits.slice(4);
+    else if (digits.startsWith('0')) digits = '972' + digits.slice(1);
+    else if (digits && !digits.startsWith('972')) digits = '972' + digits;
+    return digits;
+}
+
+function isIsraeliMobile(value) {
+    const digits = String(value || '').replace(/\D/g, '');
+    return /^05\d{8}$/.test(digits) || /^9725\d{8}$/.test(digits) || /^97205\d{8}$/.test(digits);
+}
 
 // Apps Script Web App URL for the "ימי הולדת" leads sheet — see
 // wix/apps-script/birthdayLeads.gs. Left blank until supplied; the sheet
@@ -54,7 +69,7 @@ function validate(payload) {
 
     if (!fullName) return { error: 'נא למלא שם מלא.' };
     if (!EMAIL_RE.test(email)) return { error: 'נא להזין כתובת אימייל תקינה.' };
-    if (phoneDigits.length < 9 || phoneDigits.length > 10) return { error: 'נא להזין מספר טלפון תקין.' };
+    if (!isIsraeliMobile(phoneDigits)) return { error: PHONE_HINT };
     if (!payload.termsAccepted) return { error: 'יש לאשר את תנאי השימוש כדי להמשיך.' };
 
     const addons = resolveBirthdayAddons(payload.addons);
@@ -63,7 +78,7 @@ function validate(payload) {
         row: {
             fullName,
             email,
-            phone,
+            phone: toIsraeliInternationalPhone(phone),
             workshopTypes: Array.isArray(payload.workshopTypes) ? payload.workshopTypes.map((t) => sanitizeText(t, 200)).filter(Boolean) : [],
             addons,
             addonsTotal: addons.reduce((sum, a) => sum + (Number(a.price) || 0), 0),

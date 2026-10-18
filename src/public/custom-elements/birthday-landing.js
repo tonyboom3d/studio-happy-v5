@@ -391,6 +391,37 @@ function formatAddonPrice(price) {
     return `${Number(price || 0).toLocaleString('he-IL')} ₪`;
 }
 
+const HE_MONTHS = ['ינואר', 'פברואר', 'מרץ', 'אפריל', 'מאי', 'יוני', 'יולי', 'אוגוסט', 'ספטמבר', 'אוקטובר', 'נובמבר', 'דצמבר'];
+const HE_WEEKDAYS = ['א', 'ב', 'ג', 'ד', 'ה', 'ו', 'ש'];
+
+function todayParts() {
+    const d = new Date();
+    return { y: d.getFullYear(), m: d.getMonth(), day: d.getDate() };
+}
+
+function toIsoDate(y, m, day) {
+    return `${y}-${String(m + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
+
+function parseIsoDate(value) {
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value || ''));
+    if (!match) return null;
+    return { y: Number(match[1]), m: Number(match[2]) - 1, day: Number(match[3]) };
+}
+
+function isBeforeToday(y, m, day) {
+    const t = todayParts();
+    if (y !== t.y) return y < t.y;
+    if (m !== t.m) return m < t.m;
+    return day < t.day;
+}
+
+function formatDisplayDate(iso) {
+    const parts = parseIsoDate(iso);
+    if (!parts) return '';
+    return `${String(parts.day).padStart(2, '0')}/${String(parts.m + 1).padStart(2, '0')}/${parts.y}`;
+}
+
 const STYLE = `
     @import url('https://fonts.googleapis.com/css2?family=Baloo+2:wght@400;600;800&family=Quicksand:wght@400;600;800&family=Varela+Round&family=Rubik:wght@400;600;800&display=swap');
 
@@ -1241,6 +1272,50 @@ const STYLE = `
         background: #fff;
     }
     .bl-field textarea { resize: vertical; min-height: 80px; }
+    .bl-date-trigger {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        width: 100%;
+        border: none;
+        border-radius: 14px;
+        padding: 12px 14px;
+        font-size: 15px;
+        font-weight: 600;
+        color: #262626;
+        background: #fff;
+        text-align: right;
+    }
+    .bl-date-trigger.is-empty { color: #8a8a8a; }
+    .bl-date-trigger svg { width: 18px; height: 18px; flex-shrink: 0; }
+    .bl-cal {
+        position: fixed;
+        z-index: 10000;
+        width: 280px;
+        background: #fff;
+        color: #262626;
+        border-radius: 18px;
+        padding: 12px;
+        box-shadow: 0 16px 40px rgba(37, 38, 38, 0.18);
+        font-family: 'Quicksand', 'Varela Round', 'Rubik', Arial, sans-serif;
+    }
+    .bl-cal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+    .bl-cal-head strong { font-size: 15px; }
+    .bl-cal-nav {
+        width: 32px; height: 32px; border: none; border-radius: 50%;
+        background: #f4eefe; color: #A56AF0; font-size: 18px; font-weight: 800;
+    }
+    .bl-cal-nav:disabled { opacity: 0.35; }
+    .bl-cal-week, .bl-cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+    .bl-cal-week span { text-align: center; font-size: 12px; font-weight: 800; color: #A56AF0; padding: 4px 0; }
+    .bl-cal-day {
+        height: 34px; border: none; border-radius: 10px; background: transparent;
+        font-weight: 700; font-size: 13px; color: #262626;
+    }
+    .bl-cal-day:hover { background: #f4eefe; }
+    .bl-cal-day.is-selected { background: #A56AF0; color: #fff; }
+    .bl-cal-empty { height: 34px; }
     .bl-multiselect { display: flex; flex-wrap: wrap; gap: 8px; }
     .bl-chip-option {
         border: 2px solid #fff;
@@ -1566,7 +1641,7 @@ class BirthdayLandingElement extends HTMLElement {
             submitError: null,
             submitSuccess: false,
             pendingRequestId: null,
-            form: { workshopTypes: [], addons: [], childrenCount: MIN_CHILDREN_COUNT, adultsCount: 0, termsAccepted: true },
+            form: { workshopTypes: [], addons: [], preferredDate: '', childrenCount: MIN_CHILDREN_COUNT, adultsCount: 0, termsAccepted: true },
         };
     }
 
@@ -1679,6 +1754,7 @@ class BirthdayLandingElement extends HTMLElement {
     }
 
     _renderAll() {
+        this._closeCalendar();
         if (this._heroTimer) clearInterval(this._heroTimer);
         const s = this._state;
         if (s.loading || !s.dataLoaded) {
@@ -2040,8 +2116,12 @@ class BirthdayLandingElement extends HTMLElement {
                         <input type="tel" id="blPhone" name="phone" inputmode="tel" placeholder="050-0000000" autocomplete="tel" />
                     </div>
                     <div class="bl-field">
-                        <label for="blDate">תאריך מועדף${req}</label>
-                        <input type="date" id="blDate" name="preferredDate" />
+                        <label for="blDateTrigger">תאריך מועדף${req}</label>
+                        <button type="button" class="bl-date-trigger ${f.preferredDate ? '' : 'is-empty'}" id="blDateTrigger" aria-haspopup="dialog">
+                            <span id="blDateLabel">${f.preferredDate ? escapeHtml(formatDisplayDate(f.preferredDate)) : 'בחרו תאריך'}</span>
+                            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2" stroke="#A56AF0" stroke-width="2"/><path d="M3 9h18M8 3v4M16 3v4" stroke="#A56AF0" stroke-width="2" stroke-linecap="round"/></svg>
+                        </button>
+                        <input type="hidden" id="blDate" name="preferredDate" value="${escapeHtml(f.preferredDate || '')}" />
                     </div>
                     <div class="bl-field bl-span-2">
                         <label>סוג סדנה מבוקש${req}</label>
@@ -2157,6 +2237,8 @@ class BirthdayLandingElement extends HTMLElement {
 
         const counterBtn = e.target.closest('[data-counter-delta]');
         if (counterBtn) { this._onCounterChange(counterBtn); return; }
+
+        if (e.target.closest('#blDateTrigger')) { this._toggleCalendar(e); return; }
 
         if (e.target.closest('#blSubmitBtn')) { this._onSubmit(); return; }
 
@@ -2338,6 +2420,112 @@ class BirthdayLandingElement extends HTMLElement {
     // Lead form submission
     // ---------------------------------------------------------------------
 
+    _toggleCalendar(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (this.querySelector('#blCalendar')) this._closeCalendar();
+        else this._openCalendar();
+    }
+
+    _openCalendar() {
+        const selected = parseIsoDate(this._state.form.preferredDate);
+        const today = todayParts();
+        const view = selected && !isBeforeToday(selected.y, selected.m, selected.day) ? selected : today;
+        this._calView = { y: view.y, m: view.m };
+        this._renderCalendar();
+        this._calOutside = (ev) => {
+            const cal = this.querySelector('#blCalendar');
+            const trigger = this._root && this._root.querySelector('#blDateTrigger');
+            if ((cal && cal.contains(ev.target)) || (trigger && trigger.contains(ev.target))) return;
+            this._closeCalendar();
+        };
+        setTimeout(() => document.addEventListener('pointerdown', this._calOutside), 0);
+    }
+
+    _closeCalendar() {
+        const cal = this.querySelector('#blCalendar');
+        if (cal) cal.remove();
+        if (this._calOutside) {
+            document.removeEventListener('pointerdown', this._calOutside);
+            this._calOutside = null;
+        }
+    }
+
+    _shiftCalendar(delta) {
+        const today = todayParts();
+        let { y, m } = this._calView;
+        m += delta;
+        if (m < 0) { m = 11; y -= 1; }
+        if (m > 11) { m = 0; y += 1; }
+        if (y < today.y || (y === today.y && m < today.m)) return;
+        this._calView = { y, m };
+        this._renderCalendar();
+    }
+
+    _selectCalendarDay(iso) {
+        this._state.form.preferredDate = iso;
+        const hidden = this._root.querySelector('#blDate');
+        const label = this._root.querySelector('#blDateLabel');
+        const trigger = this._root.querySelector('#blDateTrigger');
+        if (hidden) hidden.value = iso;
+        if (label) label.textContent = formatDisplayDate(iso);
+        if (trigger) trigger.classList.remove('is-empty');
+        this._closeCalendar();
+    }
+
+    _renderCalendar() {
+        const { y, m } = this._calView;
+        const today = todayParts();
+        const canPrev = y > today.y || m > today.m;
+        const selected = this._state.form.preferredDate;
+        const firstWeekday = new Date(y, m, 1).getDay();
+        const daysInMonth = new Date(y, m + 1, 0).getDate();
+        const cells = [];
+        for (let i = 0; i < firstWeekday; i++) cells.push('<span class="bl-cal-empty"></span>');
+        for (let day = 1; day <= daysInMonth; day++) {
+            if (isBeforeToday(y, m, day)) {
+                cells.push('<span class="bl-cal-empty"></span>');
+                continue;
+            }
+            const iso = toIsoDate(y, m, day);
+            cells.push(`<button type="button" class="bl-cal-day ${iso === selected ? 'is-selected' : ''}" data-cal-day="${iso}">${day}</button>`);
+        }
+        const prevCal = this.querySelector('#blCalendar');
+        if (prevCal) prevCal.remove();
+        const cal = document.createElement('div');
+        cal.id = 'blCalendar';
+        cal.className = 'bl-cal';
+        cal.setAttribute('role', 'dialog');
+        cal.innerHTML = `
+            <div class="bl-cal-head">
+                <button type="button" class="bl-cal-nav" data-cal-shift="-1" ${canPrev ? '' : 'disabled'} aria-label="חודש קודם">›</button>
+                <strong>${HE_MONTHS[m]} ${y}</strong>
+                <button type="button" class="bl-cal-nav" data-cal-shift="1" aria-label="חודש הבא">‹</button>
+            </div>
+            <div class="bl-cal-week">${HE_WEEKDAYS.map((d) => `<span>${d}</span>`).join('')}</div>
+            <div class="bl-cal-grid">${cells.join('')}</div>
+        `;
+        cal.addEventListener('click', (ev) => {
+            const shift = ev.target.closest('[data-cal-shift]');
+            if (shift && !shift.disabled) { this._shiftCalendar(Number(shift.dataset.calShift)); return; }
+            const dayBtn = ev.target.closest('[data-cal-day]');
+            if (dayBtn) this._selectCalendarDay(dayBtn.dataset.calDay);
+        });
+        this.appendChild(cal);
+        const trigger = this._root.querySelector('#blDateTrigger');
+        if (!trigger) return;
+        const rect = trigger.getBoundingClientRect();
+        const width = Math.max(280, rect.width);
+        let left = rect.left;
+        if (left + width > window.innerWidth - 8) left = window.innerWidth - width - 8;
+        if (left < 8) left = 8;
+        let top = rect.bottom + 6;
+        if (top + 320 > window.innerHeight) top = Math.max(8, rect.top - 326);
+        cal.style.width = `${width}px`;
+        cal.style.left = `${left}px`;
+        cal.style.top = `${top}px`;
+    }
+
     _readFormValues() {
         const root = this._root;
         return {
@@ -2358,7 +2546,9 @@ class BirthdayLandingElement extends HTMLElement {
         if (!values.fullName) return 'נא למלא שם מלא.';
         if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(values.email)) return 'נא להזין כתובת אימייל תקינה.';
         const phoneDigits = values.phone.replace(/\D/g, '');
-        if (phoneDigits.length < 9 || phoneDigits.length > 10) return 'נא להזין מספר טלפון תקין.';
+        if (!/^05\d{8}$/.test(phoneDigits) && !/^9725\d{8}$/.test(phoneDigits)) {
+            return 'נא לוודא שמספר הפלאפון תקין, מתחיל ב-05 ומכיל 10 ספרות.';
+        }
         if (!values.preferredDate) return 'נא לבחור תאריך מועדף.';
         if (!values.workshopTypes || !values.workshopTypes.length) return 'נא לבחור סוג סדנה מבוקש.';
         if (!values.childrenCount || values.childrenCount < MIN_CHILDREN_COUNT) return `מספר הילדים המינימלי הוא ${MIN_CHILDREN_COUNT}.`;
@@ -2492,7 +2682,7 @@ class BirthdayLandingElement extends HTMLElement {
         if (result.ok) {
             this._clearFormError();
             this._state.submitSuccess = true;
-            this._state.form = { workshopTypes: [], addons: [], childrenCount: MIN_CHILDREN_COUNT, adultsCount: 0, termsAccepted: true };
+            this._state.form = { workshopTypes: [], addons: [], preferredDate: '', childrenCount: MIN_CHILDREN_COUNT, adultsCount: 0, termsAccepted: true };
             const formSection = this._root.querySelector('#blFormSection');
             if (formSection) {
                 formSection.innerHTML = this._renderFormSuccess(result.message);

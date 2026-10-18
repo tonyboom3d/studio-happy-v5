@@ -73,7 +73,13 @@ async function handleSubmitLead(el, detail) {
         await $w(FORM_ID).submit();
     } catch (err) {
         console.error('[birthday-landing][velo] real form submit error:', err?.message || err);
-        pushLeadResult(el, requestId, { ok: false, message: 'אירעה שגיאה בשליחת הפנייה. נסו שוב מאוחר יותר.' });
+        const formRejected = /validation failed|doesn't satisfy form requirements/i.test(String(err?.message || err || ''));
+        pushLeadResult(el, requestId, {
+            ok: false,
+            message: formRejected
+                ? 'נא לוודא שמספר הפלאפון תקין, מתחיל ב-05 ומכיל 10 ספרות.'
+                : 'אירעה שגיאה בשליחת הפנייה. נסו שוב מאוחר יותר.',
+        });
         return;
     }
 

@@ -1250,17 +1250,28 @@ const STYLE = `
     .bl-form-grid {
         display: grid;
         grid-template-columns: repeat(2, 1fr);
-        gap: 16px;
+        gap: 14px;
         max-width: 780px;
         margin: 0 auto;
     }
-    .bl-field { display: flex; flex-direction: column; gap: 6px; }
+    .bl-field {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        background: rgba(255,255,255,0.16);
+        border: 1px solid rgba(255,255,255,0.32);
+        border-radius: 18px;
+        padding: 12px;
+    }
     .bl-field.bl-span-2 { grid-column: 1 / -1; }
-    .bl-field label { font-size: 13px; font-weight: 800; color: #fff; }
-    .bl-req-mark { color: #F2AF49; margin-right: 3px; }
-    .bl-field-hint { font-weight: 600; opacity: 0.75; font-size: 12px; }
+    .bl-field label { font-size: 13px; font-weight: 800; color: #fff; line-height: 1.3; }
+    .bl-req-mark { color: #FFE08A; margin-right: 3px; }
+    .bl-field-hint { font-weight: 600; opacity: 0.8; font-size: 12px; }
     .bl-field input[type="text"], .bl-field input[type="email"], .bl-field input[type="tel"],
-    .bl-field input[type="number"], .bl-field input[type="date"], .bl-field textarea, .bl-field select {
+    .bl-field input[type="number"], .bl-field input[type="date"], .bl-field textarea, .bl-field select,
+    .bl-date-trigger {
+        width: 100%;
+        min-height: 48px;
         border: none;
         border-radius: 14px;
         padding: 12px 14px;
@@ -1270,21 +1281,19 @@ const STYLE = `
         font-family: 'Quicksand', 'Varela Round', Arial, sans-serif;
         outline: none;
         background: #fff;
+        box-shadow: 0 4px 14px rgba(37, 38, 38, 0.08);
     }
-    .bl-field textarea { resize: vertical; min-height: 80px; }
+    .bl-field input::placeholder, .bl-field textarea::placeholder { color: #9a9a9a; }
+    .bl-field input:focus, .bl-field textarea:focus, .bl-date-trigger:focus {
+        box-shadow: 0 0 0 3px rgba(255,255,255,0.7);
+    }
+    .bl-field input[type="tel"] { direction: ltr; text-align: right; }
+    .bl-field textarea { resize: vertical; min-height: 96px; }
     .bl-date-trigger {
         display: flex;
         align-items: center;
         justify-content: space-between;
         gap: 8px;
-        width: 100%;
-        border: none;
-        border-radius: 14px;
-        padding: 12px 14px;
-        font-size: 15px;
-        font-weight: 600;
-        color: #262626;
-        background: #fff;
         text-align: right;
     }
     .bl-date-trigger.is-empty { color: #8a8a8a; }
@@ -1321,24 +1330,35 @@ const STYLE = `
     .bl-cal-empty { height: 34px; }
     .bl-multiselect { display: flex; flex-wrap: wrap; gap: 8px; }
     .bl-chip-option {
-        border: 2px solid #fff;
-        background: rgba(255,255,255,0.12);
+        border: 2px solid rgba(255,255,255,0.7);
+        background: rgba(255,255,255,0.22);
         color: #fff;
         font-weight: 800;
         font-size: 13px;
         padding: 8px 14px;
         border-radius: 999px;
-        transition: background 0.15s ease, color 0.15s ease;
+        transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
     }
-    .bl-chip-option.is-selected { background: #fff; color: #A56AF0; }
-    .bl-counter { display: flex; align-items: center; gap: 10px; }
+    .bl-chip-option.is-selected { background: #fff; color: #A56AF0; border-color: #fff; }
+    .bl-counter {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        min-height: 48px;
+        background: #fff;
+        border-radius: 14px;
+        padding: 6px 8px;
+        box-shadow: 0 4px 14px rgba(37, 38, 38, 0.08);
+    }
     .bl-counter button {
         width: 34px; height: 34px; border-radius: 50%; border: none;
-        background: #fff; color: #A56AF0; font-weight: 800; font-size: 18px;
+        background: #f4eefe; color: #A56AF0; font-weight: 800; font-size: 18px;
         display: flex; align-items: center; justify-content: center;
     }
     .bl-counter input[type="number"] {
         width: 56px;
+        min-height: 0;
         text-align: center;
         font-weight: 800;
         font-size: 16px;
@@ -1346,6 +1366,8 @@ const STYLE = `
         border-radius: 10px;
         border: none;
         color: #262626;
+        background: transparent;
+        box-shadow: none;
         -moz-appearance: textfield;
     }
     .bl-counter input[type="number"]::-webkit-outer-spin-button,
@@ -1385,8 +1407,8 @@ const STYLE = `
     }
 
     .bl-checkbox-row { display: flex; align-items: flex-start; gap: 10px; }
-    .bl-checkbox-row input { margin-top: 3px; width: 18px; height: 18px; }
-    .bl-checkbox-row label { font-size: 13px; font-weight: 600; color: #fff; }
+    .bl-checkbox-row input { margin-top: 2px; width: 18px; height: 18px; accent-color: #A56AF0; flex-shrink: 0; }
+    .bl-checkbox-row label { font-size: 13px; font-weight: 600; color: #fff; line-height: 1.45; }
     .bl-form-footer {
         display: flex;
         flex-direction: column;

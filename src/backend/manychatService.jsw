@@ -421,6 +421,7 @@ function formatWorkshopDate(dateObj) {
 function formatWorkshopTime(dateObj) {
     if (!dateObj) return '';
     const d = new Date(dateObj);
+    if (Number.isNaN(d.getTime())) return '';
     const parts = new Intl.DateTimeFormat('he-IL', {
         timeZone: ISRAEL_TZ,
         hour: '2-digit',
@@ -429,6 +430,16 @@ function formatWorkshopTime(dateObj) {
     }).formatToParts(d);
     const get = (t) => parts.find(p => p.type === t)?.value || '';
     return `${get('hour')}:${get('minute')}`;
+}
+
+/** Reminder copy: "12:00 - 14:30". Start only when end is missing or not after start. */
+function formatWorkshopTimeRange(startObj, endObj) {
+    const start = formatWorkshopTime(startObj);
+    const end = formatWorkshopTime(endObj);
+    const startMs = startObj ? new Date(startObj).getTime() : NaN;
+    const endMs = endObj ? new Date(endObj).getTime() : NaN;
+    if (start && end && endMs > startMs) return `${start} - ${end}`;
+    return start;
 }
 
 /** Numeric d.m.yyyy date (Israel local) — used for coupon redeem/expiry dates. */
@@ -488,7 +499,9 @@ function buildOrderCustomFields(order, notificationType = 'order_confirmed') {
         { name: MC_FIELDS.organizerEmail, value: order?.organizerEmail },
         { name: MC_FIELDS.workshopName, value: workshopTypeLabel(workshopType) },
         { name: MC_FIELDS.workshopDate, value: formatWorkshopDate(order?.workshopStart) },
-        { name: MC_FIELDS.workshopTime, value: formatWorkshopTime(order?.workshopStart) },
+        { name: MC_FIELDS.workshopTime, value: notificationType === 'workshop_reminder'
+            ? formatWorkshopTimeRange(order?.workshopStart, order?.workshopEnd)
+            : formatWorkshopTime(order?.workshopStart) },
         { name: MC_FIELDS.participantsLine, value: buildParticipantsLine(order, workshopType) },
         { name: MC_FIELDS.itemCount, value: order?.rugCount ?? 0 },
         { name: MC_FIELDS.amount, value: total },

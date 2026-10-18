@@ -1,6 +1,7 @@
 // "ימי הולדת" landing page — wires the birthday-landing Custom Element to the
 // backend (workshop data + lead validation) AND to the real Wix Form (#form1,
-// formId dfecbbfe-54a0-4003-9753-9aaaaf14fe5d) embedded hidden on this page.
+// formId dfecbbfe-54a0-4003-9753-9aaaaf14fe5d) on this page. Visibility of
+// #form1 is set in the editor, not from this code.
 //
 // Why a hidden real form instead of creating the submission from the backend:
 // submitting through the actual #form1 element client-side lets the Wix
@@ -29,11 +30,6 @@ $w.onReady(function () {
         return;
     }
 
-    // #form1 is the real Wix Form — kept on the page (for its native
-    // submission/consent handling) but hidden from visitors; the CE's own
-    // form is what they see and fill in.
-    hideRealForm();
-
     // Initial deep-link only — in-page URL updates use history API inside the CE (no reload).
     el.setAttribute('active-workshop-ref', getWorkshopRefFromQuery());
 
@@ -60,16 +56,6 @@ function getWorkshopRefFromQuery() {
 async function loadWorkshops(el) {
     const { workshops } = await getBirthdayWorkshops();
     el.setAttribute('workshops-data', JSON.stringify({ workshops: workshops || [], __ts: Date.now() }));
-}
-
-/** Hides #form1 (the real Wix Form) without removing it from the page. */
-function hideRealForm() {
-    const form = $w(FORM_ID);
-    if (!form) {
-        console.error(`[birthday-landing][velo] FORM_NOT_FOUND — ${FORM_ID} missing on page. Add the Wix Form (formId dfecbbfe-54a0-4003-9753-9aaaaf14fe5d) to this page with element ID "form1".`);
-        return;
-    }
-    form.collapse();
 }
 
 async function handleSubmitLead(el, detail) {

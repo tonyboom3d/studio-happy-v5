@@ -1,27 +1,34 @@
 // Public facade for the "ימי הולדת" landing page — workshop data + lead form.
-// Submissions are sent to the site's Wix Form (My Form 1), appended to the
-// "ימי הולדת" Google Sheet (via an Apps Script Web App), and announced to
-// the studio over WhatsApp (free text, via the existing ManyChat subscriber).
+//
+// The actual Wix Form submission (#form1, formId dfecbbfe-...) is now created
+// CLIENT-SIDE by the page's Velo code via $w('#form1').setFieldValues(...) +
+// $w('#form1').submit() — NOT from this backend module. This lets the Wix
+// Forms app run its own visitor/mailing-list-consent handling correctly.
+// This module only: (1) validates the lead and maps it to the Wix Form's
+// field-target keys for the page to feed into the real form, and (2) runs
+// the side effects (Google Sheet append + WhatsApp notice) once the page
+// confirms the real Wix Form submission succeeded.
 import { Permissions, webMethod } from 'wix-web-module';
 import wixData from 'wix-data';
-import { submissions } from '@wix/forms';
-import { auth } from '@wix/essentials';
 import { sendBirthdayLeadNoticeManyChat } from 'backend/manychatService.jsw';
 import { postSheetWebhook } from 'backend/sheetWebhook.js';
+import { resolveBirthdayAddons } from 'backend/birthdayAddons.js';
 
 const SA = { suppressAuth: true };
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const BIRTHDAY_FORM_ID = 'dfecbbfe-54a0-4003-9753-9aaaaf14fe5d';
 
 // Apps Script Web App URL for the "ימי הולדת" leads sheet — see
 // wix/apps-script/birthdayLeads.gs. Left blank until supplied; the sheet
 // append is skipped (no-op) while empty.
-const APPSCRIPT_ENDPOINT = 'https://script.google.com/macros/s/AKfycbxKJW63NHuDBDn-xGBtrZGVuyJ_Wp85WS3bhybV4MYTb-2bUGb64MRpJxklw4AroZYy/exec';
+const APPSCRIPT_ENDPOINT = 'https://script.google.com/macros/s/AKfycbzt0sQ1UAJxCrnskKuUxEAVFyajx2vT8HvXvZ9HIwCpgixtVoqMSE_Mz_ZvBGZjBrFg/exec';
 
 // Studio ManyChat subscriber that receives the "new lead" template.
 const STUDIO_MANYCHAT_SUBSCRIBER_ID = '1613710579';
 
-/** Wix Form field targets — must match the form schema storage keys. */
+/**
+ * Wix Form (#form1) field target keys — must match the form schema's default
+ * field keys (open the field in the Forms editor > Advanced tab to see its key).
+ */
 const FORM_FIELDS = {
     fullName: 'form_field',
     email: 'form_field_1',
@@ -32,9 +39,8 @@ const FORM_FIELDS = {
     adultsCount: 'melavim',
     notes: 'message',
     termsAccepted: 'subscribe',
+    addons: 'form_field_5',
 };
-
-const elevatedCreateSubmission = auth.elevate(submissions.createSubmission);
 
 function sanitizeText(value, maxLength) {
     return String(value == null ? '' : value).trim().slice(0, maxLength);
@@ -51,12 +57,16 @@ function validate(payload) {
     if (phoneDigits.length < 9 || phoneDigits.length > 10) return { error: 'נא להזין מספר טלפון תקין.' };
     if (!payload.termsAccepted) return { error: 'יש לאשר את תנאי השימוש כדי להמשיך.' };
 
+    const addons = resolveBirthdayAddons(payload.addons);
+
     return {
         row: {
             fullName,
             email,
             phone,
             workshopTypes: Array.isArray(payload.workshopTypes) ? payload.workshopTypes.map((t) => sanitizeText(t, 200)).filter(Boolean) : [],
+            addons,
+            addonsTotal: addons.reduce((sum, a) => sum + (Number(a.price) || 0), 0),
             childrenCount: Math.max(0, Math.min(100, Number(payload.childrenCount) || 0)),
             adultsCount: Math.max(0, Math.min(100, Number(payload.adultsCount) || 0)),
             preferredDate: payload.preferredDate ? sanitizeText(payload.preferredDate, 10) : '',
@@ -64,6 +74,11 @@ function validate(payload) {
             termsAccepted: true,
         },
     };
+}
+
+/** Formats the resolved add-ons as "Title (₪price), Title (₪price)" for notes/sheet columns. */
+function formatAddonsList(addons) {
+    return (addons || []).map((a) => `${a.title} (${a.price}₪)`).join(', ');
 }
 
 function formatDateForForm(value) {
@@ -82,19 +97,13 @@ function buildWixFormSubmission(row) {
         [FORM_FIELDS.adultsCount]: row.adultsCount,
         [FORM_FIELDS.notes]: row.notes || '',
         [FORM_FIELDS.termsAccepted]: true,
+        [FORM_FIELDS.addons]: formatAddonsList(row.addons),
     };
 
     const preferredDate = formatDateForForm(row.preferredDate);
     if (preferredDate) submissionValues[FORM_FIELDS.preferredDate] = preferredDate;
 
     return submissionValues;
-}
-
-async function submitToWixForm(row) {
-    return elevatedCreateSubmission({
-        formId: BIRTHDAY_FORM_ID,
-        submissions: buildWixFormSubmission(row),
-    });
 }
 
 /** Appends one row to the "ימי הולדת" Google Sheet via the Apps Script Web App. No-op until APPSCRIPT_ENDPOINT is set. */
@@ -107,6 +116,8 @@ async function appendBirthdayLeadToSheet(row) {
     try {
         await postSheetWebhook(APPSCRIPT_ENDPOINT, {
             ...buildWixFormSubmission(row),
+            addons: formatAddonsList(row.addons),
+            addons_total: row.addonsTotal || 0,
             inquiry_date: formatInquiryDate(),
         });
         return { ok: true };
@@ -178,21 +189,31 @@ export const getBirthdayWorkshops = webMethod(Permissions.Anyone, async () => {
     }
 });
 
-/** Sends a lead from the birthday-landing Custom Element to the Wix Form. */
-export const submitBirthdayLead = webMethod(Permissions.Anyone, async (payload) => {
+/**
+ * Validates a lead from the birthday-landing Custom Element and maps it to
+ * #form1's field-target keys. The PAGE then feeds these into the real,
+ * hidden Wix Form via $w('#form1').setFieldValues(...) + .submit() — this
+ * backend module never creates the submission itself (avoids duplicates).
+ */
+export const buildBirthdayFormValues = webMethod(Permissions.Anyone, async (payload) => {
+    const { error, row } = validate(payload || {});
+    if (error) return { ok: false, message: error };
+    return {
+        ok: true,
+        submissionValues: buildWixFormSubmission(row),
+        message: 'הפנייה נשלחה בהצלחה! נחזור אליכם טלפונית או בוואטסאפ עם פרטים נוספים בהקדם האפשרי.',
+    };
+});
+
+/**
+ * Runs best-effort side effects (Google Sheet append + WhatsApp notice) —
+ * called by the page ONLY after the real Wix Form submission (#form1)
+ * succeeds client-side. Re-validates the same payload to rebuild `row`.
+ */
+export const recordBirthdayLeadSideEffects = webMethod(Permissions.Anyone, async (payload) => {
     const { error, row } = validate(payload || {});
     if (error) return { ok: false, message: error };
 
-    try {
-        await submitToWixForm(row);
-    } catch (err) {
-        console.error('[birthdayLeads.web] Wix form submission failed:', err?.message || err, err?.details || '');
-        return { ok: false, message: 'אירעה שגיאה בשליחת הפנייה. נסו שוב מאוחר יותר.' };
-    }
-
-    // Best-effort side effects — never block the customer-facing success
-    // response if the sheet or WhatsApp notice fails.
-    // Awaited: un-awaited promises can be cut off once the web method returns.
     const [sheetResult, waResult] = await Promise.allSettled([
         appendBirthdayLeadToSheet(row),
         notifyBirthdayLeadWhatsApp(),
@@ -202,5 +223,5 @@ export const submitBirthdayLead = webMethod(Permissions.Anyone, async (payload) 
         whatsapp: waResult.status === 'fulfilled' ? waResult.value : String(waResult.reason),
     }));
 
-    return { ok: true, message: 'הפנייה נשלחה בהצלחה! נחזור אליכם טלפונית או בוואטסאפ עם פרטים נוספים בהקדם האפשרי.' };
+    return { ok: true };
 });

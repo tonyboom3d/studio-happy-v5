@@ -5,7 +5,7 @@ import { postSheetWebhook } from 'backend/sheetWebhook.js';
 
 const COMPANY_FORM_ID = 'dc59834f-f944-42e1-a576-9b304c87be92';
 const SHEET_NAME = 'אירועי חברה';
-const APPSCRIPT_ENDPOINT = 'https://script.google.com/macros/s/AKfycbxKJW63NHuDBDn-xGBtrZGVuyJ_Wp85WS3bhybV4MYTb-2bUGb64MRpJxklw4AroZYy/exec';
+const APPSCRIPT_ENDPOINT = 'https://script.google.com/macros/s/AKfycbzt0sQ1UAJxCrnskKuUxEAVFyajx2vT8HvXvZ9HIwCpgixtVoqMSE_Mz_ZvBGZjBrFg/exec';
 const STUDIO_MANYCHAT_SUBSCRIBER_ID = '1613710579';
 
 /** Column order matches the form summary, plus the inquiry timestamp. */

@@ -1,9 +1,18 @@
-// "ימי הולדת" landing page — wires the birthday-landing Custom Element
-// birthdayLeads.web.js backend module for data fetch and lead submissions.
-import { getBirthdayWorkshops, submitBirthdayLead } from 'backend/birthdayLeads.web.js';
+// "ימי הולדת" landing page — wires the birthday-landing Custom Element to the
+// backend (workshop data + lead validation) AND to the real Wix Form (#form1,
+// formId dfecbbfe-54a0-4003-9753-9aaaaf14fe5d) embedded hidden on this page.
+//
+// Why a hidden real form instead of creating the submission from the backend:
+// submitting through the actual #form1 element client-side lets the Wix
+// Forms app run its own visitor/mailing-list-consent handling. The backend
+// (birthdayLeads.web.js) only validates the lead and maps it to the form's
+// field keys — it never creates the Wix Form submission itself, so there's
+// no double submission.
+import { getBirthdayWorkshops, buildBirthdayFormValues, recordBirthdayLeadSideEffects } from 'backend/birthdayLeads.web.js';
 import wixLocation from 'wix-location';
 
 const ELEMENT_ID = '#customElement2';
+const FORM_ID = '#form1';
 const WORKSHOP_QUERY_KEY = 'workshop';
 
 $w.onReady(function () {
@@ -19,6 +28,11 @@ $w.onReady(function () {
         );
         return;
     }
+
+    // #form1 is the real Wix Form — kept on the page (for its native
+    // submission/consent handling) but hidden from visitors; the CE's own
+    // form is what they see and fill in.
+    hideRealForm();
 
     // Initial deep-link only — in-page URL updates use history API inside the CE (no reload).
     el.setAttribute('active-workshop-ref', getWorkshopRefFromQuery());
@@ -48,11 +62,41 @@ async function loadWorkshops(el) {
     el.setAttribute('workshops-data', JSON.stringify({ workshops: workshops || [], __ts: Date.now() }));
 }
 
+/** Hides #form1 (the real Wix Form) without removing it from the page. */
+function hideRealForm() {
+    const form = $w(FORM_ID);
+    if (!form) {
+        console.error(`[birthday-landing][velo] FORM_NOT_FOUND — ${FORM_ID} missing on page. Add the Wix Form (formId dfecbbfe-54a0-4003-9753-9aaaaf14fe5d) to this page with element ID "form1".`);
+        return;
+    }
+    form.collapse();
+}
+
 async function handleSubmitLead(el, detail) {
     const { requestId, payload } = detail || {};
     if (!requestId) return;
-    const result = await submitBirthdayLead(payload);
-    pushLeadResult(el, requestId, result);
+
+    const prep = await buildBirthdayFormValues(payload);
+    if (!prep.ok) {
+        pushLeadResult(el, requestId, prep);
+        return;
+    }
+
+    try {
+        $w(FORM_ID).setFieldValues(prep.submissionValues);
+        await $w(FORM_ID).submit();
+    } catch (err) {
+        console.error('[birthday-landing][velo] real form submit error:', err?.message || err);
+        pushLeadResult(el, requestId, { ok: false, message: 'אירעה שגיאה בשליחת הפנייה. נסו שוב מאוחר יותר.' });
+        return;
+    }
+
+    // Best-effort — only runs once the real Wix Form submission succeeded.
+    recordBirthdayLeadSideEffects(payload).catch((err) => {
+        console.error('[birthday-landing][velo] side effects error:', err?.message || err);
+    });
+
+    pushLeadResult(el, requestId, { ok: true, message: prep.message });
 }
 
 function pushLeadResult(el, requestId, result) {

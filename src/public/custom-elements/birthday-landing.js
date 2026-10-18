@@ -323,6 +323,62 @@ const FEATURE_HIGHLIGHTS = [
     },
 ];
 
+/** Party add-ons (fixed catalog, mirrors backend/birthdayAddons.js — keep in sync). */
+const BIRTHDAY_ADDONS = [
+    {
+        id: 'balloons',
+        title: 'קישוטי בלוני הליום',
+        description: '25 בלוני הליום מפוזרים ברחבי הסטודיו ומשתלבים בעיצוב הצבעוני והממותג של המקום.',
+        price: 250,
+        color: '#FF5FC0',
+        icon: '<svg viewBox="0 0 24 24" fill="none"><circle cx="8" cy="9" r="4" stroke="#fff" stroke-width="2"/><circle cx="16" cy="7" r="3" stroke="#fff" stroke-width="2"/><path d="M8 13v7M16 10v5" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg>',
+    },
+    {
+        id: 'candy-table',
+        title: 'שולחן מתוקים וחטיפים',
+        description: 'שולחן חגיגי עם סוכריות גומי ומרשמלו, במבה, ביסלי, תפוצ׳פס ועוד.',
+        price: 800,
+        color: '#A56AF0',
+        icon: '<svg viewBox="0 0 24 24" fill="none"><circle cx="7" cy="8" r="2.5" stroke="#fff" stroke-width="2"/><circle cx="13" cy="6" r="2" stroke="#fff" stroke-width="2"/><circle cx="17" cy="11" r="2.2" stroke="#fff" stroke-width="2"/><circle cx="9" cy="15" r="2.3" stroke="#fff" stroke-width="2"/><circle cx="15" cy="17" r="1.8" stroke="#fff" stroke-width="2"/></svg>',
+    },
+    {
+        id: 'crepe-station',
+        title: 'עמדת קרפ צרפתי',
+        description: 'עד 30 קרפים המוכנים במקום, עם שוקולד נוטלה או השחר, ותוספת שברן מקופלת.',
+        price: 1000,
+        color: '#F2AF49',
+        icon: '<svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="8" stroke="#fff" stroke-width="2"/><path d="M8 13c1.2 1.6 6.8 1.6 8 0" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg>',
+    },
+    {
+        id: 'hotdog-station',
+        title: 'עמדת נקניקיות חמות',
+        description: '40 נקניקיות עוף איכותיות בלחמנייה, המוכנות במקום, במלוא האירוע ומוגשות נקניקיות חמות וטריות.',
+        price: 1000,
+        color: '#35B89A',
+        icon: '<svg viewBox="0 0 24 24" fill="none"><rect x="3" y="10" width="18" height="5" rx="2.5" stroke="#fff" stroke-width="2"/><path d="M6 10V8a2 2 0 012-2h8a2 2 0 012 2v2" stroke="#fff" stroke-width="2"/></svg>',
+    },
+    {
+        id: 'popcorn-machine',
+        title: 'מכונת פופקורן',
+        description: 'פופקורן חם וטרי שמוכן במקום, מונחה על ידי האירועון.',
+        price: 300,
+        color: '#00A4FD',
+        icon: '<svg viewBox="0 0 24 24" fill="none"><path d="M6 10h12l-1.5 10h-9L6 10z" stroke="#fff" stroke-width="2" stroke-linejoin="round"/><path d="M8 10l1-5M12 10V5M16 10l-1-5" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg>',
+    },
+    {
+        id: 'slush',
+        title: 'ברד',
+        description: 'ברד קר ומרענן לאורך כל החגיגה.',
+        price: 200,
+        color: '#FF5FC0',
+        icon: '<svg viewBox="0 0 24 24" fill="none"><path d="M9 4h6l-1 5h2l-5 11-1-8H8l1-8z" stroke="#fff" stroke-width="2" stroke-linejoin="round"/></svg>',
+    },
+];
+const BIRTHDAY_ADDONS_BY_ID = BIRTHDAY_ADDONS.reduce((map, a) => { map[a.id] = a; return map; }, {});
+function formatAddonPrice(price) {
+    return `${Number(price || 0).toLocaleString('he-IL')} ₪`;
+}
+
 const STYLE = `
     @import url('https://fonts.googleapis.com/css2?family=Baloo+2:wght@400;600;800&family=Quicksand:wght@400;600;800&family=Varela+Round&family=Rubik:wght@400;600;800&display=swap');
 
@@ -918,6 +974,63 @@ const STYLE = `
         max-width: 120px;
     }
 
+    /* ---------- Add-ons ---------- */
+    .bl-addons-section { margin-top: 36px; }
+    .bl-addons-section h2 { text-align: center; font-size: 26px; margin-bottom: 8px; color: #262626; }
+    .bl-addons-sub { text-align: center; font-size: 15px; font-weight: 600; color: #525252; margin: 0 0 22px; }
+    .bl-addons-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 16px;
+    }
+    .bl-addon-card {
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+        gap: 8px;
+        background: #fff;
+        border: 2px solid #eef1f3;
+        border-radius: 22px;
+        padding: 22px 16px 18px;
+        cursor: pointer;
+        box-shadow: 0 10px 24px rgba(37, 38, 38, 0.06);
+        transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+    }
+    .bl-addon-card:hover { transform: translateY(-3px); box-shadow: 0 14px 28px rgba(37, 38, 38, 0.1); }
+    .bl-addon-card.is-selected { border-color: #A56AF0; box-shadow: 0 10px 26px rgba(165, 106, 240, 0.22); }
+    .bl-addon-check {
+        position: absolute;
+        top: 12px;
+        inset-inline-end: 12px;
+        width: 22px;
+        height: 22px;
+        border-radius: 50%;
+        background: #A56AF0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        opacity: 0;
+        transform: scale(0.6);
+        transition: opacity 0.15s ease, transform 0.15s ease;
+    }
+    .bl-addon-check svg { width: 12px; height: 12px; }
+    .bl-addon-card.is-selected .bl-addon-check { opacity: 1; transform: scale(1); }
+    .bl-addon-icon-wrap {
+        width: 64px;
+        height: 64px;
+        border-radius: 20px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 8px 20px rgba(37, 38, 38, 0.12);
+    }
+    .bl-addon-icon-wrap svg { width: 30px; height: 30px; }
+    .bl-addon-title { font-size: 15px; font-weight: 800; color: #262626; }
+    .bl-addon-desc { font-size: 12.5px; font-weight: 600; color: #525252; line-height: 1.5; }
+    .bl-addon-price { font-size: 15px; font-weight: 800; color: #A56AF0; margin-top: 2px; }
+
     /* ---------- FAQ ---------- */
     .bl-faq-section { margin-top: 30px; }
     .bl-faq-section h2 { text-align: center; font-size: 26px; margin-bottom: 18px; color: #262626; }
@@ -1249,6 +1362,7 @@ const STYLE = `
         .bl-hero { grid-template-columns: 1fr; }
         .bl-form-grid { grid-template-columns: 1fr; }
         .bl-highlights-grid { grid-template-columns: repeat(3, 1fr); }
+        .bl-addons-grid { grid-template-columns: repeat(2, 1fr); }
         .bl-price-tiers, .bl-price-body .bl-rich-ul { grid-template-columns: 1fr; }
         .bl-topnav-inner { padding: 6px 12px; gap: 8px; }
         .bl-topnav-logo-btn img { height: 32px; max-width: 88px; }
@@ -1269,6 +1383,7 @@ const STYLE = `
         .bl-marquee-track img { height: 210px; width: 306px; }
         .bl-desc-card, .bl-card, .bl-form-section { padding: 20px; }
         .bl-highlights-grid { grid-template-columns: repeat(2, 1fr); }
+        .bl-addons-grid { grid-template-columns: 1fr; }
         .bl-fab { right: 16px; bottom: 16px; padding: 12px 16px; font-size: 14px; }
         .bl-hero-logo { height: 69px; margin-bottom: 12px; }
         .bl-hero-text { padding-right: 28px; }
@@ -1398,7 +1513,7 @@ class BirthdayLandingElement extends HTMLElement {
             submitError: null,
             submitSuccess: false,
             pendingRequestId: null,
-            form: { workshopTypes: [], childrenCount: MIN_CHILDREN_COUNT, adultsCount: 0, termsAccepted: true },
+            form: { workshopTypes: [], addons: [], childrenCount: MIN_CHILDREN_COUNT, adultsCount: 0, termsAccepted: true },
         };
     }
 
@@ -1720,7 +1835,29 @@ class BirthdayLandingElement extends HTMLElement {
                     </div>
                 </div>
                 ${this._renderHighlights()}
+                ${this._renderAddons()}
                 ${this._renderFaq(workshop.faqList)}
+            </div>
+        `;
+    }
+
+    _renderAddons() {
+        const selected = this._state.form.addons || [];
+        const cards = BIRTHDAY_ADDONS.map((addon, i) => `
+            <button type="button" class="bl-addon-card bl-reveal ${selected.includes(addon.id) ? 'is-selected' : ''}" data-addon-id="${addon.id}" style="--bl-delay: ${Math.min(i, 5) * 60}ms" aria-pressed="${selected.includes(addon.id)}">
+                <span class="bl-addon-check" aria-hidden="true">${BULLET_ICON}</span>
+                <span class="bl-addon-icon-wrap" style="background:${addon.color};">${addon.icon}</span>
+                <span class="bl-addon-title">${escapeHtml(addon.title)}</span>
+                <span class="bl-addon-desc">${escapeHtml(addon.description)}</span>
+                <span class="bl-addon-price">${formatAddonPrice(addon.price)}</span>
+            </button>
+        `).join('');
+        return `
+            <div class="bl-addons-section bl-reveal" style="--bl-delay: 40ms">
+                <h2>רוצים להגיע ליום ההולדת כשהכול כבר מוכן?</h2>
+                <p class="bl-addons-sub">בחרו את התוספות שמתאימות לכם ונדאג להכין את הכל מראש.</p>
+                <div class="bl-addons-grid">${cards}</div>
+                <p class="bl-addons-footer">בלי קניות, בלי הכנות, בלי לסחוב</p>
             </div>
         `;
     }
@@ -1809,6 +1946,13 @@ class BirthdayLandingElement extends HTMLElement {
         `).join('');
     }
 
+    _renderAddonChips() {
+        const selected = this._state.form.addons || [];
+        return BIRTHDAY_ADDONS.map((addon) => `
+            <button type="button" class="bl-chip-option ${selected.includes(addon.id) ? 'is-selected' : ''}" data-addon-id="${addon.id}">${escapeHtml(addon.title)} (${formatAddonPrice(addon.price)})</button>
+        `).join('');
+    }
+
     _ensureActiveWorkshopTypeSelected() {
         const active = this._activeWorkshop();
         if (!active || !active.title) return;
@@ -1844,6 +1988,10 @@ class BirthdayLandingElement extends HTMLElement {
                     <div class="bl-field bl-span-2">
                         <label>סוג סדנה מבוקש${req}</label>
                         <div class="bl-multiselect" id="blWorkshopTypes">${this._renderWorkshopTypeChips()}</div>
+                    </div>
+                    <div class="bl-field bl-span-2">
+                        <label>תוספות (אופציונלי)</label>
+                        <div class="bl-multiselect" id="blAddons">${this._renderAddonChips()}</div>
                     </div>
                     <div class="bl-field">
                         <label for="blChildrenCount">מספר ילדים${req} <span class="bl-field-hint">(מינימום ${MIN_CHILDREN_COUNT})</span></label>
@@ -1945,6 +2093,9 @@ class BirthdayLandingElement extends HTMLElement {
 
         const typeBtn = e.target.closest('[data-workshop-type]');
         if (typeBtn) { this._onWorkshopTypeToggle(typeBtn); return; }
+
+        const addonBtn = e.target.closest('[data-addon-id]');
+        if (addonBtn) { this._onAddonToggle(addonBtn); return; }
 
         const counterBtn = e.target.closest('[data-counter-delta]');
         if (counterBtn) { this._onCounterChange(counterBtn); return; }
@@ -2077,6 +2228,19 @@ class BirthdayLandingElement extends HTMLElement {
         btn.classList.toggle('is-selected', idx < 0);
     }
 
+    _onAddonToggle(btn) {
+        const id = btn.dataset.addonId;
+        const list = this._state.form.addons;
+        const idx = list.indexOf(id);
+        const nowSelected = idx < 0;
+        if (nowSelected) list.push(id); else list.splice(idx, 1);
+        // Both the display cards and the form chips share data-addon-id — keep all instances in sync.
+        this._root.querySelectorAll(`[data-addon-id="${id}"]`).forEach((el) => {
+            el.classList.toggle('is-selected', nowSelected);
+            if (el.hasAttribute('aria-pressed')) el.setAttribute('aria-pressed', String(nowSelected));
+        });
+    }
+
     _onCounterChange(btn) {
         const wrap = btn.closest('[data-counter]');
         const key = wrap.dataset.counter;
@@ -2126,6 +2290,7 @@ class BirthdayLandingElement extends HTMLElement {
             notes: (root.querySelector('#blNotes').value || '').trim(),
             termsAccepted: !!root.querySelector('#blTerms').checked,
             workshopTypes: this._state.form.workshopTypes.slice(),
+            addons: this._state.form.addons.slice(),
             childrenCount: this._getCounterValue('childrenCount'),
             adultsCount: this._getCounterValue('adultsCount'),
         };
@@ -2269,7 +2434,7 @@ class BirthdayLandingElement extends HTMLElement {
         if (result.ok) {
             this._clearFormError();
             this._state.submitSuccess = true;
-            this._state.form = { workshopTypes: [], childrenCount: MIN_CHILDREN_COUNT, adultsCount: 0, termsAccepted: true };
+            this._state.form = { workshopTypes: [], addons: [], childrenCount: MIN_CHILDREN_COUNT, adultsCount: 0, termsAccepted: true };
             const formSection = this._root.querySelector('#blFormSection');
             if (formSection) {
                 formSection.innerHTML = this._renderFormSuccess(result.message);

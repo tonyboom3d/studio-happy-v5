@@ -9,7 +9,7 @@
  *    Who has access "Anyone" → Deploy. Copy the Web App URL.
  * 4. Send that URL back so the Velo code can be wired to it.
  *
- * Expected POST body (JSON), matching the sheet header A–I:
+ * Expected POST body (JSON), matching the sheet header A–K:
  *   {
  *     form_field:   string, // A — שם
  *     form_field_1: string, // B — דוא"ל
@@ -20,6 +20,8 @@
  *     melavim:      number, // G — מספר מבוגרים
  *     message:      string, // H — הערות
  *     inquiry_date: string, // I — תאריך פנייה (dd/MM/yyyy HH:mm, Asia/Jerusalem)
+ *     addons:       string, // J — תוספות (רשימה, לדוגמה "ברד (200₪), מכונת פופקורן (300₪)")
+ *     addons_total: number, // K — סה"כ תוספות (₪)
  *   }
  */
 
@@ -35,6 +37,8 @@ const ROW_FIELD_ORDER = [
   'melavim',
   'message',
   'inquiry_date',
+  'addons',
+  'addons_total',
 ];
 
 function doGet(e) {

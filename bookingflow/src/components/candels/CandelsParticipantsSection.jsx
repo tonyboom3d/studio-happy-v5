@@ -10,6 +10,7 @@ import {
   getMaxExtraCandles,
   computeExtraCandlesPrice,
   validateCandelsParticipantsStep,
+  resolveCandlesSlotPricing,
 } from '@/lib/candlesPricing';
 
 // Candles workshop ("סדנת נרות") participants step.
@@ -55,10 +56,10 @@ export default function CandelsParticipantsSection({
   const childrenAtMax = children >= maxChildren;
   const childrenIncreaseBlockedBySeats = seatsUsed >= maxParticipants;
 
-  const slotPricing = useMemo(() => {
-    if (!selectedSlot?.serviceId || !servicePricing) return null;
-    return servicePricing[selectedSlot.serviceId] || null;
-  }, [selectedSlot, servicePricing]);
+  const slotPricing = useMemo(
+    () => resolveCandlesSlotPricing(selectedSlot, servicePricing),
+    [selectedSlot, servicePricing]
+  );
 
   const { totalPrice: ticketsPrice, soloUnitPrice, parentChildUnitPrice, extraChildUnitPrice } = useMemo(
     () => computeCandlesPrice(slotPricing, { soloAdults, parentChildPairs, extraChildren }),

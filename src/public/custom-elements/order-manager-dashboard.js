@@ -1466,10 +1466,12 @@ function __wdInjectGlobalAssets() {
 
         // Past workshops (ended sessions) are hidden by default; toggling on
         // extends the server date-range start 30 days back (Israel calendar).
+        // A workshop that is still today stays until 1h after its end time.
         let showPastWorkshops = false;
         const __wdIsraelTz = 'Asia/Jerusalem';
         const __wdPastDaysLookback = 30;
         const __wdSoonWindowMs = 2 * 60 * 60 * 1000;
+        const __wdAfterEndGraceMs = 60 * 60 * 1000;
 
         let currentWorkshopId = null;
         let currentOrderId = null;
@@ -1714,6 +1716,27 @@ function __wdInjectGlobalAssets() {
             if (!workshop) return false;
             const end = getWorkshopEndTimestamp(workshop);
             return typeof end === 'number' && Date.now() >= end;
+        }
+
+        function workshopHasKnownEnd(workshop) {
+            return typeof workshop?.endTimestamp === 'number'
+                || !!(workshop?.endTime && workshop?.time);
+        }
+
+        /** Default table: hide once an hour has passed since the workshop ended. */
+        function isWorkshopStillOnTable(workshop) {
+            if (!workshopHasKnownEnd(workshop)) return true;
+            const end = getWorkshopEndTimestamp(workshop);
+            if (typeof end !== 'number') return true;
+            return Date.now() < end + __wdAfterEndGraceMs;
+        }
+
+        function shouldHidePassedWorkshops() {
+            if (__wdSearchActive || showPastWorkshops) return false;
+            if (!__wdDateRangeStart) return true;
+            const rangeKey = getIsraelDateKey(__wdDateRangeStart);
+            const todayKey = getIsraelDateKey(new Date());
+            return !rangeKey || rangeKey >= todayKey;
         }
 
         function computeWorkshopTimeStatuses(workshops) {
@@ -3309,6 +3332,9 @@ function __wdInjectGlobalAssets() {
                 // loadPickupQueueTab) belong to that tab only — never the main table.
                 if (__wdPickupMergedWorkshopIds.size) {
                     filtered = filtered.filter(w => !__wdPickupMergedWorkshopIds.has(w.id));
+                }
+                if (shouldHidePassedWorkshops()) {
+                    filtered = filtered.filter(isWorkshopStillOnTable);
                 }
             }
 

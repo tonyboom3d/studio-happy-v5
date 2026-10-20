@@ -10,6 +10,7 @@ import {
   sortSlotsByStartTime,
 } from '@/lib/slotTime';
 import { resolveDisplayedPricing } from '@/lib/tuftingDatePricing';
+import { CANDLES_HALLOWEEN_SERVICE_ID, resolveCandlesSlotPricing } from '@/lib/candlesPricing';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   format,
@@ -142,7 +143,7 @@ function getMinPriceForDate(slots, servicePricing) {
   let minPrice = Infinity;
 
   slots.forEach(slot => {
-    const pricing = resolveDisplayedPricing(slot, servicePricing);
+    const pricing = resolveCandlesSlotPricing(slot, servicePricing) || resolveDisplayedPricing(slot, servicePricing);
     if (!pricing) return;
 
     // Ceramics: pricing is per day-of-week (single consolidated service),
@@ -439,6 +440,7 @@ export default function TimeSlotsSection({
             const isDisabled = !isCurrentMonth || isPast || !hasSlot;
             const isHoliday = ISRAELI_HOLIDAYS[dateStr];
             const hasMultipleSlots = daySlots.length > 1;
+            const isHalloweenDay = daySlots.some((slot) => slot.serviceId === CANDLES_HALLOWEEN_SERVICE_ID);
             const showRedDot = hasSlot && isDayHasRedDot(daySlots, bookingBlockHours);
             const allBlocked = hasSlot && isDayBlocked(daySlots, bookingBlockHours);
             const isHovered = hoveredDate === dateStr && hasSlot;
@@ -463,9 +465,12 @@ export default function TimeSlotsSection({
                   )}
                 >
                   <span className={cn(
-                    'font-semibold leading-none',
+                    'font-semibold leading-none inline-flex items-center gap-0.5',
                     isCurrentMonth && isDisabled && 'line-through decoration-[#b0b0b0]/60'
                   )}>
+                    {isHalloweenDay && (
+                      <span className="text-[12px] leading-none no-underline" aria-hidden>🎃</span>
+                    )}
                     {format(day, 'd')}
                   </span>
                   {isCurrentMonth && !isPast && hasSlot && minPrice && !isMobile && (
@@ -532,6 +537,12 @@ export default function TimeSlotsSection({
             <span className="w-2 h-2 rounded-full bg-red-500" />
             <span>חסום / נסגר בקרוב</span>
           </div>
+          {availableSlots.some((slot) => slot.serviceId === CANDLES_HALLOWEEN_SERVICE_ID) && (
+            <div className="flex items-center gap-1">
+              <span aria-hidden>🎃</span>
+              <span>הלווין</span>
+            </div>
+          )}
         </div>
       </div>
 

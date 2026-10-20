@@ -11,12 +11,13 @@ const CANDLES_SERVICE_IDS = {
     a: 'eb8fec0e-5d04-48a3-a795-e3e8051d07da',
     b: 'f0f6e447-02d8-4808-80ba-3c380ce9eae8',
     limited: '925f55fc-521d-43e7-a679-53d243e65268', // slots only through 2026-10-29
+    halloween: 'fd10d533-734f-4ef8-a69b-c8dad0dbf23d', // 2026-10-31 and 2026-11-01 only
 };
 const CANDLES_SERVICE_ID_LIST = Object.values(CANDLES_SERVICE_IDS);
 
 // GitHub Pages caches index.html aggressively — bump v= when bookingflow changes.
 const BOOKINGFLOW_IFRAME_SRC =
-    'https://tonyboom3d.github.io/studio-happy-v5/?v=20261020-candles-checkout-log#/candels';
+    'https://tonyboom3d.github.io/studio-happy-v5/?v=20261020-halloween#/candels';
 
 $w.onReady(function () {
     const mainIframe = $w('#htmlComponent1');

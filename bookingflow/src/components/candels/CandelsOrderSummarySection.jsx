@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import { format } from 'date-fns';
 import { he } from 'date-fns/locale';
 import { getSlotLocalDate, getSlotTimeRange } from '@/lib/slotTime';
+import { resolveCandlesSlotPricing } from '@/lib/candlesPricing';
 
 // Order summary for the candles workshop — ticket lines (identical to
 // Tufting's solo / parent+child breakdown) plus the "נר נוסף" add-on line
@@ -56,7 +57,7 @@ export default function CandelsOrderSummarySection({
     };
   }, [selectedSlot]);
 
-  const pricing = servicePricing?.[selectedSlot?.serviceId];
+  const pricing = resolveCandlesSlotPricing(selectedSlot, servicePricing);
   const soloUnitPrice = pricing?.solo || 0;
   const parentChildUnitPrice = pricing?.parentChild || soloUnitPrice;
   // "תוספת ילד" is priced like a solo ticket (own candle), not like the
@@ -170,9 +171,15 @@ export default function CandelsOrderSummarySection({
         )}
         {bookingError && (
           <p className="mb-2 text-center text-sm font-medium text-red-600">
-            {bookingError === 'timeout'
-              ? 'המעבר לתשלום לא הסתיים (timeout). נסו שוב.'
-              : bookingError}
+            שגיאה במעבר לדף התשלום — יש לפנות לשירות הלקוחות{' '}
+            <a
+              href="https://wa.link/jbfarf"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline"
+            >
+              בוואטסאפ
+            </a>
           </p>
         )}
         <motion.button

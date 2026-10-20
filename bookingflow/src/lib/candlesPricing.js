@@ -1,4 +1,41 @@
 import { validateFirstOrderMinimumCandles } from '@/lib/firstOrderMinimum';
+import { getSlotDateStrIsrael, getSlotWeekdayEnum } from '@/lib/slotTime';
+
+export const CANDLES_HALLOWEEN_SERVICE_ID = 'fd10d533-734f-4ef8-a69b-c8dad0dbf23d';
+const CANDLES_SATURDAY_SERVICE_ID = 'eb8fec0e-5d04-48a3-a795-e3e8051d07da';
+const CANDLES_WEEKDAY_SERVICE_ID = 'f0f6e447-02d8-4808-80ba-3c380ce9eae8';
+const CANDLES_HALLOWEEN_DATES = new Set(['2026-10-31', '2026-11-01']);
+
+/** On Halloween dates only the Halloween service is shown. */
+export function filterCandlesCalendarSlots(slots) {
+  return (slots || []).filter((slot) => {
+    const dateStr = getSlotDateStrIsrael(slot);
+    const halloweenDate = CANDLES_HALLOWEEN_DATES.has(dateStr);
+    if (slot?.serviceId === CANDLES_HALLOWEEN_SERVICE_ID) return halloweenDate;
+    return !halloweenDate;
+  });
+}
+
+/** Halloween slots charge the regular ticket prices of that weekday. */
+export function resolveCandlesSlotPricing(slot, servicePricing) {
+  if (!slot?.serviceId || !servicePricing) return null;
+  const own = servicePricing[slot.serviceId] || null;
+  if (slot.serviceId !== CANDLES_HALLOWEEN_SERVICE_ID) return own;
+  const sourceId = getSlotWeekdayEnum(slot) === 'SATURDAY'
+    ? CANDLES_SATURDAY_SERVICE_ID
+    : CANDLES_WEEKDAY_SERVICE_ID;
+  const source = servicePricing[sourceId];
+  if (!source) return own;
+  return {
+    ...(own || {}),
+    solo: source.solo,
+    parentChild: source.parentChild,
+    extraChild: source.extraChild,
+    extraCandle: source.extraCandle,
+    minPrice: source.minPrice ?? source.solo,
+    maxPrice: source.maxPrice ?? source.parentChild,
+  };
+}
 
 // Shared ticket-count/price logic for the candles ("סדנת נרות") workshop.
 // Keeps CandelsParticipantsSection and CandelsBooking in sync with the

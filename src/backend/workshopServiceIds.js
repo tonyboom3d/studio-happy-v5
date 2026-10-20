@@ -33,9 +33,19 @@ export const WORKSHOP_SERVICE_IDS = {
 export const CANDLES_LIMITED_SERVICE_ID = '925f55fc-521d-43e7-a679-53d243e65268';
 export const CANDLES_LIMITED_UNTIL_DATE = '2026-10-29';
 
+/** Saturday candles tickets (שבת). Weekday candles tickets are Sun–Fri. */
+export const CANDLES_SATURDAY_SERVICE_ID = 'eb8fec0e-5d04-48a3-a795-e3e8051d07da';
+export const CANDLES_WEEKDAY_SERVICE_ID = 'f0f6e447-02d8-4808-80ba-3c380ce9eae8';
+
+/** Halloween candles — only these Israel dates, and they replace every other candles slot that day. */
+export const CANDLES_HALLOWEEN_SERVICE_ID = 'fd10d533-734f-4ef8-a69b-c8dad0dbf23d';
+export const CANDLES_HALLOWEEN_DATES = ['2026-10-31', '2026-11-01'];
+export const CANDLES_HALLOWEEN_LAST_DATE = '2026-11-01';
+
 export const ALL_CANDLES_SERVICE_IDS = [
   ...WORKSHOP_SERVICE_IDS.candles,
   CANDLES_LIMITED_SERVICE_ID,
+  CANDLES_HALLOWEEN_SERVICE_ID,
 ];
 
 /** Tufting-only price for a single calendar day (Israel). Other dates keep service variants. */
@@ -79,10 +89,30 @@ export function shouldIncludeCandlesLimitedService(rangeStart) {
 
 export function expandCandlesServiceIds(serviceIds, rangeStart) {
   const ids = (Array.isArray(serviceIds) ? [...serviceIds] : [])
-    .filter((id) => id !== CANDLES_LIMITED_SERVICE_ID);
-  if (!shouldIncludeCandlesLimitedService(rangeStart)) return ids;
-  ids.push(CANDLES_LIMITED_SERVICE_ID);
+    .filter((id) => id !== CANDLES_LIMITED_SERVICE_ID && id !== CANDLES_HALLOWEEN_SERVICE_ID);
+  if (shouldIncludeCandlesLimitedService(rangeStart)) ids.push(CANDLES_LIMITED_SERVICE_ID);
+  if (shouldIncludeCandlesHalloweenService(rangeStart)) ids.push(CANDLES_HALLOWEEN_SERVICE_ID);
   return ids;
+}
+
+export function shouldIncludeCandlesHalloweenService(rangeStart) {
+  const startKey = israelDateKey(rangeStart || new Date());
+  return !!startKey && startKey <= CANDLES_HALLOWEEN_LAST_DATE;
+}
+
+export function isCandlesHalloweenDate(startDate) {
+  const key = israelDateKey(startDate);
+  return !!key && CANDLES_HALLOWEEN_DATES.includes(key);
+}
+
+/** Ticket prices follow the regular candles service for that weekday (Saturday vs Sun–Fri). */
+export function candlesPriceServiceIdForDate(dateInput) {
+  const date = dateInput instanceof Date ? dateInput : new Date(dateInput);
+  if (Number.isNaN(date.getTime())) return CANDLES_WEEKDAY_SERVICE_ID;
+  const weekday = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Jerusalem', weekday: 'long',
+  }).format(date).toUpperCase();
+  return weekday === 'SATURDAY' ? CANDLES_SATURDAY_SERVICE_ID : CANDLES_WEEKDAY_SERVICE_ID;
 }
 
 export function filterCandlesLimitedSlots(slots) {
@@ -91,6 +121,16 @@ export function filterCandlesLimitedSlots(slots) {
     if (sid !== CANDLES_LIMITED_SERVICE_ID) return true;
     const start = slot.start?.timestamp || slot.startDate || slot.originalSlot?.startDate;
     return isCandlesLimitedSlotAllowed(start);
+  });
+}
+
+export function filterCandlesHalloweenSlots(slots) {
+  return (slots || []).filter((slot) => {
+    const sid = slot.serviceId || slot.originalSlot?.serviceId;
+    const start = slot.start?.timestamp || slot.startDate || slot.originalSlot?.startDate;
+    const halloweenDate = isCandlesHalloweenDate(start);
+    if (sid === CANDLES_HALLOWEEN_SERVICE_ID) return halloweenDate;
+    return !halloweenDate;
   });
 }
 

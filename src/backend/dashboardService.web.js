@@ -65,6 +65,7 @@ const CANDLES_SERVICE_ID_SET = new Set([
     'eb8fec0e-5d04-48a3-a795-e3e8051d07da',
     'f0f6e447-02d8-4808-80ba-3c380ce9eae8',
     '925f55fc-521d-43e7-a679-53d243e65268',
+    'fd10d533-734f-4ef8-a69b-c8dad0dbf23d',
 ]);
 
 function isCandlesOrder(order) {
@@ -147,6 +148,61 @@ function formatTimeIL(dateObj) {
     return new Intl.DateTimeFormat('en-GB', { timeZone: ISRAEL_TZ, hour: '2-digit', minute: '2-digit', hour12: false }).format(d);
 }
 
+// A same-day workshop stays on the dashboard until this long after it ends.
+const WORKSHOP_AFTER_END_GRACE_MS = 60 * 60 * 1000;
+// Pulls sessions that started late yesterday so the grace window still works after midnight.
+const WORKSHOP_GRACE_LOOKBACK_MS = 12 * 60 * 60 * 1000;
+
+function israelClockParts(date) {
+    const parts = new Intl.DateTimeFormat('en-US', {
+        timeZone: ISRAEL_TZ,
+        hourCycle: 'h23',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+    }).formatToParts(date);
+    const map = {};
+    for (const p of parts) if (p.type !== 'literal') map[p.type] = p.value;
+    if (map.hour === '24') map.hour = '00';
+    return map;
+}
+
+/** 00:00 Asia/Jerusalem on the Israel calendar day of `date`. */
+function startOfIsraelDay(date) {
+    const key = new Intl.DateTimeFormat('en-CA', {
+        timeZone: ISRAEL_TZ,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+    }).format(date);
+    let utc = new Date(`${key}T00:00:00Z`);
+    const shown = israelClockParts(utc);
+    const shownAsUtc = Date.UTC(+shown.year, +shown.month - 1, +shown.day, +shown.hour, +shown.minute, +shown.second);
+    utc = new Date(utc.getTime() - (shownAsUtc - utc.getTime()));
+    const shown2 = israelClockParts(utc);
+    const shownKey = `${shown2.year}-${shown2.month}-${shown2.day}`;
+    if (shownKey !== key || shown2.hour !== '00' || shown2.minute !== '00') {
+        const shown2AsUtc = Date.UTC(+shown2.year, +shown2.month - 1, +shown2.day, +shown2.hour, +shown2.minute, +shown2.second);
+        const [y, m, d] = key.split('-').map(Number);
+        utc = new Date(utc.getTime() - (shown2AsUtc - Date.UTC(y, m - 1, d)));
+    }
+    return utc;
+}
+
+function coerceDate(value) {
+    if (!value) return null;
+    const d = value instanceof Date ? value : new Date(value);
+    return Number.isNaN(d.getTime()) ? null : d;
+}
+
+function isWorkshopStillVisible(workshop, nowMs) {
+    if (typeof workshop.endTimestamp !== 'number') return true;
+    return nowMs < workshop.endTimestamp + WORKSHOP_AFTER_END_GRACE_MS;
+}
+
 function hoursUntil(dateObj) {
     if (!dateObj) return null;
     const now = new Date();
@@ -194,6 +250,10 @@ async function loadWorkshopTypes() {
             serviceIds,
         };
         for (const sid of serviceIds) serviceIdToTypeId[sid] = item._id;
+        if (serviceIds.some((id) => CANDLES_SERVICE_ID_SET.has(id)) && !serviceIdToTypeId['fd10d533-734f-4ef8-a69b-c8dad0dbf23d']) {
+            serviceIds.push('fd10d533-734f-4ef8-a69b-c8dad0dbf23d');
+            serviceIdToTypeId['fd10d533-734f-4ef8-a69b-c8dad0dbf23d'] = item._id;
+        }
     }
 
     if (!Object.keys(typesMap).length) {
@@ -1095,7 +1155,24 @@ export const getInitialDashboardData = webMethod(Permissions.SiteMember, async (
 
     const refreshOnly = !!filters?.refreshOnly;
     const now = new Date();
-    const startDate = filters?.dateRangeStart ? new Date(filters.dateRangeStart) : now;
+    const todayStart = startOfIsraelDay(now);
+    const requestedStart = filters?.dateRangeStart ? new Date(filters.dateRangeStart) : null;
+    const requestedStartMs = requestedStart && !Number.isNaN(requestedStart.getTime()) ? requestedStart.getTime() : null;
+    const rangeStartsBeforeToday = requestedStartMs !== null && requestedStartMs < todayStart.getTime() - 60 * 1000;
+    // Default / today-forward range: keep a workshop until 1h after it ends.
+    // A range that starts on a past Israel day is an explicit lookback — show it as requested.
+    const hidePassedWorkshops = !rangeStartsBeforeToday && (
+        requestedStartMs === null || requestedStartMs < todayStart.getTime() + 24 * 60 * 60 * 1000
+    );
+    const lookbackStartMs = todayStart.getTime() - WORKSHOP_GRACE_LOOKBACK_MS;
+    let startDate;
+    if (requestedStartMs === null) {
+        startDate = new Date(lookbackStartMs);
+    } else if (hidePassedWorkshops) {
+        startDate = new Date(Math.min(requestedStartMs, lookbackStartMs));
+    } else {
+        startDate = requestedStart;
+    }
     const endDate = filters?.dateRangeEnd ? new Date(filters.dateRangeEnd) : new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
 
     // console.log(`[dashboardService] getInitialDashboardData${refreshOnly ? ' (refresh)' : ''}: range ${startDate.toISOString()} → ${endDate.toISOString()}`);
@@ -1185,7 +1262,7 @@ export const getInitialDashboardData = webMethod(Permissions.SiteMember, async (
             eventId: calSession?.eventId || null,
             serviceId: sample.serviceId || calSession?.serviceId || null,
             start,
-            end: calSession?.end || null,
+            end: calSession?.end || coerceDate(sample.workshopEnd),
             totalSpots: calSession?.totalSpots || 0,
             openSpots: calSession?.openSpots || 0,
             staffId: calSession?.staffId || null,
@@ -1344,6 +1421,7 @@ export const getInitialDashboardData = webMethod(Permissions.SiteMember, async (
             time: formatTimeIL(session.start),
             endTime: formatTimeIL(session.end),
             startTimestamp: session.start ? session.start.getTime() : null,
+            endTimestamp: session.end ? session.end.getTime() : null,
             maxCapacity: session.isSynthetic ? cmsCapacity : session.totalSpots,
             // currentCapacity is the REAL headcount from Wix Bookings (includes legacy,
             // non-CMS bookings). cmsCapacity counts only participants from WorkshopOrders
@@ -1409,7 +1487,7 @@ export const getInitialDashboardData = webMethod(Permissions.SiteMember, async (
 
     // Employees without manageOrdersSystem see workshops where they're the
     // instructor, plus all tufting workshops when they hold sketchSewingSkill.
-    const scopedWorkshopRows = canManageOrdersSystem
+    let scopedWorkshopRows = canManageOrdersSystem
         ? visibleWorkshopRows
         : visibleWorkshopRows.filter((w) => {
             const isOwnSession = myStaffId && sessionStaffMap[w.id] === myStaffId;
@@ -1417,6 +1495,11 @@ export const getInitialDashboardData = webMethod(Permissions.SiteMember, async (
             const isTufting = tuftingTypeIds.has(w.type);
             return isOwnSession || isOwnShiftAssignment || (hasSketchSewingSkill && isTufting);
         });
+
+    if (hidePassedWorkshops) {
+        const nowMs = now.getTime();
+        scopedWorkshopRows = scopedWorkshopRows.filter((w) => isWorkshopStillVisible(w, nowMs));
+    }
 
     // Recompute alerts against the scoped workshop set only.
     missingSketchesCount = 0;
@@ -1443,6 +1526,9 @@ export const getInitialDashboardData = webMethod(Permissions.SiteMember, async (
     let scopedOrders = canManageOrdersSystem
         ? dashboardOrders
         : dashboardOrders.filter(o => scopedWorkshopIds.has(o.workshopId));
+    if (hidePassedWorkshops) {
+        scopedOrders = scopedOrders.filter(o => scopedWorkshopIds.has(o.workshopId));
+    }
     if (!canManageOrdersSystem) {
         scopedOrders = scopedOrders.map(({ paidTotal, paidDiscount, couponCode, couponName, promoCoupon, ecomOrderId, addOns, addOnsTotal, ...rest }) => rest);
         for (const w of scopedWorkshopRows) delete w.unlinkedAddOns;

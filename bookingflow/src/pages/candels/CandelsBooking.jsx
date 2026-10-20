@@ -15,6 +15,8 @@ import {
   getMaxExtraCandles,
   computeExtraCandlesPrice,
   validateCandelsParticipantsStep,
+  filterCandlesCalendarSlots,
+  resolveCandlesSlotPricing,
 } from '@/lib/candlesPricing';
 
 // Candles workshop ("סדנת נרות") booking flow — same 4-step accordion shape
@@ -107,8 +109,9 @@ export default function CandelsBooking() {
         addLog(`[Candels] Loaded ${data.products.length} cups`, 'success');
       }
       if (data.slots) {
-        setWixSlots(data.slots);
-        addLog(`[Candels] Loaded ${data.slots.length} time slots`, 'success');
+        const slots = filterCandlesCalendarSlots(data.slots);
+        setWixSlots(slots);
+        addLog(`[Candels] Loaded ${slots.length} time slots`, 'success');
       }
       if (data.servicePricing) {
         setServicePricing(data.servicePricing);
@@ -161,7 +164,7 @@ export default function CandelsBooking() {
 
   // מחיר כרטיסים
   const slotPricing = useMemo(
-    () => servicePricing?.[selectedSlot?.serviceId] || null,
+    () => resolveCandlesSlotPricing(selectedSlot, servicePricing),
     [selectedSlot, servicePricing]
   );
   const ticketPrice = useMemo(

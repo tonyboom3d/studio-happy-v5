@@ -25,8 +25,11 @@ import { buildOrderViewUrl } from 'backend/orderLookupService.js';
 import * as orderReconciliation from 'backend/orderReconciliation.js';
 import {
     ALL_CANDLES_SERVICE_IDS,
+    CANDLES_HALLOWEEN_SERVICE_ID,
     CANDLES_LIMITED_SERVICE_ID,
+    candlesPriceServiceIdForDate,
     expandCandlesServiceIds,
+    filterCandlesHalloweenSlots,
     filterCandlesLimitedSlots,
     applyTuftingDatePricing,
 } from 'backend/workshopServiceIds.js';
@@ -48,6 +51,7 @@ const CANDLES_SERVICE_IDS = {
     a: 'eb8fec0e-5d04-48a3-a795-e3e8051d07da',
     b: 'f0f6e447-02d8-4808-80ba-3c380ce9eae8',
     limited: CANDLES_LIMITED_SERVICE_ID, // slots only through 2026-10-29
+    halloween: CANDLES_HALLOWEEN_SERVICE_ID, // 2026-10-31 and 2026-11-01 only
 };
 const CANDLES_ID_SET = new Set(ALL_CANDLES_SERVICE_IDS);
 
@@ -726,7 +730,21 @@ const createAndCheckoutInner = async (orderData) => {
     const ceramicsSoloTickets = isCeramics ? Math.max(0, Number(rawParticipants) || 0) : 0;
     const ceramicsParentChildTickets = isCeramics ? Math.max(0, Number(rawParentChildTickets) || 0) : 0;
     const allPricing = await getServicePricingCached(getServiceIdsGroupFor(serviceId));
-    const servicePricing = allPricing[serviceId];
+    let servicePricing = allPricing[serviceId];
+    if (serviceId === CANDLES_HALLOWEEN_SERVICE_ID) {
+        const slotStart = slotsList[0].date || slotsList[0].startDate || slotsList[0].start?.timestamp || slotsList[0].start;
+        const source = allPricing[candlesPriceServiceIdForDate(slotStart)];
+        if (source?.solo) {
+            servicePricing = {
+                ...(servicePricing || {}),
+                solo: source.solo,
+                parentChild: source.parentChild,
+                extraChild: source.extraChild,
+                minPrice: source.minPrice,
+                maxPrice: source.maxPrice,
+            };
+        }
+    }
     // קרמיקה: המחיר תלוי ביום בשבוע של הסלוט (ולא בסרוויס — יש סרוויס אחד
     // מאוחד עם ticket variants לפי יום). נפתור את יום השבוע כאן, לפני חישוב basePrice.
     let ceramicsDayPricing = null;
@@ -794,6 +812,13 @@ const createAndCheckoutInner = async (orderData) => {
         extraCandlePrice = extraCandleConfig?.price || 0;
         extraCandleAddOnId = extraCandleConfig?.addOnId || null;
         extraCandleGroupId = extraCandleConfig?.groupId || null;
+        if (serviceId === CANDLES_HALLOWEEN_SERVICE_ID) {
+            const slotStart = slotsList[0].date || slotsList[0].startDate || slotsList[0].start?.timestamp || slotsList[0].start;
+            const sourceAddon = EXTRA_CANDLE_ADDON_BY_SERVICE[candlesPriceServiceIdForDate(slotStart)];
+            extraCandlePrice = sourceAddon?.price || 0;
+            extraCandleAddOnId = null;
+            extraCandleGroupId = null;
+        }
         extraCandles = Math.max(0, Math.min(Number(rawExtraCandles) || 0, baseCandles));
 
         rugCount = baseCandles + extraCandles; // מספר נרות כולל (למכסת כוסות/דשבורד)
@@ -2235,7 +2260,10 @@ export async function fetchCourseSessionsInternal(dateRangeStart, dateRangeEnd, 
                 };
             });
 
-        return filterCandlesLimitedSlots(availableSlots);
+        const candlesSlots = isCandlesQuery
+            ? filterCandlesHalloweenSlots(filterCandlesLimitedSlots(availableSlots))
+            : availableSlots;
+        return candlesSlots;
     } catch (error) {
         console.error("Error fetching class availability:", error);
         return [];

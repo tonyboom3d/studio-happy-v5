@@ -679,6 +679,18 @@ async function hashAccessToken(token) {
 // --- פונקציה 1b: תהליך eCommerce Checkout — יצירת הזמנות ומעבר ל-checkout של Wix ---
 // סדנת טאפטינג: createBooking (הזמנה בודדת) + WorkshopOrders CMS + eCommerce checkout
 export const createAndCheckout = webMethod(Permissions.Anyone, async (orderData) => {
+    try {
+        return await createAndCheckoutInner(orderData);
+    } catch (err) {
+        const serviceId = orderData?.slots?.[0]?.serviceId;
+        if (isCandlesServiceId(serviceId)) {
+            console.error('[candles-checkout] FAILED', err?.message || String(err));
+        }
+        throw err;
+    }
+});
+
+const createAndCheckoutInner = async (orderData) => {
     // console.log('[createAndCheckout] orderData received:', JSON.stringify(orderData, null, 2));
 
     const {
@@ -699,6 +711,16 @@ export const createAndCheckout = webMethod(Permissions.Anyone, async (orderData)
     const serviceId = slotsList[0].serviceId;
     const isCandles = isCandlesServiceId(serviceId);
     const isCeramics = isCeramicsServiceId(serviceId);
+    if (isCandles) {
+        console.log('[candles-checkout] start', JSON.stringify({
+            serviceId,
+            sessionId: slotsList[0]?.sessionId || slotsList[0]?.slot_id || null,
+            adults: numAdults,
+            children: numChildren,
+            extraCandles: Number(rawExtraCandles) || 0,
+            products: Array.isArray(rawProducts) ? rawProducts.length : 0,
+        }));
+    }
     // קרמיקה: שני סוגי כרטיסים — "יחיד" (9+, participants) ו"הורה וילד"
     // (3-8, parentChildTickets — כרטיס אחד = זוג הורה+ילד, 2 מושבים).
     const ceramicsSoloTickets = isCeramics ? Math.max(0, Number(rawParticipants) || 0) : 0;
@@ -793,6 +815,12 @@ export const createAndCheckout = webMethod(Permissions.Anyone, async (orderData)
         const pricePerAdult = tuftingPricing.solo;
         const childTicketPrice = tuftingPricing.parentChild || pricePerAdult;
         basePrice = (soloAdults * pricePerAdult) + (parentChildPairs * childTicketPrice);
+    }
+
+    if (isCandles) {
+        console.log('[candles-checkout] priced', JSON.stringify({
+            basePrice, rugCount, soloAdults, parentChildPairs, extraChildren, extraCandles,
+        }));
     }
 
     // --- נרמול פרטי משתמש ---
@@ -934,7 +962,11 @@ export const createAndCheckout = webMethod(Permissions.Anyone, async (orderData)
         }
     }
 
-    // console.log('[createAndCheckout] createBooking payload:', JSON.stringify(bookingPayload, null, 2));
+    if (isCandles) {
+        console.log('[candles-checkout] createBooking', JSON.stringify({
+            sessionId, seatsUsed, extraCandles, hasAddOn: !!bookingPayload.bookedAddOns,
+        }));
+    }
     const elevatedCreateBooking = auth.elevate(bookings.createBooking);
     const bookingResult = await elevatedCreateBooking(bookingPayload, {
         flowControlSettings: {
@@ -953,7 +985,9 @@ export const createAndCheckout = webMethod(Permissions.Anyone, async (orderData)
     }
 
     const bookingIds = [createdBooking._id];
-    // console.log('[createAndCheckout] Booking created:', createdBooking._id, 'status:', createdBooking.status);
+    if (isCandles) {
+        console.log('[candles-checkout] booking created', createdBooking._id, createdBooking.status);
+    }
 
     // --- שלב 2: יצירת רשומת WorkshopOrders ב-CMS ---
     const orderToken = generateToken();
@@ -1107,10 +1141,18 @@ export const createAndCheckout = webMethod(Permissions.Anyone, async (orderData)
         // console.log('[createAndCheckout] Ceramics Fri/Sat session — coupon code field locked on checkout.', { ceramicsSlotStartIso, ceramicsDayEnum });
     }
 
-    // console.log('[createAndCheckout] Creating eCommerce checkout...', checkoutOptions);
+    if (isCandles) {
+        console.log('[candles-checkout] createCheckout', JSON.stringify({
+            lineItems: lineItems.length,
+            customLineItems: customLineItems.length,
+            pricePerItem,
+        }));
+    }
     const elevatedCreateCheckout = auth.elevate(checkout.createCheckout);
     const newCheckout = await elevatedCreateCheckout(checkoutOptions);
-    // console.log('[createAndCheckout] Checkout created:', newCheckout?._id);
+    if (isCandles) {
+        console.log('[candles-checkout] checkout created', newCheckout?._id || null);
+    }
 
     // --- שלב 4: עדכון WorkshopOrders עם checkoutId וקישור ישיר להזמנה ---
     // orderUrl נבנה פעם אחת לפי _id שחזר מה-insert — נשמר ב-CMS כך שלצוות
@@ -1128,7 +1170,7 @@ export const createAndCheckout = webMethod(Permissions.Anyone, async (orderData)
         orderToken,
         workshopOrderId: workshopOrder._id
     };
-});
+};
 
 // --- פונקציה 1 (LEGACY): חישוב מחיר ויצירת תשלום דרך Wix Pay ---
 // @deprecated — השתמש ב-createAndCheckout עם eCommerce checkout במקום זה

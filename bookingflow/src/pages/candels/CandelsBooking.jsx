@@ -123,6 +123,7 @@ export default function CandelsBooking() {
         setIsProcessing(false);
         submittingRef.current = false;
         setBookingError(data.bookingError);
+        console.error('[Candels][checkout] BOOKING_ERROR', data.bookingError);
         addLog(`[Candels] Booking error: ${data.bookingError}`, 'error');
       }
     });
@@ -307,9 +308,13 @@ export default function CandelsBooking() {
 
   // שליחת ההזמנה (כולל הכוסות שנבחרו)
   const handleSubmit = async () => {
-    if (submittingRef.current) return;
+    if (submittingRef.current) {
+      console.warn('[Candels][checkout] ignored — submit already in progress');
+      return;
+    }
 
     if (!blockInvalidParticipantsStep()) {
+      console.warn('[Candels][checkout] blocked — participants', participantsStepValidation.error);
       setBookingError(participantsStepValidation.error);
       return;
     }
@@ -325,6 +330,7 @@ export default function CandelsBooking() {
           ? `יש לבחור ${cupsWord} לנרות לפני המשך לתשלום`
           : `יש להשלים בחירת הכוסות (${selectedCupCount}/${totalCups} ${cupsWord}) לפני המשך לתשלום`
       );
+      console.warn('[Candels][checkout] blocked — cups', selectedCupCount, '/', totalCups);
       addLog('[Candels] Submit blocked — cup selection incomplete', 'error');
       return;
     }
@@ -353,7 +359,15 @@ export default function CandelsBooking() {
       })),
     };
 
-    // console.log('[Candels][Frontend] bookingData being sent to Wix:', JSON.stringify(bookingData, null, 2));
+    console.log('[Candels][checkout] posting BOOKING_SUBMIT', {
+      adults,
+      children,
+      extraCandles,
+      sessionId: bookingData.selectedSlot?.sessionId || null,
+      serviceId: bookingData.selectedSlot?.serviceId || null,
+      products: bookingData.products.length,
+      total: orderTotalPreview,
+    });
     addLog('[Candels] Submitting booking', 'info');
     submitBooking(bookingData);
 
@@ -588,6 +602,7 @@ export default function CandelsBooking() {
                     totalPrice={orderTotalPreview}
                     onPay={handleSubmit}
                     isProcessing={isProcessing}
+                    bookingError={bookingError}
                   />
                 )}
               </AccordionSection>

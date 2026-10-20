@@ -24,7 +24,8 @@ export default function CandelsOrderSummarySection({
   totalCups = 0,
   totalPrice,
   onPay,
-  isProcessing
+  isProcessing,
+  bookingError = null,
 }) {
   const selectedCupCount = selectedCups.reduce((sum, c) => sum + (c.quantity || 1), 0);
   const cupsIncomplete = totalCups > 0 && selectedCupCount < totalCups;
@@ -36,6 +37,7 @@ export default function CandelsOrderSummarySection({
   }, [cupsIncomplete]);
 
   const handlePayClick = () => {
+    console.log('[Candels][checkout] pay clicked', { cupsIncomplete, isProcessing, totalPrice });
     if (cupsIncomplete) {
       setCupSelectionError(cupsMissingMessage);
       return;
@@ -164,6 +166,13 @@ export default function CandelsOrderSummarySection({
         {cupSelectionError && (
           <p className="mb-2 text-center text-sm font-medium text-red-600">
             {cupSelectionError}
+          </p>
+        )}
+        {bookingError && (
+          <p className="mb-2 text-center text-sm font-medium text-red-600">
+            {bookingError === 'timeout'
+              ? 'המעבר לתשלום לא הסתיים (timeout). נסו שוב.'
+              : bookingError}
           </p>
         )}
         <motion.button

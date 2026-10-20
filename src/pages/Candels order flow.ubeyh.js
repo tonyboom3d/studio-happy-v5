@@ -16,7 +16,7 @@ const CANDLES_SERVICE_ID_LIST = Object.values(CANDLES_SERVICE_IDS);
 
 // GitHub Pages caches index.html aggressively — bump v= when bookingflow changes.
 const BOOKINGFLOW_IFRAME_SRC =
-    'https://tonyboom3d.github.io/studio-happy-v5/?v=20261001-full-date-wa#/candels';
+    'https://tonyboom3d.github.io/studio-happy-v5/?v=20261020-candles-checkout-log#/candels';
 
 $w.onReady(function () {
     const mainIframe = $w('#htmlComponent1');
@@ -97,6 +97,16 @@ async function handleIframeMessage(event, iframe) {
  * טיפול בשליחת הזמנה מה-iframe (כולל הכוסות שנבחרו)
  */
 async function handleBookingSubmit(bookingData, iframe) {
+    const slot = bookingData?.selectedSlot || bookingData?.selected_slots?.[0] || null;
+    console.log('[Wix][candels][checkout] BOOKING_SUBMIT received', JSON.stringify({
+        adults: bookingData?.adults,
+        children: bookingData?.children,
+        extraCandles: bookingData?.extraCandles || 0,
+        sessionId: slot?.sessionId || slot?.slot_id || null,
+        serviceId: slot?.serviceId || null,
+        products: (bookingData?.products || bookingData?.selectedProducts || []).length,
+    }));
+
     try {
         const slots = bookingData.selectedSlot
             ? [bookingData.selectedSlot]
@@ -117,7 +127,13 @@ async function handleBookingSubmit(bookingData, iframe) {
             },
         };
 
+        console.log('[Wix][candels][checkout] calling createAndCheckout');
         const result = await createAndCheckout(orderData);
+        console.log('[Wix][candels][checkout] createAndCheckout result', JSON.stringify({
+            checkoutId: result?.checkoutId || null,
+            workshopOrderId: result?.workshopOrderId || null,
+            bookingIds: result?.bookingIds || null,
+        }));
 
         if (!result?.checkoutId) {
             throw new Error('No checkout ID returned');
@@ -135,9 +151,12 @@ async function handleBookingSubmit(bookingData, iframe) {
             overrideContinueBrowsingUrl: 'https://www.studiohappy.art/booking-flow-candels',
         };
 
+        console.log('[Wix][candels][checkout] navigateToCheckoutPage', result.checkoutId);
         await wixEcomFrontend.navigateToCheckoutPage(result.checkoutId, checkoutOptions);
+        console.log('[Wix][candels][checkout] navigateToCheckoutPage resolved', result.checkoutId);
 
     } catch (err) {
+        console.error('[Wix][candels][checkout] FAILED', err?.message || err, err?.stack || '');
         sendMessageToIframe(iframe, {
             type: 'BOOKING_ERROR',
             error: err.message || 'Booking failed'

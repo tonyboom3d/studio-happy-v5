@@ -287,7 +287,9 @@ export function notifyProgress(section, data = {}) {
 function sendToWix(type, data) {
     try {
         window.parent.postMessage({ type, data }, '*');
-    } catch (error) {}
+    } catch (error) {
+        console.error('[wixBridge] postMessage failed', type, error?.message || error);
+    }
 }
 
 /**

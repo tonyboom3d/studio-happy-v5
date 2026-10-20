@@ -6,13 +6,11 @@ const CANDLES_SATURDAY_SERVICE_ID = 'eb8fec0e-5d04-48a3-a795-e3e8051d07da';
 const CANDLES_WEEKDAY_SERVICE_ID = 'f0f6e447-02d8-4808-80ba-3c380ce9eae8';
 const CANDLES_HALLOWEEN_DATES = new Set(['2026-10-31', '2026-11-01']);
 
-/** On Halloween dates only the Halloween service is shown. */
+/** Halloween service stays on its two dates. Other candles sessions on those dates stay visible. */
 export function filterCandlesCalendarSlots(slots) {
   return (slots || []).filter((slot) => {
-    const dateStr = getSlotDateStrIsrael(slot);
-    const halloweenDate = CANDLES_HALLOWEEN_DATES.has(dateStr);
-    if (slot?.serviceId === CANDLES_HALLOWEEN_SERVICE_ID) return halloweenDate;
-    return !halloweenDate;
+    if (slot?.serviceId !== CANDLES_HALLOWEEN_SERVICE_ID) return true;
+    return CANDLES_HALLOWEEN_DATES.has(getSlotDateStrIsrael(slot));
   });
 }
 

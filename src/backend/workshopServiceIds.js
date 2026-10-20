@@ -37,7 +37,7 @@ export const CANDLES_LIMITED_UNTIL_DATE = '2026-10-29';
 export const CANDLES_SATURDAY_SERVICE_ID = 'eb8fec0e-5d04-48a3-a795-e3e8051d07da';
 export const CANDLES_WEEKDAY_SERVICE_ID = 'f0f6e447-02d8-4808-80ba-3c380ce9eae8';
 
-/** Halloween candles — only these Israel dates, and they replace every other candles slot that day. */
+/** Halloween candles — shown on these Israel dates together with the regular candles sessions. */
 export const CANDLES_HALLOWEEN_SERVICE_ID = 'fd10d533-734f-4ef8-a69b-c8dad0dbf23d';
 export const CANDLES_HALLOWEEN_DATES = ['2026-10-31', '2026-11-01'];
 export const CANDLES_HALLOWEEN_LAST_DATE = '2026-11-01';
@@ -130,7 +130,7 @@ export function filterCandlesHalloweenSlots(slots) {
     const start = slot.start?.timestamp || slot.startDate || slot.originalSlot?.startDate;
     const halloweenDate = isCandlesHalloweenDate(start);
     if (sid === CANDLES_HALLOWEEN_SERVICE_ID) return halloweenDate;
-    return !halloweenDate;
+    return true;
   });
 }
 

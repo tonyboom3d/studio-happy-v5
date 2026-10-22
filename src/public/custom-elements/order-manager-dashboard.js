@@ -2024,7 +2024,7 @@ function __wdInjectGlobalAssets() {
                 if (w) {
                     const displayCapacity = showAllOrders ? w.currentCapacity : (typeof w.cmsCapacity === 'number' ? w.cmsCapacity : w.currentCapacity);
                     document.getElementById('spCapacity').innerText = `${displayCapacity}/${w.maxCapacity} משתתפים`;
-                    renderOrdersTable(w.id, workshopTypes[w.type].requiresSketch);
+                    renderOrdersTable(w.id, workshopTypeOf(w).requiresSketch);
                     restoreExpandedOrderIds(expandedOrderIds);
                 } else {
                     closeSidePanel();
@@ -2480,6 +2480,10 @@ function __wdInjectGlobalAssets() {
             };
         }
 
+        function workshopTypeOf(workshop) {
+            return workshopTypes[workshop?.type] || { title: 'סדנה', colorHex: '#6B7280', requiresSketch: false };
+        }
+
         function isCandlesOrder(order) {
             return order?.workshopType === 'candles';
         }
@@ -2566,7 +2570,7 @@ function __wdInjectGlobalAssets() {
         function reopenOrderDetailRow(orderId, workshopId) {
             const w = mockWorkshops.find(x => x.id === (workshopId || currentWorkshopId));
             if (!w) return;
-            renderOrdersTable(w.id, workshopTypes[w.type].requiresSketch);
+            renderOrdersTable(w.id, workshopTypeOf(w).requiresSketch);
             const row = document.getElementById(`detail-${orderId}`);
             const icon = document.getElementById(`icon-${orderId}`);
             if (row) {
@@ -3438,7 +3442,7 @@ function __wdInjectGlobalAssets() {
             const workshops = allFilteredWorkshops.slice(pageStart, pageStart + __wdPageSize);
 
             workshops.forEach(w => {
-                const typeInfo = workshopTypes[w.type];
+                const typeInfo = workshopTypeOf(w);
                 
                 // Instructors badge list generation — compact: one name badge +
                 // a single "+N" badge (hover shows the rest) for any additional staff.
@@ -3590,7 +3594,7 @@ function __wdInjectGlobalAssets() {
         function openSidePanel(id) {
             currentWorkshopId = id;
             const w = mockWorkshops.find(x => x.id === id);
-            const typeInfo = workshopTypes[w.type];
+            const typeInfo = workshopTypeOf(w);
             const wOrders = getVisibleOrders().filter(o => o.workshopId === id);
             console.warn('🏫 [workshops-dashboard] Opened workshop:', w);
             console.warn(`📋 [workshops-dashboard] Orders for workshop ${id} (${wOrders.length}):`, wOrders);
@@ -4542,7 +4546,7 @@ function __wdInjectGlobalAssets() {
             closeModal('unapprovedModal');
             // Re-render to revert the select UI if cancelled
             const w = mockWorkshops.find(x => x.id === currentWorkshopId);
-            renderOrdersTable(currentWorkshopId, workshopTypes[w.type].requiresSketch);
+            renderOrdersTable(currentWorkshopId, workshopTypeOf(w).requiresSketch);
             const row = document.getElementById(`detail-${unapprovedOrderId}`);
             const icon = document.getElementById(`icon-${unapprovedOrderId}`);
             if(row) {
@@ -4583,7 +4587,7 @@ function __wdInjectGlobalAssets() {
             });
             w.sketchesReady = readySum;
 
-            renderOrdersTable(currentWorkshopId, workshopTypes[w.type].requiresSketch);
+            renderOrdersTable(currentWorkshopId, workshopTypeOf(w).requiresSketch);
             const row = document.getElementById(`detail-${orderId}`);
             const icon = document.getElementById(`icon-${orderId}`);
             if(row) {
@@ -4616,7 +4620,7 @@ function __wdInjectGlobalAssets() {
             });
             w.sketchesReady = readySum;
 
-            renderOrdersTable(currentWorkshopId, workshopTypes[w.type].requiresSketch);
+            renderOrdersTable(currentWorkshopId, workshopTypeOf(w).requiresSketch);
             
             const row = document.getElementById(`detail-${currentOrderId}`);
             const icon = document.getElementById(`icon-${currentOrderId}`);
@@ -4644,7 +4648,7 @@ function __wdInjectGlobalAssets() {
             });
             w.sketchesReady = readySum;
 
-            renderOrdersTable(currentWorkshopId, workshopTypes[w.type].requiresSketch);
+            renderOrdersTable(currentWorkshopId, workshopTypeOf(w).requiresSketch);
             const row = document.getElementById(`detail-${orderId}`);
             const icon = document.getElementById(`icon-${orderId}`);
             if(row) {
@@ -4788,7 +4792,7 @@ function __wdInjectGlobalAssets() {
             
             // Refresh inline log to show the new message sent action
             const w = mockWorkshops.find(x => x.id === currentWorkshopId);
-            renderOrdersTable(currentWorkshopId, workshopTypes[w.type].requiresSketch);
+            renderOrdersTable(currentWorkshopId, workshopTypeOf(w).requiresSketch);
             const row = document.getElementById(`detail-${currentOrderId}`);
             const icon = document.getElementById(`icon-${currentOrderId}`);
             if(row) {
@@ -4844,7 +4848,7 @@ function __wdInjectGlobalAssets() {
             closeModal('noteModal');
             
             const w = mockWorkshops.find(x => x.id === currentWorkshopId);
-            renderOrdersTable(currentWorkshopId, workshopTypes[w.type].requiresSketch);
+            renderOrdersTable(currentWorkshopId, workshopTypeOf(w).requiresSketch);
             
             const row = document.getElementById(`detail-${currentOrderId}`);
             const icon = document.getElementById(`icon-${currentOrderId}`);

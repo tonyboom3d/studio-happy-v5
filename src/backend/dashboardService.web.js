@@ -270,6 +270,21 @@ async function loadWorkshopTypes() {
     return { typesMap, serviceIdToTypeId, allServiceIds: Object.keys(serviceIdToTypeId) };
 }
 
+/** Session whose Bookings serviceId is not listed on any workshops row. */
+function resolveWorkshopType(typesMap, serviceIdToTypeId, serviceId) {
+    const typeId = (serviceId && serviceIdToTypeId[serviceId]) || 'unknown';
+    if (!typesMap[typeId]) {
+        typesMap[typeId] = {
+            id: typeId,
+            title: 'סדנה',
+            colorHex: '#6B7280',
+            requiresSketch: false,
+            serviceIds: [],
+        };
+    }
+    return { typeId, typeInfo: typesMap[typeId] };
+}
+
 async function loadStaffNamesById() {
     const result = await wixData.query('Bookings/Staff').find(SA);
     const map = {};
@@ -1305,8 +1320,7 @@ export const getInitialDashboardData = webMethod(Permissions.SiteMember, async (
     for (const session of workshopSessions) {
         const sessionId = session.id;
         sessionStaffMap[sessionId] = session.staffId || null;
-        const typeId = serviceIdToTypeId[session.serviceId] || 'unknown';
-        const typeInfo = typesMap[typeId] || typesMap.unknown;
+        const { typeId, typeInfo } = resolveWorkshopType(typesMap, serviceIdToTypeId, session.serviceId);
         const sessionDateKey = session.start ? toDateKey(session.start) : null;
         const assignedEmployeeIds = (sessionDateKey && shiftAssignmentsByKey[`${sessionDateKey}|${typeId}`]) || [];
         sessionAssignedEmployeeMap[sessionId] = assignedEmployeeIds;
@@ -2228,8 +2242,7 @@ async function enrichOrdersIntoDashboardPayload(rawOrders, { typesMap, serviceId
     for (const [cmsKey, groupOrders] of Object.entries(ordersByCmsKey)) {
         const sample = groupOrders[0];
         const workshopId = workshopIdFromCmsKey(cmsKey, sample);
-        const typeId = serviceIdToTypeId[sample.serviceId] || 'unknown';
-        const typeInfo = typesMap[typeId] || typesMap.unknown;
+        const { typeId, typeInfo } = resolveWorkshopType(typesMap, serviceIdToTypeId, sample.serviceId);
         const start = sample.workshopStart ? new Date(sample.workshopStart) : null;
         const end = sample.workshopEnd ? new Date(sample.workshopEnd) : null;
 

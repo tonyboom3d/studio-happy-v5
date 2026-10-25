@@ -10,6 +10,7 @@ import {
   sortSlotsByStartTime,
 } from '@/lib/slotTime';
 import { resolveDisplayedPricing } from '@/lib/tuftingDatePricing';
+import { tuftingSlotCutoffMs } from '@/lib/tuftingBookingWindow';
 import { CANDLES_HALLOWEEN_SERVICE_ID, resolveCandlesSlotPricing } from '@/lib/candlesPricing';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -37,12 +38,15 @@ function getUrgencyBufferHours(bookingBlockHours) {
 
 function isSlotBlocked(slot, bookingBlockHours = DEFAULT_BOOKING_BLOCK_HOURS) {
   if (!slot?.start?.timestamp) return false;
+  const cutoff = tuftingSlotCutoffMs(slot);
+  if (cutoff != null) return Date.now() >= cutoff;
   const hoursUntilStart = (new Date(slot.start.timestamp).getTime() - Date.now()) / (1000 * 60 * 60);
   return hoursUntilStart > 0 && hoursUntilStart < bookingBlockHours;
 }
 
 function isSlotInUrgencyBuffer(slot, bookingBlockHours = DEFAULT_BOOKING_BLOCK_HOURS) {
   if (!slot?.start?.timestamp) return false;
+  if (tuftingSlotCutoffMs(slot) != null) return false;
   const urgencyBufferHours = getUrgencyBufferHours(bookingBlockHours);
   if (urgencyBufferHours <= bookingBlockHours) return false;
   const hoursUntilStart = (new Date(slot.start.timestamp).getTime() - Date.now()) / (1000 * 60 * 60);
@@ -85,8 +89,13 @@ const CLOSING_SOON_HOURS = 8;
 
 function isSlotClosingSoon(slot) {
   if (!slot?.start?.timestamp) return false;
-  const startTime = new Date(slot.start.timestamp).getTime();
+  const cutoff = tuftingSlotCutoffMs(slot);
   const now = Date.now();
+  if (cutoff != null) {
+    const hoursUntilCutoff = (cutoff - now) / (1000 * 60 * 60);
+    return hoursUntilCutoff > 0 && hoursUntilCutoff <= CLOSING_SOON_HOURS;
+  }
+  const startTime = new Date(slot.start.timestamp).getTime();
   const hoursUntilStart = (startTime - now) / (1000 * 60 * 60);
   return hoursUntilStart > 0 && hoursUntilStart <= CLOSING_SOON_HOURS;
 }
@@ -339,7 +348,7 @@ export default function TimeSlotsSection({
     const bookable = getBookableSlots(daySlots, bookingBlockHours);
 
     if (bookable.length === 0) {
-      setBlockedPopup(true);
+      setBlockedPopup(daySlots.some((slot) => tuftingSlotCutoffMs(slot) != null) ? 'monday18' : 'hours');
       return;
     }
 
@@ -353,7 +362,7 @@ export default function TimeSlotsSection({
 
   const handleTimeSelect = (slot) => {
     if (isSlotBlocked(slot, bookingBlockHours)) {
-      setBlockedPopup(true);
+      setBlockedPopup(tuftingSlotCutoffMs(slot) != null ? 'monday18' : 'hours');
       return;
     }
     setSelectedSlot(slot);
@@ -678,7 +687,9 @@ export default function TimeSlotsSection({
                 </div>
                 <h3 className="text-[17px] font-bold text-[#581E83]">ההזמנה המקוונת סגורה</h3>
                 <p className="text-sm text-[#464646]/70 mt-2 leading-relaxed">
-                  {bookingBlockHours === 1
+                  {blockedPopup === 'monday18'
+                    ? 'ההרשמה לסדנה ב-27.10 נסגרה ביום שני בשעה 18:00.'
+                    : bookingBlockHours === 1
                     ? 'לא ניתן להזמין באופן מקוון סדנה שמתחילה בעוד פחות מ- 1 שעה.'
                     : `לא ניתן להזמין באופן מקוון סדנה שמתחילה בעוד פחות מ-${bookingBlockHours} שעות.`}
                 </p>

@@ -53,6 +53,14 @@ export const TUFTING_DATE_PRICE_OVERRIDES = {
   '2026-10-27': { solo: 550, parentChild: 600 },
 };
 
+/**
+ * One-off registration windows (Israel local time, no offset).
+ * 27.10.2026 only — bookable until Monday 26.10.2026 18:00. Other days stay on the 48h rule.
+ */
+export const TUFTING_REGISTRATION_CUTOFFS = {
+  '2026-10-27': '2026-10-26T18:00:00',
+};
+
 export function applyTuftingDatePricing(pricing, dateInput) {
   const key = israelDateKey(dateInput);
   const override = key && TUFTING_DATE_PRICE_OVERRIDES[key];
@@ -64,6 +72,36 @@ export function applyTuftingDatePricing(pricing, dateInput) {
     minPrice: override.solo,
     maxPrice: override.parentChild,
   };
+}
+
+function israelLocalToUtcMs(localIso) {
+  const [datePart, timePart] = String(localIso).split('T');
+  const [y, m, d] = datePart.split('-').map(Number);
+  const [hh, mm, ss] = timePart.split(':').map(Number);
+  const utcGuess = Date.UTC(y, m - 1, d, hh, mm || 0, ss || 0);
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Jerusalem',
+    hourCycle: 'h23',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+  }).formatToParts(new Date(utcGuess));
+  const get = (t) => Number(parts.find((p) => p.type === t)?.value);
+  const asUtc = Date.UTC(get('year'), get('month') - 1, get('day'), get('hour'), get('minute'), get('second'));
+  return utcGuess - (asUtc - utcGuess);
+}
+
+/** Ms when online registration closes for this tufting session, or null if the 48h rule applies. */
+export function tuftingRegistrationCutoffMs(startDate, serviceId) {
+  if (serviceId && !WORKSHOP_SERVICE_IDS.tufting.includes(serviceId)) return null;
+  const key = israelDateKey(startDate);
+  const localIso = key && TUFTING_REGISTRATION_CUTOFFS[key];
+  if (!localIso) return null;
+  return israelLocalToUtcMs(localIso);
+}
+
+export function isTuftingRegistrationClosed(startDate, serviceId, nowMs = Date.now()) {
+  const cutoff = tuftingRegistrationCutoffMs(startDate, serviceId);
+  return cutoff != null && nowMs >= cutoff;
 }
 
 function israelDateKey(d) {

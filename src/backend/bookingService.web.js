@@ -32,6 +32,8 @@ import {
     filterCandlesHalloweenSlots,
     filterCandlesLimitedSlots,
     applyTuftingDatePricing,
+    isTuftingRegistrationClosed,
+    tuftingRegistrationCutoffMs,
 } from 'backend/workshopServiceIds.js';
 
 const WORKSHOP_ACCESS_TOKEN_SECRET_NAME = 'WorkshopAccessTokens';
@@ -1028,7 +1030,12 @@ const createAndCheckoutInner = async (orderData) => {
 
     const msUntilWorkshop = workshopStart.getTime() - Date.now();
     if (isTuftingServiceId(serviceId)) {
-        if (msUntilWorkshop <= FORTY_EIGHT_HOURS_MS) {
+        const registrationCutoff = tuftingRegistrationCutoffMs(workshopStart, serviceId);
+        if (registrationCutoff != null) {
+            if (Date.now() >= registrationCutoff) {
+                throw new Error('BOOKING_TOO_CLOSE: online booking for this workshop closed Monday at 18:00');
+            }
+        } else if (msUntilWorkshop <= FORTY_EIGHT_HOURS_MS) {
             throw new Error('BOOKING_TOO_CLOSE: online booking is closed within 48 hours of the workshop');
         }
     } else if (isCandlesServiceId(serviceId)) {
@@ -2263,7 +2270,7 @@ export async function fetchCourseSessionsInternal(dateRangeStart, dateRangeEnd, 
         const candlesSlots = isCandlesQuery
             ? filterCandlesHalloweenSlots(filterCandlesLimitedSlots(availableSlots))
             : availableSlots;
-        return candlesSlots;
+        return candlesSlots.filter((slot) => !isTuftingRegistrationClosed(slot.start?.timestamp, slot.serviceId));
     } catch (error) {
         console.error("Error fetching class availability:", error);
         return [];

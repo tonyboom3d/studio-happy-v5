@@ -1,9 +1,9 @@
 /**
  * sendMsgService.jsw — Sendmsg.co.il SMS integration (account 52075).
  *
- * Used exclusively for the admin order-management OTP code (see
- * initiateAdminOtp/verifyAdminOtp in bookingService.web.js). All other
- * customer/staff notifications continue to go through manychatService.jsw.
+ * Used for admin order-management OTP, order-lookup OTP, and the
+ * Zadarma incoming-call SMS. Other customer/staff notifications go
+ * through manychatService.jsw.
  *
  * Auth token is fetched from Sendmsg (valid 12h) and cached in memory for
  * this warm instance only — never stored as a static secret since it
@@ -115,6 +115,37 @@ export async function sendAdminOtpSms(phone, code) {
         return { sent: true };
     } catch (err) {
         console.error('[SendMsg] ❌ sendAdminOtpSms failed:', err?.message || err);
+        return { sent: false, reason: 'error', error: err?.message || String(err) };
+    }
+}
+
+const INCOMING_CALL_SMS =
+    'היי ראינו שנסית להתקשר אלינו, ניתן ליצור איתנו קשר בוואטסאפ ולקבל מענה מהיר:\n' +
+    'https://api.whatsapp.com/send?phone=972522272270';
+
+/** SMS to the caller when a Zadarma incoming call starts. Never throws. */
+export async function sendIncomingCallSms(phone) {
+    const cellphone = toSendMsgLocalPhone(phone);
+    if (!/^0\d{8,9}$/.test(cellphone)) {
+        console.error('[SendMsg] sendIncomingCallSms: no valid Israeli phone', phone);
+        return { sent: false, reason: 'no-phone' };
+    }
+
+    try {
+        await sendMsgRequest('/AddUsersAndSendSMS', {
+            Users: [{ Cellphone: cellphone }],
+            Message: {
+                MessageContent: INCOMING_CALL_SMS,
+                SenderPhone: SENDMSG_SENDER_PHONE,
+                MessageInnerName: 'incoming_call',
+                MessageSubject: '',
+                MessageType: 1,
+                TypeSms: 2,
+            },
+        });
+        return { sent: true };
+    } catch (err) {
+        console.error('[SendMsg] sendIncomingCallSms failed:', err?.message || err);
         return { sent: false, reason: 'error', error: err?.message || String(err) };
     }
 }

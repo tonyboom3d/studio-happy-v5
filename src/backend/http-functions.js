@@ -48,6 +48,7 @@ import {
   formatPickupSlotLabel, PICKUP_PAGE_URL, PICKUP_WINDOW_DAYS, PICKUP_MAX_APPOINTMENTS,
 } from 'backend/pickupScheduling.js';
 import { syncPickupLink, syncPickupStatus } from 'backend/manychatService.jsw';
+import { handleZadarmaNotify, zadarmaEchoValue } from 'backend/zadarmaIncomingCall.js';
 
 // ============================================================
 // ManyChat availability endpoint
@@ -1071,6 +1072,34 @@ export async function get_normalizePhone(request) {
   } catch (err) {
     console.error('[http-functions] get_normalizePhone failed:', err?.message || err);
     return serverError({ body: { status: 'error', error: String(err?.message || err) } });
+  }
+}
+
+// Zadarma PBX call notification → SMS to the caller.
+// GET/POST https://www.studiohappy.art/_functions/zadarmaCall
+function zadarmaText(status, body) {
+  return response({
+    status,
+    headers: { 'Content-Type': 'text/plain' },
+    body,
+  });
+}
+
+export function get_zadarmaCall(request) {
+  const echo = zadarmaEchoValue(request.query);
+  if (echo != null) return zadarmaText(200, echo);
+  return zadarmaText(200, 'OK');
+}
+
+export async function post_zadarmaCall(request) {
+  const echo = zadarmaEchoValue(request.query);
+  if (echo != null) return zadarmaText(200, echo);
+  try {
+    const result = await handleZadarmaNotify(request);
+    return zadarmaText(result.status, result.body);
+  } catch (err) {
+    console.error('[http-functions] post_zadarmaCall failed:', err?.message || err);
+    return zadarmaText(500, 'error');
   }
 }
 

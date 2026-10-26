@@ -814,7 +814,9 @@ const createAndCheckoutInner = async (orderData) => {
         extraCandlePrice = extraCandleConfig?.price || 0;
         extraCandleAddOnId = extraCandleConfig?.addOnId || null;
         extraCandleGroupId = extraCandleConfig?.groupId || null;
-        if (serviceId === CANDLES_HALLOWEEN_SERVICE_ID) {
+        // Limited (through 2026-10-29, including 27.10) and Halloween have no
+        // "נר נוסף" add-on. Charge the weekday/Saturday price on the checkout line.
+        if (!extraCandleConfig) {
             const slotStart = slotsList[0].date || slotsList[0].startDate || slotsList[0].start?.timestamp || slotsList[0].start;
             const sourceAddon = EXTRA_CANDLE_ADDON_BY_SERVICE[candlesPriceServiceIdForDate(slotStart)];
             extraCandlePrice = sourceAddon?.price || 0;

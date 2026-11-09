@@ -22,7 +22,7 @@
  */
 import { ADMIN_STYLE, renderAdminTab, handleAdminClick, handleAdminChange, handleAdminDragStart, handleAdminDragEnd, handleAdminDragOver, handleAdminDrop, captureEmployeeFormDraft, captureRuleFormDraft } from './employee-portal-admin.js';
 import { RR_STYLE, renderRescheduleRequestsPanel, handleRescheduleClick, handleRescheduleChange } from './reschedule-requests-panel.js';
-import { CALENDAR_STYLE, handleCalendarClick, handleCalendarChange, handleCalendarData, handleCalendarResult, captureCalendarState, restoreCalendarState, calendarOutsideClick } from './schedule-calendar/calendarActions.js';
+import { CALENDAR_STYLE, handleCalendarClick, handleCalendarChange, handleCalendarData, handleCalendarResult, captureCalendarState, restoreCalendarState, calendarOutsideClick, updateCalendarDrawer } from './schedule-calendar/calendarActions.js';
 
 const EMPLOYEE_SAVE_HOLD_MS = 2000;
 
@@ -1421,9 +1421,17 @@ class EmployeePortal extends HTMLElement {
                 this._workshopOrderGroups[result.key] = result.groups || [];
             } else {
                 this._workshopOrderGroups[result.key] = [];
-                this._toast('טעינת פרטי הסדנה נכשלה.', 'error');
             }
-            this._scheduleRender();
+            if (this.querySelector('#scRoot')) {
+                updateCalendarDrawer(this);
+                if (!result.ok) {
+                    const toast = this.querySelector('#epToast');
+                    if (toast) { toast.textContent = 'טעינת פרטי הסדנה נכשלה.'; toast.className = 'ep-toast show error'; }
+                }
+                return;
+            }
+            if (!result.ok) this._toast('טעינת פרטי הסדנה נכשלה.', 'error');
+            else this._scheduleRender();
             return;
         }
         if (result.type?.startsWith('admin') && result.ok) {

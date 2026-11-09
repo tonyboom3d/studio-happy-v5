@@ -30,7 +30,7 @@ function renderInner(ce) {
 }
 
 export function renderScheduleCalendar(ce) {
-    queueMicrotask(() => ensureLoaded(ce));
+    queueMicrotask(() => { ensureLoaded(ce); bindTips(ce); });
     return `<div id="scRoot" class="sc-root">${renderInner(ce)}</div>`;
 }
 
@@ -83,15 +83,101 @@ export function restoreCalendarState(ce, snap) {
 function rerender(ce) {
     const root = ce.querySelector('#scRoot');
     if (!root) { ce._scheduleRender(); return; }
+    const hadDrawer = !!root.querySelector('.sc-drawer');
     const snap = captureCalendarState(ce);
     root.innerHTML = renderInner(ce);
+    if (hadDrawer) root.querySelector('.sc-drawer')?.classList.add('sc-no-anim');
     restoreCalendarState(ce, snap);
     ensureLoaded(ce);
+}
+
+/** Replaces only the open drawer. The calendar grid stays as it is, and an already-open drawer does not slide in again. */
+function paintDrawer(ce, { animate = false } = {}) {
+    const root = ce.querySelector('#scRoot');
+    if (!root) { rerender(ce); return; }
+    const html = renderDrawer(ce);
+    const prev = root.querySelector('.sc-drawer');
+    const cal = calState(ce);
+    if (!html) { prev?.remove(); return; }
+    const top = prev?.querySelector('.sc-dr-body')?.scrollTop ?? 0;
+    const tpl = document.createElement('template');
+    tpl.innerHTML = html.trim();
+    const next = tpl.content.firstElementChild;
+    if (!animate) next.classList.add('sc-no-anim');
+    if (prev) prev.replaceWith(next);
+    else root.appendChild(next);
+    const body = next.querySelector('.sc-dr-body');
+    if (body && !animate && !cal.resetDrawerScroll) body.scrollTop = top;
+    cal.resetDrawerScroll = false;
+}
+
+export function updateCalendarDrawer(ce) {
+    if (!ce.querySelector('#scRoot .sc-drawer')) return;
+    paintDrawer(ce);
+}
+
+function markSelected(ce) {
+    const d = calState(ce).drawer;
+    ce.querySelectorAll('#scRoot .sc-ev.sel').forEach(el => el.classList.remove('sel'));
+    if (d?.kind !== 'session') return;
+    ce.querySelectorAll('#scRoot .sc-ev').forEach(el => {
+        if (el.dataset.date === d.dateKey && el.dataset.type === d.typeId && (el.dataset.start || '') === (d.start || '')) el.classList.add('sel');
+    });
+}
+
+function paintLightbox(ce) {
+    const root = ce.querySelector('#scRoot');
+    if (!root) return;
+    root.querySelector('.sc-lightbox')?.remove();
+    const src = calState(ce).lightbox;
+    if (!src) return;
+    root.insertAdjacentHTML('beforeend', `<div class="sc-lightbox" data-action="cal-lightbox-close" role="dialog">
+        <button type="button" class="sc-lightbox-x" data-action="cal-lightbox-close" aria-label="סגירה">×</button>
+        <img src="${esc(src)}" alt="" data-action="cal-lightbox-hold">
+    </div>`);
+}
+
+function bindTips(ce) {
+    if (ce._scTipBound) return;
+    ce._scTipBound = true;
+    const place = (el) => {
+        let tip = ce.querySelector(':scope > .sc-floattip');
+        if (!tip) {
+            tip = document.createElement('div');
+            tip.className = 'sc-floattip';
+            ce.appendChild(tip);
+        }
+        tip.textContent = el.dataset.tip || '';
+        tip.hidden = false;
+        const r = el.getBoundingClientRect();
+        const width = Math.min(280, window.innerWidth - 16);
+        let x = r.left;
+        if (x + width > window.innerWidth - 8) x = window.innerWidth - width - 8;
+        tip.style.maxWidth = `${width}px`;
+        tip.style.left = `${Math.max(8, x)}px`;
+        tip.style.top = `${r.bottom + 6}px`;
+        const h = tip.offsetHeight;
+        if (r.bottom + 6 + h > window.innerHeight - 8) tip.style.top = `${Math.max(8, r.top - h - 6)}px`;
+    };
+    ce.addEventListener('mouseover', (e) => {
+        const el = e.target?.closest?.('[data-tip]');
+        if (!el || !ce.contains(el)) return;
+        place(el);
+    });
+    ce.addEventListener('mouseout', (e) => {
+        const el = e.target?.closest?.('[data-tip]');
+        if (!el || el.contains(e.relatedTarget)) return;
+        const tip = ce.querySelector(':scope > .sc-floattip');
+        if (tip) tip.hidden = true;
+    });
 }
 
 function toast(ce, message, kind = 'success') {
     const cal = calState(ce);
     cal.toast = { message, kind, until: Date.now() + TOAST_MS };
+    const root = ce.querySelector('#scRoot');
+    root?.querySelector('.sc-toast')?.remove();
+    if (root) root.insertAdjacentHTML('beforeend', renderToast(cal));
     clearTimeout(cal.toastTimer);
     cal.toastTimer = setTimeout(() => {
         cal.toast = null;
@@ -263,14 +349,16 @@ export function handleCalendarClick(ce, action, target) {
             cal.resetDrawerScroll = true;
             cal.resetInputs = true;
             ensureGroups(ce, ds.date, ds.type, ds.start || null);
-            rerender(ce);
+            paintDrawer(ce, { animate: !ce.querySelector('#scRoot .sc-drawer') });
+            markSelected(ce);
             return true;
         case 'cal-open-day':
             cal.drawer = { kind: 'day', dateKey: ds.date };
             cal.picker = null; cal.editHours = null; cal.removeConfirm = null;
             cal.resetDrawerScroll = true;
             cal.resetInputs = true;
-            rerender(ce);
+            paintDrawer(ce, { animate: !ce.querySelector('#scRoot .sc-drawer') });
+            markSelected(ce);
             return true;
         case 'cal-jump-day':
             cal.anchor = ds.date;
@@ -285,25 +373,26 @@ export function handleCalendarClick(ce, action, target) {
             return true;
         case 'cal-close-drawer':
             cal.drawer = null;
-            rerender(ce);
+            ce.querySelector('#scRoot .sc-drawer')?.remove();
+            markSelected(ce);
             return true;
         case 'cal-tab':
             cal.drawerTab = ds.tab;
-            rerender(ce);
+            paintDrawer(ce);
             return true;
         case 'cal-picker-open':
             cal.picker = { mode: 'add' };
             cal.removeConfirm = null;
-            rerender(ce);
+            paintDrawer(ce);
             return true;
         case 'cal-swap-open':
             cal.picker = { mode: 'swap', fromId: ds.emp };
             cal.removeConfirm = null;
-            rerender(ce);
+            paintDrawer(ce);
             return true;
         case 'cal-picker-close':
             cal.picker = null;
-            rerender(ce);
+            paintDrawer(ce);
             return true;
         case 'cal-pick': {
             const ev = currentEvent(cal);
@@ -324,11 +413,11 @@ export function handleCalendarClick(ce, action, target) {
         case 'cal-remove-ask':
             cal.removeConfirm = ds.emp;
             cal.picker = null;
-            rerender(ce);
+            paintDrawer(ce);
             return true;
         case 'cal-remove-cancel':
             cal.removeConfirm = null;
-            rerender(ce);
+            paintDrawer(ce);
             return true;
         case 'cal-remove': {
             const ev = currentEvent(cal);
@@ -340,15 +429,15 @@ export function handleCalendarClick(ce, action, target) {
         case 'cal-edit-hours':
             cal.editHours = cal.editHours === ds.emp ? null : ds.emp;
             cal.resetInputs = true;
-            rerender(ce);
+            paintDrawer(ce);
             return true;
         case 'cal-hours-cancel':
             cal.editHours = null;
-            rerender(ce);
+            paintDrawer(ce);
             return true;
         case 'cal-save-hours': {
             const h = readHours(ce);
-            if (h.error) { toast(ce, h.error, 'error'); rerender(ce); return true; }
+            if (h.error) { toast(ce, h.error, 'error'); return true; }
             runOp(ce, 'hours', ds.date, { submissionId: ds.sub, startTime: h.startTime, endTime: h.endTime },
                 'calendarUpdateHours', 'שעות המשמרת עודכנו');
             return true;
@@ -356,7 +445,7 @@ export function handleCalendarClick(ce, action, target) {
         case 'cal-day-assign': {
             const employeeId = ce.querySelector('#scDayAssignEmp')?.value;
             const workType = ce.querySelector('#scDayAssignWT')?.value || 'OPENING';
-            if (!employeeId) { toast(ce, 'יש לבחור עובד/ת.', 'error'); rerender(ce); return true; }
+            if (!employeeId) { toast(ce, 'יש לבחור עובד/ת.', 'error'); return true; }
             runOp(ce, 'assign', ds.date, { workshopTypeIds: [], employeeId, workType }, 'calendarAssign', `${empName(cal, employeeId)} שובץ/ה ליום`);
             return true;
         }
@@ -373,7 +462,6 @@ export function handleCalendarClick(ce, action, target) {
             const shortEnd = (ce.querySelector('#scHolEnd')?.value || '').trim();
             if (mode === 'SHORT' && (!TIME_RE.test(shortStart) || !TIME_RE.test(shortEnd))) {
                 toast(ce, 'יש להזין שעת פתיחה וסגירה ליום מקוצר.', 'error');
-                rerender(ce);
                 return true;
             }
             runOp(ce, 'holiday', ds.date, { mode, shortStart, shortEnd }, 'calendarHolidayMode', 'מצב היום נשמר');
@@ -394,7 +482,6 @@ export function handleCalendarClick(ce, action, target) {
             const endTime = confirm ? pending?.endTime : (ce.querySelector('#scSketchEnd')?.value || '').trim();
             if (!TIME_RE.test(startTime || '') || !TIME_RE.test(endTime || '') || startTime >= endTime) {
                 toast(ce, 'יש להזין שעת התחלה ושעת סיום תקינות.', 'error');
-                rerender(ce);
                 return true;
             }
             cal.sketchConfirm = null;
@@ -407,7 +494,18 @@ export function handleCalendarClick(ce, action, target) {
             return true;
         case 'cal-toggle-group':
             cal.openGroups[ds.id] = !cal.openGroups[ds.id];
-            rerender(ce);
+            paintDrawer(ce);
+            return true;
+        case 'cal-lightbox':
+            cal.lightbox = ds.img || '';
+            paintLightbox(ce);
+            return true;
+        case 'cal-lightbox-close':
+            cal.lightbox = null;
+            ce.querySelector('#scRoot .sc-lightbox')?.remove();
+            return true;
+        case 'cal-lightbox-hold':
+        case 'cal-tip':
             return true;
         case 'cal-filter-opt':
         case 'cal-filter-state':

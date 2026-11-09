@@ -48,7 +48,7 @@ const shekel = (n) => `₪${Number(n || 0).toLocaleString('he-IL')}`;
 function thumbs(items, label) {
     if (!items.length) return '';
     return `<div class="sc-gd-line"><span class="k">${label}</span><span class="sc-thumbs">${items.map(i => i.img
-        ? `<a href="${esc(i.img)}" target="_blank" rel="noopener" class="sc-thumb" title="${esc(i.caption || '')}"><img src="${esc(i.img)}" alt="" loading="lazy">${i.badge ? `<em>${esc(i.badge)}</em>` : ''}</a>`
+        ? `<button type="button" class="sc-thumb" data-action="cal-lightbox" data-img="${esc(i.img)}" title="${esc(i.caption || '')}"><img src="${esc(i.img)}" alt="" loading="lazy">${i.badge ? `<em>${esc(i.badge)}</em>` : ''}</button>`
         : `<span class="sc-thumb empty" title="${esc(i.caption || '')}">—</span>`).join('')}</span></div>`;
 }
 

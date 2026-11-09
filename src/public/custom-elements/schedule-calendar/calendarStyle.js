@@ -71,8 +71,12 @@ export const CALENDAR_STYLE = `
 .ep-wrap:has(.sc-root) { padding: 10px 8px; }
 .sc-select { border: 1px solid var(--sc-line); background: #fff; border-radius: 8px; padding: 7px 10px; font-size: 13px; font-family: inherit; color: var(--sc-text); cursor: pointer; }
 .sc-select.has { border-color: var(--sc-blue); background: var(--sc-blue-soft); color: var(--sc-blue); }
-.sc-tip { position: relative; cursor: help; }
-.sc-tip[data-tip]:hover::after { content: attr(data-tip); position: absolute; top: calc(100% + 6px); inset-inline-start: 0; z-index: 2147483100; width: max-content; max-width: 260px; white-space: pre-wrap; text-align: start; background: #20303c; color: #fff; font-size: 12px; font-weight: 400; line-height: 1.45; padding: 7px 10px; border-radius: 8px; box-shadow: 0 6px 20px rgba(22,45,61,.3); pointer-events: none; }
+.sc-floattip { position: fixed; z-index: 2147483600; max-width: 280px; white-space: pre-wrap; text-align: start; background: #20303c; color: #fff; font-size: 12px; font-weight: 400; line-height: 1.45; padding: 7px 10px; border-radius: 8px; box-shadow: 0 6px 20px rgba(22,45,61,.3); pointer-events: none; }
+.sc-note-badge { flex: 0 0 auto; cursor: help; font-size: 12px; line-height: 1; }
+.sc-lightbox { position: fixed; inset: 0; z-index: 2147483400; background: rgba(15,23,42,.86); display: flex; align-items: center; justify-content: center; padding: 24px; }
+.sc-lightbox img { max-width: min(92vw, 900px); max-height: 86vh; border-radius: 12px; box-shadow: 0 20px 60px rgba(0,0,0,.4); }
+.sc-lightbox-x { position: absolute; top: 16px; inset-inline-end: 16px; width: 38px; height: 38px; border: none; border-radius: 50%; background: rgba(255,255,255,.16); color: #fff; font-size: 22px; cursor: pointer; }
+button.sc-thumb { padding: 0; cursor: zoom-in; }
 .sc-grp { border-bottom: 1px solid var(--sc-line-soft); }
 .sc-grp-head { cursor: pointer; border-radius: 8px; }
 .sc-grp-head:hover { background: #f6f8fb; }
@@ -142,6 +146,7 @@ export const CALENDAR_STYLE = `
 
 /* Drawer */
 .sc-drawer { position: fixed; top: 0; bottom: 0; inset-inline-end: 0; width: min(420px, 100vw); background: #fff; z-index: 2147483000; box-shadow: 0 0 40px rgba(22,45,61,.22); display: flex; flex-direction: column; animation: scSlide .18s ease-out; direction: rtl; }
+.sc-drawer.sc-no-anim { animation: none; }
 @keyframes scSlide { from { transform: translateX(-24px); opacity: 0; } to { transform: none; opacity: 1; } }
 .sc-dr-head { display: flex; align-items: flex-start; gap: 10px; padding: 18px 18px 8px; }
 .sc-dr-color { width: 14px; height: 14px; border-radius: 4px; margin-top: 4px; flex: 0 0 auto; }

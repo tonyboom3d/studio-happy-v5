@@ -168,6 +168,12 @@ function renderDayHeader(cal, k, view) {
     </button>`;
 }
 
+function noteBadge(cal, dateKey) {
+    const msg = dayFlags(cal, dateKey).note?.message;
+    if (!msg) return '';
+    return `<span class="sc-note-badge" data-action="cal-tip" data-tip="${esc(msg)}">📝</span>`;
+}
+
 function renderEventBlock(cal, ev, startHour, byId) {
     const col = colorForType(ev.typeId, cal.cache.workshopTypes);
     const top = ((ev.startMin - startHour * 60) / 60) * HOUR_PX;
@@ -183,7 +189,7 @@ function renderEventBlock(cal, ev, startHour, byId) {
     return `<button type="button" class="sc-ev ${sel ? 'sel' : ''}" data-action="cal-open-event" data-date="${ev.dateKey}" data-type="${esc(ev.typeId)}" data-start="${esc(ev.start || '')}"
         style="top:${top}px;height:${height}px;inset-inline-start:calc(${(ev.col || 0) * 100 / cols}% + 2px);width:calc(${100 / cols}% - 4px);background:${col.bg};border-inline-start:3px solid ${col.border};color:${col.text}"
         title="${esc(`${ev.name} · ${time}`)}">
-        <span class="sc-ev-title">${warnTip ? `<span class="sc-ev-warn" title="${esc(warnTip)}">!</span>` : ''}<span style="overflow:hidden;text-overflow:ellipsis">${esc(ev.name)}</span></span>
+        <span class="sc-ev-title">${noteBadge(cal, ev.dateKey)}${warnTip ? `<span class="sc-ev-warn" title="${esc(warnTip)}">!</span>` : ''}<span style="overflow:hidden;text-overflow:ellipsis">${esc(ev.name)}</span></span>
         <span class="sc-ev-line">${cap.total != null ? `${cap.booked}/${cap.total} משתתפים` : `${cap.booked} משתתפים`}</span>
         <span class="sc-ev-line">${names.length ? `עם ${esc(names.join(', '))}` : '<b>ללא צוות</b>'}${ev.required ? ` · ${st.assigned}/${ev.required}` : ''}</span>
         <span class="sc-ev-line" style="opacity:.75">${esc(time)}</span>
@@ -271,7 +277,7 @@ function renderMonth(cal) {
             const col = colorForType(ev.typeId, cal.cache.workshopTypes);
             const st = eventStaffState(cal, ev);
             return `<button type="button" class="sc-mchip" style="background:${col.bg};color:${col.text};border-inline-start:3px solid ${col.border}" data-action="cal-open-event" data-date="${k}" data-type="${esc(ev.typeId)}" data-start="${esc(ev.start || '')}" title="${esc(ev.name)}">
-                ${st.missing || st.hoursIssue ? '<span class="sc-ev-warn">!</span>' : ''}${ev.start ? `<span class="t">${ilParts(ev.start).hm}</span>` : ''}<span class="n">${esc(ev.name)}</span>
+                ${noteBadge(cal, k)}${st.missing || st.hoursIssue ? '<span class="sc-ev-warn">!</span>' : ''}${ev.start ? `<span class="t">${ilParts(ev.start).hm}</span>` : ''}<span class="n">${esc(ev.name)}</span>
             </button>`;
         }).join('');
         const more = dayEvents.length > MONTH_CHIPS

@@ -70,7 +70,23 @@ employee-portal * { box-sizing: border-box; }
 .ep-chrome-toggle, .ep-chrome-fab { border: 1px solid #dbeafe; background: #fff; color: #2563eb; font-size: 12px; font-weight: 600; border-radius: 9px; padding: 5px 11px; cursor: pointer; font-family: inherit; }
 .ep-chrome-fab { position: fixed; bottom: 16px; inset-inline-end: 16px; z-index: 2147483200; box-shadow: 0 6px 18px rgba(15,23,42,.18); }
 .ep-wrap.ep-chrome-min { padding-top: 10px; }
-.ep-wrap.ep-chrome-min .sc-scroll { max-height: max(560px, calc(100vh - 110px)); }
+.ep-fill { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+employee-portal.ep-board-fill { display: flex; flex-direction: column; background: #fff; overflow: hidden; }
+employee-portal.ep-board-fill .ep-wrap.ep-chrome-min { flex: 1; min-height: 0; height: 100%; padding: 0; display: flex; flex-direction: column; }
+employee-portal.ep-board-fill .ep-header-min { border-radius: 0; border-inline: none; border-top: none; flex: none; }
+employee-portal.ep-board-fill .epa-shell,
+employee-portal.ep-board-fill .epa-shell.collapsed { flex: 1; min-height: 0; height: 100%; gap: 0; align-items: stretch; }
+employee-portal.ep-board-fill .epa-content { min-height: 0; height: 100%; display: flex; flex-direction: column; }
+employee-portal.ep-board-fill .epa-sidebar { border-radius: 0; height: 100%; position: static; overflow: auto; }
+employee-portal.ep-board-fill .sc-panel-full { flex: 1; min-height: 0; margin: 0; border: none; border-radius: 0; box-shadow: none; display: flex; flex-direction: column; }
+employee-portal.ep-board-fill .sc-root { flex: 1; min-height: 0; height: 100%; display: flex; flex-direction: column; border-radius: 0; }
+employee-portal.ep-board-fill .sc-body { flex: 1; min-height: 0; }
+employee-portal.ep-board-fill .sc-main { min-height: 0; display: flex; flex-direction: column; }
+employee-portal.ep-board-fill .sc-scroll { flex: 1; min-height: 0; max-height: none; height: auto; }
+employee-portal.ep-board-fill .sc-wk { min-height: 100%; display: flex; flex-direction: column; }
+employee-portal.ep-board-fill .sc-wk-body { flex: 1 0 auto; min-height: var(--sc-hours, 0px); grid-template-rows: minmax(var(--sc-hours, 0px), 1fr); }
+employee-portal.ep-board-fill .sc-month { min-height: 100%; height: 100%; grid-template-rows: auto repeat(6, minmax(72px, 1fr)); }
+employee-portal.ep-board-fill .sc-mc { min-height: 0; }
 .ep-quota-chip { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 10px; padding: 6px 12px; font-size: 12px; text-align: center; min-width: 110px; }
 .ep-quota-chip b { display: block; font-size: 15px; }
 .ep-quota-chip.met b { color: #059669; }
@@ -795,6 +811,14 @@ class EmployeePortal extends HTMLElement {
     }
 
     disconnectedCallback() {
+        if (this._boardResize) {
+            window.removeEventListener('resize', this._boardResize);
+            this._boardResize = null;
+        }
+        if (this._boardHtmlOverflow != null) {
+            document.documentElement.style.overflow = this._boardHtmlOverflow;
+            this._boardHtmlOverflow = null;
+        }
         clearInterval(this._msgCarTimer);
         clearInterval(this._editWindowTimer);
         clearTimeout(this._tipTimer);
@@ -1519,7 +1543,9 @@ class EmployeePortal extends HTMLElement {
 
         let tabContent;
         if (this._tab === 'admin' && isAdmin) {
-            tabContent = `<div style="margin-top:12px">${renderAdminTab(this)}</div>`;
+            tabContent = chromeMin
+                ? `<div class="ep-fill">${renderAdminTab(this)}</div>`
+                : `<div style="margin-top:12px">${renderAdminTab(this)}</div>`;
         } else if (this._tab === 'hours') {
             tabContent = `<div style="margin-top:12px">${this._renderHoursTab()}</div>`;
         } else if (this._tab === 'vacations') {
@@ -1561,6 +1587,52 @@ class EmployeePortal extends HTMLElement {
         this._setupMsgCarousel();
         this._setupEditWindowTimer();
         restoreCalendarState(this, calSnap);
+        this._syncBoardFrame(chromeMin);
+    }
+
+    /** Pin the scheduling board to the viewport so it covers the screen, not the Wix section box. */
+    _syncBoardFrame(on) {
+        if (this._boardResize) {
+            window.removeEventListener('resize', this._boardResize);
+            this._boardResize = null;
+        }
+        const clear = () => {
+            this.classList.remove('ep-board-fill');
+            for (const p of ['position', 'top', 'left', 'right', 'width', 'height', 'zIndex', 'maxWidth', 'margin']) this.style[p] = '';
+            if (this._boardHtmlOverflow != null) {
+                document.documentElement.style.overflow = this._boardHtmlOverflow;
+                this._boardHtmlOverflow = null;
+            }
+            if (this._boardHome?.isConnected && this.parentElement === document.body) {
+                this._boardHome.insertBefore(this, this._boardNext);
+            }
+            this._boardHome = null;
+            this._boardNext = null;
+        };
+        if (!on) { clear(); return; }
+        const apply = () => {
+            if (!this.isConnected || !this.classList.contains('ep-board-fill')) return;
+            this.style.position = 'fixed';
+            this.style.top = '0';
+            this.style.left = '0';
+            this.style.right = '0';
+            this.style.width = '100vw';
+            this.style.height = '100dvh';
+            this.style.maxWidth = 'none';
+            this.style.margin = '0';
+            this.style.zIndex = '2147482000';
+        };
+        this.classList.add('ep-board-fill');
+        if (this.parentElement && this.parentElement !== document.body) {
+            this._boardHome = this.parentElement;
+            this._boardNext = this.nextSibling;
+            document.body.appendChild(this);
+        }
+        if (this._boardHtmlOverflow == null) this._boardHtmlOverflow = document.documentElement.style.overflow;
+        document.documentElement.style.overflow = 'hidden';
+        apply();
+        this._boardResize = () => apply();
+        window.addEventListener('resize', this._boardResize);
     }
 
     /** "השעות שלי" — monthly time-clock history + approval (Module E). */

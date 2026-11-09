@@ -236,7 +236,7 @@ function renderTimeGrid(cal, view) {
     const cols = keys.map(k => {
         const f = dayFlags(cal, k);
         const dayEvents = layoutOverlaps(timed.filter(e => e.dateKey === k));
-        return `<div class="sc-col ${k === today ? 'today' : ''} ${f.closed || f.blocked ? 'closed' : ''}" style="height:${height}px">
+        return `<div class="sc-col ${k === today ? 'today' : ''} ${f.closed || f.blocked ? 'closed' : ''}" style="height:${height}px;min-height:100%">
             ${dayEvents.map(ev => renderEventBlock(cal, ev, start, byId)).join('')}
             ${showNow && k === today ? `<div class="sc-now" style="top:${nowTop}px"></div>` : ''}
         </div>`;
@@ -245,11 +245,11 @@ function renderTimeGrid(cal, view) {
     return {
         events,
         html: `<div class="sc-scroll" data-sc-scroll="1">
-            <div class="sc-wk ${view === 'day' ? 'day' : ''}" style="--sc-cols:${keys.length}">
+            <div class="sc-wk ${view === 'day' ? 'day' : ''}" style="--sc-cols:${keys.length};--sc-hours:${height}px">
                 <div class="sc-wk-head"><span></span>${keys.map(k => renderDayHeader(cal, k, view)).join('')}</div>
                 ${hasAllDay ? `<div class="sc-allday"><span class="sc-allday-label">ללא שעה</span>${allDayCells.map(c => `<div class="sc-allday-cell">${c.join('')}</div>`).join('')}</div>` : ''}
                 <div class="sc-wk-body">
-                    <div class="sc-gutter" style="height:${height}px">${hours.join('')}${showNow ? `<span class="sc-now-pill" style="top:${nowTop}px">${now.hm}</span>` : ''}</div>
+                    <div class="sc-gutter" style="height:${height}px;min-height:100%">${hours.join('')}${showNow ? `<span class="sc-now-pill" style="top:${nowTop}px">${now.hm}</span>` : ''}</div>
                     ${cols}
                 </div>
             </div>

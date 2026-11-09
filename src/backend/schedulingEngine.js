@@ -289,7 +289,7 @@ async function loadActiveWixBookings(fromKey, toKey, serviceIdToTypeId) {
             const response = await elevatedQueryExtendedBookings(request);
             for (const ext of (response.extendedBookings || [])) {
                 const booking = ext.booking;
-                if (!booking?._id || booking.status === 'CANCELED') continue;
+                if (!booking?._id || booking.status === 'CANCELED' || String(booking.status || '').toUpperCase() === 'ABANDONED') continue;
                 const slot = booking.bookedEntity?.slot || booking.bookedEntity?.item?.slot || {};
                 const serviceId = slot.serviceId;
                 const typeId = serviceIdToTypeId[serviceId];

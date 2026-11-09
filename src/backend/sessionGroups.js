@@ -10,7 +10,7 @@ import { canonicalSessionKey } from 'backend/schedulingEngine.js';
 
 const SA = { suppressAuth: true };
 const elevatedQueryExtendedBookings = auth.elevate(extendedBookings.queryExtendedBookings);
-const INACTIVE_BOOKING = new Set(['CANCELED', 'DECLINED', 'WAITING_LIST']);
+const INACTIVE_BOOKING = new Set(['CANCELED', 'DECLINED', 'WAITING_LIST', 'ABANDONED']);
 
 const ORDER_STATUS_LABELS = {
     pending_payment: 'ממתין לתשלום',
@@ -97,7 +97,7 @@ export async function loadUncoveredSessionBookings({ serviceIds, dateKey, sessio
             const response = await elevatedQueryExtendedBookings(request);
             for (const ext of response.extendedBookings || []) {
                 const b = ext.booking;
-                if (!b?._id || INACTIVE_BOOKING.has(b.status) || coveredBookingIds.has(b._id)) continue;
+                if (!b?._id || INACTIVE_BOOKING.has(String(b.status || '').toUpperCase()) || coveredBookingIds.has(b._id)) continue;
                 const slot = b.bookedEntity?.slot || b.bookedEntity?.item?.slot || {};
                 const startRaw = b.startDate || slot.startDate;
                 if (!startRaw) continue;
@@ -118,6 +118,7 @@ export async function loadUncoveredSessionBookings({ serviceIds, dateKey, sessio
     for (const b of bookings) {
         const order = orderByBooking[b._id];
         if (order) {
+            if (String(order.status || '').toLowerCase() === 'abandoned') continue;
             if (seenOrders.has(order._id)) continue;
             seenOrders.add(order._id);
         }

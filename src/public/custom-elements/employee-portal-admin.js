@@ -119,6 +119,7 @@ export const ADMIN_STYLE = `
 .epa-page-head h2 { margin: 0; font-size: 19px; color: #0f172a; }
 .epa-page-head p { margin: 3px 0 0; font-size: 11.5px; color: #64748b; }
 .epa-panel { background: #fff; border: 1px solid #e2e8f0; border-radius: 16px; padding: 15px; box-shadow: 0 5px 18px rgba(15,23,42,.045); margin-bottom: 12px; }
+.epa-panel-full { margin-bottom: 0; }
 .epa-panel-title { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 10px; }
 .epa-panel-title h3 { margin: 0; font-size: 14px; }
 .epa-table-wrap { overflow-x: auto; border: 1px solid #e2e8f0; border-radius: 11px; }
@@ -629,13 +630,9 @@ function renderAdminPage(ce, d) {
 }
 
 function renderBoardPage(ce, d) {
-    const calendar = d.permissions.manageScheduling
-        ? `<section class="epa-panel sc-panel">${renderScheduleCalendar(ce)}</section>`
+    return d.permissions.manageScheduling
+        ? `<section class="epa-panel sc-panel sc-panel-full">${renderScheduleCalendar(ce)}</section>`
         : `<section class="epa-panel"><div class="ep-empty">אין הרשאת ניהול שיבוצים.</div></section>`;
-    return `<div class="epa-page-head"><div><h2>לוח שיבוץ</h2><p>סדנאות, צוות ושיבוצים — כל שינוי נשמר מיד</p></div></div>
-        ${calendar}
-        ${d.openOffers?.length ? `<section class="epa-panel">${renderOpenOffers(ce, d)}</section>` : ''}
-        <section class="epa-panel">${renderMonthControls(d)}${renderBoardSubmissions(ce, d)}</section>`;
 }
 
 const BOARD_PAGE_SIZE = 10;

@@ -65,6 +65,12 @@ employee-portal * { box-sizing: border-box; }
 .ep-user-role { font-size: 12px; color: #6b7280; }
 .ep-tag { display: inline-block; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: #fef3c7; color: #92400e; margin-inline-start: 6px; }
 .ep-quota { display: flex; gap: 10px; flex-wrap: wrap; }
+.ep-header-min { padding: 7px 14px; }
+.ep-header-min .ep-avatar.sm { width: 28px; height: 28px; border-radius: 9px; font-size: 11px; }
+.ep-chrome-toggle, .ep-chrome-fab { border: 1px solid #dbeafe; background: #fff; color: #2563eb; font-size: 12px; font-weight: 600; border-radius: 9px; padding: 5px 11px; cursor: pointer; font-family: inherit; }
+.ep-chrome-fab { position: fixed; bottom: 16px; inset-inline-end: 16px; z-index: 2147483200; box-shadow: 0 6px 18px rgba(15,23,42,.18); }
+.ep-wrap.ep-chrome-min { padding-top: 10px; }
+.ep-wrap.ep-chrome-min .sc-scroll { max-height: max(560px, calc(100vh - 110px)); }
 .ep-quota-chip { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 10px; padding: 6px 12px; font-size: 12px; text-align: center; min-width: 110px; }
 .ep-quota-chip b { display: block; font-size: 15px; }
 .ep-quota-chip.met b { color: #059669; }
@@ -1478,7 +1484,22 @@ class EmployeePortal extends HTMLElement {
         this._hideTip();
 
         const isAdmin = !!d.user.permissions?.manageEmployeeSystem;
-        const tabs = `
+
+        // Board page: minimize the header + tabs row (restored on leaving) so the
+        // calendar gets the full screen. Manual expand/collapse still works meanwhile.
+        const chromeKey = this._tab === 'admin' ? `admin:${this._adminPage || 'board'}` : this._tab;
+        if (this._lastChromeKey !== chromeKey) {
+            if (chromeKey === 'admin:board') {
+                this._chromeBeforeBoard = !!this._chromeMinimized;
+                this._chromeMinimized = true;
+            } else if (this._lastChromeKey === 'admin:board') {
+                this._chromeMinimized = this._chromeBeforeBoard || false;
+            }
+            this._lastChromeKey = chromeKey;
+        }
+        const chromeMin = chromeKey === 'admin:board' && this._chromeMinimized;
+
+        const tabs = chromeMin ? '' : `
             <div class="ep-tabs">
                 <button class="ep-tabbtn ${this._tab === 'portal' ? 'active' : ''}" data-action="tab-portal">הפורטל שלי</button>
                 <button class="ep-tabbtn ${this._tab === 'hours' ? 'active' : ''}" data-action="tab-hours">השעות שלי</button>
@@ -1508,16 +1529,22 @@ class EmployeePortal extends HTMLElement {
         }
 
         const isManager = !!d.user.permissions?.manageScheduling;
-        const reschedulePanel = isManager ? renderRescheduleRequestsPanel(this) : '';
+        const reschedulePanel = (isManager && !chromeMin) ? renderRescheduleRequestsPanel(this) : '';
+        const header = chromeMin ? this._renderHeaderMinimal() : this._renderHeader();
+
+        const chromeFab = (chromeKey === 'admin:board' && !chromeMin)
+            ? `<button type="button" class="ep-chrome-fab" data-action="toggle-chrome" title="מיזעור התפריט" aria-label="מיזעור התפריט">מיזעור התפריט ▴</button>`
+            : '';
 
         const calSnap = captureCalendarState(this);
         this.innerHTML = `
-            <div class="ep-wrap${this._rowMenuOpen ? ' ep-row-menu-active' : ''}">
-                ${this._renderHeader()}
+            <div class="ep-wrap${this._rowMenuOpen ? ' ep-row-menu-active' : ''}${chromeMin ? ' ep-chrome-min' : ''}">
+                ${header}
                 ${reschedulePanel}
                 ${tabs}
                 ${tabContent}
             </div>
+            ${chromeFab}
             ${this._busy ? `<div class="ep-busy"><div class="ep-spinner"></div>${escapeHtml(this._busy)}</div>` : ''}
             ${this._shiftModal ? this._renderShiftModal() : ''}
             ${this._selectedShiftDate ? this._renderDayWorkshopsModal() : ''}
@@ -1926,6 +1953,18 @@ class EmployeePortal extends HTMLElement {
                 </div>
                 <div class="ep-quota">${chips}</div>
             </div>`;
+    }
+
+    /** Slim one-line header shown instead of the full header+tabs while viewing the schedule calendar. */
+    _renderHeaderMinimal() {
+        const u = this._data.user;
+        return `<div class="ep-header ep-header-min">
+            <div class="ep-user">
+                <div class="ep-avatar sm" ${u.color ? `style="background:${escapeHtml(u.color)}"` : ''}>${escapeHtml((u.name || '?').trim().split(/\s+/).map(w => w[0]).slice(0, 2).join(''))}</div>
+                <div class="ep-user-name">${escapeHtml(u.name || '')}</div>
+            </div>
+            <button type="button" class="ep-chrome-toggle" data-action="toggle-chrome" title="הצגת התפריט המלא" aria-label="הצגת התפריט המלא">תפריט מלא ▾</button>
+        </div>`;
     }
 
     _monthInfo(monthKey) {
@@ -3098,6 +3137,11 @@ class EmployeePortal extends HTMLElement {
         if (calendarOutsideClick(this, e, target)) return;
         if (!target) return;
         const action = target.dataset.action;
+        if (action === 'toggle-chrome') {
+            this._chromeMinimized = !this._chromeMinimized;
+            this.render();
+            return;
+        }
         const months = (this._data?.months || []).map(m => m.monthKey);
         const idx = months.indexOf(this._viewMonth);
         const rules = this._data?.rules || {};

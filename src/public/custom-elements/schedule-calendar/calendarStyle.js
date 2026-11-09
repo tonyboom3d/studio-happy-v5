@@ -82,6 +82,9 @@ button.sc-thumb { padding: 0; cursor: zoom-in; }
 .sc-grp-head:hover { background: #f6f8fb; }
 .sc-chev { color: var(--sc-muted); font-size: 11px; }
 .sc-note-ico { font-size: 15px; }
+.sc-note-btn { border: 1px solid transparent; background: transparent; border-radius: 8px; width: 30px; height: 30px; font-size: 15px; cursor: pointer; opacity: .45; flex: 0 0 auto; }
+.sc-note-btn:hover { background: #eef2f7; opacity: 1; }
+.sc-note-btn.has { opacity: 1; background: #fff7e6; border-color: #f5d79a; }
 .sc-gd { margin: 0 6px 10px; padding: 10px 12px; background: #f9fafc; border: 1px solid var(--sc-line); border-radius: 10px; display: flex; flex-direction: column; gap: 6px; font-size: 12.5px; }
 .sc-gd-line { display: flex; gap: 8px; align-items: flex-start; }
 .sc-gd-line .k { flex: 0 0 74px; color: var(--sc-muted); }

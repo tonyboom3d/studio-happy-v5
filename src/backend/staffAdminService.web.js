@@ -35,7 +35,8 @@ import {
     classifyShiftSlot,
 } from 'backend/availabilityRules.js';
 import { TASK_TYPES, TASK_LABELS } from 'backend/timeClockService.web.js';
-import { getOrdersGroupDetails } from 'backend/dashboardService.web.js';
+import { getOrdersGroupDetails, logOrderAction } from 'backend/dashboardService.web.js';
+import { loadCupLabels, loadUncoveredSessionBookings } from 'backend/sessionGroups.js';
 import { syncHebcalHolidays } from 'backend/holidayService.js';
 import { TUFTING_SERVICE_IDS } from 'backend/sketchEditingPolicy.js';
 import {
@@ -509,11 +510,21 @@ export const getWorkshopOrderGroups = webMethod(Permissions.SiteMember, async (d
     const orders = (result.items || [])
         .filter(o => !o.cancelledAt && toDateKey(o.workshopStart) === dateKey)
         .filter(o => !sessionKey || canonicalSessionKey(o.workshopStart) === sessionKey);
-    const details = await getOrdersGroupDetails(orders).catch(() => ({}));
-    return orders.map(o => {
+    const coveredBookingIds = new Set();
+    for (const o of orders) for (const id of [...(o.bookingIds || []), o.bookingId]) if (id) coveredBookingIds.add(id);
+    const [details, cupLabels, uncovered] = await Promise.all([
+        getOrdersGroupDetails(orders).catch(() => ({})),
+        loadCupLabels(orders).catch(() => ({})),
+        loadUncoveredSessionBookings({ serviceIds, dateKey, sessionKey, coveredBookingIds }).catch(() => []),
+    ]);
+    const paidGroups = orders.map(o => {
         const x = details[o._id] || {};
         return {
             id: o._id,
+            orderId: o._id,
+            workshopType: o.workshopType || '',
+            extraCandleCount: o.extraCandleCount || 0,
+            cups: (x.cups || []).map((c, i) => ({ ...c, label: cupLabels[o._id]?.[i]?.label || '' })),
             organizerName: x.name || o.organizerName || 'ללא שם',
             organizerPhone: x.phone || o.organizerPhone || '',
             organizerEmail: x.email || o.organizerEmail || '',
@@ -528,13 +539,25 @@ export const getWorkshopOrderGroups = webMethod(Permissions.SiteMember, async (d
             internalNotes: x.internalNotes ?? (o.internalNotes || ''),
             notes: o.customerNotes || o.internalNotes || '',
             sketches: x.sketches || [],
-            cups: x.cups || [],
             rugCount: x.rugCount || 0,
             orderNumber: x.orderNumber || '',
             checkedInAt: x.checkedInAt || null,
             participants: x.participants || [],
         };
     });
+    return [...paidGroups, ...uncovered];
+});
+
+/** Manager note on a workshop order (shown in the calendar and the orders dashboard). */
+export const saveOrderInternalNote = webMethod(Permissions.SiteMember, async (orderId, text) => {
+    const { role } = await assertEmployeeAccess('manageScheduling');
+    if (!orderId || typeof orderId !== 'string' || orderId.startsWith('bk:')) throw new Error('BAD_REQUEST: להזמנה זו אין רשומה במערכת.');
+    const note = String(text || '').trim().slice(0, 2000);
+    const order = await wixData.get('WorkshopOrders', orderId, SA).catch(() => null);
+    if (!order) throw new Error('NOT_FOUND: ההזמנה לא נמצאה.');
+    await wixData.update('WorkshopOrders', { ...order, internalNotes: note }, SA);
+    await logOrderAction(orderId, 'הערה פנימית עודכנה מלוח השיבוץ', role.displayName || undefined).catch(() => null);
+    return { ok: true, internalNotes: note };
 });
 
 /** Atomic employee save — profile, skills, rates, and optional permissions in one CMS write. */

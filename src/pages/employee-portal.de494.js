@@ -72,6 +72,7 @@ import {
     listEmployeeUpcomingShifts,
     removeEmployeeUpcomingShifts,
     getWorkshopOrderGroups,
+    saveOrderInternalNote,
 } from 'backend/staffAdminService.web.js';
 import {
     runSchedulingNow,
@@ -426,6 +427,14 @@ async function handleCalendarAction(portalEl, type, payload) {
             return runCalendarMutation(portalEl, type, p, () => saveSketchSewingDay(p.dateKey, p.startTime, p.endTime, !!p.confirmOverlap));
         case 'calendarSketchDelete':
             return runCalendarMutation(portalEl, type, p, () => deleteSketchSewingDay(p.dateKey));
+        case 'calendarOrderNote':
+            try {
+                const r = await saveOrderInternalNote(p.orderId, p.text);
+                pushActionResult(portalEl, { type, opId: p.opId, orderId: p.orderId, ok: true, internalNotes: r?.internalNotes ?? p.text });
+            } catch (err) {
+                pushActionResult(portalEl, { type, opId: p.opId, orderId: p.orderId, error: true, message: friendlyError(err) });
+            }
+            return;
         default:
             console.warn('[employee-portal] Unknown calendar action:', type);
     }

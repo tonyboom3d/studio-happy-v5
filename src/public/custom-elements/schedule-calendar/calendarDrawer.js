@@ -52,28 +52,69 @@ function thumbs(items, label) {
         : `<span class="sc-thumb empty" title="${esc(i.caption || '')}">—</span>`).join('')}</span></div>`;
 }
 
+const fmtSize = (s) => String(s || '').replace(/x/i, '×');
+
+/** "2 × 60×60 · 1 × 90×90" from the group's sketches; flags rugs whose sketch isn't chosen yet. */
+function rugSizesText(g) {
+    const counts = {};
+    for (const s of g.sketches || []) {
+        const k = fmtSize(s.size) || 'לא צוין';
+        counts[k] = (counts[k] || 0) + 1;
+    }
+    const parts = Object.entries(counts).map(([size, n]) => `${n} × ${esc(size)}`);
+    const pending = (g.rugCount || 0) - (g.sketches || []).length;
+    if (pending > 0) parts.push(`${pending} טרם נבחר מידה/סקיצה`);
+    return parts.join(' · ');
+}
+
+function cupsText(g) {
+    return (g.cups || []).map(c => `${esc(c.label || 'כוס')} × ${c.quantity || 1}`).join(' · ');
+}
+
 function groupDetails(g) {
     const line = (k, v) => (v ? `<div class="sc-gd-line"><span class="k">${k}</span><span class="v">${v}</span></div>` : '');
+    const isCandles = g.workshopType === 'candles';
+    const isCeramics = g.workshopType === 'ceramics';
+    const units = g.rugCount
+        ? (isCandles
+            ? `<b>${g.rugCount}</b> נרות${g.extraCandleCount ? ` (מתוכם ${g.extraCandleCount} נוספים)` : ''}`
+            : (isCeramics ? `<b>${g.rugCount}</b> כלים` : ''))
+        : '';
+    const rugs = !isCandles && !isCeramics ? rugSizesText(g) : '';
     const phone = g.organizerPhone ? `<a dir="ltr" href="tel:${esc(g.organizerPhone)}">${esc(g.organizerPhone)}</a>` : '';
     const email = g.organizerEmail ? `<a dir="ltr" href="mailto:${esc(g.organizerEmail)}">${esc(g.organizerEmail)}</a>` : '';
     const promo = g.promoCoupon?.code ? `קופון מתנה ${esc(g.promoCoupon.code)} (${g.promoCoupon.status === 'redeemed' || g.promoCoupon.redeemedAt ? 'מומש' : esc(g.promoCoupon.status || 'הונפק')})` : '';
     const coupon = g.couponCode || g.couponName
         ? `✓ נוצל: ${esc(g.couponCode || g.couponName)}${g.paidDiscount ? ` (−${shekel(g.paidDiscount)})` : ''}`
         : (g.paidDiscount ? `הנחה ${shekel(g.paidDiscount)}` : 'לא נוצל קוד קופון');
-    const sketches = (g.sketches || []).map((s, i) => ({ img: s.img, caption: `${s.participantName || `סקיצה ${i + 1}`} · ${s.size || ''}`, badge: s.size }));
-    const cups = (g.cups || []).map(c => ({ img: c.image, caption: `כוס × ${c.quantity}`, badge: c.quantity > 1 ? `×${c.quantity}` : '' }));
+    const sketches = (g.sketches || []).map((s, i) => ({ img: s.img, caption: `${s.participantName || `שטיח ${i + 1}`} · ${fmtSize(s.size)}`, badge: fmtSize(s.size) }));
+    const cups = (g.cups || []).map(c => ({ img: c.image, caption: `${c.label || 'כוס'} × ${c.quantity}`, badge: c.label || (c.quantity > 1 ? `×${c.quantity}` : '') }));
     const people = (g.participants || []).map(p => `${esc(p.name)}${p.phone ? ` (<span dir="ltr">${esc(p.phone)}</span>)` : ''}${p.childrenCount ? ` +${p.childrenCount} ילדים` : ''}`).join('<br>');
     return `<div class="sc-gd">
+        ${g.unpaid ? `<div class="sc-banner hol">⚠ ${esc(g.statusLabel || 'לא שולם')}</div>` : ''}
         ${line('טלפון', phone)}${line('מייל', email)}
-        ${line('שולם', `<b>${shekel(g.paidTotal)}</b>`)}
-        ${line('קופון', coupon)}${line('קופון מתנה', promo)}
+        ${line('כמות', units)}${line('מידת שטיחים', rugs)}${line('כוסות', isCandles || isCeramics ? cupsText(g) : '')}
+        ${g.unpaid ? '' : line('שולם', `<b>${shekel(g.paidTotal)}</b>`)}
+        ${g.unpaid ? '' : line('קופון', coupon)}${line('קופון מתנה', promo)}
         ${line('הזמנה', g.orderNumber ? `#${esc(g.orderNumber)}` : '')}
         ${line('צ׳ק-אין', g.checkedInAt ? '✓ הגיעו' : '')}
         ${line('משתתפים', people)}
-        ${thumbs(sketches, `סקיצות (${sketches.length}${g.rugCount > sketches.length ? `/${g.rugCount}` : ''})`)}
+        ${thumbs(sketches, `שטיחים (${sketches.length}${g.rugCount > sketches.length ? `/${g.rugCount}` : ''})`)}
         ${thumbs(cups, 'כוסות')}
         ${g.customerNotes ? `<div class="sc-gd-note"><b>הערת לקוח</b>${esc(g.customerNotes)}</div>` : ''}
         ${g.internalNotes ? `<div class="sc-gd-note int"><b>הערה פנימית</b>${esc(g.internalNotes)}</div>` : ''}
+    </div>`;
+}
+
+function noteEditor(g) {
+    return `<div class="sc-inline" style="flex-direction:column;align-items:stretch;margin:2px 6px 8px">
+        ${g.customerNotes ? `<div class="sc-gd-note"><b>הערת לקוח</b>${esc(g.customerNotes)}</div>` : ''}
+        <label style="font-size:12px">הערה פנימית להזמנה</label>
+        <textarea id="scOrderNote" rows="3" maxlength="2000" placeholder="כתבו הערה להזמנה…" style="width:100%;border:1px solid #c9d1da;border-radius:6px;padding:6px 8px;font-family:inherit;font-size:13px;resize:vertical">${esc(g.internalNotes || '')}</textarea>
+        <div style="display:flex;gap:6px">
+            <button type="button" class="sc-btn primary sm" data-action="cal-note-save" data-id="${esc(g.id)}">שמירה</button>
+            <button type="button" class="sc-btn sm" data-action="cal-note-cancel">ביטול</button>
+        </div>
     </div>`;
 }
 
@@ -98,11 +139,14 @@ function renderParticipants(ce, ev) {
                 <span class="sc-av" style="background:#8b9bb0">${esc(initials(g.organizerName))}</span>
                 <div class="sc-row-main"><b>${esc(g.organizerName)}</b>
                     <div class="sc-row-sub">${esc(parts || '—')}${g.organizerPhone ? ` · <span dir="ltr">${esc(g.organizerPhone)}</span>` : ''}</div>
+                    ${g.unpaid ? `<span class="sc-warn-note">⚠ ${esc(g.statusLabel || 'לא שולם')}</span>` : ''}
                 </div>
-                ${noteText ? `<span class="sc-tip sc-note-ico" data-tip="${esc(noteText)}">📝</span>` : ''}
+                ${g.orderId ? `<button type="button" class="sc-note-btn ${g.internalNotes ? 'has' : ''}" data-action="cal-note-edit" data-id="${esc(g.id)}" data-tip="${esc(noteText ? `${noteText}\n\n(לחיצה לעריכת הערה)` : 'הוספת הערה להזמנה')}" aria-label="הערות להזמנה">📝</button>`
+                    : (noteText ? `<span class="sc-tip sc-note-ico" data-tip="${esc(noteText)}">📝</span>` : '')}
                 <span class="sc-badge">👥 ${total}</span>
                 <span class="sc-chev">${open ? '▴' : '▾'}</span>
             </div>
+            ${cal.noteEdit === g.id ? noteEditor(g) : ''}
             ${open ? groupDetails(g) : ''}
         </div>`;
     }).join('');

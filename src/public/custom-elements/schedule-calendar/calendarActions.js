@@ -250,6 +250,19 @@ export function handleCalendarResult(ce, result) {
         return true;
     }
     const failed = result.error || result.ok === false;
+    if (result.type === 'calendarOrderNote') {
+        const op = cal.noteOps?.[result.opId];
+        if (cal.noteOps) delete cal.noteOps[result.opId];
+        if (failed) {
+            const g = op && findGroup(ce, op.groupId);
+            if (g) { g.internalNotes = op.prev; g.notes = g.customerNotes || op.prev; }
+            toast(ce, result.message || 'שמירת ההערה נכשלה.', 'error');
+        } else {
+            toast(ce, 'ההערה נשמרה', 'success');
+        }
+        updateCalendarDrawer(ce);
+        return true;
+    }
     if (result.type === 'calendarSketchDuty' && result.needsConfirm) {
         rollbackOp(cal, result.opId);
         cal.sketchConfirm = { dateKey: result.dateKey, startTime: result.startTime, endTime: result.endTime };
@@ -264,6 +277,14 @@ export function handleCalendarResult(ce, result) {
     }
     rerender(ce);
     return true;
+}
+
+function findGroup(ce, id) {
+    for (const list of Object.values(ce._workshopOrderGroups || {})) {
+        const g = Array.isArray(list) ? list.find(x => x.id === id) : null;
+        if (g) return g;
+    }
+    return null;
 }
 
 function currentEvent(cal) {
@@ -496,6 +517,30 @@ export function handleCalendarClick(ce, action, target) {
             cal.openGroups[ds.id] = !cal.openGroups[ds.id];
             paintDrawer(ce);
             return true;
+        case 'cal-note-edit':
+            cal.noteEdit = cal.noteEdit === ds.id ? null : ds.id;
+            cal.resetInputs = true;
+            paintDrawer(ce);
+            ce.querySelector('#scOrderNote')?.focus();
+            return true;
+        case 'cal-note-cancel':
+            cal.noteEdit = null;
+            paintDrawer(ce);
+            return true;
+        case 'cal-note-save': {
+            const g = findGroup(ce, ds.id);
+            if (!g) return true;
+            const text = (ce.querySelector('#scOrderNote')?.value || '').trim();
+            const opId = `note-${Date.now()}`;
+            cal.noteOps = cal.noteOps || {};
+            cal.noteOps[opId] = { groupId: g.id, prev: g.internalNotes || '' };
+            g.internalNotes = text;
+            g.notes = g.customerNotes || text;
+            cal.noteEdit = null;
+            paintDrawer(ce);
+            ce._dispatch('calendarOrderNote', { orderId: g.orderId || g.id, text, opId });
+            return true;
+        }
         case 'cal-lightbox':
             cal.lightbox = ds.img || '';
             paintLightbox(ce);

@@ -347,6 +347,8 @@ async function loadBookingsSessions(fromKey, toKey, serviceIdToTypeId) {
                     typeId,
                     startIso: new Date(slot.startDate).toISOString(),
                     endIso: slot.endDate ? new Date(slot.endDate).toISOString() : null,
+                    totalSpots: Number.isFinite(entry.totalSpots) ? entry.totalSpots : null,
+                    openSpots: Number.isFinite(entry.openSpots) ? entry.openSpots : null,
                 });
             }
         } catch (err) {
@@ -482,6 +484,7 @@ export async function buildBoard(fromKey, toKey, { consistent = false, includeOf
                 sessions: [], // distinct workshopStart ISO timestamps that day (calendar display)
                 sessionEnds: {}, // startIso -> endIso, resolved from Bookings availability where known
                 sessionComps: {}, // startIso -> per-session participant composition (for split occupancy UI)
+                sessionCapacity: {}, // canonical startIso -> { total, open } from Bookings availability
                 hasActiveCustomers: false, // true when paid WorkshopOrders or live Wix Bookings exist
             };
         }
@@ -541,11 +544,12 @@ export async function buildBoard(fromKey, toKey, { consistent = false, includeOf
         days[b.dateKey].hasWorkshops = true;
     }
 
-    for (const { dateKey, typeId, startIso, endIso } of sessionRows) {
+    for (const { dateKey, typeId, startIso, endIso, totalSpots, openSpots } of sessionRows) {
         const t = dayType(dateKey, typeId);
         const sessionKey = canonicalSessionKey(startIso);
         if (sessionKey && !t.sessions.includes(sessionKey)) t.sessions.push(sessionKey);
         if (sessionKey && endIso) t.sessionEnds[sessionKey] = new Date(endIso).toISOString();
+        if (sessionKey && totalSpots != null) t.sessionCapacity[sessionKey] = { total: totalSpots, open: openSpots ?? null };
         days[dateKey].hasWorkshops = true;
     }
 

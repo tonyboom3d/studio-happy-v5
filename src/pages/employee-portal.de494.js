@@ -72,7 +72,6 @@ import {
     listEmployeeUpcomingShifts,
     removeEmployeeUpcomingShifts,
     getWorkshopOrderGroups,
-    applyScheduleBatch,
 } from 'backend/staffAdminService.web.js';
 import {
     runSchedulingNow,
@@ -101,9 +100,11 @@ import {
     approveRescheduleRequest,
     rejectRescheduleRequest,
 } from 'backend/rescheduleService.web.js';
+import { getScheduleRange, adminUpdateShiftHours } from 'backend/scheduleCalendarService.web.js';
 
 const PORTAL_ELEMENT_ID = '#employeePortal1';
 const REALTIME_DEBOUNCE_MS = 1500;
+const ADMIN_BG_REFRESH_MS = 2500;
 
 let __epLoadGeneration = 0;
 let __epAdminGeneration = 0;
@@ -111,6 +112,9 @@ let __epLastAdminMonth = null;
 let __epRealtimeTimer = null;
 let __epSuppressRealtimeUntil = 0;
 let __epIsRescheduleManager = false; // set from portal-data.user.permissions.manageScheduling
+let __epCalRange = null;             // last calendar range requested by the CE (realtime refresh scope)
+let __epAdminBgTimer = null;
+let __epLastResultTs = 0;
 
 $w.onReady(function () {
     // console.log('[employee-portal] $w.onReady fired');
@@ -155,6 +159,7 @@ function subscribeToRealtime(portalEl) {
         __epRealtimeTimer = setTimeout(() => {
             loadAndPushData(portalEl);
             if (__epLastAdminMonth) loadAndPushAdminData(portalEl, __epLastAdminMonth);
+            if (__epCalRange) loadAndPushCalendar(portalEl, __epCalRange.fromKey, __epCalRange.toKey);
         }, REALTIME_DEBOUNCE_MS);
     }).catch((err) => {
         console.warn('[employee-portal] realtime subscribe failed:', err?.message || err);
@@ -339,10 +344,91 @@ async function loadAndPushAdminMessages(portalEl) {
 }
 
 function pushActionResult(portalEl, result) {
+    // Strictly increasing — the CE drops results whose __ts repeats.
+    __epLastResultTs = Math.max(Date.now(), __epLastResultTs + 1);
     portalEl.setAttribute('action-result', JSON.stringify({
         ...result,
-        __ts: Date.now(),
+        __ts: __epLastResultTs,
     }));
+}
+
+/** Schedule calendar: light range read (week/month window or a single day after a mutation). */
+async function loadAndPushCalendar(portalEl, fromKey, toKey) {
+    try {
+        const data = await getScheduleRange(fromKey, toKey);
+        portalEl.setAttribute('calendar-data', JSON.stringify({ ...data, __fetchedAt: Date.now() }));
+    } catch (err) {
+        console.error('[employee-portal] Failed to load calendar range:', err?.message || err);
+        portalEl.setAttribute('calendar-data', JSON.stringify({ error: true, fromKey, toKey, message: friendlyError(err), __fetchedAt: Date.now() }));
+    }
+}
+
+/** Debounced background refresh of the month admin data (submissions table, tracker) — never blocks the UI. */
+function scheduleBackgroundAdminRefresh(portalEl) {
+    clearTimeout(__epAdminBgTimer);
+    __epAdminBgTimer = setTimeout(() => {
+        if (__epLastAdminMonth) loadAndPushAdminData(portalEl, __epLastAdminMonth);
+    }, ADMIN_BG_REFRESH_MS);
+}
+
+/**
+ * Runs one calendar mutation: pushes an opId-tagged result immediately (the CE already
+ * applied it optimistically), then refreshes only the affected day.
+ */
+async function runCalendarMutation(portalEl, type, payload, fn) {
+    const opId = payload?.opId;
+    try {
+        const r = (await fn()) || {};
+        const failed = r.ok === false || r.blocked || r.needsConfirm;
+        pushActionResult(portalEl, {
+            ...r,
+            type,
+            opId,
+            dateKey: payload?.dateKey,
+            startTime: payload?.startTime,
+            endTime: payload?.endTime,
+            ok: !failed,
+            ...(failed ? { error: true, message: r.reason || r.message } : {}),
+        });
+    } catch (err) {
+        pushActionResult(portalEl, { type, opId, dateKey: payload?.dateKey, error: true, message: friendlyError(err) });
+    }
+    if (payload?.dateKey) await loadAndPushCalendar(portalEl, payload.dateKey, payload.dateKey);
+    scheduleBackgroundAdminRefresh(portalEl);
+}
+
+async function handleCalendarAction(portalEl, type, payload) {
+    const p = payload || {};
+    switch (type) {
+        case 'calendarLoadRange':
+            __epCalRange = { fromKey: p.fromKey, toKey: p.toKey };
+            await loadAndPushCalendar(portalEl, p.fromKey, p.toKey);
+            return;
+        case 'calendarAssign':
+            return runCalendarMutation(portalEl, type, p, () => manualAssign(p.dateKey, p.workshopTypeIds || [], p.employeeId, p.workType, { notify: p.notify !== false }));
+        case 'calendarRemove':
+            return runCalendarMutation(portalEl, type, p, () => cancelAssignment(p.dateKey, p.workshopTypeId, p.employeeId, p.disposition || 'restore', { notify: p.notify !== false }));
+        case 'calendarSwap':
+            return runCalendarMutation(portalEl, type, p, () => swapAssignment(p.dateKey, p.workshopTypeId, p.fromEmployeeId, p.toEmployeeId, {
+                notifyFrom: p.notify !== false,
+                notifyTo: p.notify !== false,
+                workType: p.workType,
+            }));
+        case 'calendarUpdateHours':
+            return runCalendarMutation(portalEl, type, p, () => adminUpdateShiftHours(p.submissionId, p.startTime, p.endTime));
+        case 'calendarDayFlags':
+            return runCalendarMutation(portalEl, type, p, () => updateDayFlags(p.dateKey, p.flags));
+        case 'calendarHolidayMode':
+            return runCalendarMutation(portalEl, type, p, () => setHolidayMode(p.dateKey, p.mode, p.shortStart, p.shortEnd));
+        case 'calendarDayNote':
+            return runCalendarMutation(portalEl, type, p, () => setDayNote(p.dateKey, p.message || ''));
+        case 'calendarSketchDuty':
+            return runCalendarMutation(portalEl, type, p, () => saveSketchSewingDay(p.dateKey, p.startTime, p.endTime, !!p.confirmOverlap));
+        case 'calendarSketchDelete':
+            return runCalendarMutation(portalEl, type, p, () => deleteSketchSewingDay(p.dateKey));
+        default:
+            console.warn('[employee-portal] Unknown calendar action:', type);
+    }
 }
 
 // Pure read/load actions never write to the CMS — no need to suppress the
@@ -362,6 +448,7 @@ const READ_ONLY_ACTION_TYPES = new Set([
     'adminTeamTimeLoad',
     'adminTemplatesLoad',
     'adminLoadWorkshopOrders',
+    'calendarLoadRange',
 ]);
 
 async function handlePortalAction(portalEl, detail) {
@@ -374,6 +461,11 @@ async function handlePortalAction(portalEl, detail) {
     // an extra redundant refresh/render.
     if (!READ_ONLY_ACTION_TYPES.has(type)) {
         __epSuppressRealtimeUntil = Date.now() + 4000;
+    }
+
+    if (type.startsWith('calendar')) {
+        await handleCalendarAction(portalEl, type, payload);
+        return;
     }
 
     let refreshPortal = true;
@@ -885,17 +977,6 @@ async function handlePortalAction(portalEl, detail) {
             pushActionResult(portalEl, { type, ...result });
             // A blocked swap (conflict) doesn't mutate anything — skip the refetch/collapse.
             refreshAdmin = !result?.blocked;
-            break;
-        }
-
-        case 'adminApplyBatch': {
-            try {
-                const result = await applyScheduleBatch(payload?.actions || [], { notify: payload?.notify !== false });
-                pushActionResult(portalEl, { type, ...result });
-            } catch (err) {
-                pushActionResult(portalEl, { type, ok: false, message: friendlyError(err) });
-            }
-            refreshAdmin = true;
             break;
         }
 

@@ -4,6 +4,7 @@
  * submission tracker, employee management, scheduling rules and open calls.
  * All mutations dispatch portal-action events handled by the Velo page.
  */
+import { renderScheduleCalendar } from './schedule-calendar/calendarActions.js';
 
 export const ADMIN_STYLE = `
 .epa-toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
@@ -280,29 +281,6 @@ export const ADMIN_STYLE = `
 .epa-table.small th, .epa-table.small td { padding: 5px 7px; font-size: 11px; }
 .ep-loading.small { padding: 6px 0; font-size: 12px; display: flex; align-items: center; gap: 8px; }
 .ep-loading.small .ep-spinner { width: 14px; height: 14px; }
-.epa-batch-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 8px; padding: 8px 12px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; }
-.epa-batch-bar.on { background: #f0fdf4; border-color: #bbf7d0; }
-.epa-batch-bar .epa-chip { background: #fef3c7; color: #92400e; font-weight: 700; }
-.epa-batch-list { display: flex; flex-direction: column; gap: 6px; max-height: 50vh; overflow-y: auto; margin-bottom: 12px; }
-.epa-batch-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; padding: 9px 11px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 9px; }
-.epa-batch-row-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.epa-batch-row-label { font-size: 13px; font-weight: 600; color: #1e293b; }
-.epa-batch-time { font-size: 11px; color: #6b7280; }
-.epa-batch-meta { font-size: 11px; color: #9ca3af; }
-.epa-batch-remove { flex-shrink: 0; border: none; background: none; cursor: pointer; color: #9ca3af; font-size: 15px; line-height: 1; padding: 2px 4px; }
-.epa-batch-remove:hover { color: #dc2626; }
-.epa-batch-footer { display: flex; flex-direction: column; gap: 10px; padding-top: 10px; border-top: 1px solid #e2e8f0; }
-.epa-batch-saving { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 24px 10px; color: #475569; font-size: 13px; }
-.epa-batch-saving-bar { width: 100%; height: 6px; background: #e2e8f0; border-radius: 999px; overflow: hidden; }
-.epa-batch-saving-fill { height: 100%; width: 40%; background: #2563eb; border-radius: 999px; animation: epaBatchSaving 1.1s ease-in-out infinite; }
-@keyframes epaBatchSaving { 0% { transform: translateX(-100%); } 100% { transform: translateX(250%); } }
-.epa-batch-summary { margin-bottom: 12px; padding: 10px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 9px; }
-.epa-batch-summary-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
-.epa-batch-summary-row { display: flex; align-items: center; gap: 8px; padding: 4px 0; font-size: 12.5px; }
-.epa-batch-summary-row.ok { color: #16a34a; }
-.epa-batch-summary-row.fail { color: #dc2626; }
-.epa-batch-summary-label { color: #1e293b; flex: 1; }
-.epa-batch-summary-reason { color: #dc2626; font-size: 11px; }
 .epa-btn.small { padding: 3px 9px; font-size: 11px; }
 .epa-pending-chip { display: inline-flex; align-items: center; margin-inline-start: 6px; font-size: 10.5px; font-weight: 700; padding: 2px 7px; border-radius: 999px; background: #fef3c7; color: #92400e; border: 1px solid #fde68a; cursor: default; white-space: nowrap; }
 .epa-row-pending { opacity: .55; }
@@ -524,210 +502,15 @@ function workshopOptionsForSubmission(d, s) {
     return opts;
 }
 
-// -----------------------------------------------------------------
-// Batch scheduling mode — queue assign/remove/swap actions locally.
-// -----------------------------------------------------------------
-const BATCH_QUEUE_CAP = 50;
-
-function batchEmpName(d, employeeId) {
-    return (d.employees || []).find(e => e.id === employeeId)?.displayName || 'עובד/ת';
-}
-
-function batchWsName(d, dateKey, workshopTypeId) {
-    if (!workshopTypeId) return '';
-    return (d.days?.[dateKey]?.types || []).find(t => t.typeId === workshopTypeId)?.name || 'סדנה';
-}
-
 /** Start–end time text for a workshop that day, shown as small meta under a queued action's label. */
-function batchWsTimes(d, dateKey, workshopTypeId) {
-    if (!workshopTypeId) return '';
-    const t = (d.days?.[dateKey]?.types || []).find(x => x.typeId === workshopTypeId);
-    if (!t) return '';
-    return (t.timeRanges || []).map(r => r.end ? `${fmtTimeHe(r.start)}–${fmtTimeHe(r.end)}` : fmtTimeHe(r.start)).filter(Boolean).join(', ');
-}
-
 /** Time info shown alongside a queued action's label in the action-history panel. */
-function buildBatchTimeInfo(d, type, payload) {
-    if (type === 'adminManualAssign') {
-        return (payload.workshopTypeIds || []).map(id => batchWsTimes(d, payload.dateKey, id)).filter(Boolean).join(' · ');
-    }
-    if (type === 'adminCancelAssignment' || type === 'adminSwapAssignment') {
-        return batchWsTimes(d, payload.dateKey, payload.workshopTypeId);
-    }
-    return '';
-}
-
 /** Builds a human-readable Hebrew label for a queued action, used in the action-history panel. */
-function buildBatchLabel(d, type, payload) {
-    const date = fmtDate(payload.dateKey);
-    if (type === 'adminManualAssign') {
-        const empName = batchEmpName(d, payload.employeeId);
-        const wsNames = (payload.workshopTypeIds || []).map(id => batchWsName(d, payload.dateKey, id)).filter(Boolean);
-        const wsPart = wsNames.length ? ` ל${wsNames.join(', ')}` : '';
-        return `שיבוץ ${empName}${wsPart} · ${date}`;
-    }
-    if (type === 'adminCancelAssignment') {
-        const empName = batchEmpName(d, payload.employeeId);
-        const wsName = batchWsName(d, payload.dateKey, payload.workshopTypeId);
-        const wsPart = wsName ? ` מ${wsName}` : '';
-        return payload.disposition === 'delete'
-            ? `הסרת ${empName}${wsPart} · ${date}`
-            : `החזרת ${empName}${wsPart} להגשות · ${date}`;
-    }
-    if (type === 'adminSwapAssignment') {
-        const fromName = batchEmpName(d, payload.fromEmployeeId);
-        const toName = batchEmpName(d, payload.toEmployeeId);
-        const wsName = batchWsName(d, payload.dateKey, payload.workshopTypeId);
-        const wsPart = wsName ? ` ב${wsName}` : '';
-        return `החלפה: ${toName} במקום ${fromName}${wsPart} · ${date}`;
-    }
-    return `פעולה · ${date}`;
-}
-
 /** Identifies "the same action" for de-duplication — same target(s), same date, same effect. */
-function batchDedupeKey(type, payload) {
-    const p = payload || {};
-    if (type === 'adminManualAssign') {
-        const ids = (p.workshopTypeIds || []).slice().sort().join(',');
-        return `assign:${p.dateKey}:${p.employeeId}:${ids}`;
-    }
-    if (type === 'adminCancelAssignment') {
-        return `cancel:${p.dateKey}:${p.workshopTypeId || ''}:${p.employeeId}:${p.disposition}`;
-    }
-    if (type === 'adminSwapAssignment') {
-        return `swap:${p.dateKey}:${p.workshopTypeId}:${p.fromEmployeeId}:${p.toEmployeeId}`;
-    }
-    return `${type}:${JSON.stringify(p)}`;
-}
-
-/**
- * Queues a scheduling action locally instead of dispatching it, enforcing the 50-item cap and persisting.
- * If an equivalent action (same target/date/effect) is already queued, it's updated in place instead of
- * duplicated — so performing "the same" action twice only ever saves once.
- */
-function enqueueBatchAction(ce, d, type, payload) {
-    const clean = { ...payload };
-    delete clean.notify;
-    delete clean.notifyFrom;
-    delete clean.notifyTo;
-    const label = buildBatchLabel(d, type, clean);
-    const time = buildBatchTimeInfo(d, type, clean);
-    const key = batchDedupeKey(type, clean);
-    const existingIdx = (ce._batchQueue || []).findIndex(item => batchDedupeKey(item.type, item.payload) === key);
-    if (existingIdx >= 0) {
-        ce._batchQueue[existingIdx] = { ...ce._batchQueue[existingIdx], payload: clean, label, time, at: Date.now() };
-        ce._saveBatch();
-        ce._adminModal = null;
-        ce._toast(`הפעולה כבר הייתה בתור — עודכנה (${ce._batchQueue.length})`, 'success');
-        ce.render();
-        return true;
-    }
-    if (ce._batchQueue.length >= BATCH_QUEUE_CAP) {
-        ce._toast(`תור הפעולות מלא (עד ${BATCH_QUEUE_CAP} פעולות). שמרו או הסירו פעולות כדי להמשיך.`, 'error');
-        return false;
-    }
-    if (!ce._batchExpiresAt) ce._batchExpiresAt = Date.now() + 30 * 60 * 1000;
-    ce._batchQueue.push({
-        id: `b${Date.now()}${Math.random().toString(36).slice(2, 7)}`,
-        type,
-        payload: clean,
-        label,
-        time,
-        at: Date.now(),
-    });
-    ce._saveBatch();
-    ce._adminModal = null;
-    ce._toast(`נוסף לתור הפעולות (${ce._batchQueue.length})`, 'success');
-    ce.render();
-    return true;
-}
-
 /** Queued batch items that touch a given employee on a given date — as the direct target, or on either side of a swap. */
-function pendingBatchItemsFor(ce, dateKey, employeeId) {
-    if (!ce._batchMode || !employeeId || !dateKey) return [];
-    return (ce._batchQueue || []).filter(item => {
-        const p = item.payload || {};
-        if (p.dateKey !== dateKey) return false;
-        return p.employeeId === employeeId || p.fromEmployeeId === employeeId || p.toEmployeeId === employeeId;
-    });
-}
-
 /** Small "ממתין לשמירה" chip shown next to an employee's row when a queued (unsaved) batch action affects them that day. */
-function pendingBatchBadge(ce, dateKey, employeeId) {
-    const items = pendingBatchItemsFor(ce, dateKey, employeeId);
-    if (!items.length) return '';
-    const tip = items.map(it => it.label).join('\n');
-    return `<span class="epa-pending-chip ep-tip-trigger" tabindex="0" data-tip="${esc(tip)}">⏳ ממתין לשמירה${items.length > 1 ? ` (${items.length})` : ''}</span>`;
-}
-
 /** Compact "⏳" marker (no pill) for embedding inside an existing name chip, e.g. the monthly list's assigned/submitted names. */
-function pendingBatchDot(ce, dateKey, employeeId) {
-    const items = pendingBatchItemsFor(ce, dateKey, employeeId);
-    if (!items.length) return '';
-    const tip = `ממתין לשמירה:\n${items.map(it => it.label).join('\n')}`;
-    return `<span class="ep-tip-trigger" tabindex="0" data-tip="${esc(tip)}" style="margin-inline-start:3px">⏳</span>`;
-}
-
 /** True (marks a real row as "pending removal") when a queued cancel/swap-out action targets exactly this employee+workshop+date row. */
-function pendingBatchOverlayForRow(ce, row) {
-    if (!ce._batchMode || row.kind !== 'submission' || !row.employeeId) return null;
-    for (const item of (ce._batchQueue || [])) {
-        const p = item.payload || {};
-        if (p.dateKey !== row.date) continue;
-        if (item.type === 'adminCancelAssignment' && p.employeeId === row.employeeId && (p.workshopTypeId || null) === (row.workshopTypeId || null)) {
-            return 'remove';
-        }
-        if (item.type === 'adminSwapAssignment' && p.fromEmployeeId === row.employeeId && p.workshopTypeId === row.workshopTypeId) {
-            return 'remove';
-        }
-    }
-    return null;
-}
-
-function pendingBatchSyntheticRow(item, dateKey, employeeId, employeeName, workshopTypeId, workshopName) {
-    return {
-        key: `pending-${item.id}-${workshopTypeId || 'none'}`,
-        kind: 'submission',
-        date: dateKey,
-        dateEnd: dateKey,
-        employeeId,
-        employeeName,
-        startTime: '',
-        endTime: '',
-        workshopTypeId: workshopTypeId || null,
-        workshopName: workshopName || '',
-        status: 'SCHEDULED',
-        managerOverride: true,
-        extra: '',
-        pendingBatch: 'add',
-    };
-}
-
 /** Virtual rows for queued assign/swap-in actions on a date, so the manager sees the pending change in the table (dimmed, "ממתין לשמירה") before saving. */
-function pendingBatchSyntheticRows(ce, d, dateKey) {
-    if (!ce._batchMode) return [];
-    const rows = [];
-    for (const item of (ce._batchQueue || [])) {
-        const p = item.payload || {};
-        if (p.dateKey !== dateKey) continue;
-        if (item.type === 'adminManualAssign') {
-            const empName = batchEmpName(d, p.employeeId);
-            const ids = p.workshopTypeIds || [];
-            if (!ids.length) {
-                rows.push(pendingBatchSyntheticRow(item, dateKey, p.employeeId, empName, null, ''));
-            } else {
-                for (const typeId of ids) {
-                    rows.push(pendingBatchSyntheticRow(item, dateKey, p.employeeId, empName, typeId, batchWsName(d, dateKey, typeId)));
-                }
-            }
-        } else if (item.type === 'adminSwapAssignment') {
-            const empName = batchEmpName(d, p.toEmployeeId);
-            rows.push(pendingBatchSyntheticRow(item, dateKey, p.toEmployeeId, empName, p.workshopTypeId, batchWsName(d, dateKey, p.workshopTypeId)));
-        }
-    }
-    return rows;
-}
-
 function renderWorkshopCell(ce, d, s, canEdit) {
     if (s.status === 'SCHEDULED' && s.workshopName) return esc(s.workshopName);
     if (!canEdit || s.status === 'REJECTED') return s.workshopName ? esc(s.workshopName) : '—';
@@ -753,32 +536,6 @@ function renderSubmissionActions(ce, d, s) {
         <button class="epa-btn primary" data-action="admin-approve-submission" data-sub="${esc(s.id)}">אישור</button>
         <button class="epa-btn danger" data-action="admin-reject-submission" data-sub="${esc(s.id)}">דחייה</button>
     </div>`;
-}
-
-function coverageClass(day) {
-    const types = day?.types || [];
-    if (!day?.hasWorkshops || !types.length) return 'no-ws';
-    const required = types.reduce((s, t) => s + t.required, 0);
-    const filled = types.reduce((s, t) => s + Math.min(t.filled, t.required), 0);
-    if (filled >= required) return 'cov-full';
-    return filled > 0 ? 'cov-partial' : 'cov-none';
-}
-
-function dayCoverageStats(info) {
-    const types = info?.types || [];
-    if (!info?.hasWorkshops || !types.length) return null;
-    const required = types.reduce((s, t) => s + t.required, 0);
-    if (!required) return null;
-    const filled = types.reduce((s, t) => s + Math.min(t.filled, t.required), 0);
-    const pct = Math.min(100, Math.round((filled / required) * 100));
-    return { pct, filled, required };
-}
-
-function renderDayCoverageBar(info) {
-    const cov = dayCoverageStats(info);
-    if (!cov) return '';
-    const cls = cov.pct >= 100 ? 'full' : cov.pct > 0 ? 'partial' : 'none';
-    return `<div class="epa-day-cov" title="${cov.filled}/${cov.required} מקומות צוות מאוישים"><div class="epa-day-cov-fill ${cls}" style="width:${cov.pct}%"></div></div>`;
 }
 
 // ---------------------------------------------------------------------------
@@ -861,14 +618,13 @@ function renderAdminPage(ce, d) {
 }
 
 function renderBoardPage(ce, d) {
-    return `<div class="epa-page-head"><div><h2>לוח שיבוץ</h2><p>תמונת מצב חודשית, כיסוי ושיבוצים</p></div></div>
-        <section class="epa-panel">
-            ${renderToolbar(ce, d)}
-            ${ce._adminView === 'list' ? renderListView(ce, d) : renderHeatmap(ce, d)}
-            ${ce._adminSelectedDay ? renderDayDetail(ce, d) : ''}
-        </section>
+    const calendar = d.permissions.manageScheduling
+        ? `<section class="epa-panel sc-panel">${renderScheduleCalendar(ce)}</section>`
+        : `<section class="epa-panel"><div class="ep-empty">אין הרשאת ניהול שיבוצים.</div></section>`;
+    return `<div class="epa-page-head"><div><h2>לוח שיבוץ</h2><p>סדנאות, צוות ושיבוצים — כל שינוי נשמר מיד</p></div></div>
+        ${calendar}
         ${d.openOffers?.length ? `<section class="epa-panel">${renderOpenOffers(ce, d)}</section>` : ''}
-        <section class="epa-panel">${renderBoardSubmissions(ce, d)}</section>`;
+        <section class="epa-panel">${renderMonthControls(d)}${renderBoardSubmissions(ce, d)}</section>`;
 }
 
 const BOARD_PAGE_SIZE = 10;
@@ -893,9 +649,6 @@ const BOARD_STATUS = {
  * it isn't tied to a workshop slot.
  */
 function rowStatusMeta(row) {
-    if (row.pendingBatch) {
-        return { label: 'ממתין לשמירה', badge: 'pending' };
-    }
     if (row.kind === 'workshop-gap') {
         return { label: `חסר שיבוץ (${row.gapFilled}/${row.gapRequired})`, badge: 'miss' };
     }
@@ -1025,11 +778,9 @@ function filteredDayRows(ce, d, dateKey) {
     const filterOpts = { ...f, from: dateKey, to: dateKey };
     const bounds = monthBounds(d.monthKey);
     const real = filterBoardRows(buildBoardMonthRows(d), filterOpts, bounds)
-        .filter(r => r.kind === 'submission' || r.kind === 'vacation')
-        .map(r => ({ ...r, pendingBatch: pendingBatchOverlayForRow(ce, r) }));
-    const synthetic = filterBoardRows(pendingBatchSyntheticRows(ce, d, dateKey), filterOpts, bounds);
+        .filter(r => r.kind === 'submission' || r.kind === 'vacation');
     const gaps = filterBoardRows(buildUnderstaffedWorkshopRows(d, dateKey), filterOpts, bounds);
-    return [...real, ...synthetic, ...gaps];
+    return [...real, ...gaps];
 }
 
 function applyMsOpt(list, value, checked) {
@@ -1107,12 +858,12 @@ function renderBoardRow(ce, row, selectedDay, employees, monthKey) {
     const employee = (employees || []).find(e => e.id === row.employeeId);
     const dot = row.employeeId ? `<span class="epa-dot-lg" style="background:${esc(employee?.color || '#2563eb')}"></span>` : '';
     const selectDate = rowSelectDate(row, monthKey);
-    return `<tr class="epa-row-click ${selectedDay === selectDate ? 'active' : ''}" data-action="admin-select-day" data-date="${esc(selectDate)}">
+    return `<tr class="epa-row-click ${selectedDay === selectDate ? 'active' : ''}" data-action="cal-jump-day" data-date="${esc(selectDate)}">
         <td>${formatBoardDate(row)}</td>
         <td>${dot}${esc(row.employeeName || '—')}</td>
         <td>${formatBoardHours(row)}</td>
         <td>${formatBoardDetails(row)}</td>
-        <td><span class="epa-badge ${meta.badge}">${esc(meta.label)}${extra}</span>${pendingBatchBadge(ce, row.date, row.employeeId)}</td>
+        <td><span class="epa-badge ${meta.badge}">${esc(meta.label)}${extra}</span></td>
     </tr>`;
 }
 
@@ -1185,48 +936,6 @@ function renderBoardSubmissions(ce, d) {
             <tbody>${rows || '<tr><td colspan="5" class="ep-empty">אין רשומות התואמות את הסינון</td></tr>'}</tbody>
         </table></div>
         ${renderPager(page, totalPages, total, 'admin-board-subs-prev', 'admin-board-subs-next', pageSize)}`;
-}
-
-function renderBatchToolbar(ce) {
-    if (!ce._batchMode) {
-        return `
-            <div class="epa-batch-bar">
-                <label class="epa-switch">
-                    <input type="checkbox" data-action="admin-batch-toggle">
-                    <span class="epa-switch-slider"></span>
-                </label>
-                <span class="epa-switch-status off">מצב טיוטה כבוי — שינויים נשמרים באופן מיידי</span>
-            </div>`;
-    }
-    const n = ce._batchQueue.length;
-    const remainMs = ce._batchExpiresAt ? (ce._batchExpiresAt - Date.now()) : 0;
-    return `
-        <div class="epa-batch-bar on">
-            <label class="epa-switch">
-                <input type="checkbox" data-action="admin-batch-toggle" checked>
-                <span class="epa-switch-slider"></span>
-            </label>
-            <span class="epa-switch-status on">${n ? `${n} שינויים בטיוטה — טרם נשמרו` : 'מצב טיוטה — בצעו שינויים ואשרו יחד'}</span>
-            <button class="epa-btn" data-action="admin-batch-open-history" ${n ? '' : 'disabled'}>היסטוריית שינויים${n ? ` (${n})` : ''}</button>
-            <button class="epa-btn danger" data-action="admin-batch-clear" ${n ? '' : 'disabled'}>ביטול כל הטיוטה</button>
-            <button class="epa-btn primary" data-action="admin-batch-save" ${(n && !ce._batchSaving) ? '' : 'disabled'}>${ce._batchSaving ? 'שומר…' : `שמירת שינויים (${n})`}</button>
-            ${n && ce._batchExpiresAt ? `<span class="epa-chip" id="epaBatchClock" data-until="${ce._batchExpiresAt}">⏳ ${ce._formatCountdown(remainMs)}</span>` : ''}
-        </div>`;
-}
-
-function renderToolbar(ce, d) {
-    return `
-        <div class="epa-toolbar">
-            <div class="ep-cal-nav">
-                <button data-action="admin-month-next" title="חודש הבא">&#8249;</button>
-                <button data-action="admin-month-prev" title="חודש קודם">&#8250;</button>
-            </div>
-            <div class="epa-month">${monthTitle(d.monthKey)}</div>
-            <button class="epa-btn ${ce._adminView !== 'list' ? 'active' : ''}" data-action="admin-view-heat">לוח חודשי</button>
-            <button class="epa-btn ${ce._adminView === 'list' ? 'active' : ''}" data-action="admin-view-list">רשימה</button>
-            ${d.permissions.manageScheduling ? `<button class="epa-btn primary" data-action="admin-open-auto-assign">✨ שיבוץ אוטומטי לעובדים נבחרים</button>` : ''}
-        </div>
-        ${d.permissions.manageScheduling ? renderBatchToolbar(ce) : ''}`;
 }
 
 function submissionsByDate(d) {
@@ -1337,328 +1046,13 @@ function renderEventAvatar(emp, fallbackName) {
 }
 
 /** One Wix-Bookings-style event chip for a single workshop session on a day: time, name, staffing fraction and assigned-staff avatars — visible directly on the month grid (no hover required). */
-function renderDayEventChip(empById, t, session) {
-    const required = session.required ?? t.required ?? 0;
-    const filled = Math.min(session.filled ?? t.filled ?? 0, required || (session.filled ?? t.filled ?? 0));
-    const full = required > 0 && filled >= required;
-    const timeText = session.start ? (session.end ? `${fmtTimeHe(session.start)}–${fmtTimeHe(session.end)}` : fmtTimeHe(session.start)) : '';
-    const assignedIds = t.assignedEmployeeIds || [];
-    const shown = assignedIds.slice(0, 4).map(id => renderEventAvatar(empById[id]));
-    const extra = assignedIds.length > 4 ? `<span class="epa-event-avatar epa-event-avatar-more">+${assignedIds.length - 4}</span>` : '';
-    return `<div class="epa-event-chip ${full ? 'full' : filled > 0 ? 'partial' : 'empty'}">
-        <div class="epa-event-top">${timeText ? `<span class="epa-event-time">${esc(timeText)}</span>` : '<span></span>'}${required ? `<span class="epa-event-frac">${filled}/${required}</span>` : ''}</div>
-        <div class="epa-event-name">${esc(t.name)}</div>
-        ${assignedIds.length ? `<div class="epa-event-staff">${shown.join('')}${extra}</div>` : `<div class="epa-event-empty-note">אין עובדים משובצים</div>`}
-    </div>`;
-}
-
 /** Chip for a scheduled employee with no linked workshop (e.g. opening/closing "מתלה" shifts). */
-function renderManualShiftChip(empById, sub) {
-    const emp = empById[sub.employeeId];
-    const timeText = sub.startTime ? (sub.endTime ? `${esc(sub.startTime)}–${esc(sub.endTime)}` : esc(sub.startTime)) : '';
-    const label = WORK_TYPE_LABELS[sub.workType] || 'שיבוץ ידני';
-    return `<div class="epa-event-chip manual">
-        <div class="epa-event-top">${timeText ? `<span class="epa-event-time">${timeText}</span>` : '<span></span>'}</div>
-        <div class="epa-event-name">${esc(label)}</div>
-        <div class="epa-event-staff">${renderEventAvatar(emp, sub.employeeName)}<span>${esc(sub.employeeName)}</span></div>
-    </div>`;
-}
-
 /** Builds the visible event-chip stack for a month-grid day cell — one chip per workshop session plus any no-workshop scheduled shifts. */
-function renderDayEventChips(d, info, subs) {
-    const empById = Object.fromEntries((d.employees || []).map(e => [e.id, e]));
-    const types = info?.types || [];
-    const chips = [];
-    for (const t of types) {
-        for (const session of workshopSessionsForType(t)) chips.push(renderDayEventChip(empById, t, session));
-    }
-    for (const s of subs) {
-        if (s.workshopTypeId || s.status !== 'SCHEDULED') continue;
-        chips.push(renderManualShiftChip(empById, s));
-    }
-    if (!chips.length) return '';
-    return `<div class="epa-day-events">${chips.join('')}</div>`;
-}
-
-function renderHeatmap(ce, d) {
-    const [y, m] = d.monthKey.split('-').map(Number);
-    const firstDow = new Date(y, m - 1, 1).getDay();
-    const daysInMonth = new Date(y, m, 0).getDate();
-    const subsByDate = submissionsByDate(d);
-    const holidays = holidayByDate(d);
-
-    let cells = HEBREW_DOW.map(x => `<div class="ep-dow">${x}</div>`).join('');
-    for (let i = 0; i < firstDow; i++) cells += `<div class="epa-day other"></div>`;
-
-    for (let day = 1; day <= daysInMonth; day++) {
-        const dateKey = `${d.monthKey}-${pad2(day)}`;
-        const info = d.days?.[dateKey];
-        const blocked = (d.settings?.blockedDates || []).includes(dateKey);
-        const promoted = (d.settings?.promotedDates || []).includes(dateKey);
-        const subs = subsByDate[dateKey] || [];
-        const holidayEntry = getHolidayEntry(d, dateKey);
-        const note = getDayNote(d, dateKey);
-        const hasDraft = ce._batchMode && (ce._batchQueue || []).some(item => item.payload?.dateKey === dateKey);
-        const cls = ['epa-day', blocked || holidayEntry?.mode === 'CLOSED' ? 'blocked' : coverageClass(info), ce._adminSelectedDay === dateKey ? 'sel' : '', hasDraft ? 'has-draft' : ''].join(' ');
-        const flags = `${promoted ? '⭐' : ''}${blocked ? '🚫' : ''}${note ? ' ✉' : ''}`;
-        const events = renderDayEventChips(d, info, subs);
-        cells += `<div class="${cls}" data-action="admin-select-day" data-date="${dateKey}" ${note ? `title="${esc(note.message)}"` : ''}>
-            ${flags ? `<span class="epa-flag">${flags}</span>` : ''}
-            ${hasDraft ? `<span class="epa-day-draft-badge" title="יש שינויי טיוטה ממתינים לשמירה ביום זה">⏳</span>` : ''}
-            <span class="num">${day}</span>
-            ${holidays[dateKey] ? `<span class="hol">${esc(holidays[dateKey])}${holidayModeMarker(holidayEntry)}</span>` : ''}
-            ${events}
-            ${renderDayCoverageBar(info)}
-        </div>`;
-    }
-
-    return `<div class="epa-grid7">${cells}</div>
-        <div class="ep-legend">
-            <span><span class="ep-dot" style="background:#ecfdf5"></span>מאויש</span>
-            <span><span class="ep-dot" style="background:#fffbeb"></span>חלקי</span>
-            <span><span class="ep-dot" style="background:#fef2f2"></span>אין הגשות</span>
-            <span><span class="ep-dot" style="background:#f9fafb"></span>אין סדנאות</span>
-            <span><span class="ep-dot" style="background:#e5e7eb"></span>חסום</span>
-            <span><span class="ep-dot" style="background:#fff7ed;box-shadow:inset 0 0 0 2px #f59e0b"></span>שינויי טיוטה</span>
-        </div>`;
-}
-
-function renderListView(ce, d) {
-    const [y, m] = d.monthKey.split('-').map(Number);
-    const daysInMonth = new Date(y, m, 0).getDate();
-    const subsByDate = submissionsByDate(d);
-    const holidays = holidayByDate(d);
-    const rows = [];
-
-    for (let day = 1; day <= daysInMonth; day++) {
-        const dateKey = `${d.monthKey}-${pad2(day)}`;
-        const info = d.days?.[dateKey];
-        const subs = subsByDate[dateKey] || [];
-        const holidayEntry = getHolidayEntry(d, dateKey);
-        const note = getDayNote(d, dateKey);
-        const holiday = holidays[dateKey] ? ` · 🕎 ${esc(holidays[dateKey])}${holidayModeMarker(holidayEntry)}` : '';
-        const noteFlag = note ? ` · ✉` : '';
-
-        if (!info?.hasWorkshops) {
-            rows.push(`<div class="epa-list-day no-ws" data-action="admin-select-day" data-date="${dateKey}">
-                <div class="epa-list-head"><span>${fmtDate(dateKey)}${holiday}${noteFlag}</span><span>אין סדנאות${subs.length ? ` · ${subs.length} הגשות` : ''}</span></div>
-            </div>`);
-            continue;
-        }
-        const typeRows = (info.types || []).map(t => {
-            const assigned = subs.filter(s => t.assignedEmployeeIds.includes(s.employeeId));
-            const submitted = subs.filter(s => !t.assignedEmployeeIds.includes(s.employeeId) && s.status !== 'STANDBY');
-            const times = (t.timeRanges || []).map(r => r.end ? `${fmtTimeHe(r.start)}–${fmtTimeHe(r.end)}` : fmtTimeHe(r.start)).filter(Boolean).join(', ');
-            return `<div style="margin-top:5px">
-                <b>${esc(t.name)}</b> — נדרשים ${t.required}, שובצו ${Math.min(t.filled, t.required)}${t.standbyCount ? `, בהמתנה ${t.standbyCount}` : ''}${times ? ` <span style="color:#6b7280">(${esc(times)})</span>` : ''}
-                <div class="epa-chips">
-                    ${assigned.map(s => `<span class="epa-chip assigned">${esc(s.employeeName)}${pendingBatchDot(ce, dateKey, s.employeeId)}</span>`).join('')}
-                    ${submitted.map(s => `<span class="epa-chip">${esc(s.employeeName)}${pendingBatchDot(ce, dateKey, s.employeeId)}</span>`).join('')}
-                </div>
-            </div>`;
-        }).join('');
-        rows.push(`<div class="epa-list-day" data-action="admin-select-day" data-date="${dateKey}">
-            <div class="epa-list-head"><span>${fmtDate(dateKey)}${holiday}${noteFlag}</span>${renderDayCoverageBar(info)}</div>
-            ${typeRows}
-        </div>`);
-    }
-    return rows.join('');
-}
-
 /** Kebab dropdown of per-row actions in the day's employee list. */
-function renderDayRowMenu(ce, d, row, dateKey) {
-    if (row.kind !== 'submission' || !d.permissions.manageScheduling) return '';
-    if (row.pendingBatch === 'add') return ''; // virtual row — nothing saved yet to act on
-    const isOpen = ce._dayRowMenuOpen === row.key;
-    const isScheduled = row.status === 'SCHEDULED';
-    const hasWorkshop = !!row.workshopTypeId;
-    return `<div class="epa-row-menu-wrap${isOpen ? ' open' : ''}">
-        <button type="button" class="epa-row-menu-btn" data-action="admin-day-row-menu" data-row="${esc(row.key)}" aria-label="פעולות נוספות">⋮</button>
-        ${isOpen ? `<div class="epa-row-menu-drop">
-            <button type="button" data-action="admin-day-row-assign" data-date="${esc(dateKey)}" data-emp="${esc(row.employeeId)}">🗂 שיבוץ לסדנה</button>
-            <button type="button" data-action="admin-open-swap" data-date="${esc(dateKey)}" data-type="${esc(row.workshopTypeId || '')}" data-emp="${esc(row.employeeId)}" ${isScheduled && hasWorkshop ? '' : 'disabled title="רלוונטי רק לעובד/ת המשובץ/ת לסדנה"'}>🔁 החלפת עובד/ת</button>
-            <button type="button" class="danger" data-action="admin-cancel-assign" data-date="${esc(dateKey)}" data-type="${esc(row.workshopTypeId || '')}" data-emp="${esc(row.employeeId)}" ${hasWorkshop ? '' : 'disabled title="לא משובץ/ת לסדנה ביום זה"'}>🗑 הסרה מהמשמרת</button>
-            <button type="button" data-action="admin-day-row-note" data-date="${esc(dateKey)}" data-emp="${esc(row.employeeId)}">✉ הערה אישית</button>
-        </div>` : ''}
-    </div>`;
-}
-
-function renderDayPeopleRow(ce, d, row, dateKey) {
-    const meta = rowStatusMeta(row);
-    if (row.kind === 'workshop-gap') {
-        return `<tr class="epa-row-ws-gap">
-            <td><span class="epa-dot-lg" style="background:#ef4444"></span>${esc(row.workshopName || row.employeeName)}</td>
-            <td>${esc(row.startTime || '—')}</td>
-            <td>${esc(row.extra || '—')}</td>
-            <td><span class="epa-badge ${meta.badge}">${esc(meta.label)}</span></td>
-            <td>${d.permissions.manageScheduling ? `<button type="button" class="epa-btn primary epa-btn-sm" data-action="admin-open-assign-day" data-date="${esc(dateKey)}">שיבוץ לסדנה</button>` : ''}</td>
-        </tr>`;
-    }
-    const extra = row.kind === 'submission' && row.extra && !meta.label.includes('ידני') ? ` · ${esc(row.extra)}` : '';
-    const employee = (d.employees || []).find(e => e.id === row.employeeId);
-    const dot = row.employeeId ? `<span class="epa-dot-lg" style="background:${esc(employee?.color || '#2563eb')}"></span>` : '';
-    return `<tr class="${row.pendingBatch ? 'epa-row-pending' : ''}">
-        <td>${dot}${esc(row.employeeName || '—')}</td>
-        <td>${formatBoardHours(row)}</td>
-        <td>${formatBoardDetails(row)}</td>
-        <td><span class="epa-badge ${meta.badge}">${esc(meta.label)}${extra}</span></td>
-        <td>${renderDayRowMenu(ce, d, row, dateKey)}</td>
-    </tr>`;
-}
-
-function renderDayPeopleList(ce, d, dateKey) {
-    const f = dayFilter(ce);
-    const dayRows = filteredDayRows(ce, d, dateKey);
-    const { items, page, totalPages, total } = paginateSlice(dayRows, ce._dayListPage || 0);
-    const empIds = [...new Set(dayRows.map(r => r.employeeId).filter(Boolean))];
-    const empOpts = boardEmployeeOptions(d).filter(o => empIds.includes(o.value));
-    const wsIds = [...new Set(dayRows.map(r => r.workshopTypeId).filter(Boolean))];
-    const wsOpts = boardWorkshopOptions(d).filter(o => wsIds.includes(o.value));
-    const statusOpts = boardStatusOptions().filter(o => dayRows.some(r => r.status === o.value));
-    const hasFilter = !!(f.employeeIds?.length || f.statuses?.length || f.workshopIds?.length);
-    const rows = items.map(r => renderDayPeopleRow(ce, d, r, dateKey)).join('');
-    const canManageScheduling = d.permissions.manageScheduling;
-    const canSeeGlobalScope = d.permissions.manageRules || d.permissions.manageScheduling;
-    const menuOpen = !!ce._dayRowMenuOpen;
-    return `<div class="epa-day-people">
-        <div class="epa-panel-title">
-            <h3>עובדים משובצים והגשות פעילות ליום - ${fmtDate(dateKey)} (${total})</h3>
-            <div style="display:flex;gap:6px;flex-wrap:wrap">
-                ${canManageScheduling ? `<button type="button" class="epa-btn primary" data-action="admin-open-assign-day" data-date="${esc(dateKey)}">👤 שיבוץ עובד/ת ידני ליום זה</button>` : ''}
-                ${canSeeGlobalScope ? `<button type="button" class="epa-btn" data-action="admin-open-day-settings" data-date="${esc(dateKey)}">⚙️ הגדרות ליום זה</button>` : ''}
-            </div>
-        </div>
-        <div class="epa-filter-row">
-            ${renderMultiSelect('day', 'employeeIds', 'עובדים', empOpts, f.employeeIds, ce._dayMsOpen)}
-            ${renderMultiSelect('day', 'statuses', 'סטטוסים', statusOpts, f.statuses, ce._dayMsOpen)}
-            ${renderMultiSelect('day', 'workshopIds', 'סדנאות', wsOpts, f.workshopIds, ce._dayMsOpen)}
-            ${hasFilter ? `<button type="button" class="epa-btn" data-action="admin-day-filter-clear">איפוס סינון</button>` : ''}
-        </div>
-        <div class="epa-table-wrap${menuOpen ? ' menu-open' : ''}"><table class="epa-table"><thead><tr><th>עובד/ת</th><th>שעות</th><th>סדנה / פרטים</th><th>סטטוס</th><th></th></tr></thead>
-            <tbody>${rows || '<tr><td colspan="5" class="ep-empty">אין עובדים התואמים את הסינון ביום זה</td></tr>'}</tbody>
-        </table></div>
-        ${renderPager(page, totalPages, total, 'admin-day-list-prev', 'admin-day-list-next')}
-    </div>`;
-}
-
 /** Compact stat chips summarizing the day: headcount, active workshops, staff-slot coverage. */
-function renderDayStatChips(subs, info) {
-    const types = info?.types || [];
-    const requiredTotal = types.reduce((s, t) => s + t.required, 0);
-    const filledTotal = types.reduce((s, t) => s + Math.min(t.filled, t.required), 0);
-    const chips = [
-        `<span class="epa-stat-chip"><b>${subs.length}</b> עובדים ביום זה</span>`,
-        `<span class="epa-stat-chip"><b>${types.length}</b> סדנאות פעילות</span>`,
-    ];
-    if (requiredTotal) {
-        chips.push(`<span class="epa-stat-chip ${filledTotal >= requiredTotal ? 'ok' : ''}"><b>${filledTotal}/${requiredTotal}</b> מקומות צוות מאוישים</span>`);
-    }
-    return `<div class="epa-stat-row">${chips.join('')}</div>`;
-}
-
 /** Renders the paid-order "groups" (client/participant detail) for one expanded workshop card. Lazily fetched — cached in ce._workshopOrderGroups by cardKey. */
-function renderWorkshopGroupsDetail(ce, cardKey) {
-    const groups = ce._workshopOrderGroups?.[cardKey];
-    if (!groups) {
-        return `<div class="epa-ws-groups"><div class="ep-loading small"><div class="ep-spinner"></div>טוען פרטי קבוצות…</div></div>`;
-    }
-    if (!groups.length) {
-        return `<div class="epa-ws-groups"><div class="ep-empty">לא נמצאו הזמנות משולמות לסדנה זו</div></div>`;
-    }
-    const rows = groups.map(g => `<tr>
-        <td>${esc(g.organizerName)}</td>
-        <td>${g.adults} מבוגרים${g.children ? ` + ${g.children} ילדים` : ''}</td>
-        <td>${esc(g.organizerPhone || '—')}</td>
-        <td>${g.paidTotal ? `₪${g.paidTotal}` : '—'}</td>
-        <td>${esc(g.notes || '—')}</td>
-    </tr>`).join('');
-    return `<div class="epa-ws-groups"><table class="epa-table small"><thead><tr>
-        <th>לקוח/ה</th><th>משתתפים</th><th>טלפון</th><th>שולם</th><th>הערות הזמנה</th>
-    </tr></thead><tbody>${rows}</tbody></table></div>`;
-}
-
 /** Prefer totals from loaded order groups (matches the table); fall back to server slot stats. */
-function sessionParticipantTotals(ce, cardKey, slot) {
-    const groups = ce._workshopOrderGroups?.[cardKey];
-    if (Array.isArray(groups)) {
-        return {
-            adults: groups.reduce((s, g) => s + (g.adults || 0), 0),
-            children: groups.reduce((s, g) => s + (g.children || 0), 0),
-        };
-    }
-    return { adults: slot.adults || 0, children: slot.children || 0 };
-}
-
 /** Workshop capacity cards for the day: one card per session/time-slot. Click to expand paid-order groups for that slot. */
-function renderWorkshopCapacityGrid(ce, d, dateKey, info, subs) {
-    const types = info?.types || [];
-    if (!types.length) {
-        return `<div class="ep-empty">אין סדנאות ביום זה${subs.length ? ` — ${subs.length} הגשות זמינות (יום סטודיו)` : ''}</div>`;
-    }
-    const cards = types.flatMap(t => {
-        const slots = (t.slots && t.slots.length) ? t.slots : [{
-            start: t.timeRanges?.[0]?.start || null,
-            end: t.timeRanges?.[0]?.end || null,
-            adults: t.adults,
-            children: t.children,
-            required: t.required,
-            filled: t.filled,
-            label: '',
-        }];
-        return slots.map(slot => {
-            const filled = Math.min(slot.filled ?? 0, slot.required ?? 0);
-            const full = slot.required > 0 && filled >= slot.required;
-            const pct = slot.required ? Math.min(100, Math.round((filled / slot.required) * 100)) : 0;
-            const timeText = slot.start ? (slot.end ? `${fmtTimeHe(slot.start)}–${fmtTimeHe(slot.end)}` : fmtTimeHe(slot.start)) : '';
-            const title = slot.label ? `${t.name} — ${slot.label}` : t.name;
-            const cardKey = slot.start ? `${dateKey}::${t.typeId}::${slot.start}` : `${dateKey}::${t.typeId}`;
-            const isOpen = ce._dayWsOpenCard === cardKey;
-            const parts = sessionParticipantTotals(ce, cardKey, slot);
-            return `<div class="epa-ws-card">
-                <button type="button" class="epa-ws-head epa-ws-head-btn" data-action="admin-toggle-ws-card" data-date="${esc(dateKey)}" data-type="${esc(t.typeId)}" data-start="${esc(slot.start || '')}">
-                    <h4>${esc(title)}${timeText ? ` <span class="epa-ws-head-time">${esc(timeText)}</span>` : ''}</h4>
-                    <span class="epa-ws-fraction ${full ? 'full' : ''}">${filled}/${slot.required} צוות</span>
-                    <span class="epa-accordion-arrow">${isOpen ? '▲' : '▼'}</span>
-                </button>
-                <div class="epa-capacity-track"><div class="epa-capacity-fill ${full ? 'full' : ''}" style="width:${pct}%"></div></div>
-                <div class="epa-ws-meta"><span>${parts.adults} מבוגרים</span><span>${parts.children} ילדים</span>${t.standbyCount ? `<span>בהמתנה: ${t.standbyCount}</span>` : ''}</div>
-                ${isOpen ? renderWorkshopGroupsDetail(ce, cardKey) : ''}
-            </div>`;
-        });
-    }).join('');
-    return `<div class="epa-ws-grid">${cards}</div>`;
-}
-
-function renderDayDetail(ce, d) {
-    const dateKey = ce._adminSelectedDay;
-    const info = d.days?.[dateKey];
-    const subs = submissionsByDate(d)[dateKey] || [];
-    const blocked = (d.settings?.blockedDates || []).includes(dateKey);
-    const holidayEntry = getHolidayEntry(d, dateKey);
-    const note = getDayNote(d, dateKey);
-    const dayTag = blocked ? 'יום חסום' : (holidayEntry ? `${holidayEntry.mode === 'CLOSED' ? 'עסק סגור' : 'יום מקוצר'} — ${holidayEntry.name || 'חג/מועד'}` : 'יום רגיל');
-    const banners = [
-        blocked ? `<div class="epa-day-banner blocked">🚫 היום חסום להגשות</div>` : '',
-        holidayEntry ? `<div class="epa-day-banner holiday">🕎 ${esc(holidayEntry.name || 'חג')}${holidayModeMarker(holidayEntry)}</div>` : '',
-        note?.message ? `<div class="epa-day-banner note">✉ ${esc(note.message)}</div>` : '',
-    ].join('');
-
-    return `<div class="epa-detail">
-        <div class="epa-detail-head">
-            <div class="epa-detail-title">
-                <button type="button" class="epa-btn epa-nav-arrow" data-action="admin-day-prev" data-date="${dateKey}" aria-label="יום קודם">›</button>
-                <h3>${fmtDate(dateKey)} <span class="epa-day-tag">${esc(dayTag)}</span></h3>
-                <button type="button" class="epa-btn epa-nav-arrow" data-action="admin-day-next" data-date="${dateKey}" aria-label="יום הבא">‹</button>
-            </div>
-            <button type="button" class="epa-btn" data-action="admin-close-day">✕ סגירה</button>
-        </div>
-        ${banners}
-        ${renderDayStatChips(subs, info)}
-        <div class="epa-panel" style="margin-top:0">${renderDayPeopleList(ce, d, dateKey)}</div>
-        <div class="epa-panel"><div class="epa-panel-title"><h3>תפוסת סדנאות</h3></div>${renderWorkshopCapacityGrid(ce, d, dateKey, info, subs)}</div>
-    </div>`;
-}
-
 /** Task-type <select> for morning shifts — options come from d.taskTypes (TASK_TYPES). */
 function taskTypeOptions(d, selected) {
     const opts = d.taskTypes || [];
@@ -2670,49 +2064,6 @@ function relTimeHe(ts) {
     return `לפני ${diffMin} דק׳`;
 }
 
-function renderBatchHistory(ce, d) {
-    const queue = ce._batchQueue || [];
-    const summary = ce._batchSummary;
-    const summaryHtml = summary ? `
-        <div class="epa-batch-summary">
-            <div class="epa-batch-summary-head">
-                <b>סיכום השמירה</b>
-                <button class="epa-btn small" data-action="admin-batch-dismiss-summary">סגירה</button>
-            </div>
-            ${summary.map(r => `<div class="epa-batch-summary-row ${r.ok ? 'ok' : 'fail'}">
-                <span>${r.ok ? '✓' : '✗'}</span>
-                <span class="epa-batch-summary-label">${esc(r.label)}</span>
-                ${!r.ok ? `<span class="epa-batch-summary-reason">${esc(r.reason || r.message || 'נכשל')}</span>` : ''}
-            </div>`).join('')}
-        </div>` : '';
-    if (ce._batchSaving) {
-        return `${summaryHtml}
-            <div class="epa-batch-saving">
-                <div class="epa-batch-saving-bar"><div class="epa-batch-saving-fill"></div></div>
-                <div>שומר ${queue.length} פעולות…</div>
-            </div>`;
-    }
-    const rows = queue.length ? queue.map(item => `
-        <div class="epa-batch-row">
-            <div class="epa-batch-row-main">
-                <div class="epa-batch-row-label">${esc(item.label)}</div>
-                ${item.time ? `<div class="epa-batch-time">🕒 ${esc(item.time)}</div>` : ''}
-                <div class="epa-batch-meta">נוסף · ${relTimeHe(item.at)} · ${fmtTimeHe(new Date(item.at).toISOString())}${item.failReason ? ` · <span style="color:#dc2626">${esc(item.failReason)}</span>` : ''}</div>
-            </div>
-            <button class="epa-batch-remove" data-action="admin-batch-remove" data-id="${esc(item.id)}" aria-label="הסרה">✕</button>
-        </div>`).join('') : `<div class="ep-empty">התור ריק — כל הפעולות שתוסיפו יופיעו כאן.</div>`;
-    return `${summaryHtml}
-        <div class="epa-batch-list">${rows}</div>
-        <div class="epa-batch-footer">
-            <label class="epa-check-item"><input type="checkbox" data-action="admin-batch-notify-global" ${ce._batchNotify ? 'checked' : ''}> שליחת התראות וואטסאפ לעובדים המשויכים</label>
-            <div class="epa-inline">
-                <button class="epa-btn primary" data-action="admin-batch-save" ${queue.length ? '' : 'disabled'}>שמירת הכל (${queue.length})</button>
-
-                <button class="epa-btn danger" data-action="admin-batch-clear" ${queue.length ? '' : 'disabled'}>ניקוי הכל</button>
-            </div>
-        </div>`;
-}
-
 function renderModal(ce, d) {
     const modal = ce._adminModal;
     if (!modal) return '';
@@ -2780,9 +2131,6 @@ function renderModal(ce, d) {
     } else if (modal.type === 'autoAssignSummary') {
         title = '📋 שיבוץ אוטומטי — סיכום תוצאות';
         body = renderAutoAssignSummaryStep(ce);
-    } else if (modal.type === 'batch') {
-        title = '📋 היסטוריית פעולות — מצב אצווה';
-        body = renderBatchHistory(ce, d);
     } else if (modal.type === 'confirmDeactivate') {
         const employee = findEmployee(ce, d, modal.id);
         title = `השבתת עובד/ת — ${esc(employee?.displayName || '')}`;
@@ -2911,16 +2259,6 @@ export function handleAdminChange(ce, input) {
         ce._dayAssignPrefillEmp = input.value || null;
         ce._dayAssignShowMorning = false;
         ce.render();
-        return true;
-    }
-    if (input?.dataset?.action === 'admin-batch-toggle') {
-        ce._batchMode = input.checked;
-        ce._saveBatch();
-        ce.render();
-        return true;
-    }
-    if (input?.dataset?.action === 'admin-batch-notify-global') {
-        ce._batchNotify = input.checked;
         return true;
     }
     if (input?.dataset?.action === 'admin-toggle-active') {
@@ -3357,10 +2695,6 @@ export function handleAdminClick(ce, action, target) {
             const assignPayload = { dateKey: target.dataset.date, workshopTypeIds, employeeId: emp, workType, notify, taskType, shiftNote };
             ce._dayAssignPrefillEmp = null;
             ce._dayAssignShowMorning = false;
-            if (ce._batchMode) {
-                enqueueBatchAction(ce, d, 'adminManualAssign', assignPayload);
-                return true;
-            }
             ce._adminModal = null;
             ce._startBusy('משבץ עובד/ת…');
             ce.render();
@@ -3377,39 +2711,6 @@ export function handleAdminClick(ce, action, target) {
             ce._adminModal = { type: 'daySettings', dateKey: target.dataset.date };
             ce.render();
             return true;
-        case 'admin-batch-open-history':
-            ce._batchSummary = null;
-            ce._adminModal = { type: 'batch' };
-            ce.render();
-            return true;
-        case 'admin-batch-dismiss-summary':
-            ce._batchSummary = null;
-            ce.render();
-            return true;
-        case 'admin-batch-remove': {
-            const id = target.dataset.id;
-            ce._batchQueue = ce._batchQueue.filter(item => item.id !== id);
-            if (!ce._batchQueue.length) ce._batchExpiresAt = null;
-            ce._saveBatch();
-            ce.render();
-            return true;
-        }
-        case 'admin-batch-clear':
-            ce._clearBatch();
-            ce._batchSummary = null;
-            ce.render();
-            return true;
-        case 'admin-batch-save': {
-            if (!ce._batchQueue.length || ce._batchSaving) return true;
-            ce._batchSaving = true;
-            ce._batchSummary = null;
-            ce._batchSaveSnapshot = ce._batchQueue.map(item => ({ ...item }));
-            const actions = ce._batchSaveSnapshot.map(item => ({ type: item.type, payload: item.payload }));
-            ce.render();
-            ce._startBusy(`שומר ${actions.length} פעולות…`);
-            ce._dispatch('adminApplyBatch', { actions, notify: ce._batchNotify !== false });
-            return true;
-        }
         case 'admin-toggle-ws-card': {
             const dateKey = target.dataset.date;
             const sessionStart = target.dataset.start || '';
@@ -3495,10 +2796,6 @@ export function handleAdminClick(ce, action, target) {
                 taskType,
                 shiftNote,
             };
-            if (ce._batchMode) {
-                enqueueBatchAction(ce, d, 'adminManualAssign', wsAssignPayload);
-                return true;
-            }
             ce._adminModal = null;
             ce._startBusy('משבץ עובד/ת…');
             ce.render();
@@ -3528,10 +2825,6 @@ export function handleAdminClick(ce, action, target) {
                 notifyFrom,
                 notifyTo,
             };
-            if (ce._batchMode) {
-                enqueueBatchAction(ce, d, 'adminSwapAssignment', swapPayload);
-                return true;
-            }
             ce._adminModal = null;
             ce._startBusy('מבצע החלפה…');
             ce.render();
@@ -3576,10 +2869,6 @@ export function handleAdminClick(ce, action, target) {
                 disposition: target.dataset.disposition === 'delete' ? 'delete' : 'restore',
                 notify,
             };
-            if (ce._batchMode) {
-                enqueueBatchAction(ce, d, 'adminCancelAssignment', cancelPayload);
-                return true;
-            }
             ce._adminModal = null;
             ce._startBusy(target.dataset.disposition === 'delete' ? 'מסיר הגשה…' : 'מחזיר להגשות פעילות…');
             ce.render();

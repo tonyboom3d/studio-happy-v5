@@ -70,6 +70,7 @@ import {
 } from 'backend/whatsappTemplates.js';
 import { EMPLOYEE_ACTION_KEYS } from 'backend/employeeTemplates.js';
 import { enqueueNotification, flushOutbox, PRIORITY } from 'backend/notificationOutbox.js';
+import { shapeBoardDays } from 'backend/scheduleDayShape.js';
 
 const PORTAL_URL = 'https://www.studiohappy.art/employee-portal';
 
@@ -295,53 +296,7 @@ export const getStaffAdminData = webMethod(Permissions.SiteMember, async (monthK
     });
 
     // Day coverage for heatmap/list views.
-    const days = {};
-    for (const [dateKey, day] of Object.entries(board.days)) {
-        days[dateKey] = {
-            hasWorkshops: day.hasWorkshops,
-            hasTufting: Object.keys(day.types).some(id => tuftingTypeIds.has(id)),
-            types: Object.values(day.types).map(t => {
-                const sortedSessions = [...t.sessions].sort();
-                const timeRanges = sortedSessions.map(start => ({ start, end: t.sessionEnds?.[start] || null }));
-                const earliestStart = sortedSessions[0] || null;
-                const rule = board.rules[t.typeId];
-                const slots = (sortedSessions.length ? sortedSessions : [null]).map((start, idx) => {
-                    const key = start ? canonicalSessionKey(start) : null;
-                    const comp = key && t.sessionComps?.[key]
-                        ? t.sessionComps[key]
-                        : (sortedSessions.length <= 1
-                            ? { adults: t.adults, children: t.children, pairs: t.pairs, soloAdults: t.soloAdults, extraChildren: t.extraChildren, people: t.people }
-                            : { adults: 0, children: 0, pairs: 0, soloAdults: 0, extraChildren: 0, people: 0 });
-                    return {
-                        start: key || start,
-                        end: key ? (t.sessionEnds?.[key] || null) : null,
-                        adults: comp.adults || 0,
-                        children: comp.children || 0,
-                        required: requiredInstructorsFor(rule, comp),
-                        label: sortedSessions.length > 1 ? `מפגש ${idx + 1}` : '',
-                    };
-                });
-                let fillRemaining = typeFilledCount(t);
-                for (const slot of slots) {
-                    slot.filled = Math.min(fillRemaining, slot.required);
-                    fillRemaining -= slot.filled;
-                }
-                return {
-                    typeId: t.typeId,
-                    name: t.name,
-                    adults: t.adults,
-                    children: t.children,
-                    required: t.required,
-                    filled: typeFilledCount(t),
-                    assignedEmployeeIds: t.assignedEmployeeIds,
-                    standbyCount: t.standbyQueue.length,
-                    timeRanges,
-                    slots,
-                    isMorning: earliestStart ? classifyShiftSlot(dateKey, earliestStart) === 'morning' : false,
-                };
-            }),
-        };
-    }
+    const days = shapeBoardDays(board, tuftingTypeIds);
 
     // Submission tracker: weekly quota + Friday/Saturday compliance per employee.
     const tracker = employees.filter(e => e.active).map(e => {

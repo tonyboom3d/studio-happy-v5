@@ -22,6 +22,7 @@
  */
 import { ADMIN_STYLE, renderAdminTab, handleAdminClick, handleAdminChange, handleAdminDragStart, handleAdminDragEnd, handleAdminDragOver, handleAdminDrop, captureEmployeeFormDraft, captureRuleFormDraft } from './employee-portal-admin.js';
 import { RR_STYLE, renderRescheduleRequestsPanel, handleRescheduleClick, handleRescheduleChange } from './reschedule-requests-panel.js';
+import { CALENDAR_STYLE, handleCalendarClick, handleCalendarChange, handleCalendarData, handleCalendarResult, captureCalendarState, restoreCalendarState, calendarOutsideClick } from './schedule-calendar/calendarActions.js';
 
 const EMPLOYEE_SAVE_HOLD_MS = 2000;
 
@@ -430,6 +431,7 @@ employee-portal * { box-sizing: border-box; }
   .ep-user-dropdown { inset-inline-start: auto; inset-inline-end: 0; width: min(300px, calc(100vw - 20px)); }
 }
 ${ADMIN_STYLE}
+${CALENDAR_STYLE}
 ${RR_STYLE}
 `;
 
@@ -628,7 +630,7 @@ function groupWorkshopsBySession(workshops) {
 }
 
 class EmployeePortal extends HTMLElement {
-    static get observedAttributes() { return ['portal-data', 'action-result', 'admin-data', 'hours-data', 'templates-data', 'staff-data', 'team-time-data', 'messages-data', 'messages-admin-data', 'vacations-data', 'reschedule-data']; }
+    static get observedAttributes() { return ['portal-data', 'action-result', 'admin-data', 'hours-data', 'templates-data', 'staff-data', 'team-time-data', 'messages-data', 'messages-admin-data', 'vacations-data', 'reschedule-data', 'calendar-data']; }
 
     constructor() {
         super();
@@ -688,17 +690,6 @@ class EmployeePortal extends HTMLElement {
         this._wsAccordionOpen = new Set();      // open workshop-accordion keys in day modal
         this._lightboxImage = null;             // full-size sketch image URL shown in the lightbox
         this._sketchGalleryOrderId = null;      // orderId whose full sketch grid is open (overflow view)
-        // Batch scheduling mode — queue assign/remove/swap actions and save them all at once.
-        // On by default (draft-first workflow): board edits accumulate as a draft until the
-        // manager explicitly saves. See `_loadBatch()` for the persisted on/off override.
-        this._batchMode = true;
-        this._batchQueue = [];                  // [{ id, type, payload, label, at }]
-        this._batchExpiresAt = null;            // Date.now() + 30min from the first queued item
-        this._batchHistoryOpen = false;
-        this._batchNotify = true;               // global "send WhatsApp" choice at save time
-        this._batchSaving = false;
-        this._batchSummary = null;              // [{ ok, blocked, reason, warning, label }] shown after save
-        this._batchTimer = null;                // 1s ticker for the expiry countdown chip
         this._shiftModal = null;                // { type: 'edit'|'requestEdit'|'requestDelete'|'swap', submissionId }
         this._busy = null;                      // busy-overlay message while a mutation is in flight
         this._pendingAdminToast = null;         // { message, kind } held until admin-data confirms a silent day-level edit
@@ -800,7 +791,6 @@ class EmployeePortal extends HTMLElement {
     disconnectedCallback() {
         clearInterval(this._msgCarTimer);
         clearInterval(this._editWindowTimer);
-        clearInterval(this._batchTimer);
         clearTimeout(this._tipTimer);
         if (this._tipDocClick) document.removeEventListener('click', this._tipDocClick);
         if (this._tipEl?.parentNode) this._tipEl.parentNode.removeChild(this._tipEl);
@@ -992,7 +982,6 @@ class EmployeePortal extends HTMLElement {
             if (!this._empSaveFinishing) this._clearBusyOverlay();
             this._pendingWorkTypes = null;
             if (this._adminData?.monthKey) this._adminMonth = this._adminData.monthKey;
-            this._loadBatch();
             if (this._pendingAdminToast) {
                 clearTimeout(this._pendingAdminToastTimer);
                 const t = this._pendingAdminToast;
@@ -1093,6 +1082,10 @@ class EmployeePortal extends HTMLElement {
             this._busy = null;
             this._scheduleRender();
         }
+        if (name === 'calendar-data') {
+            handleCalendarData(this, newVal);
+            return;
+        }
         if (name === 'action-result') {
             try {
                 const result = JSON.parse(newVal);
@@ -1159,6 +1152,7 @@ class EmployeePortal extends HTMLElement {
 
     _handleActionResult(result) {
         this._submitting = false;
+        if (handleCalendarResult(this, result)) return;
 
         if (result.type === 'adminSaveEmployee' && result.ok) {
             if (this._lastEmployeeSave && this._adminData) {
@@ -1421,33 +1415,6 @@ class EmployeePortal extends HTMLElement {
             this._scheduleRender();
             return;
         }
-        if (result.type === 'adminApplyBatch') {
-            this._batchSaving = false;
-            if (!result.ok) {
-                this._toast(result.message || 'שמירת האצווה נכשלה.', 'error');
-                this._scheduleRender();
-                return;
-            }
-            const results = result.results || [];
-            const savedSnapshot = this._batchSaveSnapshot || [];
-            // Keep only the failed items in the queue (tagged with their failure reason) so the manager can retry/remove them.
-            const survivors = [];
-            results.forEach((r, i) => {
-                if (r.ok) return;
-                const item = savedSnapshot[i];
-                if (item) survivors.push({ ...item, failReason: r.reason || r.message || 'הפעולה נכשלה' });
-            });
-            this._batchQueue = survivors;
-            this._batchExpiresAt = survivors.length ? (this._batchExpiresAt || (Date.now() + 30 * 60 * 1000)) : null;
-            this._batchSaveSnapshot = null;
-            this._saveBatch();
-            this._batchSummary = results.map((r, i) => ({ ...r, label: savedSnapshot[i]?.label || `פעולה ${i + 1}` }));
-            this._batchHistoryOpen = true;
-            const okCount = results.filter(r => r.ok).length;
-            this._toast(`נשמרו ${okCount} מ-${results.length} פעולות.`, okCount === results.length ? 'success' : 'error');
-            this._scheduleRender();
-            return;
-        }
         if (result.type === 'adminLoadWorkshopOrders') {
             this._workshopOrderGroups = this._workshopOrderGroups || {};
             if (result.ok) {
@@ -1535,6 +1502,7 @@ class EmployeePortal extends HTMLElement {
         const isManager = !!d.user.permissions?.manageScheduling;
         const reschedulePanel = isManager ? renderRescheduleRequestsPanel(this) : '';
 
+        const calSnap = captureCalendarState(this);
         this.innerHTML = `
             <div class="ep-wrap${this._rowMenuOpen ? ' ep-row-menu-active' : ''}">
                 ${this._renderHeader()}
@@ -1557,7 +1525,7 @@ class EmployeePortal extends HTMLElement {
         this._restoreToast();
         this._setupMsgCarousel();
         this._setupEditWindowTimer();
-        this._setupBatchTimer();
+        restoreCalendarState(this, calSnap);
     }
 
     /** "השעות שלי" — monthly time-clock history + approval (Module E). */
@@ -1669,67 +1637,6 @@ class EmployeePortal extends HTMLElement {
     _unreadCount(scope) {
         const seen = this._getSeenMsgs();
         return this._msgListFor(scope).filter(m => !seen.has(this._msgId(m))).length;
-    }
-
-    // -----------------------------------------------------------------
-    // Batch scheduling mode — per-device queue with a 30-min expiry.
-    // -----------------------------------------------------------------
-    _batchKey() {
-        const u = this._data?.user || {};
-        return `epBatchQueue:${u.id || u.email || u.name || 'anon'}`;
-    }
-
-    _loadBatch() {
-        let raw = null;
-        try { raw = JSON.parse(localStorage.getItem(this._batchKey()) || 'null'); } catch (_) { raw = null; }
-        this._batchQueue = Array.isArray(raw?.queue) ? raw.queue : [];
-        this._batchExpiresAt = raw?.expiresAt || null;
-        if (this._batchQueue.length && this._batchExpiresAt && Date.now() > this._batchExpiresAt) {
-            const hadItems = this._batchQueue.length;
-            this._batchQueue = [];
-            this._batchExpiresAt = null;
-            this._saveBatch();
-            if (hadItems) this._toast('הטיוטה הקודמת פגה תוקף (30 דק׳) ונוקתה.', 'error');
-        }
-        // Draft mode is on by default so board edits always accumulate for an explicit save.
-        // Respect an explicit stored off-choice, but never lose a pending queue silently.
-        this._batchMode = raw?.mode !== false || this._batchQueue.length > 0;
-    }
-
-    _saveBatch() {
-        try {
-            localStorage.setItem(this._batchKey(), JSON.stringify({
-                mode: this._batchMode,
-                queue: this._batchQueue,
-                expiresAt: this._batchExpiresAt,
-            }));
-        } catch (_) { /* storage unavailable */ }
-    }
-
-    _clearBatch() {
-        this._batchQueue = [];
-        this._batchExpiresAt = null;
-        this._saveBatch();
-    }
-
-    /** 1s ticker that updates the expiry countdown chip in place; drops the queue once it actually expires. */
-    _setupBatchTimer() {
-        clearInterval(this._batchTimer);
-        if (!this.querySelector('#epaBatchClock')) return;
-        this._batchTimer = setInterval(() => {
-            const clockEl = this.querySelector('#epaBatchClock');
-            if (!clockEl) { clearInterval(this._batchTimer); return; }
-            const until = Number(clockEl.dataset.until);
-            const remainMs = until - Date.now();
-            if (remainMs <= 0) {
-                clearInterval(this._batchTimer);
-                this._clearBatch();
-                this._toast('פעולות האצווה פגו תוקף (30 דק׳) ונוקו.', 'error');
-                this.render();
-                return;
-            }
-            clockEl.textContent = this._formatCountdown(remainMs);
-        }, 1000);
     }
 
     _renderStatusGuide() {
@@ -3180,12 +3087,14 @@ class EmployeePortal extends HTMLElement {
             this._slotMenuOpen = null;
             if (!target) { this.render(); return; }
         }
+        if (calendarOutsideClick(this, e, target)) return;
         if (!target) return;
         const action = target.dataset.action;
         const months = (this._data?.months || []).map(m => m.monthKey);
         const idx = months.indexOf(this._viewMonth);
         const rules = this._data?.rules || {};
 
+        if (action.startsWith('cal-') && handleCalendarClick(this, action, target)) return;
         if (action.startsWith('admin-')) {
             if (handleAdminClick(this, action, target)) return;
         }
@@ -3570,6 +3479,7 @@ class EmployeePortal extends HTMLElement {
 
     _onChange(e) {
         const input = e.target;
+        if (input?.dataset?.action?.startsWith('cal-') && handleCalendarChange(this, input)) return;
         if (input?.dataset?.action?.startsWith('admin-') && handleAdminChange(this, input)) return;
         if (input?.dataset?.action?.startsWith('reschedule-') && handleRescheduleChange(this, input.dataset.action, input)) return;
         if (this._adminModal?.type === 'employee' && (input?.id?.startsWith('epaF_') || input?.classList?.contains('epa-skill') || input?.classList?.contains('epaPerm'))) {

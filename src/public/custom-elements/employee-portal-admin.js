@@ -554,6 +554,17 @@ export function renderAdminTab(ce) {
     if (d.permissions.manageTemplates) allowedPages.push('templates');
     if (!allowedPages.includes(ce._adminPage)) ce._adminPage = 'board';
 
+    // Board page: minimize the side menu (restored on leaving); manual toggling still works.
+    if (ce._lastAdminPage !== ce._adminPage) {
+        if (ce._adminPage === 'board') {
+            ce._sidebarBeforeBoard = !!ce._adminSidebarCollapsed;
+            ce._adminSidebarCollapsed = true;
+        } else if (ce._lastAdminPage === 'board' && ce._sidebarBeforeBoard !== undefined) {
+            ce._adminSidebarCollapsed = ce._sidebarBeforeBoard;
+        }
+        ce._lastAdminPage = ce._adminPage;
+    }
+
     return `
         <div class="epa-shell ${ce._adminSidebarCollapsed ? 'collapsed' : ''}">
             <main class="epa-content">${renderAdminPage(ce, d)}</main>

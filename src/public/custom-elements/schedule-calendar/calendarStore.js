@@ -13,7 +13,8 @@ export function calState(ce) {
             view: 'week',
             anchor: today,
             miniMonth: today.slice(0, 7),
-            filters: { workshopIds: [], employeeIds: [] },
+            filters: { workshopIds: [], employeeIds: [], state: '' },
+            openGroups: {},
             msOpen: null,
             cache: { days: {}, subsByDate: {}, loaded: {}, employees: [], workshopTypes: [], vacations: [], settings: EMPTY_SETTINGS(), permissions: {}, ready: false },
             loadingKey: null,
@@ -113,7 +114,7 @@ function slotRange(slot) {
 
 /** Flat list of workshop sessions for the given dates, honoring filters. */
 export function buildEvents(cal, keys, { applyFilters = true } = {}) {
-    const { workshopIds, employeeIds } = cal.filters;
+    const { workshopIds, employeeIds, state } = cal.filters;
     const out = [];
     for (const k of keys) {
         const day = cal.cache.days[k];
@@ -125,6 +126,11 @@ export function buildEvents(cal, keys, { applyFilters = true } = {}) {
             const slots = t.slots?.length ? t.slots : [{ start: null, end: null, required: t.required, adults: t.adults, children: t.children, capacity: null }];
             for (const slot of slots) {
                 const r = slotRange(slot);
+                if (applyFilters && state) {
+                    if (state === 'noStaff' && assignedIds.length) continue;
+                    if (state === 'withStaff' && !assignedIds.length) continue;
+                    if (state === 'noParticipants' && eventCapacity({ capacity: slot.capacity || null, people: (slot.adults || 0) + (slot.children || 0) }).booked > 0) continue;
+                }
                 out.push({
                     id: `${k}|${t.typeId}|${slot.start || ''}`,
                     dateKey: k,

@@ -405,7 +405,12 @@ export function handleCalendarClick(ce, action, target) {
             cal.sketchConfirm = null;
             runOp(ce, 'sketchDelete', ds.date, {}, 'calendarSketchDelete', 'תפירת הסקיצות נמחקה');
             return true;
+        case 'cal-toggle-group':
+            cal.openGroups[ds.id] = !cal.openGroups[ds.id];
+            rerender(ce);
+            return true;
         case 'cal-filter-opt':
+        case 'cal-filter-state':
         case 'cal-notify':
         case 'cal-hol-mode':
             return true; // handled on change
@@ -422,6 +427,11 @@ export function handleCalendarChange(ce, input) {
         const key = input.dataset.key;
         const list = cal.filters[key] || [];
         cal.filters[key] = input.checked ? [...new Set([...list, input.value])] : list.filter(v => v !== input.value);
+        rerender(ce);
+        return true;
+    }
+    if (action === 'cal-filter-state') {
+        cal.filters.state = input.value || '';
         rerender(ce);
         return true;
     }

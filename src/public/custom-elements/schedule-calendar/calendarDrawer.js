@@ -43,6 +43,40 @@ function hoursLine(cal, dateKey, emp, sub) {
 // Session drawer
 // ---------------------------------------------------------------------------
 
+const shekel = (n) => `₪${Number(n || 0).toLocaleString('he-IL')}`;
+
+function thumbs(items, label) {
+    if (!items.length) return '';
+    return `<div class="sc-gd-line"><span class="k">${label}</span><span class="sc-thumbs">${items.map(i => i.img
+        ? `<a href="${esc(i.img)}" target="_blank" rel="noopener" class="sc-thumb" title="${esc(i.caption || '')}"><img src="${esc(i.img)}" alt="" loading="lazy">${i.badge ? `<em>${esc(i.badge)}</em>` : ''}</a>`
+        : `<span class="sc-thumb empty" title="${esc(i.caption || '')}">—</span>`).join('')}</span></div>`;
+}
+
+function groupDetails(g) {
+    const line = (k, v) => (v ? `<div class="sc-gd-line"><span class="k">${k}</span><span class="v">${v}</span></div>` : '');
+    const phone = g.organizerPhone ? `<a dir="ltr" href="tel:${esc(g.organizerPhone)}">${esc(g.organizerPhone)}</a>` : '';
+    const email = g.organizerEmail ? `<a dir="ltr" href="mailto:${esc(g.organizerEmail)}">${esc(g.organizerEmail)}</a>` : '';
+    const promo = g.promoCoupon?.code ? `קופון מתנה ${esc(g.promoCoupon.code)} (${g.promoCoupon.status === 'redeemed' || g.promoCoupon.redeemedAt ? 'מומש' : esc(g.promoCoupon.status || 'הונפק')})` : '';
+    const coupon = g.couponCode || g.couponName
+        ? `✓ נוצל: ${esc(g.couponCode || g.couponName)}${g.paidDiscount ? ` (−${shekel(g.paidDiscount)})` : ''}`
+        : (g.paidDiscount ? `הנחה ${shekel(g.paidDiscount)}` : 'לא נוצל קוד קופון');
+    const sketches = (g.sketches || []).map((s, i) => ({ img: s.img, caption: `${s.participantName || `סקיצה ${i + 1}`} · ${s.size || ''}`, badge: s.size }));
+    const cups = (g.cups || []).map(c => ({ img: c.image, caption: `כוס × ${c.quantity}`, badge: c.quantity > 1 ? `×${c.quantity}` : '' }));
+    const people = (g.participants || []).map(p => `${esc(p.name)}${p.phone ? ` (<span dir="ltr">${esc(p.phone)}</span>)` : ''}${p.childrenCount ? ` +${p.childrenCount} ילדים` : ''}`).join('<br>');
+    return `<div class="sc-gd">
+        ${line('טלפון', phone)}${line('מייל', email)}
+        ${line('שולם', `<b>${shekel(g.paidTotal)}</b>`)}
+        ${line('קופון', coupon)}${line('קופון מתנה', promo)}
+        ${line('הזמנה', g.orderNumber ? `#${esc(g.orderNumber)}` : '')}
+        ${line('צ׳ק-אין', g.checkedInAt ? '✓ הגיעו' : '')}
+        ${line('משתתפים', people)}
+        ${thumbs(sketches, `סקיצות (${sketches.length}${g.rugCount > sketches.length ? `/${g.rugCount}` : ''})`)}
+        ${thumbs(cups, 'כוסות')}
+        ${g.customerNotes ? `<div class="sc-gd-note"><b>הערת לקוח</b>${esc(g.customerNotes)}</div>` : ''}
+        ${g.internalNotes ? `<div class="sc-gd-note int"><b>הערה פנימית</b>${esc(g.internalNotes)}</div>` : ''}
+    </div>`;
+}
+
 function renderParticipants(ce, ev) {
     const groups = ce._workshopOrderGroups?.[groupsKey(ev.dateKey, ev.typeId, ev.start)];
     if (!Array.isArray(groups)) {
@@ -53,16 +87,23 @@ function renderParticipants(ce, ev) {
     }
     const adults = groups.reduce((s, g) => s + (g.adults || 0), 0);
     const children = groups.reduce((s, g) => s + (g.children || 0), 0);
+    const cal = calState(ce);
     const rows = groups.map(g => {
         const total = (g.adults || 0) + (g.children || 0);
         const parts = [g.adults ? `${g.adults} מבוגרים` : '', g.children ? `${g.children} ילדים` : ''].filter(Boolean).join(' + ');
-        return `<div class="sc-row">
-            <span class="sc-av" style="background:#8b9bb0">${esc(initials(g.organizerName))}</span>
-            <div class="sc-row-main"><b>${esc(g.organizerName)}</b>
-                <div class="sc-row-sub">${esc(parts || '—')}${g.organizerPhone ? ` · <span dir="ltr">${esc(g.organizerPhone)}</span>` : ''}</div>
-                ${g.notes ? `<div class="sc-row-sub">📝 ${esc(g.notes)}</div>` : ''}
+        const open = !!cal.openGroups[g.id];
+        const noteText = [g.customerNotes ? `הערת לקוח: ${g.customerNotes}` : '', g.internalNotes ? `הערה פנימית: ${g.internalNotes}` : ''].filter(Boolean).join('\n') || g.notes || '';
+        return `<div class="sc-grp ${open ? 'open' : ''}">
+            <div class="sc-row sc-grp-head" data-action="cal-toggle-group" data-id="${esc(g.id)}" role="button" tabindex="0">
+                <span class="sc-av" style="background:#8b9bb0">${esc(initials(g.organizerName))}</span>
+                <div class="sc-row-main"><b>${esc(g.organizerName)}</b>
+                    <div class="sc-row-sub">${esc(parts || '—')}${g.organizerPhone ? ` · <span dir="ltr">${esc(g.organizerPhone)}</span>` : ''}</div>
+                </div>
+                ${noteText ? `<span class="sc-tip sc-note-ico" data-tip="${esc(noteText)}">📝</span>` : ''}
+                <span class="sc-badge">👥 ${total}</span>
+                <span class="sc-chev">${open ? '▴' : '▾'}</span>
             </div>
-            <span class="sc-badge">👥 ${total}</span>
+            ${open ? groupDetails(g) : ''}
         </div>`;
     }).join('');
     return `${rows}

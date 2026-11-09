@@ -35,6 +35,7 @@ import {
     classifyShiftSlot,
 } from 'backend/availabilityRules.js';
 import { TASK_TYPES, TASK_LABELS } from 'backend/timeClockService.web.js';
+import { getOrdersGroupDetails } from 'backend/dashboardService.web.js';
 import { syncHebcalHolidays } from 'backend/holidayService.js';
 import { TUFTING_SERVICE_IDS } from 'backend/sketchEditingPolicy.js';
 import {
@@ -505,18 +506,35 @@ export const getWorkshopOrderGroups = webMethod(Permissions.SiteMember, async (d
         .limit(200).find(SA).catch(() => ({ items: [] }));
 
     const sessionKey = sessionStart ? canonicalSessionKey(sessionStart) : null;
-    return (result.items || [])
+    const orders = (result.items || [])
         .filter(o => !o.cancelledAt && toDateKey(o.workshopStart) === dateKey)
-        .filter(o => !sessionKey || canonicalSessionKey(o.workshopStart) === sessionKey)
-        .map(o => ({
+        .filter(o => !sessionKey || canonicalSessionKey(o.workshopStart) === sessionKey);
+    const details = await getOrdersGroupDetails(orders).catch(() => ({}));
+    return orders.map(o => {
+        const x = details[o._id] || {};
+        return {
             id: o._id,
-            organizerName: o.organizerName || 'ללא שם',
-            organizerPhone: o.organizerPhone || '',
+            organizerName: x.name || o.organizerName || 'ללא שם',
+            organizerPhone: x.phone || o.organizerPhone || '',
+            organizerEmail: x.email || o.organizerEmail || '',
             adults: o.adults || 0,
             children: o.children || 0,
-            paidTotal: o.paidTotal || o.basePrice || 0,
+            paidTotal: x.paidTotal ?? (o.paidTotal || o.basePrice || 0),
+            paidDiscount: x.paidDiscount || 0,
+            couponCode: x.couponCode || '',
+            couponName: x.couponName || '',
+            promoCoupon: x.promoCoupon || null,
+            customerNotes: x.customerNotes ?? (o.customerNotes || ''),
+            internalNotes: x.internalNotes ?? (o.internalNotes || ''),
             notes: o.customerNotes || o.internalNotes || '',
-        }));
+            sketches: x.sketches || [],
+            cups: x.cups || [],
+            rugCount: x.rugCount || 0,
+            orderNumber: x.orderNumber || '',
+            checkedInAt: x.checkedInAt || null,
+            participants: x.participants || [],
+        };
+    });
 });
 
 /** Atomic employee save — profile, skills, rates, and optional permissions in one CMS write. */

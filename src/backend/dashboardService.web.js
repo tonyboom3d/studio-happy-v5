@@ -842,6 +842,55 @@ export async function getOrderPickupDisplayItems(order) {
     return { sketches, selectedProducts };
 }
 
+/** Full per-group detail (contact, sketches/cups, payment, coupons, notes) for scheduling-calendar drawer. */
+export async function getOrdersGroupDetails(orders) {
+    const list = (orders || []).filter(o => o?._id);
+    const out = {};
+    if (!list.length) return out;
+    const ids = list.map(o => o._id);
+    const [sketchesBy, participantsBy, promoBy, ecomBy] = await Promise.all([
+        loadSketchesForOrders(ids).catch(() => ({})),
+        loadParticipantsForOrders(ids).catch(() => ({})),
+        getPromoCouponsByOrderIds(ids).catch(() => ({})),
+        loadEcomBuyerByOrderId(list).catch(() => ({})),
+    ]);
+    const productIds = [
+        ...Object.values(sketchesBy).flat().map(s => s.productId),
+        ...list.flatMap(o => parseSelectedProductsField(o.selectedProducts).map(s => s.productId)),
+    ];
+    const productImgs = await loadProductWixImagesById(productIds).catch(() => ({}));
+    for (const order of list) {
+        const parts = participantsBy[order._id] || [];
+        const organizer = enrichOrganizerFields(order, parts, ecomBy[order._id]);
+        const sketches = sortSketchesByRugIndex(
+            (sketchesBy[order._id] || []).map(sel => mapSketch(sel, parts, order, productImgs))
+        ).map(s => ({ img: s.img, size: s.size, participantName: s.participantName, status: s.status }));
+        const cups = mapSelectedProductsForOrder(order, productImgs)
+            .map(c => ({ image: c.image, quantity: c.quantity }));
+        const promo = mapPromoCouponForDashboard(promoBy[order._id]);
+        out[order._id] = {
+            email: organizer.organizerEmail,
+            phone: organizer.organizerPhone,
+            name: organizer.organizerName,
+            sketches,
+            cups,
+            rugCount: order.rugCount || 0,
+            paidTotal: order.paidTotal || order.basePrice || 0,
+            paidDiscount: order.paidDiscount || 0,
+            couponCode: order.couponCode || '',
+            couponName: order.couponName || '',
+            promoCoupon: promo ? { code: promo.code, status: promo.status, redeemedAt: promo.redeemedAt } : null,
+            customerNotes: order.customerNotes || '',
+            internalNotes: order.internalNotes || '',
+            orderNumber: order.ecomOrderNumber || '',
+            orderUrl: order.orderUrl || '',
+            checkedInAt: order.checkedInAt || null,
+            participants: parts.filter(p => !p.cancelledAt).map(p => ({ name: p.name || '', phone: p.phone || p.rawPhone || '', childrenCount: p.childrenCount || 0 })),
+        };
+    }
+    return out;
+}
+
 function buildSketchLogContext(sel, participantsForOrder, order) {
     const participants = participantsForOrder || [];
     const sketchNum = sel.rugIndex != null && sel.rugIndex !== ''

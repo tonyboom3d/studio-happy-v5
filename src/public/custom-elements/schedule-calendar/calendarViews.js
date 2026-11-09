@@ -80,6 +80,10 @@ function renderToolbar(ce, cal) {
         <span class="sc-spacer"></span>
         ${renderMultiSelect(cal, 'workshopIds', 'סדנאות', wsOpts)}
         ${renderMultiSelect(cal, 'employeeIds', 'עובדים', empOpts)}
+        <select class="sc-select ${cal.filters.state ? 'has' : ''}" data-action="cal-filter-state" aria-label="סינון לפי איוש ומשתתפים">
+            ${[['', 'כל הסדנאות'], ['noStaff', 'ללא אנשי צוות'], ['withStaff', 'עם אנשי צוות'], ['noParticipants', 'ללא משתתפים']]
+                .map(([v, l]) => `<option value="${v}" ${cal.filters.state === v ? 'selected' : ''}>${l}</option>`).join('')}
+        </select>
         <div class="sc-seg" role="tablist">${views.map(([v, l]) => `<button type="button" class="${cal.view === v ? 'active' : ''}" data-action="cal-view" data-view="${v}">${l}</button>`).join('')}</div>
         <button type="button" class="sc-icon-btn" data-action="cal-refresh" title="רענון" aria-label="רענון" style="font-size:16px">⟳</button>
         ${perms.manageEmployees ? `<button type="button" class="sc-btn" data-action="admin-page" data-page="messages">✉ הודעות לעובדים</button>` : ''}
@@ -156,7 +160,7 @@ function renderDayHeader(cal, k, view) {
     const tags = [
         f.holiday?.name || f.holiday?.mode ? `<span class="sc-tag hol" title="${esc(f.holiday.name || '')}">${esc(f.holiday.name || (f.closed ? 'סגור' : 'מקוצר'))}${f.closed && f.holiday.name ? ' · סגור' : ''}</span>` : '',
         f.blocked ? '<span class="sc-tag blk">חסום</span>' : '',
-        f.note ? `<span class="sc-tag note" title="${esc(f.note.message || '')}">✉ הודעה</span>` : '',
+        f.note ? `<span class="sc-tag note sc-tip" data-tip="${esc(f.note.message || '')}">✉ הודעה</span>` : '',
     ].join('');
     return `<button type="button" class="sc-dh ${today ? 'today' : ''}" data-action="cal-open-day" data-date="${k}" title="פרטי היום והגדרות">
         <span class="sc-dh-row"><span class="sc-dh-dow">${view === 'day' ? `יום ${DOW_LONG[dowOf(k)]}` : DOW_LONG[dowOf(k)]}</span><span class="sc-dh-num">${pad2(p.d)}</span></span>
@@ -273,7 +277,7 @@ function renderMonth(cal) {
         const more = dayEvents.length > MONTH_CHIPS
             ? `<button type="button" class="sc-more" data-action="cal-goto-day" data-date="${k}">+${dayEvents.length - MONTH_CHIPS} נוספים</button>` : '';
         const tag = f.holiday?.name ? `<span class="sc-tag hol" title="${esc(f.holiday.name)}">${esc(f.holiday.name)}</span>`
-            : (f.blocked ? '<span class="sc-tag blk">חסום</span>' : (f.note ? '<span class="sc-tag note">✉</span>' : ''));
+            : (f.blocked ? '<span class="sc-tag blk">חסום</span>' : (f.note ? `<span class="sc-tag note sc-tip" data-tip="${esc(f.note.message || '')}">✉</span>` : ''));
         return `<div class="sc-mc ${p.m !== month ? 'out' : ''} ${k === today ? 'today' : ''} ${f.closed ? 'closed' : ''}">
             <div class="sc-mc-head"><button type="button" class="sc-mc-num" data-action="cal-goto-day" data-date="${k}" title="תצוגת יום">${p.d}</button>
                 <span style="display:flex;gap:3px;align-items:center;min-width:0">${tag}<button type="button" class="sc-icon-btn" style="width:22px;height:22px;font-size:12px" data-action="cal-open-day" data-date="${k}" title="פרטי היום והגדרות">⚙</button></span>

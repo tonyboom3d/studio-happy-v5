@@ -49,6 +49,8 @@ import {
 } from 'backend/pickupScheduling.js';
 import { syncPickupLink, syncPickupStatus } from 'backend/manychatService.jsw';
 import { handleZadarmaNotify, zadarmaEchoValue } from 'backend/zadarmaIncomingCall.js';
+import { buildPromoPopupPayload } from 'backend/promoPopupPublic.js';
+import { handleFaqQuestionWebhook } from 'backend/faqKnowledge.js';
 
 // ============================================================
 // ManyChat availability endpoint
@@ -1089,6 +1091,36 @@ export function get_zadarmaCall(request) {
   const echo = zadarmaEchoValue(request.query);
   if (echo != null) return zadarmaText(200, echo);
   return zadarmaText(200, 'OK');
+}
+
+// Site promo popup. Custom Code fetches this and stays hidden until a payload arrives.
+// GET https://www.studiohappy.art/_functions/promoPopup
+const PROMO_POPUP_HEADERS = { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' };
+
+export async function get_promoPopup(request) {
+  try {
+    return ok({ headers: PROMO_POPUP_HEADERS, body: await buildPromoPopupPayload(request) });
+  } catch (err) {
+    console.error('[http-functions] get_promoPopup failed:', err?.message || err);
+    return ok({ headers: PROMO_POPUP_HEADERS, body: { show: false } });
+  }
+}
+
+// POST https://www.studiohappy.art/_functions/faqQuestionEntry
+// Point the Blocks webhooks for question created, updated, and deleted here.
+export async function post_faqQuestionEntry(request) {
+  const headers = { 'Content-Type': 'application/json' };
+  try {
+    const text = await request.body.text();
+    const result = await handleFaqQuestionWebhook(text);
+    if (result.skipped && result.reason === 'unrecognized payload') {
+      return badRequest({ headers, body: result });
+    }
+    return ok({ headers, body: result });
+  } catch (err) {
+    console.error('[http-functions] post_faqQuestionEntry failed:', err?.message || err);
+    return serverError({ headers, body: { error: String(err?.message || err) } });
+  }
 }
 
 export async function post_zadarmaCall(request) {

@@ -2,6 +2,7 @@ import { category, questionEntry } from "@wix/faq";
 import { auth } from "@wix/essentials";
 import { webMethod, Permissions } from "wix-web-module";
 import wixData from "wix-data";
+import { WORKSHOP_NAME_BY_CATEGORY_ID } from "backend/faqKnowledge.js";
 
 const listQuestionEntriesElevated = auth.elevate(questionEntry.listQuestionEntries);
 const listCategoriesElevated = auth.elevate(category.listCategories);
@@ -10,14 +11,6 @@ const PAGE_LIMIT = 100;
 const MAX_PAGES = 50;
 const KNOWLEDGE_BASE = "Workshops_KnowledgeBase";
 const DATA_OPTIONS = { suppressAuth: true };
-
-const WORKSHOP_NAME_BY_CATEGORY_ID = {
-    "41f1d0b9-a5f4-4b58-8e9c-9e96ca7d7a5b": "כללי",
-    "1aba4e76-8d70-4aa2-9b5f-63aee3cb4d2e": "תכשיטים",
-    "6c6a9707-a64e-46ec-ab90-92f48bf3359a": "טאפטינג",
-    "36201862-63cb-4961-a9d6-ce61141051d5": "צביעה בקרמיקה",
-    "f41ebc9d-9759-414f-97ee-8b11c02aff1a": "נרות",
-};
 
 async function listAll(fetchPage, itemsKey) {
     const items = [];

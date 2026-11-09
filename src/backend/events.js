@@ -5,7 +5,9 @@ import { reconcileEcomOrder } from 'backend/orderReconciliation.js';
 import { reconcileAddOnEcomOrder, getAddOnOrderByCheckoutId, getAddOnOrderByEcomOrderId } from 'backend/studioUpsell/reconcile.js';
 import { cancelPromoCouponsForOrder, reschedulePromoCouponsForOrder } from 'backend/promoCouponService.js';
 import { submissions } from '@wix/forms';
+import { questionEntry } from '@wix/faq';
 import { handleCompanyEventSubmission } from 'backend/companyEventLeads.js';
+import { syncFaqQuestionSaved, syncFaqQuestionDeleted } from 'backend/faqKnowledge.js';
 
 const SA = { suppressAuth: true, suppressHooks: true };
 
@@ -117,6 +119,24 @@ staffMembers.onStaffMemberFullyCreated((event) => {
 staffMembers.onStaffMemberDeleted((event) => {
     removeDashboardRole(event?.entity?._id).catch(err => {
         console.error('[events] onStaffMemberDeleted error:', err?.message || err);
+    });
+});
+
+questionEntry.onQuestionEntryCreated((event) => {
+    syncFaqQuestionSaved(event).catch((err) => {
+        console.error('[events] FAQ created sync failed:', err?.message || err);
+    });
+});
+
+questionEntry.onQuestionEntryUpdated((event) => {
+    syncFaqQuestionSaved(event).catch((err) => {
+        console.error('[events] FAQ updated sync failed:', err?.message || err);
+    });
+});
+
+questionEntry.onQuestionEntryDeleted((event) => {
+    syncFaqQuestionDeleted(event).catch((err) => {
+        console.error('[events] FAQ deleted sync failed:', err?.message || err);
     });
 });
 

@@ -72,6 +72,7 @@ employee-portal * { box-sizing: border-box; }
 .ep-wrap.ep-chrome-min { padding-top: 10px; }
 .ep-fill { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 employee-portal.ep-board-fill { display: flex; flex-direction: column; background: #fff; overflow: hidden; }
+employee-portal.ep-board-fill .sc-drawer { position: absolute; top: 0; bottom: 0; height: auto; z-index: 40; }
 employee-portal.ep-board-fill .ep-wrap.ep-chrome-min { flex: 1; min-height: 0; height: 100%; padding: 0; display: flex; flex-direction: column; }
 employee-portal.ep-board-fill .ep-header-min { border-radius: 0; border-inline: none; border-top: none; flex: none; }
 employee-portal.ep-board-fill .epa-shell,
@@ -1590,6 +1591,36 @@ class EmployeePortal extends HTMLElement {
         this._syncBoardFrame(chromeMin);
     }
 
+    /** Let the board's fixed frame escape the Wix section without detaching the element. */
+    _pinBoardAncestors() {
+        if (this._boardAncestors) return;
+        const props = ['overflow', 'transform', 'filter', 'contain', 'will-change'];
+        const saved = [];
+        let node = this.parentElement;
+        while (node && node !== document.documentElement) {
+            const snap = {};
+            for (const p of props) snap[p] = node.style.getPropertyValue(p);
+            node.style.setProperty('overflow', 'visible', 'important');
+            node.style.setProperty('transform', 'none', 'important');
+            node.style.setProperty('filter', 'none', 'important');
+            node.style.setProperty('contain', 'none', 'important');
+            node.style.setProperty('will-change', 'auto', 'important');
+            saved.push({ node, snap });
+            node = node.parentElement;
+        }
+        this._boardAncestors = saved;
+    }
+
+    _unpinBoardAncestors() {
+        for (const { node, snap } of this._boardAncestors || []) {
+            for (const [p, v] of Object.entries(snap)) {
+                if (v) node.style.setProperty(p, v);
+                else node.style.removeProperty(p);
+            }
+        }
+        this._boardAncestors = null;
+    }
+
     /** Pin the scheduling board to the viewport so it covers the screen, not the Wix section box. */
     _syncBoardFrame(on) {
         if (this._boardResize) {
@@ -1599,15 +1630,11 @@ class EmployeePortal extends HTMLElement {
         const clear = () => {
             this.classList.remove('ep-board-fill');
             for (const p of ['position', 'top', 'left', 'right', 'width', 'height', 'zIndex', 'maxWidth', 'margin']) this.style[p] = '';
+            this._unpinBoardAncestors();
             if (this._boardHtmlOverflow != null) {
                 document.documentElement.style.overflow = this._boardHtmlOverflow;
                 this._boardHtmlOverflow = null;
             }
-            if (this._boardHome?.isConnected && this.parentElement === document.body) {
-                this._boardHome.insertBefore(this, this._boardNext);
-            }
-            this._boardHome = null;
-            this._boardNext = null;
         };
         if (!on) { clear(); return; }
         const apply = () => {
@@ -1620,14 +1647,10 @@ class EmployeePortal extends HTMLElement {
             this.style.height = '100dvh';
             this.style.maxWidth = 'none';
             this.style.margin = '0';
-            this.style.zIndex = '2147482000';
+            this.style.zIndex = '20';
         };
         this.classList.add('ep-board-fill');
-        if (this.parentElement && this.parentElement !== document.body) {
-            this._boardHome = this.parentElement;
-            this._boardNext = this.nextSibling;
-            document.body.appendChild(this);
-        }
+        this._pinBoardAncestors();
         if (this._boardHtmlOverflow == null) this._boardHtmlOverflow = document.documentElement.style.overflow;
         document.documentElement.style.overflow = 'hidden';
         apply();

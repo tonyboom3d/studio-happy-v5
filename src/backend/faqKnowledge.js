@@ -88,12 +88,14 @@ export async function upsertFaqKnowledge(entry) {
     const existing = await findByQuestionId(questionId);
     if (!existing.length) {
         const inserted = await wixData.insert(KNOWLEDGE_BASE, row, DATA_OPTIONS);
+        console.log('[faqKnowledge] created', questionId, title, inserted?._id);
         return { inserted: 1, id: inserted?._id };
     }
 
     for (const item of existing) {
         await wixData.update(KNOWLEDGE_BASE, { ...item, ...row }, DATA_OPTIONS);
     }
+    console.log('[faqKnowledge] updated', questionId, title, existing.length);
     return { updated: existing.length, id: existing[0]._id };
 }
 
@@ -103,6 +105,7 @@ export async function removeFaqKnowledge(questionId) {
     for (const item of existing) {
         await wixData.remove(KNOWLEDGE_BASE, item._id, DATA_OPTIONS);
     }
+    if (existing.length) console.log('[faqKnowledge] deleted', questionId, existing.length);
     return { removed: existing.length };
 }
 

@@ -1,5 +1,5 @@
 // Dashboard page bridge: <quotes-dashboard> CE <-> backend/quotesAdmin.web.js. No business logic here.
-import { loadQuotesDashboard, listQuotes, getQuote } from 'backend/quotesRead.web.js';
+import { loadQuotesDashboard, listQuotes, getQuote, getQuoteStaff } from 'backend/quotesRead.web.js';
 import {
     updateQuote, cancelQuote, syncQuoteLeads, listTemplates, saveTemplate, deleteTemplate,
     previewQuote, prepareQuote, getQuoteLink, approveBankTransfer, rejectBankTransfer, sendQuote,
@@ -12,6 +12,7 @@ const handlers = {
     boot: (p) => loadQuotesDashboard({ search: p.search, filters: p.filters, sort: p.sort, paging: p.paging }),
     list: (p) => listQuotes({ search: p.search, filters: p.filters, sort: p.sort, paging: p.paging }),
     get: (p) => getQuote(p.id),
+    staff: (p) => getQuoteStaff(p.id, p.eventDate),
     update: (p) => updateQuote(p.id, p.patch, p.actorName),
     cancel: (p) => cancelQuote(p.id, p.actorName),
     sync: (p) => syncQuoteLeads(p.actorName),

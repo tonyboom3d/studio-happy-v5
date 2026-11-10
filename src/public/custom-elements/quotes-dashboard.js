@@ -169,6 +169,7 @@ class QuotesDashboard extends HTMLElement {
         if (type === 'boot' || type === 'init') return ok({ actors: [{ id: 'a1', name: 'מנהל בדיקה' }], addons: [{ id: 'x1', title: 'ברד', price: 200 }], items: MOCK_ROWS, total: MOCK_ROWS.length });
         if (type === 'list') return ok({ items: MOCK_ROWS, total: MOCK_ROWS.length });
         if (type === 'get') return ok({ quote: MOCK_ROWS.find((r) => r._id === payload.id) || MOCK_ROWS[0], log: [], payments: [] });
+        if (type === 'staff') return ok({ actors: [{ id: 'a1', name: 'מנהל בדיקה', trainings: [{ id: 'x1', title: 'ברד' }] }], busyStaff: {} });
         if (type === 'templates') return ok({ templates: [], placeholders: ['customerName', 'totalAmount'] });
         if (type === 'preview') return ok({ html: '<h1>תצוגה לדוגמה</h1>' });
         if (type === 'update') return ok({ quote: { ...MOCK_ROWS[0], ...payload.patch } });
@@ -227,9 +228,8 @@ class QuotesDashboard extends HTMLElement {
     onChange(e) {
         const t = e.target;
         if (t.dataset.filter) { this.s.filters[t.dataset.filter] = t.value || undefined; if (t.dataset.filter === 'workshopClosed') this.s.filters.workshopClosed = t.value; this.s.skip = 0; this.load(); }
-        else if (t.id === 'actor') { this.s.actorId = t.value; try { localStorage.setItem('quotesActorId', t.value); } catch (_) { /* ignore */ } }
+        else if (t.id === 'staffPick' && t.value && this.s.detail?.draft) { this.toggleStaff(t.value, true); this.render(); }
         else if (t.dataset.f && this.s.detail) { this.readField(t); }
-        else if (t.dataset.staff && this.s.detail?.draft) { this.toggleStaff(t.dataset.staff, t.checked); }
         else if (t.dataset.t && this.s.modal?.tpl) { this.s.modal.tpl[t.dataset.t] = t.type === 'checkbox' ? t.checked : t.value; }
     }
 
@@ -266,6 +266,7 @@ class QuotesDashboard extends HTMLElement {
         if (a === 'addCatalogExtra') return this.addCatalogExtra();
         if (a === 'addCustomExtra') return this.addCustomExtra();
         if (a === 'delExtra') { this.s.detail.draft.extras.splice(Number(el.dataset.i), 1); return this.render(); }
+        if (a === 'delStaff') { this.toggleStaff(el.dataset.id, false); return this.render(); }
         if (a === 'approveTransfer' || a === 'rejectTransfer') return this.reviewTransfer(a === 'approveTransfer');
         if (a === 'sendEmail' || a === 'sendWhatsapp') return this.sendQuote(a === 'sendEmail' ? 'email' : 'whatsapp');
         if (a === 'toggleSec') { this.s.open[el.dataset.k] = !this.s.open[el.dataset.k]; return this.render(); }
@@ -282,14 +283,7 @@ class QuotesDashboard extends HTMLElement {
         if (a === 'clearFilters') { this.s.filters = {}; this.s.search = ''; this.s.skip = 0; return this.load(); }
     }
 
-    requireActor() {
-        if (this.s.actorId) return true;
-        this.toast('בחר/י "מי עובד/ת כרגע" לפני ביצוע שינויים');
-        return false;
-    }
-
     async sync() {
-        if (!this.requireActor()) return;
         this.toast('מסנכרן לידים...');
         try {
             const r = await this.req('sync');
@@ -306,11 +300,24 @@ class QuotesDashboard extends HTMLElement {
             const d = await this.req('get', { id });
             const q = d.quote;
             this.s.detail = {
-                id, quote: q, log: d.log || [], payments: d.payments || [], busyStaff: d.busyStaff || {}, staff: d.actors || [],
+                id, quote: q, log: d.log || [], payments: d.payments || [], busyStaff: {}, staff: [], staffLoading: true,
                 draft: { ...q, extras: (q.extras || []).map((x) => ({ ...x })), assignedStaffIds: [...(q.assignedStaffIds || [])], eventDate: ymd(q.eventDate), expiresAt: ymd(q.expiresAt), balanceDueDate: ymd(q.balanceDueDate) },
             };
+            this.render();
+            this.loadStaff(id, q.eventDate);
+            return;
         } catch (err) { this.s.detail = null; this.toast(errText(err)); }
         this.render();
+    }
+
+    async loadStaff(id, eventDate) {
+        try {
+            const r = await this.req('staff', { id, eventDate });
+            if (this.s.detail?.id !== id) return;
+            this.s.detail.staff = r.actors || [];
+            this.s.detail.busyStaff = r.busyStaff || {};
+        } catch (_) { /* drawer stays usable without the picker */ }
+        if (this.s.detail?.id === id) { this.s.detail.staffLoading = false; this.render(); }
     }
 
     isLocked() { return ['signed', 'expired', 'cancelled'].includes(this.s.detail?.quote?.status); }
@@ -346,7 +353,9 @@ class QuotesDashboard extends HTMLElement {
                 priceOverride: num(d.priceOverride), depositType: d.depositType, depositValue: num(d.depositValue) ?? 0,
                 balanceDueDate: d.balanceDueDate || null, expiresAt: d.expiresAt || null,
                 allowOnlinePayment: !!d.allowOnlinePayment, allowBankTransfer: !!d.allowBankTransfer, notes: d.notes || '',
+                assignedStaffIds: d.assignedStaffIds || [],
             };
+        if (locked && this.s.detail.quote.status !== 'cancelled') patch.assignedStaffIds = d.assignedStaffIds || [];
         this.s.saving = true; this.render();
         try {
             await this.req('update', { id: this.s.detail.id, patch });
@@ -359,7 +368,6 @@ class QuotesDashboard extends HTMLElement {
     }
 
     async cancelQuote() {
-        if (!this.requireActor()) return;
         if (!window.confirm('לבטל את ההצעה? הפעולה אינה הפיכה.')) return;
         try {
             await this.req('cancel', { id: this.s.detail.id });
@@ -371,7 +379,7 @@ class QuotesDashboard extends HTMLElement {
 
     // ---------- builder / templates ----------
     async prepare() {
-        if (!this.requireActor() || this.s.saving) return;
+        if (this.s.saving) return;
         if (!window.confirm('לשמור את השינויים ולהכין את ההצעה לשליחה? ייווצר קישור ללקוח.')) return;
         if (!(await this.save())) return;
         try {
@@ -383,7 +391,6 @@ class QuotesDashboard extends HTMLElement {
     }
 
     async sendQuote(channel) {
-        if (!this.requireActor()) return;
         const label = channel === 'email' ? 'במייל' : 'בוואטסאפ';
         if (!window.confirm(`לשלוח את ההצעה ללקוח ${label}?`)) return;
         try {
@@ -396,7 +403,6 @@ class QuotesDashboard extends HTMLElement {
     }
 
     async reviewTransfer(approve) {
-        if (!this.requireActor()) return;
         if (!window.confirm(approve ? 'לאשר את ההעברה הבנקאית? התשלום יירשם כשולם.' : 'לדחות את האסמכתא? הלקוח יתבקש להעלות מחדש.')) return;
         try {
             await this.req(approve ? 'approveTransfer' : 'rejectTransfer', { id: this.s.detail.id });
@@ -431,7 +437,6 @@ class QuotesDashboard extends HTMLElement {
     }
 
     async saveTpl() {
-        if (!this.requireActor()) return;
         try {
             await this.req('saveTemplate', { tpl: this.s.modal.tpl });
             const r = await this.req('templates');
@@ -441,7 +446,7 @@ class QuotesDashboard extends HTMLElement {
     }
 
     async delTpl(id) {
-        if (!this.requireActor() || !window.confirm('למחוק את התבנית?')) return;
+        if (!window.confirm('למחוק את התבנית?')) return;
         try {
             await this.req('deleteTemplate', { id });
             this.s.modal.templates = this.s.modal.templates.filter((t) => t._id !== id); this.s.modal.tpl = null;
@@ -490,8 +495,6 @@ class QuotesDashboard extends HTMLElement {
 
     topHtml() {
         return `<div class="top"><h1>הצעות מחיר</h1>
-            <label class="sub">מי עובד/ת כרגע
-              <select id="actor"><option value="">בחר/י...</option>${this.s.actors.map((a) => `<option value="${esc(a.id)}"${a.id === this.s.actorId ? ' selected' : ''}>${esc(a.name)}</option>`).join('')}</select></label>
             <button data-act="tplOpen">תבניות</button><button data-act="sync">סנכרון לידים</button><button data-act="refresh">רענון</button></div>`;
     }
 
@@ -531,6 +534,31 @@ class QuotesDashboard extends HTMLElement {
             <div class="pager"><span class="sub">${from}-${to} מתוך ${this.s.total}</span><span><button data-act="prev"${this.s.skip === 0 ? ' disabled' : ''}>הקודם</button> <button data-act="next"${to >= this.s.total ? ' disabled' : ''}>הבא</button></span></div></div>`;
     }
 
+    staffPicker(dt, d, blocked) {
+        if (dt.staffLoading) return '<div class="sub">טוען עובדים...</div>';
+        if (!dt.staff.length) return '<div class="sub">אין עובדים פעילים</div>';
+        const chosen = new Set(d.assignedStaffIds || []);
+        const card = (a) => {
+            const have = new Set((a.trainings || []).map((t) => t.id));
+            const missing = (d.extras || []).filter((x) => x.source === 'catalog' && !have.has(x.id));
+            const need = (d.extras || []).some((x) => x.source === 'catalog');
+            const trainedBadge = !need ? '' : missing.length ? ` <span class="badge amber" title="${esc(`חסרה הכשרה: ${missing.map((x) => x.title).join(', ')}`)}">חסרה הכשרה</span>` : ' <span class="badge green">מוכשר/ת לתוספות</span>';
+            const trainTxt = (a.trainings || []).length ? `<div class="sub">הכשרות: ${esc(a.trainings.map((t) => t.title).join(', '))}</div>` : '<div class="sub">אין הכשרות רשומות</div>';
+            const busyList = dt.busyStaff[a.id] || [];
+            const busyTitle = busyList.map((b) => `${b.label}${b.start ? ` ${b.start}–${b.end || '?'}` : ''}`).join(' | ');
+            const busyNote = busyList.length ? `<div class="sub">⚠️ <span class="badge amber" style="cursor:help" title="${esc(busyTitle)}">${busyList.some((b) => b.kind !== 'availability') ? 'משובץ/ת באותו יום' : 'הגיש/ה זמינות באותו יום'}</span></div>` : '';
+            return `<div class="staffRow"><div><b>${esc(a.name)}</b>${trainedBadge}${blocked ? '' : ` <button data-act="delStaff" data-id="${esc(a.id)}">✕</button>`}</div>${trainTxt}${busyNote}</div>`;
+        };
+        const selected = dt.staff.filter((a) => chosen.has(a.id)).map(card).join('') || '<div class="sub">לא שובץ עובד</div>';
+        const opts = dt.staff.filter((a) => !chosen.has(a.id)).map((a) => {
+            const trains = (a.trainings || []).map((t) => t.title).join(', ');
+            const busy = (dt.busyStaff[a.id] || []).length ? ' · תפוס/ה באותו יום' : '';
+            return `<option value="${esc(a.id)}">${esc(a.name)}${trains ? ` — ${esc(trains)}` : ''}${busy}</option>`;
+        }).join('');
+        const pick = blocked ? '' : `<select id="staffPick" style="width:100%;margin-bottom:8px"><option value="">בחרו עובד/ת</option>${opts}</select>`;
+        return `${pick}<div class="staffList">${selected}</div>`;
+    }
+
     drawerHtml() {
         const dt = this.s.detail;
         if (!dt) return '';
@@ -556,18 +584,7 @@ class QuotesDashboard extends HTMLElement {
                 <label class="full">הערות הלקוח<textarea rows="2" disabled>${esc(q.customerNotes || '')}</textarea></label></div></div>
               ${sec('event', 'האירוע')}<div class="grid">${f('eventDate', 'תאריך', 'date')}${f('participants', 'משתתפים', 'number', 'min="0"')}${f('eventStartTime', 'שעת התחלה', 'time')}${f('eventEndTime', 'שעת סיום', 'time')}${f('adults', 'מלווים', 'number', 'min="0"')}${f('requiredInstructors', 'מדריכים נדרשים', 'number', 'min="0"')}
                 <div class="full">${chk('workshopClosed', 'סדנה סגורה (פרטית)')}</div></div></div>
-              ${sec('staff', 'צוות משובץ')}<div class="staffList">${(dt.staff.length ? dt.staff : this.s.actors).map((a) => {
-                  const on = (d.assignedStaffIds || []).includes(a.id);
-                  const have = new Set((a.trainings || []).map((t) => t.id));
-                  const need = (d.extras || []).filter((x) => x.source === 'catalog');
-                  const missing = need.filter((x) => !have.has(x.id));
-                  const trainedBadge = !need.length ? '' : missing.length ? ` <span class="badge amber" title="${esc(`חסרה הכשרה: ${missing.map((x) => x.title).join(', ')}`)}">חסרה הכשרה</span>` : ' <span class="badge green">מוכשר/ת לתוספות</span>';
-                  const trainTxt = (a.trainings || []).length ? `<div class="sub">הכשרות: ${esc(a.trainings.map((t) => t.title).join(', '))}</div>` : '<div class="sub">אין הכשרות רשומות</div>';
-                  const busyList = dt.busyStaff[a.id] || [];
-                  const busyTitle = busyList.map((b) => `${b.label}${b.start ? ` ${b.start}–${b.end || '?'}` : ''}`).join(' | ');
-                  const busyNote = busyList.length ? `<div class="sub">⚠️ <span class="badge amber" style="cursor:help" title="${esc(busyTitle)}">${busyList.some((b) => b.kind !== 'availability') ? 'משובץ/ת באותו יום' : 'הגיש/ה זמינות באותו יום'}</span></div>` : '';
-                  return `<div class="staffRow"><label class="chk"><input type="checkbox" data-staff="${esc(a.id)}"${on ? ' checked' : ''}${dis}> <b>${esc(a.name)}</b>${trainedBadge}</label>${trainTxt}${busyNote}</div>`;
-              }).join('') || '<div class="sub">אין עובדים פעילים</div>'}</div></div>
+              ${sec('staff', 'צוות משובץ')}${this.staffPicker(dt, d, q.status === 'cancelled')}</div>
               ${sec('pricing', 'תמחור')}<div class="grid">${f('basePrice', 'מחיר בסיס (₪)', 'number', 'min="0"')}${f('priceOverride', 'מחיר מותאם (עוקף הכול)', 'number', 'min="0"')}
                 <label>סוג מקדמה<select data-f="depositType"${dis}><option value="percent"${d.depositType !== 'fixed' ? ' selected' : ''}>אחוז</option><option value="fixed"${d.depositType === 'fixed' ? ' selected' : ''}>סכום קבוע</option></select></label>${f('depositValue', 'ערך מקדמה', 'number', 'min="0"')}
                 ${f('balanceDueDate', 'מועד אחרון לתשלום יתרה', 'date')}${f('expiresAt', 'תוקף ההצעה', 'date')}</div>

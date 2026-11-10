@@ -92,13 +92,18 @@ const dayKey = (v) => {
     return d ? new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jerusalem', year: 'numeric', month: '2-digit', day: '2-digit' }).format(d) : '';
 };
 
-// Warm-instance cache for rarely-changing reference data (10 min).
-let refCache = null;
-async function getRefData() {
-    if (refCache && Date.now() - refCache.at < 10 * 60 * 1000) return refCache.data;
-    const [actors, addons] = await Promise.all([queryActors(), loadAddonsCatalog()]);
-    refCache = { at: Date.now(), data: { actors, addons } };
-    return refCache.data;
+let addonCache = null;
+async function getAddons() {
+    if (addonCache && Date.now() - addonCache.at < 10 * 60 * 1000) return addonCache.data;
+    addonCache = { at: Date.now(), data: await loadAddonsCatalog() };
+    return addonCache.data;
+}
+
+let actorCache = null;
+async function getActors() {
+    if (actorCache && Date.now() - actorCache.at < 10 * 60 * 1000) return actorCache.data;
+    actorCache = { at: Date.now(), data: await queryActors() };
+    return actorCache.data;
 }
 
 export const listQuotes = webMethod(Permissions.Admin, queryQuotes);
@@ -129,19 +134,26 @@ async function queryBusyStaff(quoteId, eventDate) {
 export const getQuote = webMethod(Permissions.Admin, async (quoteId) => {
     const quote = await wixData.get('Quotes', quoteId, SA);
     if (!quote) throw new Error('NOT_FOUND:ההצעה לא נמצאה.');
-    const [log, payments, busyStaff, ref] = await Promise.all([
+    const [log, payments] = await Promise.all([
         listQuoteLog(quoteId),
         wixData.query('QuotePayments').eq('quoteId', quoteId).descending('_createdDate').limit(50).find(SA),
-        queryBusyStaff(quoteId, quote.eventDate).catch(() => ({})),
-        getRefData().catch(() => ({ actors: [] })),
     ]);
-    return { quote, log, payments: payments.items, busyStaff, actors: ref.actors };
+    return { quote, log, payments: payments.items };
 });
 
-export const listActors = webMethod(Permissions.Admin, async () => ({ actors: await queryActors() }));
+/** Staff picker, loaded after the drawer is already open. */
+export const getQuoteStaff = webMethod(Permissions.Admin, async (quoteId, eventDate) => {
+    const [actors, busyStaff] = await Promise.all([
+        getActors(),
+        queryBusyStaff(quoteId, eventDate).catch(() => ({})),
+    ]);
+    return { actors, busyStaff };
+});
 
-/** First paint: the first page, the actor picker and the extras catalog, in one backend call. */
+export const listActors = webMethod(Permissions.Admin, async () => ({ actors: await getActors() }));
+
+/** First paint: the first page and the extras catalog. Staff loads only when a drawer opens. */
 export const loadQuotesDashboard = webMethod(Permissions.Admin, async (opts = {}) => {
-    const [list, ref] = await Promise.all([queryQuotes(opts), getRefData()]);
-    return { ...list, ...ref };
+    const [list, addons] = await Promise.all([queryQuotes(opts), getAddons()]);
+    return { ...list, addons };
 });

@@ -157,7 +157,7 @@ export const deleteTemplate = webMethod(Permissions.Admin, async (templateId) =>
 export const previewQuote = webMethod(Permissions.Admin, async (quoteId, templateId) => {
     const quote = await wixData.get('Quotes', quoteId, SA);
     if (!quote) throw new Error('NOT_FOUND:ההצעה לא נמצאה.');
-    const tpl = await resolveTemplate(templateId || quote.templateId, quote.eventType);
+    const tpl = await resolveTemplate(templateId || quote.templateId, quote.eventType).catch((e) => { throw new Error(e?.message || 'VALIDATION:שגיאה בטעינת תבנית.'); });
     if (!tpl) throw new Error('VALIDATION:לא נמצאה תבנית. צרו תבנית וסמנו אותה כברירת מחדל.');
     const amounts = computeAmounts(quote);
     const view = amounts.error ? quote : { ...quote, ...amounts };
@@ -168,18 +168,20 @@ export const previewQuote = webMethod(Permissions.Admin, async (quoteId, templat
 
 /** lead|draft -> draft: validates, assigns token + number, defaults dates. */
 export const prepareQuote = webMethod(Permissions.Admin, async (quoteId, templateId, actorName) => {
-    const quote = await wixData.get('Quotes', quoteId, SA);
+    const rethrow = (err, fallback) => { throw new Error(/^(VALIDATION|NOT_FOUND|ACCESS_DENIED):/.test(err?.message || '') ? err.message : (fallback || `VALIDATION:${err?.message || 'שגיאה לא ידועה'}`)); };
+    const quote = await wixData.get('Quotes', quoteId, SA).catch((e) => rethrow(e, 'NOT_FOUND:ההצעה לא נמצאה.'));
     if (!quote) throw new Error('NOT_FOUND:ההצעה לא נמצאה.');
     if (!['lead', 'draft'].includes(quote.status)) throw new Error('VALIDATION:ההצעה כבר נשלחה או נעולה.');
-    const tpl = await resolveTemplate(templateId || quote.templateId, quote.eventType);
+    const tpl = await resolveTemplate(templateId || quote.templateId, quote.eventType).catch((e) => rethrow(e));
     if (!tpl) throw new Error('VALIDATION:לא נמצאה תבנית. צרו תבנית וסמנו אותה כברירת מחדל.');
     const rendered = renderTemplate(tpl.bodyHtml, quote);
     if (rendered.error) throw new Error(`VALIDATION:${rendered.error}`);
 
-    const fields = await buildPreparedFields(quote, tpl._id);
-    const saved = await wixData.update('Quotes', { ...quote, ...fields }, SA);
-    await writeQuoteLog(quoteId, quote.status === 'lead' ? 'quote_prepared' : 'quote_reprepared', { templateId: tpl._id }, await getActor(actorName));
-    return { quote: saved, url: await buildQuoteUrl(saved.publicToken) };
+    const fields = await buildPreparedFields(quote, tpl._id).catch((e) => rethrow(e));
+    const saved = await wixData.update('Quotes', { ...quote, ...fields }, SA).catch((e) => rethrow(e, 'VALIDATION:שגיאה בשמירת ההצעה.'));
+    const url = await buildQuoteUrl(saved.publicToken).catch((e) => rethrow(e));
+    await writeQuoteLog(quoteId, quote.status === 'lead' ? 'quote_prepared' : 'quote_reprepared', { templateId: tpl._id }, await getActor(actorName).catch(() => ({ type: 'admin', name: actorName || '' })));
+    return { quote: saved, url };
 });
 
 export const getQuoteLink = webMethod(Permissions.Admin, async (quoteId, actorName) => {

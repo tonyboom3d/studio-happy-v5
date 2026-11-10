@@ -3,6 +3,8 @@
 // 'action-result' attribute: JSON {requestId, ok, data, error}. Add attribute mock="true" for local dev.
 
 const TAG = 'quotes-dashboard';
+const T0 = performance.now();
+const dbg = (msg, extra) => console.log(`[quotes-FE +${Math.round(performance.now() - T0)}ms] ${msg}`, extra !== undefined ? extra : '');
 
 const L = {
     status: { lead: 'ליד', draft: 'טיוטה', sent: 'נשלחה', viewed: 'נצפתה', signed: 'נחתמה', expired: 'פגה', cancelled: 'בוטלה' },
@@ -140,19 +142,22 @@ class QuotesDashboard extends HTMLElement {
         this.root.addEventListener('input', (e) => this.onInput(e));
         this.root.addEventListener('change', (e) => this.onChange(e));
         this.paintCache();
+        dbg('connected', { cachedItems: this.s.items.length, bridgeReady: this.hasAttribute('bridge-ready') });
         this.render();
         this.startBoot();
     }
 
     attributeChangedCallback(name, _old, val) {
+        if (name === 'bridge-ready' && val) dbg('bridge-ready received');
         if (name === 'bridge-ready' && val && this.isConnected && !this.bootStarted) { this.boot(); return; }
         if (name !== 'action-result' || !val) return;
         try {
             const msg = JSON.parse(val);
             const p = this.pending.get(msg.requestId);
-            if (!p) return;
+            if (!p) { dbg(`reply for unknown request ${msg.requestId} (late/duplicate)`); return; }
             this.pending.delete(msg.requestId);
             clearTimeout(p.timer);
+            dbg(`← ${p.type} ${msg.ok ? 'ok' : 'ERROR'} in ${Math.round(performance.now() - p.t0)}ms`, msg.ok ? (msg.data?.items ? { items: msg.data.items.length, total: msg.data.total } : undefined) : msg.error);
             if (msg.ok) p.resolve(msg.data); else p.reject(new Error(msg.error || 'שגיאה'));
         } catch (err) { console.error('[quotes-dashboard] bad action-result', err); }
     }
@@ -162,8 +167,9 @@ class QuotesDashboard extends HTMLElement {
         if (this.getAttribute('mock') === 'true') return this.mockReq(type, payload);
         const requestId = `${Date.now()}-${++this.seq}`;
         return new Promise((resolve, reject) => {
-            const timer = setTimeout(() => { this.pending.delete(requestId); reject(new Error('הבקשה נכשלה (פג זמן)')); }, 60000);
-            this.pending.set(requestId, { resolve, reject, timer });
+            const timer = setTimeout(() => { this.pending.delete(requestId); dbg(`✖ ${type} TIMEOUT (no reply from page: listener missing?)`); reject(new Error('הבקשה נכשלה (פג זמן)')); }, 60000);
+            this.pending.set(requestId, { resolve, reject, timer, type, t0: performance.now() });
+            dbg(`→ ${type}`, requestId);
             this.dispatchEvent(new CustomEvent('quotes-action', { detail: { type, payload: { ...payload, actorName: this.actorName() }, requestId }, bubbles: true, composed: true }));
         });
     }
@@ -197,7 +203,8 @@ class QuotesDashboard extends HTMLElement {
     // Wait for the page's 'bridge-ready' (listener attached) so the first request is not lost; fallback after 3s.
     startBoot() {
         if (this.getAttribute('mock') === 'true' || this.hasAttribute('bridge-ready')) { this.boot(); return; }
-        this.bootTimer = setTimeout(() => this.boot(), 3000);
+        dbg('waiting for bridge-ready (fallback 3s)');
+        this.bootTimer = setTimeout(() => { dbg('bridge-ready fallback fired'); this.boot(); }, 3000);
     }
 
     async boot() {
@@ -512,6 +519,7 @@ class QuotesDashboard extends HTMLElement {
     render() {
         const app = this.root.getElementById('app');
         if (!app) return;
+        if (this.lastRows !== `${this.s.items.length}|${this.s.loading}`) { this.lastRows = `${this.s.items.length}|${this.s.loading}`; dbg('render', { rows: this.s.items.length, loading: this.s.loading, error: this.s.error || undefined }); }
         const keep = this.root.activeElement?.id;
         app.innerHTML = `<div class="wrap">${this.topHtml()}${this.filtersHtml()}${this.s.error ? `<div class="err">${esc(this.s.error)}</div>` : ''}${this.tableHtml()}</div>${this.drawerHtml()}${this.modalHtml()}${this.s.toast ? `<div class="toast">${esc(this.s.toast)}</div>` : ''}`;
         if (keep === 'search') { const i = this.root.getElementById('search'); i?.focus(); i?.setSelectionRange(i.value.length, i.value.length); }

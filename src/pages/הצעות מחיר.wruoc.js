@@ -32,13 +32,18 @@ $w.onReady(() => {
     ce.on('quotes-action', async (event) => {
         const { type, payload, requestId } = event.detail || {};
         const reply = (body) => ce.setAttribute('action-result', JSON.stringify({ requestId, ...body, __ts: Date.now() }));
+        const t0 = Date.now();
+        console.log(`[quotes-PAGE] → ${type}`, requestId);
         try {
             if (!handlers[type]) throw new Error(`UNKNOWN_ACTION:${type}`);
-            reply({ ok: true, data: await handlers[type](payload || {}) });
+            const data = await handlers[type](payload || {});
+            console.log(`[quotes-PAGE] ← ${type} backend call took ${Date.now() - t0}ms`, data?.items ? { items: data.items.length, total: data.total } : '');
+            reply({ ok: true, data });
         } catch (err) {
-            console.error('[quotes-dashboard-velo]', type, err?.message || err);
+            console.error(`[quotes-PAGE] ✖ ${type} after ${Date.now() - t0}ms`, err?.message || err);
             reply({ ok: false, error: err?.message || String(err) });
         }
     });
+    console.log('[quotes-PAGE] listener attached, bridge-ready set');
     ce.setAttribute('bridge-ready', '1'); // CE starts its first load only now
 });

@@ -60,7 +60,9 @@ async function queryQuotes(opts = {}) {
     const field = SORTABLE.includes(sort?.field) ? sort.field : '_createdDate';
     q = sort?.dir === 'asc' ? q.ascending(field) : q.descending(field);
 
+    const t0 = Date.now();
     const res = await q.fields(...LIST_FIELDS).skip(skip).limit(limit).find(SA);
+    console.log(`[quotes-BE] Quotes query: ${res.items.length} rows of ${res.totalCount}, ${Date.now() - t0}ms (search=${!!search}, sort=${field})`);
     return {
         items: res.items.map((i) => pick(i, LIST_FIELDS)),
         total: res.totalCount,
@@ -154,6 +156,9 @@ export const listActors = webMethod(Permissions.Admin, async () => ({ actors: aw
 
 /** First paint: the first page and the extras catalog. Staff loads only when a drawer opens. */
 export const loadQuotesDashboard = webMethod(Permissions.Admin, async (opts = {}) => {
-    const [list, addons] = await Promise.all([queryQuotes(opts), getAddons()]);
+    const t0 = Date.now();
+    const timed = async (name, p) => { const s = Date.now(); const r = await p; console.log(`[quotes-BE] ${name}: ${Date.now() - s}ms`); return r; };
+    const [list, addons] = await Promise.all([timed('queryQuotes', queryQuotes(opts)), timed('addons', getAddons())]);
+    console.log(`[quotes-BE] loadQuotesDashboard total ${Date.now() - t0}ms (module age ${Math.round(process.uptime?.() ?? 0)}s)`);
     return { ...list, addons };
 });

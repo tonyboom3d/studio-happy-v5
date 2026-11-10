@@ -176,7 +176,14 @@ class QuotesDashboard extends HTMLElement {
     actorName() { return (this.s.actors.find((a) => a.id === this.s.actorId) || {}).name || ''; }
 
     async boot() {
-        this.s.loading = true;
+        // Stale-while-revalidate: paint last snapshot instantly, refresh in background.
+        let cached = null;
+        try { cached = JSON.parse(localStorage.getItem('quotesBootCache') || 'null'); } catch (_) { /* ignore */ }
+        if (cached?.items) {
+            this.s.actors = cached.actors || []; this.s.addons = cached.addons || [];
+            this.s.items = cached.items; this.s.total = cached.total || 0;
+            this.s.loading = false;
+        } else this.s.loading = true;
         this.render();
         try {
             const res = await this.req('boot', {
@@ -186,7 +193,8 @@ class QuotesDashboard extends HTMLElement {
             this.s.addons = res.addons || [];
             this.s.items = res.items || [];
             this.s.total = res.total || 0;
-        } catch (err) { this.s.error = errText(err); }
+            try { localStorage.setItem('quotesBootCache', JSON.stringify({ actors: this.s.actors, addons: this.s.addons, items: this.s.items, total: this.s.total })); } catch (_) { /* quota */ }
+        } catch (err) { if (!cached) this.s.error = errText(err); }
         this.s.loading = false;
         this.render();
     }

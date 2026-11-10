@@ -78,6 +78,15 @@ async function queryActors() {
         .sort((a, b) => a.name.localeCompare(b.name, 'he'));
 }
 
+// Warm-instance cache for rarely-changing reference data (10 min).
+let refCache = null;
+async function getRefData() {
+    if (refCache && Date.now() - refCache.at < 10 * 60 * 1000) return refCache.data;
+    const [actors, addons] = await Promise.all([queryActors(), loadAddonsCatalog()]);
+    refCache = { at: Date.now(), data: { actors, addons } };
+    return refCache.data;
+}
+
 export const listQuotes = webMethod(Permissions.Admin, queryQuotes);
 
 export const getQuote = webMethod(Permissions.Admin, async (quoteId) => {
@@ -94,10 +103,6 @@ export const listActors = webMethod(Permissions.Admin, async () => ({ actors: aw
 
 /** First paint: the first page, the actor picker and the extras catalog, in one backend call. */
 export const loadQuotesDashboard = webMethod(Permissions.Admin, async (opts = {}) => {
-    const [list, actors, addons] = await Promise.all([
-        queryQuotes(opts),
-        queryActors(),
-        loadAddonsCatalog(),
-    ]);
-    return { ...list, actors, addons };
+    const [list, ref] = await Promise.all([queryQuotes(opts), getRefData()]);
+    return { ...list, ...ref };
 });

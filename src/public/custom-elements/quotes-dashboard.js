@@ -67,7 +67,10 @@ td.wrapc{white-space:normal;max-width:220px}
 .dh h2{margin:0;font-size:18px;flex:1}
 .db{padding:14px}
 .sec{background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:12px;margin-bottom:12px}
-.sec h3{margin:0 0 10px;font-size:14px;color:#1d4ed8}
+.sec h3{margin:0 0 10px;font-size:14px;color:#1d4ed8;cursor:pointer;display:flex;justify-content:space-between;align-items:center;user-select:none}
+.sec h3:after{content:"▾";font-size:12px}
+.sec.col h3{margin:0}.sec.col h3:after{content:"◂"}
+.sec.col>*:not(h3){display:none}
 .grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
 .grid label{display:flex;flex-direction:column;font-size:12px;color:#475569;gap:3px}
 .grid .full{grid-column:1/-1}
@@ -121,7 +124,7 @@ class QuotesDashboard extends HTMLElement {
         this.seq = 0;
         this.s = {
             items: [], total: 0, loading: true, error: '', search: '', filters: {}, sort: { field: '_createdDate', dir: 'desc' },
-            skip: 0, limit: 25, actors: [], addons: [], actorId: '', detail: null, modal: null, detailLoading: false, saving: false, toast: '',
+            skip: 0, limit: 25, actors: [], addons: [], actorId: '', detail: null, open: { customer: true }, modal: null, detailLoading: false, saving: false, toast: '',
         };
     }
 
@@ -247,6 +250,7 @@ class QuotesDashboard extends HTMLElement {
         if (a === 'delExtra') { this.s.detail.draft.extras.splice(Number(el.dataset.i), 1); return this.render(); }
         if (a === 'approveTransfer' || a === 'rejectTransfer') return this.reviewTransfer(a === 'approveTransfer');
         if (a === 'sendEmail' || a === 'sendWhatsapp') return this.sendQuote(a === 'sendEmail' ? 'email' : 'whatsapp');
+        if (a === 'toggleSec') { this.s.open[el.dataset.k] = !this.s.open[el.dataset.k]; return this.render(); }
         if (a === 'prepare') return this.prepare();
         if (a === 'preview') return this.preview();
         if (a === 'copyLink') return this.copyLink();
@@ -278,6 +282,7 @@ class QuotesDashboard extends HTMLElement {
     }
 
     async openDetail(id) {
+        if (this.s.detail?.id !== id) this.s.open = { customer: true };
         this.s.detail = { id, loading: true }; this.render();
         try {
             const d = await this.req('get', { id });
@@ -513,6 +518,7 @@ class QuotesDashboard extends HTMLElement {
         if (!dt) return '';
         if (dt.loading) return '<div class="mask" data-act="close"></div><div class="drawer"><div class="loading">טוען...</div></div>';
         const q = dt.quote; const d = dt.draft; const locked = this.isLocked(); const dis = locked ? ' disabled' : '';
+        const sec = (key, title) => `<div class="sec${this.s.open[key] ? '' : ' col'}"><h3 data-act="toggleSec" data-k="${key}">${title}</h3>`;
         const f = (key, label, type = 'text', extra = '') => `<label>${label}<input type="${type}" data-f="${key}" value="${esc(d[key] ?? '')}"${dis} ${extra}></label>`;
         const chk = (key, label) => `<label class="chk"><input type="checkbox" data-f="${key}"${d[key] ? ' checked' : ''}${dis}> ${label}</label>`;
         const extras = d.extras.map((x, i) => `<div class="extra"><span>${esc(x.title)}</span><b>${money(x.price)}</b>${locked ? '' : `<button data-act="delExtra" data-i="${i}">✕</button>`}</div>`).join('') || '<div class="sub">אין תוספות</div>';
@@ -527,12 +533,12 @@ class QuotesDashboard extends HTMLElement {
             <div class="db">
               ${locked ? '<div class="lockmsg">ההצעה נעולה לעריכה (נחתמה / פגה / בוטלה). ניתן לערוך הערות בלבד.</div>' : ''}
               ${(q.conflicts || []).length ? `<div class="err">🔴 התנגשות ביומן: ${esc(q.conflicts.map((c) => c.summary || c.key).join(' | '))}</div>` : ''}
-              <div class="sec"><h3>פרטי לקוח</h3><div class="grid">${f('customerName', 'שם')}${f('customerPhone', 'טלפון')}${f('customerEmail', 'אימייל')}${f('companyName', 'חברה')}
+              ${sec('customer', 'פרטי לקוח')}<div class="grid">${f('customerName', 'שם')}${f('customerPhone', 'טלפון')}${f('customerEmail', 'אימייל')}${f('companyName', 'חברה')}
                 <label class="full">בקשת הלקוח בטופס<input value="${esc(q.requestedWorkshop || '')}" disabled></label>
                 <label class="full">הערות הלקוח<textarea rows="2" disabled>${esc(q.customerNotes || '')}</textarea></label></div></div>
-              <div class="sec"><h3>האירוע</h3><div class="grid">${f('eventDate', 'תאריך', 'date')}${f('participants', 'משתתפים', 'number', 'min="0"')}${f('eventStartTime', 'שעת התחלה', 'time')}${f('eventEndTime', 'שעת סיום', 'time')}${f('adults', 'מלווים', 'number', 'min="0"')}${f('requiredInstructors', 'מדריכים נדרשים', 'number', 'min="0"')}
+              ${sec('event', 'האירוע')}<div class="grid">${f('eventDate', 'תאריך', 'date')}${f('participants', 'משתתפים', 'number', 'min="0"')}${f('eventStartTime', 'שעת התחלה', 'time')}${f('eventEndTime', 'שעת סיום', 'time')}${f('adults', 'מלווים', 'number', 'min="0"')}${f('requiredInstructors', 'מדריכים נדרשים', 'number', 'min="0"')}
                 <div class="full">${chk('workshopClosed', 'סדנה סגורה (פרטית)')}</div></div></div>
-              <div class="sec"><h3>תמחור</h3><div class="grid">${f('basePrice', 'מחיר בסיס (₪)', 'number', 'min="0"')}${f('priceOverride', 'מחיר מותאם (עוקף הכול)', 'number', 'min="0"')}
+              ${sec('pricing', 'תמחור')}<div class="grid">${f('basePrice', 'מחיר בסיס (₪)', 'number', 'min="0"')}${f('priceOverride', 'מחיר מותאם (עוקף הכול)', 'number', 'min="0"')}
                 <label>סוג מקדמה<select data-f="depositType"${dis}><option value="percent"${d.depositType !== 'fixed' ? ' selected' : ''}>אחוז</option><option value="fixed"${d.depositType === 'fixed' ? ' selected' : ''}>סכום קבוע</option></select></label>${f('depositValue', 'ערך מקדמה', 'number', 'min="0"')}
                 ${f('balanceDueDate', 'מועד אחרון לתשלום יתרה', 'date')}${f('expiresAt', 'תוקף ההצעה', 'date')}</div>
                 <div style="margin-top:10px"><b>תוספות</b>${extras}
@@ -540,15 +546,15 @@ class QuotesDashboard extends HTMLElement {
                   <label class="sub" style="display:flex;gap:6px;align-items:center;margin-top:8px">תוספת מותאמת<input id="customTitle" placeholder="שם" style="flex:1"><input id="customPrice" type="number" min="0" placeholder="₪" style="width:80px"><button data-act="addCustomExtra">הוסף</button></label>`}</div>
                 <div class="sum"><div><span class="sub">סה"כ</span><b>${money(q.totalAmount)}</b></div><div><span class="sub">מקדמה</span><b>${money(q.depositAmount)}</b></div><div><span class="sub">יתרה</span><b>${money(q.balanceAmount)}</b></div><div><span class="sub">שולם</span><b>${money(q.paidAmount)}</b></div></div>
                 <div class="sub" style="margin-top:6px">הסכומים מחושבים בשרת בעת השמירה.</div></div>
-              <div class="sec"><h3>אמצעי תשלום מותרים</h3>
+              ${sec('methods', 'אמצעי תשלום מותרים')}
                 ${paySwitch('allowOnlinePayment', 'תשלום מקוון', 'ביט / אשראי / Apple Pay', d, dis)}
                 ${paySwitch('allowBankTransfer', 'העברה בנקאית', 'הלקוח מעלה אסמכתא לאישור', d, dis)}
                 <div class="sub">נבחר ע"י הלקוח: ${esc(L.method[q.selectedPaymentMethod] || '—')} · ${badge(L.pay, 'pay', q.paymentStatus)} · חתימה: ${badge(L.sig, 'sig', q.signatureStatus)}</div></div>
-              <div class="sec"><h3>הערות פנימיות</h3><textarea rows="3" style="width:100%" data-f="notes">${esc(d.notes || '')}</textarea></div>
-              <div class="sec"><h3>תשלומים</h3><ul class="tl">${pays}</ul>
+              ${sec('notes', 'הערות פנימיות')}<textarea rows="3" style="width:100%" data-f="notes">${esc(d.notes || '')}</textarea></div>
+              ${sec('payments', 'תשלומים')}<ul class="tl">${pays}</ul>
                 ${q.transferProof && /^https?:\/\//.test(q.transferProof) ? `<div class="lockmsg">אסמכתת העברה התקבלה (${dmyTime(q.transferProofAt)}): <a href="${esc(q.transferProof)}" target="_blank" rel="noopener">צפייה בקובץ</a>
                   <div style="margin-top:8px"><button class="btn-p" data-act="approveTransfer">אשר העברה</button> <button class="btn-d" data-act="rejectTransfer">דחה</button></div></div>` : ''}</div>
-              <div class="sec"><h3>היסטוריית פעולות</h3><ul class="tl">${log}</ul></div>
+              ${sec('log', 'היסטוריית פעולות')}<ul class="tl">${log}</ul></div>
             </div>
             <div class="foot"><button class="btn-d" data-act="cancel"${q.status === 'cancelled' ? ' disabled' : ''}>בטל הצעה</button><span><button data-act="preview">תצוגה מקדימה</button> <button data-act="copyLink"${q.publicToken ? '' : ' disabled'}>העתק קישור</button> ${q.publicToken && ['draft', 'sent', 'viewed'].includes(q.status) ? '<button data-act="sendEmail">שלח במייל</button> <button data-act="sendWhatsapp">שלח בוואטסאפ</button> ' : ''}${['lead', 'draft'].includes(q.status) ? '<button data-act="prepare">הכן לשליחה</button> ' : ''}<button data-act="close">סגור</button> <button class="btn-p" data-act="save"${this.s.saving ? ' disabled' : ''}>${this.s.saving ? 'שומר...' : 'שמור'}</button></span></div>
           </div>`;

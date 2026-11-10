@@ -100,10 +100,14 @@ submissions.onSubmissionCreated((event) => {
     handleCompanyEventSubmission(event).catch((err) => {
         console.error('[events] company event lead failed:', err?.message || err);
     });
-    handleQuoteLeadSubmission(event).catch((err) => {
+});
+
+/** Quote leads: Wix Forms event (birthday + event forms only; source detected from entity.formId). */
+export function wixForms_onSubmissionCreated(event) {
+    return handleQuoteLeadSubmission(event).catch((err) => {
         console.error('[events] quote lead sync failed:', err?.message || err);
     });
-});
+}
 
 staffMembers.onStaffMemberCreated((event) => {
     upsertDashboardRole(event?.entity?._id).catch(err => {

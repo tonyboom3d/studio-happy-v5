@@ -165,7 +165,9 @@ async function buildContext() {
 export async function handleQuoteLeadSubmission(event) {
     const submission = event?.entity || event;
     if (submission?.formId !== BIRTHDAY_FORM_ID && submission?.formId !== EVENT_FORM_ID) return;
-    return upsertLead(submission, await buildContext());
+    const result = await upsertLead(submission, await buildContext());
+    console.log('[quoteLeadsSync] submission', submission._id || submission.id, result);
+    return result;
 }
 
 /** Imports missing submissions of both forms. Safe to re-run. */

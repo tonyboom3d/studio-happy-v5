@@ -36,7 +36,7 @@ import {
 } from 'backend/availabilityRules.js';
 import { TASK_TYPES, TASK_LABELS } from 'backend/timeClockService.web.js';
 import { getOrdersGroupDetails, logOrderAction } from 'backend/dashboardService.web.js';
-import { loadCupLabels, loadUncoveredSessionBookings } from 'backend/sessionGroups.js';
+import { loadCupLabels } from 'backend/sessionGroups.js';
 import { syncHebcalHolidays } from 'backend/holidayService.js';
 import { TUFTING_SERVICE_IDS } from 'backend/sketchEditingPolicy.js';
 import {
@@ -510,12 +510,9 @@ export const getWorkshopOrderGroups = webMethod(Permissions.SiteMember, async (d
     const orders = (result.items || [])
         .filter(o => !o.cancelledAt && toDateKey(o.workshopStart) === dateKey)
         .filter(o => !sessionKey || canonicalSessionKey(o.workshopStart) === sessionKey);
-    const coveredBookingIds = new Set();
-    for (const o of orders) for (const id of [...(o.bookingIds || []), o.bookingId]) if (id) coveredBookingIds.add(id);
-    const [details, cupLabels, uncovered] = await Promise.all([
+    const [details, cupLabels] = await Promise.all([
         getOrdersGroupDetails(orders).catch(() => ({})),
         loadCupLabels(orders).catch(() => ({})),
-        loadUncoveredSessionBookings({ serviceIds, dateKey, sessionKey, coveredBookingIds }).catch(() => []),
     ]);
     const paidGroups = orders.map(o => {
         const x = details[o._id] || {};
@@ -545,7 +542,7 @@ export const getWorkshopOrderGroups = webMethod(Permissions.SiteMember, async (d
             participants: x.participants || [],
         };
     });
-    return [...paidGroups, ...uncovered];
+    return paidGroups;
 });
 
 /** Manager note on a workshop order (shown in the calendar and the orders dashboard). */

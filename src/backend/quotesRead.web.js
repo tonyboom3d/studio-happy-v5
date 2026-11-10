@@ -3,8 +3,6 @@ import { Permissions, webMethod } from 'wix-web-module';
 import wixData from 'wix-data';
 import { loadAddonsCatalog } from 'backend/quoteCore.js';
 import { listQuoteLog } from 'backend/quoteLog.js';
-import { loadSkillsForRoleId } from 'backend/staffRoles.js';
-
 const SA = { suppressAuth: true, suppressHooks: true };
 
 const LIST_FIELDS = [
@@ -71,26 +69,28 @@ async function queryQuotes(opts = {}) {
     };
 }
 
-/** workshops._id -> workshopName, for showing staff skills (Dashboard_Roles.skills -> workshops). */
-async function loadWorkshopNames() {
-    const res = await wixData.query('workshops').fields('workshopName').limit(200).find(SA).catch(() => ({ items: [] }));
-    const map = {};
-    res.items.forEach((w) => { map[w._id] = w.workshopName || ''; });
-    return map;
-}
-
+/** Staff = Dashboard_Roles (displayName); trainings = connectedTrainings -> addons_events. */
 async function queryActors() {
-    const [rolesRes, workshopNames] = await Promise.all([
-        wixData.query('Dashboard_Roles').eq('active', true).limit(200).find(SA),
-        loadWorkshopNames(),
-    ]);
-    const actors = await Promise.all(rolesRes.items.filter((r) => r.displayName).map(async (r) => {
-        const skillIds = await loadSkillsForRoleId(r._id, r.skills).catch(() => []);
-        const skills = skillIds.map((id) => workshopNames[id]).filter(Boolean);
-        return { id: r._id, name: r.displayName, skills };
+    const res = await wixData.query('Dashboard_Roles').ne('active', false).limit(200).find(SA);
+    const rows = res.items.filter((r) => r.displayName);
+    const actors = await Promise.all(rows.map(async (r) => {
+        let trainings = [];
+        try {
+            const t = await wixData.queryReferenced('Dashboard_Roles', r._id, 'connectedTrainings', { suppressAuth: true, limit: 100 });
+            trainings = (t.items || []).map((a) => ({
+                id: a._id,
+                title: typeof a.name === 'string' ? a.name : a.name?.he || a.title || '',
+            })).filter((x) => x.title);
+        } catch (_) { /* trainings optional */ }
+        return { id: r._id, name: r.displayName, trainings };
     }));
     return actors.sort((a, b) => a.name.localeCompare(b.name, 'he'));
 }
+
+const dayKey = (v) => {
+    const d = toDate(v);
+    return d ? new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jerusalem', year: 'numeric', month: '2-digit', day: '2-digit' }).format(d) : '';
+};
 
 // Warm-instance cache for rarely-changing reference data (10 min).
 let refCache = null;
@@ -103,34 +103,39 @@ async function getRefData() {
 
 export const listQuotes = webMethod(Permissions.Admin, queryQuotes);
 
-/** Other active quotes on the same calendar day -> staffId -> [{workshop, start, end}], for the busy tag + tooltip. */
+/** employeeId -> [{kind, label, start, end}] for the quote's day: ShiftAssignments, AvailabilitySubmissions, other quotes. */
 async function queryBusyStaff(quoteId, eventDate) {
-    const d = toDate(eventDate);
-    if (!d) return {};
-    const from = new Date(d); from.setHours(0, 0, 0, 0);
-    const to = new Date(d); to.setHours(23, 59, 59, 999);
-    const res = await wixData.query('Quotes')
-        .ne('_id', quoteId).ne('status', 'cancelled')
-        .ge('eventDate', from).le('eventDate', to)
-        .fields('assignedStaffIds', 'eventStartTime', 'eventEndTime', 'requestedWorkshop').limit(200).find(SA);
+    const key = dayKey(eventDate);
+    if (!key) return {};
+    const day = new Date(`${key}T12:00:00Z`);
+    const from = new Date(day.getTime() - 36 * 3600 * 1000);
+    const to = new Date(day.getTime() + 36 * 3600 * 1000);
+    const [shifts, avail, quotes] = await Promise.all([
+        wixData.query('ShiftAssignments').eq('dateKey', key).ne('status', 'CANCELLED').limit(500).find(SA).catch(() => ({ items: [] })),
+        wixData.query('AvailabilitySubmissions').ge('date', from).le('date', to).limit(1000).find(SA).catch(() => ({ items: [] })),
+        wixData.query('Quotes').ne('_id', quoteId).ne('status', 'cancelled').ge('eventDate', from).le('eventDate', to)
+            .fields('assignedStaffIds', 'eventDate', 'eventStartTime', 'eventEndTime', 'requestedWorkshop').limit(200).find(SA).catch(() => ({ items: [] })),
+    ]);
     const map = {};
-    res.items.forEach((q) => {
-        (q.assignedStaffIds || []).forEach((id) => {
-            (map[id] = map[id] || []).push({ workshop: q.requestedWorkshop || '', start: q.eventStartTime || '', end: q.eventEndTime || '' });
-        });
-    });
+    const add = (id, row) => { if (id) (map[id] = map[id] || []).push(row); };
+    shifts.items.forEach((s) => add(s.employeeId, { kind: 'shift', label: s.workshopName || 'משמרת', start: '', end: '' }));
+    avail.items.filter((a) => dayKey(a.date) === key && !/CANCEL|REJECT/i.test(a.status || ''))
+        .forEach((a) => add(a.employeeId, { kind: a.status === 'SCHEDULED' ? 'shift' : 'availability', label: a.status === 'SCHEDULED' ? 'משובץ/ת' : 'הגיש/ה זמינות', start: a.startTime || '', end: a.endTime || '' }));
+    quotes.items.filter((q) => dayKey(q.eventDate) === key)
+        .forEach((q) => (q.assignedStaffIds || []).forEach((id) => add(id, { kind: 'quote', label: q.requestedWorkshop || 'אירוע (הצעת מחיר)', start: q.eventStartTime || '', end: q.eventEndTime || '' })));
     return map;
 }
 
 export const getQuote = webMethod(Permissions.Admin, async (quoteId) => {
     const quote = await wixData.get('Quotes', quoteId, SA);
     if (!quote) throw new Error('NOT_FOUND:ההצעה לא נמצאה.');
-    const [log, payments, busyStaff] = await Promise.all([
+    const [log, payments, busyStaff, ref] = await Promise.all([
         listQuoteLog(quoteId),
         wixData.query('QuotePayments').eq('quoteId', quoteId).descending('_createdDate').limit(50).find(SA),
-        queryBusyStaff(quoteId, quote.eventDate),
+        queryBusyStaff(quoteId, quote.eventDate).catch(() => ({})),
+        getRefData().catch(() => ({ actors: [] })),
     ]);
-    return { quote, log, payments: payments.items, busyStaff };
+    return { quote, log, payments: payments.items, busyStaff, actors: ref.actors };
 });
 
 export const listActors = webMethod(Permissions.Admin, async () => ({ actors: await queryActors() }));

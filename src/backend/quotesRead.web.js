@@ -89,14 +89,30 @@ async function getRefData() {
 
 export const listQuotes = webMethod(Permissions.Admin, queryQuotes);
 
+/** Other active quotes on the same calendar day -> staff already assigned elsewhere that day. */
+async function queryBusyStaff(quoteId, eventDate) {
+    const d = toDate(eventDate);
+    if (!d) return [];
+    const from = new Date(d); from.setHours(0, 0, 0, 0);
+    const to = new Date(d); to.setHours(23, 59, 59, 999);
+    const res = await wixData.query('Quotes')
+        .ne('_id', quoteId).ne('status', 'cancelled')
+        .ge('eventDate', from).le('eventDate', to)
+        .fields('assignedStaffIds').limit(200).find(SA);
+    const ids = new Set();
+    res.items.forEach((q) => (q.assignedStaffIds || []).forEach((id) => ids.add(id)));
+    return [...ids];
+}
+
 export const getQuote = webMethod(Permissions.Admin, async (quoteId) => {
     const quote = await wixData.get('Quotes', quoteId, SA);
     if (!quote) throw new Error('NOT_FOUND:ההצעה לא נמצאה.');
-    const [log, payments] = await Promise.all([
+    const [log, payments, busyStaffIds] = await Promise.all([
         listQuoteLog(quoteId),
         wixData.query('QuotePayments').eq('quoteId', quoteId).descending('_createdDate').limit(50).find(SA),
+        queryBusyStaff(quoteId, quote.eventDate),
     ]);
-    return { quote, log, payments: payments.items };
+    return { quote, log, payments: payments.items, busyStaffIds };
 });
 
 export const listActors = webMethod(Permissions.Admin, async () => ({ actors: await queryActors() }));

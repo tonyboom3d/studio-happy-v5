@@ -227,7 +227,15 @@ class QuotesDashboard extends HTMLElement {
         if (t.dataset.filter) { this.s.filters[t.dataset.filter] = t.value || undefined; if (t.dataset.filter === 'workshopClosed') this.s.filters.workshopClosed = t.value; this.s.skip = 0; this.load(); }
         else if (t.id === 'actor') { this.s.actorId = t.value; try { localStorage.setItem('quotesActorId', t.value); } catch (_) { /* ignore */ } }
         else if (t.dataset.f && this.s.detail) { this.readField(t); }
+        else if (t.dataset.staff && this.s.detail?.draft) { this.toggleStaff(t.dataset.staff, t.checked); }
         else if (t.dataset.t && this.s.modal?.tpl) { this.s.modal.tpl[t.dataset.t] = t.type === 'checkbox' ? t.checked : t.value; }
+    }
+
+    toggleStaff(id, checked) {
+        const d = this.s.detail.draft;
+        const ids = new Set(d.assignedStaffIds || []);
+        checked ? ids.add(id) : ids.delete(id);
+        d.assignedStaffIds = [...ids];
     }
 
     readField(t) {
@@ -296,8 +304,8 @@ class QuotesDashboard extends HTMLElement {
             const d = await this.req('get', { id });
             const q = d.quote;
             this.s.detail = {
-                id, quote: q, log: d.log || [], payments: d.payments || [],
-                draft: { ...q, extras: (q.extras || []).map((x) => ({ ...x })), eventDate: ymd(q.eventDate), expiresAt: ymd(q.expiresAt), balanceDueDate: ymd(q.balanceDueDate) },
+                id, quote: q, log: d.log || [], payments: d.payments || [], busyStaffIds: d.busyStaffIds || [],
+                draft: { ...q, extras: (q.extras || []).map((x) => ({ ...x })), assignedStaffIds: [...(q.assignedStaffIds || [])], eventDate: ymd(q.eventDate), expiresAt: ymd(q.expiresAt), balanceDueDate: ymd(q.balanceDueDate) },
             };
         } catch (err) { this.s.detail = null; this.toast(errText(err)); }
         this.render();
@@ -322,7 +330,7 @@ class QuotesDashboard extends HTMLElement {
     }
 
     async save() {
-        if (!this.requireActor() || this.s.saving) return;
+        if (this.s.saving) return;
         const d = this.s.detail.draft;
         const locked = this.isLocked();
         const num = (v) => (v === '' || v === null || v === undefined ? null : Number(v));
@@ -508,7 +516,7 @@ class QuotesDashboard extends HTMLElement {
                 <td>${(q.conflicts || []).length ? '<span class="conflict" title="התנגשות ביומן">🔴 </span>' : ''}<b>${esc(q.customerName || '—')}</b><div class="sub">${esc(phoneDisp(q.customerPhone))}</div></td>
                 <td><span class="badge purple">${esc(L.type[q.eventType] || q.eventType || '—')}</span></td>
                 <td>${badge(L.sig, 'sig', q.signatureStatus)}</td><td>${badge(L.pay, 'pay', q.paymentStatus)}</td>
-                <td>${money(q.depositAmount)}</td><td>${money(q.balanceAmount)}</td><td>${esc(L.method[q.selectedPaymentMethod] || '—')}</td>
+                <td>${q.totalAmount != null ? money(q.totalAmount) : '-'}</td><td>${money(q.depositAmount)}</td><td>${money(q.balanceAmount)}</td><td>${esc(L.method[q.selectedPaymentMethod] || '—')}</td>
                 <td>${dmy(q._createdDate)}</td><td>${dmy(q.expiresAt)}</td><td>${dmy(q.eventDate)}${q.eventStartTime ? `<div class="sub">${esc(q.eventStartTime)}</div>` : ''}</td>
                 <td>${q.workshopClosed ? 'סגורה' : 'פתוחה'}</td><td>${q.requiredInstructors || 0} / ${assigned}</td>
                 <td class="wrapc" title="${esc(extras)}">${esc(extras || '—')}</td><td class="wrapc">${esc((q.notes || '').slice(0, 60) || '—')}</td>
@@ -516,7 +524,7 @@ class QuotesDashboard extends HTMLElement {
         }).join('');
         const from = this.s.skip + 1; const to = Math.min(this.s.skip + this.s.limit, this.s.total);
         return `<div class="card"><div class="tablewrap"><table><thead><tr>
-            ${th('לקוח')}${th('סוג')}${th('חתימה')}${th('תשלום')}${th('מקדמה')}${th('יתרה')}${th('אמצעי תשלום')}${th('נוצרה', '_createdDate')}${th('תוקף', 'expiresAt')}${th('תאריך אירוע', 'eventDate')}${th('סדנה')}${th('מדריכים (נדרש/משובץ)')}${th('תוספות')}${th('הערות')}${th('סטטוס')}
+            ${th('לקוח')}${th('סוג')}${th('חתימה')}${th('תשלום')}${th('סה"כ', 'totalAmount')}${th('מקדמה')}${th('יתרה')}${th('אמצעי תשלום')}${th('נוצרה', '_createdDate')}${th('תוקף', 'expiresAt')}${th('תאריך אירוע', 'eventDate')}${th('סדנה')}${th('מדריכים (נדרש/משובץ)')}${th('תוספות')}${th('הערות')}${th('סטטוס')}
             </tr></thead><tbody>${rows}</tbody></table></div>
             <div class="pager"><span class="sub">${from}-${to} מתוך ${this.s.total}</span><span><button data-act="prev"${this.s.skip === 0 ? ' disabled' : ''}>הקודם</button> <button data-act="next"${to >= this.s.total ? ' disabled' : ''}>הבא</button></span></div></div>`;
     }
@@ -546,6 +554,11 @@ class QuotesDashboard extends HTMLElement {
                 <label class="full">הערות הלקוח<textarea rows="2" disabled>${esc(q.customerNotes || '')}</textarea></label></div></div>
               ${sec('event', 'האירוע')}<div class="grid">${f('eventDate', 'תאריך', 'date')}${f('participants', 'משתתפים', 'number', 'min="0"')}${f('eventStartTime', 'שעת התחלה', 'time')}${f('eventEndTime', 'שעת סיום', 'time')}${f('adults', 'מלווים', 'number', 'min="0"')}${f('requiredInstructors', 'מדריכים נדרשים', 'number', 'min="0"')}
                 <div class="full">${chk('workshopClosed', 'סדנה סגורה (פרטית)')}</div></div></div>
+              ${sec('staff', 'צוות משובץ')}<div class="grid">${this.s.actors.map((a) => {
+                  const on = (d.assignedStaffIds || []).includes(a.id);
+                  const busy = dt.busyStaffIds?.includes(a.id) ? ' <span class="badge amber">עובד/ת באותו יום</span>' : '';
+                  return `<label class="chk"><input type="checkbox" data-staff="${esc(a.id)}"${on ? ' checked' : ''}${dis}> ${esc(a.name)}${busy}</label>`;
+              }).join('') || '<div class="sub">אין עובדים פעילים</div>'}</div></div>
               ${sec('pricing', 'תמחור')}<div class="grid">${f('basePrice', 'מחיר בסיס (₪)', 'number', 'min="0"')}${f('priceOverride', 'מחיר מותאם (עוקף הכול)', 'number', 'min="0"')}
                 <label>סוג מקדמה<select data-f="depositType"${dis}><option value="percent"${d.depositType !== 'fixed' ? ' selected' : ''}>אחוז</option><option value="fixed"${d.depositType === 'fixed' ? ' selected' : ''}>סכום קבוע</option></select></label>${f('depositValue', 'ערך מקדמה', 'number', 'min="0"')}
                 ${f('balanceDueDate', 'מועד אחרון לתשלום יתרה', 'date')}${f('expiresAt', 'תוקף ההצעה', 'date')}</div>

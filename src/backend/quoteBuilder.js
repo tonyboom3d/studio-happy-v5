@@ -3,6 +3,7 @@ import wixData from 'wix-data';
 import crypto from 'crypto';
 import { getQuoteSettings } from 'backend/quoteCore.js';
 import { computeAmounts } from 'backend/quotePricing.js';
+import { buildTemplateHtml, DEFAULT_TEMPLATE_FIELDS } from 'backend/quoteTemplates.js';
 
 const SA = { suppressAuth: true, suppressHooks: true };
 const DAY = 24 * 3600 * 1000;
@@ -65,5 +66,18 @@ export async function resolveTemplate(templateId, eventType) {
     const byType = await wixData.query('QuoteTemplates').eq('active', true).eq('isDefault', true).eq('eventType', eventType).limit(1).find(SA);
     if (byType.items[0]) return byType.items[0];
     const any = await wixData.query('QuoteTemplates').eq('active', true).eq('isDefault', true).limit(1).find(SA);
-    return any.items[0] || null;
+    if (any.items[0]) return any.items[0];
+    // No default marked: use any active template of this type, then any active one.
+    const typed = await wixData.query('QuoteTemplates').eq('active', true).eq('eventType', eventType).limit(1).find(SA);
+    if (typed.items[0]) return typed.items[0];
+    const anyActive = await wixData.query('QuoteTemplates').eq('active', true).limit(1).find(SA);
+    if (anyActive.items[0]) return anyActive.items[0];
+    // Nothing exists: create the built-in default so preparing never blocks.
+    return wixData.insert('QuoteTemplates', {
+        name: 'תבנית ברירת מחדל',
+        eventType: eventType === 'birthday' ? 'birthday' : 'event',
+        isDefault: true,
+        active: true,
+        bodyHtml: buildTemplateHtml({ title: 'הצעת מחיר', fields: DEFAULT_TEMPLATE_FIELDS }),
+    }, SA);
 }

@@ -5,6 +5,7 @@ import { auth } from '@wix/essentials';
 import { computeAmounts } from 'backend/quotePricing.js';
 import { toManyChatPhone, getQuoteSettings, LOCKED_STATUSES, SIGNED_EDITABLE_FIELDS } from 'backend/quoteCore.js';
 import { writeQuoteLog } from 'backend/quoteLog.js';
+import { diffQuote } from 'backend/quoteDiff.js';
 import { backfillQuoteLeads } from 'backend/quoteLeadsSync.js';
 import { buildPreparedFields, buildQuoteUrl, resolveTemplate } from 'backend/quoteBuilder.js';
 import { recomputePaymentState } from 'backend/quotePayments.js';
@@ -90,8 +91,8 @@ export const updateQuote = webMethod(Permissions.Admin, async (quoteId, patch = 
 
     const saved = await wixData.update('Quotes', next, SA);
     const actor = await getActor(actorName);
-    const priceTouched = ['basePrice', 'priceOverride', 'extras', 'depositType', 'depositValue'].some((k) => k in changes);
-    await writeQuoteLog(quoteId, priceTouched ? 'price_changed' : 'edited', { fields: Object.keys(changes) }, actor);
+    const diff = await diffQuote(quote, saved, Object.keys(changes)).catch(() => []);
+    if (diff.length) await writeQuoteLog(quoteId, 'quote_updated', { changes: diff }, actor);
     return { quote: saved, changed: Object.keys(changes) };
 });
 

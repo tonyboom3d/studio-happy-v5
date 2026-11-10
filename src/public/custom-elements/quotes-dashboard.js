@@ -17,7 +17,7 @@ const L = {
         transfer_approved: 'העברה אושרה', transfer_proof_uploaded: 'הועלתה אסמכתא', calendar_blocked: 'יומן נחסם',
         calendar_released: 'יומן שוחרר', conflict_detected: 'התגלתה התנגשות', conflict_alert_sent: 'נשלחה התראת התנגשות',
         payment_refunded: 'תשלום הוחזר', transfer_rejected: 'העברה נדחתה', quote_prepared: 'הוכנה לשליחה', quote_reprepared: 'הוכנה מחדש',
-        staff_assigned: 'שובץ עובד', expired: 'פג תוקף', cancelled: 'בוטל',
+        quote_updated: 'עדכונים להצעה', staff_assigned: 'שובץ עובד', expired: 'פג תוקף', cancelled: 'בוטל',
     },
     actor: { admin: '👤', customer: '🙋', system: '⚙️' },
 };
@@ -67,6 +67,7 @@ td.wrapc{white-space:normal;max-width:220px}
 .dh h2{margin:0;font-size:18px;flex:1}
 .db{padding:14px}
 .sec{background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:12px;margin-bottom:12px}
+.tl .chg{margin:4px 0 0;padding:0 16px 0 0;font-size:12px;color:#334155;list-style:disc}.tl .chg li{display:list-item;padding:1px 0;border:0}
 .fieldPick{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:6px;margin-top:6px}
 .staffList{display:flex;flex-direction:column;gap:8px}
 .staffRow{padding:6px 0;border-bottom:1px solid #f1f5f9}
@@ -595,7 +596,12 @@ class QuotesDashboard extends HTMLElement {
             const title = a.title || a.name || '';
             return `<option value="${esc(a.id)}" style="color:#0f172a;background:#fff">${esc(title)} (${money(a.price)})</option>`;
         }).join('');
-        const log = dt.log.map((l) => `<li><span>${L.actor[l.actorType] || ''}</span><div><b>${esc(L.action[l.action] || l.action)}</b> <span class="sub">${esc(l.actorName || '')} · ${dmyTime(l._createdDate)}</span></div></li>`).join('') || '<li class="sub">אין פעולות</li>';
+        const logDetail = (l) => {
+            const ch = l.details?.changes;
+            if (!Array.isArray(ch) || !ch.length) return '';
+            return `<ul class="chg">${ch.map((c) => `<li><b>${esc(c.label)}:</b> ${c.text ? esc(c.text) : `מ-${esc(c.from)} ל-${esc(c.to)}`}</li>`).join('')}</ul>`;
+        };
+        const log = dt.log.map((l) => `<li><span>${L.actor[l.actorType] || ''}</span><div><b>${esc(L.action[l.action] || l.action)}</b> <span class="sub">${esc(l.actorName || '')} · ${dmyTime(l._createdDate)}</span>${logDetail(l)}</div></li>`).join('') || '<li class="sub">אין פעולות</li>';
         const pays = dt.payments.map((p) => `<li><div><b>${money(p.amount)}</b> · ${esc(p.stage)} · ${esc(L.method[p.method] || p.method)} · <span class="badge ${p.status === 'paid' ? 'green' : p.status === 'failed' ? 'red' : 'amber'}">${esc(p.status)}</span> <span class="sub">${dmyTime(p.paidAt || p._createdDate)}</span></div></li>`).join('') || '<li class="sub">אין תשלומים</li>';
         return `<div class="mask" data-act="close"></div><div class="drawer">
             <div class="dh"><h2>${esc(q.customerName || 'הצעה')} ${q.quoteNumber ? `<span class="sub">#${q.quoteNumber}</span>` : ''}</h2>${badge(L.status, 'status', q.status)}<button data-act="close">✕</button></div>

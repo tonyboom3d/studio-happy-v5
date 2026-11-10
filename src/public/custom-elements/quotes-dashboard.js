@@ -28,7 +28,8 @@ const BADGE = {
 };
 
 const CSS = `
-:host{display:block;direction:rtl;font-family:Heebo,Arial,sans-serif;color:#0f172a;background:#f1f5f9;min-height:600px;font-size:14px}
+@import url('https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;600;700&display=swap');
+:host{display:block;direction:rtl;font-family:Rubik,Arial,sans-serif;color:#0f172a;background:#f1f5f9;min-height:600px;font-size:14px}
 *{box-sizing:border-box}
 .wrap{padding:16px}
 .top{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
@@ -416,7 +417,7 @@ class QuotesDashboard extends HTMLElement {
         if (!m) return '';
         if (m.kind === 'preview') {
             return `<div class="mask" data-act="closeModal"></div><div class="modal"><div class="dh"><h2>תצוגה מקדימה</h2><button data-act="closeModal">✕</button></div>
-                <iframe sandbox="" style="width:100%;height:70vh;border:0;background:#fff" srcdoc="${esc(`<html dir="rtl"><body style="font-family:Arial;padding:16px">${m.html}</body></html>`)}"></iframe></div>`;
+                <iframe sandbox="" style="width:100%;height:70vh;border:0;background:#fff" srcdoc="${esc(`<html dir="rtl"><head><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;600;700&display=swap"></head><body style="font-family:Rubik,Arial,sans-serif;padding:16px">${m.html}</body></html>`)}"></iframe></div>`;
         }
         const t = m.tpl;
         const list = m.templates.map((x) => `<div class="extra"><span>${esc(x.name)} <span class="sub">${esc(L.type[x.eventType] || '')}</span> ${x.isDefault ? '<span class="badge green">ברירת מחדל</span>' : ''}</span>
@@ -426,7 +427,7 @@ class QuotesDashboard extends HTMLElement {
               <label>סוג אירוע<select data-t="eventType"><option value="birthday"${t.eventType === 'birthday' ? ' selected' : ''}>יום הולדת</option><option value="event"${t.eventType === 'event' ? ' selected' : ''}>אירוע חברה / פרטי</option></select></label>
               <label class="chk full"><input type="checkbox" data-t="isDefault"${t.isDefault ? ' checked' : ''}> ברירת מחדל לסוג האירוע</label>
               <div class="full"><span class="sub">הוספת משתנה:</span> ${m.placeholders.map((k) => `<button data-act="tplIns" data-k="${k}" style="padding:2px 8px;margin:2px">${k}</button>`).join('')}</div>
-              <label class="full">תוכן (HTML)<textarea id="tplBody" data-t="bodyHtml" rows="12" style="font-family:monospace;direction:rtl">${esc(t.bodyHtml)}</textarea></label></div>
+              <label class="full">תוכן (HTML)<textarea id="tplBody" data-t="bodyHtml" rows="12" style="font-family:Rubik,Arial,sans-serif;direction:rtl">${esc(t.bodyHtml)}</textarea></label></div>
               <div style="margin-top:10px"><button class="btn-p" data-act="tplSave">שמור תבנית</button></div></div>` : '';
         return `<div class="mask" data-act="closeModal"></div><div class="modal"><div class="dh"><h2>תבניות חוזה</h2><button data-act="tplNew">+ תבנית חדשה</button><button data-act="closeModal">✕</button></div>
             <div class="db">${list}${form}</div></div>`;

@@ -12,7 +12,8 @@ const MSG = {
 };
 
 const CSS = `
-:host{display:block;direction:rtl;font-family:Heebo,Arial,sans-serif;color:#0f172a;background:#f1f5f9;padding:16px;--brand:#2563eb}
+@import url('https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;600;700&display=swap');
+:host{display:block;direction:rtl;font-family:Rubik,Arial,sans-serif;color:#0f172a;background:#f1f5f9;padding:16px;--brand:#2563eb}
 *{box-sizing:border-box}
 .box{max-width:760px;margin:0 auto}
 .card{background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:18px;margin-bottom:14px}

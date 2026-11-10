@@ -9,6 +9,7 @@ const CE_ID = '#customElement2';
 
 // action type -> backend call (payload.actorName is self-declared by the CE)
 const handlers = {
+    ping: () => ({ pong: true }),
     boot: (p) => loadQuotesDashboard({ search: p.search, filters: p.filters, sort: p.sort, paging: p.paging }),
     list: (p) => listQuotes({ search: p.search, filters: p.filters, sort: p.sort, paging: p.paging }),
     get: (p) => getQuote(p.id),

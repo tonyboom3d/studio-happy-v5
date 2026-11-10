@@ -163,13 +163,13 @@ class QuotesDashboard extends HTMLElement {
     }
 
     // ---------- bridge ----------
-    req(type, payload = {}) {
+    req(type, payload = {}, timeoutMs = 60000) {
         if (this.getAttribute('mock') === 'true') return this.mockReq(type, payload);
         const requestId = `${Date.now()}-${++this.seq}`;
         return new Promise((resolve, reject) => {
-            const timer = setTimeout(() => { this.pending.delete(requestId); dbg(`✖ ${type} TIMEOUT (no reply from page: listener missing?)`); reject(new Error('הבקשה נכשלה (פג זמן)')); }, 60000);
+            const timer = setTimeout(() => { this.pending.delete(requestId); if (type !== 'ping') dbg(`✖ ${type} TIMEOUT (no reply from page: listener missing?)`); reject(new Error('הבקשה נכשלה (פג זמן)')); }, timeoutMs);
             this.pending.set(requestId, { resolve, reject, timer, type, t0: performance.now() });
-            dbg(`→ ${type}`, requestId);
+            if (type !== 'ping') dbg(`→ ${type}`, requestId);
             this.dispatchEvent(new CustomEvent('quotes-action', { detail: { type, payload: { ...payload, actorName: this.actorName() }, requestId }, bubbles: true, composed: true }));
         });
     }
@@ -207,11 +207,26 @@ class QuotesDashboard extends HTMLElement {
         this.bootTimer = setTimeout(() => { dbg('bridge-ready fallback fired'); this.boot(); }, 3000);
     }
 
+    // Velo binds the element's event listener asynchronously; early events are dropped. Ping until the page answers.
+    async waitBridge() {
+        if (this.getAttribute('mock') === 'true') return;
+        for (let i = 1; i <= 40; i++) {
+            const ok = await new Promise((resolve) => {
+                let done = false;
+                const finish = (v) => { if (!done) { done = true; resolve(v); } };
+                this.req('ping', {}, 700).then(() => finish(true), () => finish(false));
+            });
+            if (ok) { dbg(`bridge answered ping (attempt ${i})`); return; }
+        }
+        dbg('bridge never answered ping; sending boot anyway');
+    }
+
     async boot() {
         if (this.bootStarted) return;
         this.bootStarted = true;
         clearTimeout(this.bootTimer);
         const cached = this.cached;
+        await this.waitBridge();
         try {
             const res = await this.req('boot', {
                 search: this.s.search, sort: this.s.sort, paging: { limit: this.s.limit, skip: 0 }, filters: {},

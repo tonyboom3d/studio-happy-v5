@@ -67,6 +67,7 @@ td.wrapc{white-space:normal;max-width:220px}
 .dh h2{margin:0;font-size:18px;flex:1}
 .db{padding:14px}
 .sec{background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:12px;margin-bottom:12px}
+.fieldPick{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:6px;margin-top:6px}
 .staffList{display:flex;flex-direction:column;gap:8px}
 .staffRow{padding:6px 0;border-bottom:1px solid #f1f5f9}
 .sec h3{margin:0 0 10px;font-size:14px;color:#1d4ed8;cursor:pointer;display:flex;justify-content:space-between;align-items:center;user-select:none}
@@ -117,7 +118,7 @@ const MOCK_ROWS = [
 ];
 
 class QuotesDashboard extends HTMLElement {
-    static get observedAttributes() { return ['action-result']; }
+    static get observedAttributes() { return ['action-result', 'bridge-ready']; }
 
     constructor() {
         super();
@@ -137,11 +138,13 @@ class QuotesDashboard extends HTMLElement {
         this.root.addEventListener('click', (e) => this.onClick(e));
         this.root.addEventListener('input', (e) => this.onInput(e));
         this.root.addEventListener('change', (e) => this.onChange(e));
+        this.paintCache();
         this.render();
-        this.boot();
+        this.startBoot();
     }
 
     attributeChangedCallback(name, _old, val) {
+        if (name === 'bridge-ready' && val && this.isConnected && !this.bootStarted) { this.boot(); return; }
         if (name !== 'action-result' || !val) return;
         try {
             const msg = JSON.parse(val);
@@ -178,16 +181,29 @@ class QuotesDashboard extends HTMLElement {
 
     actorName() { return (this.s.actors.find((a) => a.id === this.s.actorId) || {}).name || ''; }
 
-    async boot() {
-        // Stale-while-revalidate: paint last snapshot instantly, refresh in background.
+    // Stale-while-revalidate: last snapshot paints at once, refresh runs in the background.
+    paintCache() {
         let cached = null;
         try { cached = JSON.parse(localStorage.getItem('quotesBootCache') || 'null'); } catch (_) { /* ignore */ }
         if (cached?.items) {
-            this.s.actors = cached.actors || []; this.s.addons = cached.addons || [];
+            this.s.addons = cached.addons || [];
             this.s.items = cached.items; this.s.total = cached.total || 0;
             this.s.loading = false;
-        } else this.s.loading = true;
-        this.render();
+            this.cached = true;
+        }
+    }
+
+    // Wait for the page's 'bridge-ready' (listener attached) so the first request is not lost; fallback after 3s.
+    startBoot() {
+        if (this.getAttribute('mock') === 'true' || this.hasAttribute('bridge-ready')) { this.boot(); return; }
+        this.bootTimer = setTimeout(() => this.boot(), 3000);
+    }
+
+    async boot() {
+        if (this.bootStarted) return;
+        this.bootStarted = true;
+        clearTimeout(this.bootTimer);
+        const cached = this.cached;
         try {
             const res = await this.req('boot', {
                 search: this.s.search, sort: this.s.sort, paging: { limit: this.s.limit, skip: 0 }, filters: {},
@@ -222,6 +238,7 @@ class QuotesDashboard extends HTMLElement {
         const t = e.target;
         if (t.dataset.f && this.s.detail?.draft) this.readField(t);
         if (t.dataset.t && this.s.modal?.tpl) this.s.modal.tpl[t.dataset.t] = t.type === 'checkbox' ? t.checked : t.value;
+        if (t.dataset.c && this.s.modal?.tpl) this.s.modal.tpl.config[t.dataset.c] = t.value;
         if (t.id === 'search') { clearTimeout(this.st); this.st = setTimeout(() => { this.s.search = t.value; this.s.skip = 0; this.load(); }, 400); }
     }
 
@@ -230,7 +247,11 @@ class QuotesDashboard extends HTMLElement {
         if (t.dataset.filter) { this.s.filters[t.dataset.filter] = t.value || undefined; if (t.dataset.filter === 'workshopClosed') this.s.filters.workshopClosed = t.value; this.s.skip = 0; this.load(); }
         else if (t.id === 'staffPick' && t.value && this.s.detail?.draft) { this.toggleStaff(t.value, true); this.render(); }
         else if (t.dataset.f && this.s.detail) { this.readField(t); }
-        else if (t.dataset.t && this.s.modal?.tpl) { this.s.modal.tpl[t.dataset.t] = t.type === 'checkbox' ? t.checked : t.value; }
+        else if (t.dataset.cf && this.s.modal?.tpl) {
+            const f = new Set(this.s.modal.tpl.config.fields);
+            t.checked ? f.add(t.dataset.cf) : f.delete(t.dataset.cf);
+            this.s.modal.tpl.config.fields = this.s.modal.fieldOptions.map((o) => o.key).filter((k) => f.has(k));
+        } else if (t.dataset.t && this.s.modal?.tpl) { this.s.modal.tpl[t.dataset.t] = t.type === 'checkbox' ? t.checked : t.value; }
     }
 
     toggleStaff(id, checked) {
@@ -275,11 +296,14 @@ class QuotesDashboard extends HTMLElement {
         if (a === 'copyLink') return this.copyLink();
         if (a === 'closeModal') { this.s.modal = null; return this.render(); }
         if (a === 'tplOpen') return this.openTemplates();
-        if (a === 'tplNew') { this.s.modal.tpl = { name: '', eventType: 'birthday', bodyHtml: '', isDefault: false }; return this.render(); }
-        if (a === 'tplEdit') { this.s.modal.tpl = { ...this.s.modal.templates.find((t) => t._id === el.dataset.id) }; return this.render(); }
+        if (a === 'tplNew') { this.s.modal.tpl = { name: '', eventType: 'birthday', isDefault: false, config: this.blankConfig() }; return this.render(); }
+        if (a === 'tplEdit') {
+            const x = this.s.modal.templates.find((t) => t._id === el.dataset.id);
+            this.s.modal.tpl = { _id: x._id, name: x.name, eventType: x.eventType, isDefault: !!x.isDefault, legacy: !x.config, config: x.config ? { ...this.blankConfig(), ...x.config, fields: [...(x.config.fields || [])] } : { ...this.blankConfig(), title: x.name } };
+            return this.render();
+        }
         if (a === 'tplSave') return this.saveTpl();
         if (a === 'tplDel') return this.delTpl(el.dataset.id);
-        if (a === 'tplIns') return this.insertPlaceholder(el.dataset.k);
         if (a === 'clearFilters') { this.s.filters = {}; this.s.search = ''; this.s.skip = 0; return this.load(); }
     }
 
@@ -431,7 +455,7 @@ class QuotesDashboard extends HTMLElement {
     async openTemplates() {
         try {
             const r = await this.req('templates');
-            this.s.modal = { kind: 'templates', templates: r.templates || [], placeholders: r.placeholders || [], tpl: null };
+            this.s.modal = { kind: 'templates', templates: r.templates || [], placeholders: r.placeholders || [], fieldOptions: r.fieldOptions || [], defaultFields: r.defaultFields || [], tpl: null };
             this.render();
         } catch (err) { this.toast(errText(err)); }
     }
@@ -454,13 +478,8 @@ class QuotesDashboard extends HTMLElement {
         } catch (err) { this.toast(errText(err)); }
     }
 
-    insertPlaceholder(key) {
-        const ta = this.root.getElementById('tplBody');
-        if (!ta) return;
-        const s = ta.selectionStart ?? ta.value.length;
-        ta.value = `${ta.value.slice(0, s)}{{${key}}}${ta.value.slice(ta.selectionEnd ?? s)}`;
-        this.s.modal.tpl.bodyHtml = ta.value;
-        ta.focus();
+    blankConfig() {
+        return { title: 'הצעת מחיר', intro: '', terms: '', footer: '', fields: [...(this.s.modal?.defaultFields || [])] };
     }
 
     modalHtml() {
@@ -477,8 +496,12 @@ class QuotesDashboard extends HTMLElement {
               <label>שם<input data-t="name" value="${esc(t.name)}"></label>
               <label>סוג אירוע<select data-t="eventType"><option value="birthday"${t.eventType === 'birthday' ? ' selected' : ''}>יום הולדת</option><option value="event"${t.eventType === 'event' ? ' selected' : ''}>אירוע חברה / פרטי</option></select></label>
               <label class="chk full"><input type="checkbox" data-t="isDefault"${t.isDefault ? ' checked' : ''}> ברירת מחדל לסוג האירוע</label>
-              <div class="full"><span class="sub">הוספת משתנה:</span> ${m.placeholders.map((k) => `<button data-act="tplIns" data-k="${k}" style="padding:2px 8px;margin:2px">${k}</button>`).join('')}</div>
-              <label class="full">תוכן (HTML)<textarea id="tplBody" data-t="bodyHtml" rows="12" style="font-family:Rubik,Arial,sans-serif;direction:rtl">${esc(t.bodyHtml)}</textarea></label></div>
+              <label class="full">כותרת<input data-c="title" value="${esc(t.config.title)}"></label>
+              <label class="full">פתיחה<textarea data-c="intro" rows="3">${esc(t.config.intro)}</textarea></label>
+              <div class="full"><b>שדות דינאמיים להצגה</b><div class="fieldPick">${m.fieldOptions.map((o) => `<label class="chk"><input type="checkbox" data-cf="${o.key}"${t.config.fields.includes(o.key) ? ' checked' : ''}> ${esc(o.label)}</label>`).join('')}</div></div>
+              <label class="full">תנאים<textarea data-c="terms" rows="6">${esc(t.config.terms)}</textarea></label>
+              <label class="full">שורת סיום<input data-c="footer" value="${esc(t.config.footer)}"></label>
+              ${t.legacy ? '<div class="full lockmsg">תבנית ישנה (HTML חופשי): שמירה תחליף אותה במבנה האחיד.</div>' : ''}</div>
               <div style="margin-top:10px"><button class="btn-p" data-act="tplSave">שמור תבנית</button></div></div>` : '';
         return `<div class="mask" data-act="closeModal"></div><div class="modal"><div class="dh"><h2>תבניות חוזה</h2><button data-act="tplNew">+ תבנית חדשה</button><button data-act="closeModal">✕</button></div>
             <div class="db">${list}${form}</div></div>`;

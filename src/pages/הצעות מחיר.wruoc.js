@@ -40,4 +40,5 @@ $w.onReady(() => {
             reply({ ok: false, error: err?.message || String(err) });
         }
     });
+    ce.setAttribute('bridge-ready', '1'); // CE starts its first load only now
 });

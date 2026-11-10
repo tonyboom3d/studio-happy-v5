@@ -10,7 +10,9 @@ import { buildPreparedFields, buildQuoteUrl, resolveTemplate } from 'backend/quo
 import { recomputePaymentState } from 'backend/quotePayments.js';
 import { sendQuoteEmail } from 'backend/quoteNotify.js';
 import { sendQuoteLinkManyChat } from 'backend/manychatService.jsw';
-import { renderTemplate, sanitizeHtml, PLACEHOLDERS } from 'backend/quoteTemplates.js';
+import {
+    renderTemplate, sanitizeHtml, PLACEHOLDERS, FIELD_OPTIONS, DEFAULT_TEMPLATE_FIELDS, buildTemplateHtml, parseTemplateConfig,
+} from 'backend/quoteTemplates.js';
 
 const SA = { suppressAuth: true, suppressHooks: true };
 
@@ -113,12 +115,13 @@ export const saveSettings = webMethod(Permissions.Admin, async (patch = {}) => {
 // ---- Templates ----
 export const listTemplates = webMethod(Permissions.Admin, async () => {
     const res = await wixData.query('QuoteTemplates').eq('active', true).ascending('name').limit(100).find(SA);
-    return { templates: res.items, placeholders: PLACEHOLDERS };
+    const templates = res.items.map((t) => ({ ...t, config: parseTemplateConfig(t.bodyHtml) }));
+    return { templates, placeholders: PLACEHOLDERS, fieldOptions: FIELD_OPTIONS, defaultFields: DEFAULT_TEMPLATE_FIELDS };
 });
 
 export const saveTemplate = webMethod(Permissions.Admin, async (tpl = {}, actorName) => {
     const name = String(tpl.name || '').trim().slice(0, 120);
-    const bodyHtml = sanitizeHtml(tpl.bodyHtml);
+    const bodyHtml = tpl.config ? buildTemplateHtml(tpl.config) : sanitizeHtml(tpl.bodyHtml);
     if (!name) throw new Error('VALIDATION:חסר שם לתבנית.');
     if (!bodyHtml.trim()) throw new Error('VALIDATION:תוכן התבנית ריק.');
     const probe = renderTemplate(bodyHtml, {});

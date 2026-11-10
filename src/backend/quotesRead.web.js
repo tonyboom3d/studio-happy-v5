@@ -3,6 +3,7 @@ import { Permissions, webMethod } from 'wix-web-module';
 import wixData from 'wix-data';
 import { loadAddonsCatalog } from 'backend/quoteCore.js';
 import { listQuoteLog } from 'backend/quoteLog.js';
+import { loadSkillsForRoleId } from 'backend/staffRoles.js';
 
 const SA = { suppressAuth: true, suppressHooks: true };
 
@@ -70,12 +71,25 @@ async function queryQuotes(opts = {}) {
     };
 }
 
+/** workshops._id -> workshopName, for showing staff skills (Dashboard_Roles.skills -> workshops). */
+async function loadWorkshopNames() {
+    const res = await wixData.query('workshops').fields('workshopName').limit(200).find(SA).catch(() => ({ items: [] }));
+    const map = {};
+    res.items.forEach((w) => { map[w._id] = w.workshopName || ''; });
+    return map;
+}
+
 async function queryActors() {
-    const res = await wixData.query('Dashboard_Roles').eq('active', true).limit(200).find(SA);
-    return res.items
-        .filter((r) => r.displayName)
-        .map((r) => ({ id: r._id, name: r.displayName }))
-        .sort((a, b) => a.name.localeCompare(b.name, 'he'));
+    const [rolesRes, workshopNames] = await Promise.all([
+        wixData.query('Dashboard_Roles').eq('active', true).limit(200).find(SA),
+        loadWorkshopNames(),
+    ]);
+    const actors = await Promise.all(rolesRes.items.filter((r) => r.displayName).map(async (r) => {
+        const skillIds = await loadSkillsForRoleId(r._id, r.skills).catch(() => []);
+        const skills = skillIds.map((id) => workshopNames[id]).filter(Boolean);
+        return { id: r._id, name: r.displayName, skills };
+    }));
+    return actors.sort((a, b) => a.name.localeCompare(b.name, 'he'));
 }
 
 // Warm-instance cache for rarely-changing reference data (10 min).
@@ -89,30 +103,34 @@ async function getRefData() {
 
 export const listQuotes = webMethod(Permissions.Admin, queryQuotes);
 
-/** Other active quotes on the same calendar day -> staff already assigned elsewhere that day. */
+/** Other active quotes on the same calendar day -> staffId -> [{workshop, start, end}], for the busy tag + tooltip. */
 async function queryBusyStaff(quoteId, eventDate) {
     const d = toDate(eventDate);
-    if (!d) return [];
+    if (!d) return {};
     const from = new Date(d); from.setHours(0, 0, 0, 0);
     const to = new Date(d); to.setHours(23, 59, 59, 999);
     const res = await wixData.query('Quotes')
         .ne('_id', quoteId).ne('status', 'cancelled')
         .ge('eventDate', from).le('eventDate', to)
-        .fields('assignedStaffIds').limit(200).find(SA);
-    const ids = new Set();
-    res.items.forEach((q) => (q.assignedStaffIds || []).forEach((id) => ids.add(id)));
-    return [...ids];
+        .fields('assignedStaffIds', 'eventStartTime', 'eventEndTime', 'requestedWorkshop').limit(200).find(SA);
+    const map = {};
+    res.items.forEach((q) => {
+        (q.assignedStaffIds || []).forEach((id) => {
+            (map[id] = map[id] || []).push({ workshop: q.requestedWorkshop || '', start: q.eventStartTime || '', end: q.eventEndTime || '' });
+        });
+    });
+    return map;
 }
 
 export const getQuote = webMethod(Permissions.Admin, async (quoteId) => {
     const quote = await wixData.get('Quotes', quoteId, SA);
     if (!quote) throw new Error('NOT_FOUND:ההצעה לא נמצאה.');
-    const [log, payments, busyStaffIds] = await Promise.all([
+    const [log, payments, busyStaff] = await Promise.all([
         listQuoteLog(quoteId),
         wixData.query('QuotePayments').eq('quoteId', quoteId).descending('_createdDate').limit(50).find(SA),
         queryBusyStaff(quoteId, quote.eventDate),
     ]);
-    return { quote, log, payments: payments.items, busyStaffIds };
+    return { quote, log, payments: payments.items, busyStaff };
 });
 
 export const listActors = webMethod(Permissions.Admin, async () => ({ actors: await queryActors() }));

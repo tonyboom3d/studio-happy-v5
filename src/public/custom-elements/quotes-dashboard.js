@@ -67,6 +67,8 @@ td.wrapc{white-space:normal;max-width:220px}
 .dh h2{margin:0;font-size:18px;flex:1}
 .db{padding:14px}
 .sec{background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:12px;margin-bottom:12px}
+.staffList{display:flex;flex-direction:column;gap:8px}
+.staffRow{padding:6px 0;border-bottom:1px solid #f1f5f9}
 .sec h3{margin:0 0 10px;font-size:14px;color:#1d4ed8;cursor:pointer;display:flex;justify-content:space-between;align-items:center;user-select:none}
 .sec h3:after{content:"▾";font-size:12px}
 .sec.col h3{margin:0}.sec.col h3:after{content:"◂"}
@@ -304,7 +306,7 @@ class QuotesDashboard extends HTMLElement {
             const d = await this.req('get', { id });
             const q = d.quote;
             this.s.detail = {
-                id, quote: q, log: d.log || [], payments: d.payments || [], busyStaffIds: d.busyStaffIds || [],
+                id, quote: q, log: d.log || [], payments: d.payments || [], busyStaff: d.busyStaff || {},
                 draft: { ...q, extras: (q.extras || []).map((x) => ({ ...x })), assignedStaffIds: [...(q.assignedStaffIds || [])], eventDate: ymd(q.eventDate), expiresAt: ymd(q.expiresAt), balanceDueDate: ymd(q.balanceDueDate) },
             };
         } catch (err) { this.s.detail = null; this.toast(errText(err)); }
@@ -554,10 +556,16 @@ class QuotesDashboard extends HTMLElement {
                 <label class="full">הערות הלקוח<textarea rows="2" disabled>${esc(q.customerNotes || '')}</textarea></label></div></div>
               ${sec('event', 'האירוע')}<div class="grid">${f('eventDate', 'תאריך', 'date')}${f('participants', 'משתתפים', 'number', 'min="0"')}${f('eventStartTime', 'שעת התחלה', 'time')}${f('eventEndTime', 'שעת סיום', 'time')}${f('adults', 'מלווים', 'number', 'min="0"')}${f('requiredInstructors', 'מדריכים נדרשים', 'number', 'min="0"')}
                 <div class="full">${chk('workshopClosed', 'סדנה סגורה (פרטית)')}</div></div></div>
-              ${sec('staff', 'צוות משובץ')}<div class="grid">${this.s.actors.map((a) => {
+              ${sec('staff', 'צוות משובץ')}<div class="staffList">${this.s.actors.map((a) => {
                   const on = (d.assignedStaffIds || []).includes(a.id);
-                  const busy = dt.busyStaffIds?.includes(a.id) ? ' <span class="badge amber">עובד/ת באותו יום</span>' : '';
-                  return `<label class="chk"><input type="checkbox" data-staff="${esc(a.id)}"${on ? ' checked' : ''}${dis}> ${esc(a.name)}${busy}</label>`;
+                  const eventText = [q.requestedWorkshop, ...(d.extras || []).map((x) => x.title)].filter(Boolean).join(' ');
+                  const trained = a.skills?.length && eventText ? a.skills.some((s) => eventText.includes(s)) : null;
+                  const trainedBadge = trained === true ? ' <span class="badge green">מוכשר/ת לאירוע</span>' : trained === false ? ' <span class="badge amber">אין הכשרה מתאימה</span>' : '';
+                  const skillsTxt = a.skills?.length ? `<div class="sub">הכשרות: ${esc(a.skills.join(', '))}</div>` : '<div class="sub">אין הכשרות רשומות</div>';
+                  const busyList = dt.busyStaff[a.id] || [];
+                  const busyTitle = busyList.map((b) => `${b.workshop || 'אירוע'} ${b.start || '?'}–${b.end || '?'}`).join(' | ');
+                  const busyNote = busyList.length ? `<div class="sub" title="${esc(busyTitle)}">⚠️ <span class="badge amber">משובץ/ת גם באותו יום</span></div>` : '';
+                  return `<div class="staffRow"><label class="chk"><input type="checkbox" data-staff="${esc(a.id)}"${on ? ' checked' : ''}${dis}> ${esc(a.name)}${trainedBadge}</label>${skillsTxt}${busyNote}</div>`;
               }).join('') || '<div class="sub">אין עובדים פעילים</div>'}</div></div>
               ${sec('pricing', 'תמחור')}<div class="grid">${f('basePrice', 'מחיר בסיס (₪)', 'number', 'min="0"')}${f('priceOverride', 'מחיר מותאם (עוקף הכול)', 'number', 'min="0"')}
                 <label>סוג מקדמה<select data-f="depositType"${dis}><option value="percent"${d.depositType !== 'fixed' ? ' selected' : ''}>אחוז</option><option value="fixed"${d.depositType === 'fixed' ? ' selected' : ''}>סכום קבוע</option></select></label>${f('depositValue', 'ערך מקדמה', 'number', 'min="0"')}

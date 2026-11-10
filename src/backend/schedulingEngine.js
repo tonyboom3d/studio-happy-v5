@@ -400,6 +400,18 @@ export function canonicalSessionKey(iso) {
 
 const EMPTY_SESSION_COMP = { adults: 0, children: 0, pairs: 0, soloAdults: 0, extraChildren: 0, people: 0 };
 
+/** Collapses a raw session-key comp map through canonicalSessionKey (shared by full + paid-only maps). */
+function normalizeCompMap(raw) {
+    const merged = {};
+    for (const [rawKey, comp] of Object.entries(raw || {})) {
+        const key = canonicalSessionKey(rawKey);
+        if (!key) continue;
+        if (!merged[key]) merged[key] = { ...EMPTY_SESSION_COMP };
+        mergeSessionComp(merged[key], comp);
+    }
+    return merged;
+}
+
 function mergeSessionComp(into, from) {
     into.adults += from.adults || 0;
     into.children += from.children || 0;
@@ -409,21 +421,17 @@ function mergeSessionComp(into, from) {
     into.people += from.people || 0;
 }
 
-/** Collapses duplicate session keys (calendar vs orders) and re-keys sessionComps/sessionEnds. */
+/** Collapses duplicate session keys (calendar vs orders) and re-keys sessionComps/sessionCompsPaid/sessionEnds. */
 function normalizeTypeSessions(t) {
-    const mergedComps = {};
-    for (const [rawKey, comp] of Object.entries(t.sessionComps || {})) {
-        const key = canonicalSessionKey(rawKey);
-        if (!key) continue;
-        if (!mergedComps[key]) mergedComps[key] = { ...EMPTY_SESSION_COMP };
-        mergeSessionComp(mergedComps[key], comp);
-    }
+    const mergedComps = normalizeCompMap(t.sessionComps);
+    const mergedPaidComps = normalizeCompMap(t.sessionCompsPaid);
     const mergedEnds = {};
     for (const [rawKey, endIso] of Object.entries(t.sessionEnds || {})) {
         const key = canonicalSessionKey(rawKey);
         if (key && endIso) mergedEnds[key] = endIso;
     }
     t.sessionComps = mergedComps;
+    t.sessionCompsPaid = mergedPaidComps;
     t.sessionEnds = mergedEnds;
     t.sessions = [...new Set([
         ...t.sessions.map(s => canonicalSessionKey(s)).filter(Boolean),
@@ -479,11 +487,18 @@ export async function buildBoard(fromKey, toKey, { consistent = false, includeOf
                 // pairs = Σ min(order.adults, order.children); soloAdults/extraChildren
                 // are the remainder on each side; people = adults+children.
                 pairs: 0, soloAdults: 0, extraChildren: 0, people: 0,
+                // Paid-only mirror of the composition above — used for the calendar's displayed
+                // participant counts, which must reflect WorkshopOrders.status === 'paid' only
+                // (loadActiveWixBookings below also feeds the full composition with unpaid/pending
+                // Wix Bookings seats, for staffing "demand detection", but those must not inflate
+                // the on-screen headcount).
+                paidAdults: 0, paidChildren: 0, paidPairs: 0, paidSoloAdults: 0, paidExtraChildren: 0, paidPeople: 0,
                 activeCount: 0, standbyQueue: [],
                 assignedCount: 0, assignedEmployeeIds: [],
                 sessions: [], // distinct workshopStart ISO timestamps that day (calendar display)
                 sessionEnds: {}, // startIso -> endIso, resolved from Bookings availability where known
                 sessionComps: {}, // startIso -> per-session participant composition (for split occupancy UI)
+                sessionCompsPaid: {}, // startIso -> paid-only participant composition (calendar display)
                 sessionCapacity: {}, // canonical startIso -> { total, open } from Bookings availability
                 hasActiveCustomers: false, // true when paid WorkshopOrders or live Wix Bookings exist
             };
@@ -492,11 +507,11 @@ export async function buildBoard(fromKey, toKey, { consistent = false, includeOf
     };
 
     const coveredBookingIds = new Set();
-    const bumpSessionComp = (t, startIso, orderAdults, orderChildren) => {
+    const bumpSessionComp = (map, startIso, orderAdults, orderChildren) => {
         const key = canonicalSessionKey(startIso);
         if (!key) return;
-        if (!t.sessionComps[key]) t.sessionComps[key] = { ...EMPTY_SESSION_COMP };
-        const sc = t.sessionComps[key];
+        if (!map[key]) map[key] = { ...EMPTY_SESSION_COMP };
+        const sc = map[key];
         const orderPairs = Math.min(orderAdults, orderChildren);
         sc.adults += orderAdults;
         sc.children += orderChildren;
@@ -515,14 +530,23 @@ export async function buildBoard(fromKey, toKey, { consistent = false, includeOf
         const orderAdults = order.adults || 0;
         const orderChildren = order.children || 0;
         const orderPairs = Math.min(orderAdults, orderChildren);
+        // loadPaidOrders() only returns status === 'paid' rows, so everything in this
+        // loop counts towards both the full composition (staffing) and the paid-only one.
         t.adults += orderAdults;
         t.children += orderChildren;
         t.pairs += orderPairs;
         t.soloAdults += orderAdults - orderPairs;
         t.extraChildren += orderChildren - orderPairs;
         t.people += orderAdults + orderChildren;
+        t.paidAdults += orderAdults;
+        t.paidChildren += orderChildren;
+        t.paidPairs += orderPairs;
+        t.paidSoloAdults += orderAdults - orderPairs;
+        t.paidExtraChildren += orderChildren - orderPairs;
+        t.paidPeople += orderAdults + orderChildren;
         const startIso = order.workshopStart instanceof Date ? order.workshopStart.toISOString() : new Date(order.workshopStart).toISOString();
-        bumpSessionComp(t, startIso, orderAdults, orderChildren);
+        bumpSessionComp(t.sessionComps, startIso, orderAdults, orderChildren);
+        bumpSessionComp(t.sessionCompsPaid, startIso, orderAdults, orderChildren);
         const sessionKey = canonicalSessionKey(startIso);
         if (sessionKey && !t.sessions.includes(sessionKey)) t.sessions.push(sessionKey);
         days[dateKey].hasWorkshops = true;
@@ -538,7 +562,9 @@ export async function buildBoard(fromKey, toKey, { consistent = false, includeOf
         t.soloAdults += b.adults - orderPairs;
         t.extraChildren += b.children - orderPairs;
         t.people += b.adults + b.children;
-        bumpSessionComp(t, b.startIso, b.adults, b.children);
+        // Full composition only (staffing/demand detection) — not sessionCompsPaid, so
+        // these unpaid/pending seats never inflate the calendar's displayed headcount.
+        bumpSessionComp(t.sessionComps, b.startIso, b.adults, b.children);
         const sessionKey = canonicalSessionKey(b.startIso);
         if (sessionKey && !t.sessions.includes(sessionKey)) t.sessions.push(sessionKey);
         days[b.dateKey].hasWorkshops = true;

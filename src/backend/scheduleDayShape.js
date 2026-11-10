@@ -19,12 +19,19 @@ function shapeType(board, dateKey, t) {
             : (sortedSessions.length <= 1
                 ? { adults: t.adults, children: t.children, pairs: t.pairs, soloAdults: t.soloAdults, extraChildren: t.extraChildren, people: t.people }
                 : EMPTY_COMP);
+        // Displayed headcount: paid orders only (WorkshopOrders.status === 'paid'), separate
+        // from `comp` above which also feeds unpaid/pending demand into required staffing.
+        const paidComp = key && t.sessionCompsPaid?.[key]
+            ? t.sessionCompsPaid[key]
+            : (sortedSessions.length <= 1
+                ? { adults: t.paidAdults, children: t.paidChildren }
+                : EMPTY_COMP);
         const cap = key ? t.sessionCapacity?.[key] : null;
         return {
             start: key || start,
             end: key ? (t.sessionEnds?.[key] || null) : null,
-            adults: comp.adults || 0,
-            children: comp.children || 0,
+            adults: paidComp.adults || 0,
+            children: paidComp.children || 0,
             required: requiredInstructorsFor(rule, comp),
             label: sortedSessions.length > 1 ? `מפגש ${idx + 1}` : '',
             capacity: cap ? { total: cap.total, open: cap.open } : null,

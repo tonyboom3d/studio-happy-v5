@@ -160,11 +160,16 @@ export function findEvent(cal, dateKey, typeId, start) {
 }
 
 /** Booked/total/open for an event — Bookings capacity when known, else paid headcount. */
+/**
+ * `ev.people` is already paid-only (WorkshopOrders.status === 'paid' — see scheduleDayShape.js).
+ * `cap.total`/`cap.open` come straight from the Wix Bookings slot and don't know about payment
+ * status, so `booked` must stay the paid headcount rather than being maxed against them.
+ */
 export function eventCapacity(ev) {
     const cap = ev.capacity;
     if (cap && Number.isFinite(cap.total)) {
         const open = Number.isFinite(cap.open) ? cap.open : Math.max(0, cap.total - ev.people);
-        return { booked: Math.max(ev.people, cap.total - open), total: cap.total, open };
+        return { booked: ev.people, total: cap.total, open };
     }
     return { booked: ev.people, total: null, open: null };
 }

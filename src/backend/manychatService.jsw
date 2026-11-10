@@ -9,6 +9,7 @@
  * Never throws out of sendOrderConfirmationManyChat / sendStaffManyChat — a
  * ManyChat failure must never block order creation/payment or backend actions.
  */
+import wixData from 'wix-data';
 import wixSecretsBackend from 'wix-secrets-backend';
 import { fetch } from 'wix-fetch';
 import { normalizeIsraeliPhone } from 'backend/orderUtils.js';
@@ -84,6 +85,11 @@ const RESCHEDULE_SUMMARY_FLOW_NS = 'content20260923100948_424304';
 
 // Pre-workshop reminder (~48h) — dedicated flow with approved Utility template.
 const WORKSHOP_REMINDER_FLOW_NS = 'content20260923104716_620983';
+
+// Self check-in reminder (±10min around workshop start, not yet checked in)
+// — create this flow + its WhatsApp Utility template manually in ManyChat,
+// then paste the real flow namespace here. See checkin/checkinReminders.js.
+const CHECKIN_REMINDER_FLOW_NS = 'REPLACE_ME_CHECKIN_REMINDER_FLOW_NS';
 
 // Manager-audience WhatsApp only. Customer messages (orders, reminders, etc.) still send.
 const BLOCKED_MANAGER_SUBSCRIBER_IDS = new Set(['523269268']);
@@ -1064,6 +1070,43 @@ export async function sendWorkshopReminderManyChat(order) {
     }
 }
 
+// --- Self check-in reminder (±10min around workshop start) ---
+
+/**
+ * "Hurry and check in" WhatsApp nudge for customers who haven't scanned the
+ * self check-in QR yet as their workshop is about to start. See
+ * checkin/checkinReminders.js for the scheduling/idempotency/feature-flag
+ * logic that calls this. Never throws — same contract as
+ * sendOrderConfirmationManyChat / sendWorkshopReminderManyChat.
+ */
+export async function sendCheckinReminderManyChat(order) {
+    try {
+        const phone = normalizeIsraeliPhone(order?.organizerPhone);
+        const email = order?.organizerEmail || '';
+        if (!phone) {
+            logManyChatSendError('sendCheckinReminderManyChat', { order, reason: 'no-phone' });
+            return { sent: false, reason: 'no-phone' };
+        }
+
+        const subscriber = await findSubscriber({ email, phone });
+        if (!subscriber?.id) {
+            logManyChatSendError('sendCheckinReminderManyChat', { order, phone, reason: 'subscriber-not-found' });
+            return { sent: false, reason: 'subscriber-not-found' };
+        }
+
+        const sentFields = await setOrderCustomFields(subscriber.id, order, 'checkin_reminder');
+        await sendFlow(subscriber.id, CHECKIN_REMINDER_FLOW_NS);
+
+        logManyChatSendSuccess('sendCheckinReminderManyChat', {
+            order, phone, subscriberId: subscriber.id, notificationType: 'checkin_reminder', fields: sentFields,
+        });
+        return { sent: true, subscriberId: subscriber.id };
+    } catch (err) {
+        logManyChatSendError('sendCheckinReminderManyChat', { order, error: err?.message || String(err) });
+        return { sent: false, reason: 'error', error: err?.message || String(err) };
+    }
+}
+
 // --- Sketch-selected notification (replaces Green API sendSelectionNotification) ---
 
 /**
@@ -1370,6 +1413,53 @@ export async function sendBirthdayLeadNoticeManyChat(subscriberId) {
         return { sent: true, subscriberId };
     } catch (err) {
         console.error('[ManyChat] ❌ sendBirthdayLeadNoticeManyChat failed:', err?.message || err);
+        return { sent: false, reason: 'error', error: err?.message || String(err) };
+    }
+}
+
+// --- Quote link (client-callable .jsw: accepts ONLY a quoteId, everything else is read from the DB) ---
+
+const QUOTE_SENT_NOTIFICATION_TYPE = 'quote_sent';
+const QUOTE_SEND_COOLDOWN_MS = 2 * 60 * 1000;
+
+/**
+ * Sends the quote link to the customer via the shared order-confirmation flow
+ * (notification_type = quote_sent → needs a matching branch + approved template in ManyChat).
+ * Needs custom fields: quote_link, customer_name, event_date, quote_amount. Never throws.
+ */
+export async function sendQuoteLinkManyChat(quoteId) {
+    try {
+        if (typeof quoteId !== 'string' || !quoteId) return { sent: false, reason: 'bad-id' };
+        const SA = { suppressAuth: true, suppressHooks: true };
+        const quote = await wixData.get('Quotes', quoteId, SA);
+        if (!quote || !quote.publicToken || !['draft', 'sent', 'viewed'].includes(quote.status)) return { sent: false, reason: 'not-sendable' };
+        const lastSend = (await wixData.query('QuoteActivityLog').eq('quoteId', quoteId).eq('action', 'sent_whatsapp').descending('_createdDate').limit(1).find(SA)).items[0];
+        if (lastSend && Date.now() - new Date(lastSend._createdDate).getTime() < QUOTE_SEND_COOLDOWN_MS) {
+            return { sent: false, reason: 'cooldown' };
+        }
+        const phone = normalizeIsraeliPhone(quote.customerPhone);
+        if (!phone) return { sent: false, reason: 'no-phone' };
+
+        const settings = (await wixData.query('QuoteSettings').eq('settingKey', 'default').limit(1).find(SA)).items[0];
+        const base = String(settings?.quotePageUrl || '').replace(/\/+$/, '');
+        if (!base) return { sent: false, reason: 'no-quote-page-url' };
+
+        const parts = String(quote.customerName || '').trim().split(/\s+/);
+        const subscriber = await findOrCreateSubscriber({ phone, email: quote.customerEmail || undefined, firstName: parts[0] || undefined, lastName: parts.slice(1).join(' ') || undefined });
+        if (!subscriber?.id) throw new Error('No subscriber id after find/create');
+
+        await setCustomFieldsByName(subscriber.id, [
+            { name: NOTIFICATION_TYPE_FIELD, value: QUOTE_SENT_NOTIFICATION_TYPE },
+            { name: 'quote_link', value: `${base}?id=${encodeURIComponent(quote.publicToken)}` },
+            { name: 'customer_name', value: quote.customerName || '' },
+            { name: 'event_date', value: quote.eventDate ? new Date(quote.eventDate).toLocaleDateString('he-IL', { timeZone: ISRAEL_TZ }) : '' },
+            { name: 'quote_amount', value: String(quote.totalAmount ?? '') },
+        ]);
+        await sendFlow(subscriber.id, ORDER_CONFIRMATION_FLOW_NS);
+        await wixData.update('Quotes', { ...quote, manychatSubscriberId: String(subscriber.id) }, SA);
+        return { sent: true, subscriberId: subscriber.id };
+    } catch (err) {
+        console.error('[ManyChat] ❌ sendQuoteLinkManyChat failed:', err?.message || err);
         return { sent: false, reason: 'error', error: err?.message || String(err) };
     }
 }

@@ -113,6 +113,22 @@ export const EMPLOYEE_ACTION_KEYS = {
         label: '🔴 בקשת שינוי מועד סדנה ממתינה לאישור מנהל',
         placeholders: ['organizerName', 'organizerPhone', 'workshopName', 'currentDate', 'requestedDate', 'orderNumber', 'reviewLink'],
     },
+    manager_quote_conflict: {
+        label: '🔴 התנגשות ביומן בהצעת מחיר',
+        placeholders: ['customerName', 'eventDate', 'quoteNumber', 'detail', 'reviewLink'],
+    },
+    manager_quote_signed: {
+        label: 'הצעת מחיר נחתמה',
+        placeholders: ['customerName', 'eventDate', 'quoteNumber', 'totalAmount', 'reviewLink'],
+    },
+    manager_quote_transfer_proof: {
+        label: 'הועלתה אסמכתת העברה להצעת מחיר (ממתין לאישור)',
+        placeholders: ['customerName', 'quoteNumber', 'amount', 'reviewLink'],
+    },
+    manager_quote_paid: {
+        label: 'התקבל תשלום להצעת מחיר',
+        placeholders: ['customerName', 'quoteNumber', 'amount', 'stage', 'reviewLink'],
+    },
     addon_out_of_stock: {
         label: 'התראת מלאי — תוסף בסטודיו נגמר (אוטומטי)',
         placeholders: ['addOnTitle', 'workshopTitle', 'remainingStock'],

@@ -7,6 +7,8 @@ import { cancelPromoCouponsForOrder, reschedulePromoCouponsForOrder } from 'back
 import { submissions } from '@wix/forms';
 import { questionEntry } from '@wix/faq';
 import { handleCompanyEventSubmission } from 'backend/companyEventLeads.js';
+import { handleQuoteLeadSubmission } from 'backend/quoteLeadsSync.js';
+import { isQuotePayment, isQuoteOrder, handleQuotePaymentUpdate } from 'backend/quotePayments.js';
 import { syncFaqQuestionSaved, syncFaqQuestionDeleted } from 'backend/faqKnowledge.js';
 
 const SA = { suppressAuth: true, suppressHooks: true };
@@ -98,6 +100,9 @@ submissions.onSubmissionCreated((event) => {
     handleCompanyEventSubmission(event).catch((err) => {
         console.error('[events] company event lead failed:', err?.message || err);
     });
+    handleQuoteLeadSubmission(event).catch((err) => {
+        console.error('[events] quote lead sync failed:', err?.message || err);
+    });
 });
 
 staffMembers.onStaffMemberCreated((event) => {
@@ -151,7 +156,7 @@ questionEntry.onQuestionEntryDeleted((event) => {
  * - Successful/Charged -> upgradePaymentStatus = 'paid' (90x90 choice kept)
  * - Declined/Refunded  -> upgradePaymentStatus = 'failed' (size reverted to 60x60)
  */
-export function wixPay_onPaymentUpdate(event) {
+function handleSketchUpgradePayment(event) {
     const { payment } = event;
     if (!payment?.id) return;
 
@@ -195,6 +200,23 @@ export function wixPay_onPaymentUpdate(event) {
         .catch(err => {
             console.error('[events] wixPay_onPaymentUpdate error:', err?.message || err);
         });
+}
+
+/**
+ * Quote payments are routed first (item-name prefix, or an indexed QuotePayments lookup when
+ * the event carries no items). Everything else runs the unchanged SketchSelections logic.
+ */
+export async function wixPay_onPaymentUpdate(event) {
+    const payment = event?.payment;
+    if (payment?.id && (!Array.isArray(payment.items) || isQuotePayment(payment))) {
+        try {
+            if (await handleQuotePaymentUpdate(payment)) return;
+        } catch (err) {
+            console.error('[events] quote payment handling failed:', err?.message || err);
+            if (isQuotePayment(payment)) return;
+        }
+    }
+    return handleSketchUpgradePayment(event);
 }
 
 /**
@@ -430,6 +452,7 @@ export async function wixEcom_onOrderPaymentStatusUpdated(event) {
         console.warn('[events] wixEcom_onOrderPaymentStatusUpdated: no order on event, skipping.');
         return;
     }
+    if (isQuoteOrder(order)) return; // quote payments never reconcile as workshop/add-on orders
 
     let isStudioAddOnOrder = false;
     try {

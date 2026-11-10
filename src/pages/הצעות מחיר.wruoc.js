@@ -1,10 +1,45 @@
-// API Reference: https://www.wix.com/velo/reference/api-overview/introduction
-// “Hello, World!” Example: https://learn-code.wix.com/en/article/hello-world
+// Dashboard page bridge: <quotes-dashboard> CE <-> backend/quotesAdmin.web.js. No business logic here.
+import {
+    listQuotes, getQuote, updateQuote, cancelQuote,
+    getSettings, listActors, syncQuoteLeads, listTemplates, saveTemplate, deleteTemplate,
+    previewQuote, prepareQuote, getQuoteLink, approveBankTransfer, rejectBankTransfer, sendQuote,
+} from 'backend/quotesAdmin.web.js';
 
-$w.onReady(function () {
-    // Write your JavaScript here
+const CE_ID = '#customElement2';
 
-    // To select an element by ID use: $w('#elementID')
+// action type -> backend call (payload.actorName is self-declared by the CE)
+const handlers = {
+    init: async () => {
+        const [a, s] = await Promise.all([listActors(), getSettings()]);
+        return { actors: a.actors, addons: s.addons };
+    },
+    list: (p) => listQuotes({ search: p.search, filters: p.filters, sort: p.sort, paging: p.paging }),
+    get: (p) => getQuote(p.id),
+    update: (p) => updateQuote(p.id, p.patch, p.actorName),
+    cancel: (p) => cancelQuote(p.id, p.actorName),
+    sync: (p) => syncQuoteLeads(p.actorName),
+    templates: () => listTemplates(),
+    saveTemplate: (p) => saveTemplate(p.tpl, p.actorName),
+    deleteTemplate: (p) => deleteTemplate(p.id),
+    preview: (p) => previewQuote(p.id, p.templateId),
+    prepare: (p) => prepareQuote(p.id, p.templateId, p.actorName),
+    approveTransfer: (p) => approveBankTransfer(p.id, p.actorName),
+    rejectTransfer: (p) => rejectBankTransfer(p.id, p.actorName),
+    send: (p) => sendQuote(p.id, p.channels, p.actorName),
+    link: (p) => getQuoteLink(p.id, p.actorName),
+};
 
-    // Click 'Preview' to run your code
+$w.onReady(() => {
+    const ce = $w(CE_ID);
+    ce.on('quotes-action', async (event) => {
+        const { type, payload, requestId } = event.detail || {};
+        const reply = (body) => ce.setAttribute('action-result', JSON.stringify({ requestId, ...body, __ts: Date.now() }));
+        try {
+            if (!handlers[type]) throw new Error(`UNKNOWN_ACTION:${type}`);
+            reply({ ok: true, data: await handlers[type](payload || {}) });
+        } catch (err) {
+            console.error('[quotes-dashboard-velo]', type, err?.message || err);
+            reply({ ok: false, error: err?.message || String(err) });
+        }
+    });
 });

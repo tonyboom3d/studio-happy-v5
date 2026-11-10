@@ -3,8 +3,8 @@ import { Permissions, webMethod } from 'wix-web-module';
 import wixData from 'wix-data';
 import { auth } from '@wix/essentials';
 import { computeAmounts } from 'backend/quotePricing.js';
-import { toManyChatPhone, getQuoteSettings, loadAddonsCatalog, LOCKED_STATUSES, SIGNED_EDITABLE_FIELDS } from 'backend/quoteCore.js';
-import { writeQuoteLog, listQuoteLog } from 'backend/quoteLog.js';
+import { toManyChatPhone, getQuoteSettings, LOCKED_STATUSES, SIGNED_EDITABLE_FIELDS } from 'backend/quoteCore.js';
+import { writeQuoteLog } from 'backend/quoteLog.js';
 import { backfillQuoteLeads } from 'backend/quoteLeadsSync.js';
 import { buildPreparedFields, buildQuoteUrl, resolveTemplate } from 'backend/quoteBuilder.js';
 import { recomputePaymentState } from 'backend/quotePayments.js';
@@ -13,14 +13,6 @@ import { sendQuoteLinkManyChat } from 'backend/manychatService.jsw';
 import { renderTemplate, sanitizeHtml, PLACEHOLDERS } from 'backend/quoteTemplates.js';
 
 const SA = { suppressAuth: true, suppressHooks: true };
-
-const LIST_FIELDS = [
-    '_id', '_createdDate', 'quoteNumber', 'eventType', 'customerName', 'customerEmail', 'customerPhone',
-    'companyName', 'participants', 'adults', 'eventDate', 'eventStartTime', 'eventEndTime', 'workshopClosed',
-    'requiredInstructors', 'extras', 'totalAmount', 'depositAmount', 'balanceAmount', 'expiresAt',
-    'balanceDueDate', 'selectedPaymentMethod', 'selectedPaymentPlan', 'signatureStatus', 'paymentStatus',
-    'status', 'conflicts', 'assignedStaffIds', 'notes', 'paidAmount', 'requestedWorkshop',
-];
 
 const EDITABLE_FIELDS = [
     'customerName', 'customerEmail', 'customerPhone', 'companyName', 'companyRole', 'eventLocation', 'eventAddress',
@@ -36,7 +28,6 @@ const SETTINGS_FIELDS = [
 ];
 
 const DATE_FIELDS = ['eventDate', 'balanceDueDate', 'expiresAt'];
-const SORTABLE = ['_createdDate', 'eventDate', 'expiresAt', 'totalAmount', 'customerName', 'quoteNumber'];
 
 async function getActor(actorName) {
     let userId = '';
@@ -59,59 +50,6 @@ function toDate(value) {
     const d = new Date(value);
     return Number.isNaN(d.getTime()) ? null : d;
 }
-
-function applyFilters(q, f = {}) {
-    if (f.eventType) q = q.eq('eventType', f.eventType);
-    if (f.status) q = q.eq('status', f.status);
-    if (f.signatureStatus) q = q.eq('signatureStatus', f.signatureStatus);
-    if (f.paymentStatus) q = q.eq('paymentStatus', f.paymentStatus);
-    if (typeof f.workshopClosed === 'boolean') q = q.eq('workshopClosed', f.workshopClosed);
-    const from = toDate(f.dateFrom);
-    const toRaw = toDate(f.dateTo);
-    const to = toRaw ? new Date(toRaw.getTime() + 24 * 3600 * 1000 - 1) : null; // inclusive end of day
-    if (from) q = q.ge('eventDate', from);
-    if (to) q = q.le('eventDate', to);
-    return q;
-}
-
-export const listQuotes = webMethod(Permissions.Admin, async (opts = {}) => {
-    const { filters, sort, paging } = opts;
-    const search = String(opts.search || '').trim().slice(0, 80);
-    const limit = Math.min(Math.max(parseInt(paging?.limit, 10) || 25, 1), 100);
-    const skip = Math.max(parseInt(paging?.skip, 10) || 0, 0);
-
-    let q = wixData.query('Quotes');
-    if (search) {
-        const digits = search.replace(/\D/g, '');
-        let sq = wixData.query('Quotes').contains('customerName', search)
-            .or(wixData.query('Quotes').contains('customerEmail', search))
-            .or(wixData.query('Quotes').contains('companyName', search));
-        if (digits.length >= 4) sq = sq.or(wixData.query('Quotes').contains('customerPhone', digits.replace(/^0/, '972')));
-        q = sq;
-    }
-    q = applyFilters(q, filters);
-
-    const field = SORTABLE.includes(sort?.field) ? sort.field : '_createdDate';
-    q = sort?.dir === 'asc' ? q.ascending(field) : q.descending(field);
-
-    const res = await q.skip(skip).limit(limit).find(SA);
-    return {
-        items: res.items.map((i) => pick(i, LIST_FIELDS)),
-        total: res.totalCount,
-        skip,
-        limit,
-    };
-});
-
-export const getQuote = webMethod(Permissions.Admin, async (quoteId) => {
-    const quote = await wixData.get('Quotes', quoteId, SA);
-    if (!quote) throw new Error('NOT_FOUND:ההצעה לא נמצאה.');
-    const [log, payments] = await Promise.all([
-        listQuoteLog(quoteId),
-        wixData.query('QuotePayments').eq('quoteId', quoteId).descending('_createdDate').find(SA),
-    ]);
-    return { quote, log, payments: payments.items };
-});
 
 export const updateQuote = webMethod(Permissions.Admin, async (quoteId, patch = {}, actorName) => {
     const quote = await wixData.get('Quotes', quoteId, SA);
@@ -139,6 +77,9 @@ export const updateQuote = webMethod(Permissions.Admin, async (quoteId, patch = 
         if (next.balanceDueDate && next.eventDate && next.balanceDueDate > next.eventDate) {
             throw new Error('VALIDATION:מועד תשלום היתרה חייב להיות עד תאריך האירוע.');
         }
+        if (!next.allowOnlinePayment && !next.allowBankTransfer) {
+            throw new Error('VALIDATION:חייב להישאר אמצעי תשלום אחד פעיל.');
+        }
         const amounts = computeAmounts(next);
         if (amounts.error) throw new Error(`VALIDATION:${amounts.error}`);
         const { error, ...fields } = amounts;
@@ -161,22 +102,6 @@ export const cancelQuote = webMethod(Permissions.Admin, async (quoteId, actorNam
     // Calendar release is added in the calendar phase.
     return { quote: saved };
 });
-
-/** Active employees for the dashboard's "who is working now" picker (self-declared actor name). */
-export const listActors = webMethod(Permissions.Admin, async () => {
-    const res = await wixData.query('Dashboard_Roles').eq('active', true).limit(200).find(SA);
-    return {
-        actors: res.items
-            .filter((r) => r.displayName)
-            .map((r) => ({ id: r._id, name: r.displayName }))
-            .sort((a, b) => a.name.localeCompare(b.name, 'he')),
-    };
-});
-
-export const getSettings = webMethod(Permissions.Admin, async () => ({
-    settings: await getQuoteSettings(),
-    addons: await loadAddonsCatalog(),
-}));
 
 export const saveSettings = webMethod(Permissions.Admin, async (patch = {}) => {
     const current = await getQuoteSettings();

@@ -22,7 +22,7 @@ export async function loadAddonsCatalog() {
     const res = await wixData.query('addons_events').limit(100).find(SA);
     return res.items.map((a) => ({
         id: a._id,
-        title: a.name || '',
+        title: (typeof a.name === 'string' ? a.name : a.name?.he || a.title || ''),
         price: Number(String(a.price || '').replace(/[^\d.]/g, '')) || 0,
         arrivalOffsetMinutes: Number(a.arrivalOffsetMinutes) || 0,
     }));

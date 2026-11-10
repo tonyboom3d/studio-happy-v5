@@ -2,6 +2,7 @@
 // Field keys: see birthdayLeads.web.js (FORM_FIELDS) and companyEventLeads.js (COLUMNS).
 import wixData from 'wix-data';
 import { auth } from '@wix/essentials';
+import { contacts } from 'wix-crm-backend';
 import { submissions } from '@wix/forms';
 import { toManyChatPhone, getQuoteSettings, loadAddonsCatalog, matchExtrasFromText } from 'backend/quoteCore.js';
 import { computeAmounts } from 'backend/quotePricing.js';
@@ -41,6 +42,32 @@ function parseDate(value) {
     return null;
 }
 
+/** Form phone field: a string, or an object with e164Phone / formattedPhone / phone. */
+function submissionPhone(value) {
+    if (value == null || value === '') return '';
+    if (typeof value === 'string' || typeof value === 'number') return toManyChatPhone(value);
+    if (typeof value === 'object') {
+        const raw = value.e164Phone || value.formattedPhone || value.phone || value.formatted || value.number || '';
+        return toManyChatPhone(typeof raw === 'string' ? raw : cell(raw));
+    }
+    return '';
+}
+
+/** Most birthday submissions store the phone on the contact, not in submissions.phone. */
+async function phoneFromContact(contactId) {
+    if (!contactId) return '';
+    try {
+        const c = await contacts.getContact(contactId);
+        const list = c?.info?.phones?.items || c?.info?.phones || [];
+        const phones = Array.isArray(list) ? list : [];
+        const primary = phones.find((p) => p.primary) || phones[0];
+        return toManyChatPhone(primary?.e164Phone || primary?.phone || c?.primaryInfo?.phone || '');
+    } catch (err) {
+        console.error('[quoteLeadsSync] contact phone lookup failed:', contactId, err?.message || err);
+        return '';
+    }
+}
+
 function parseTime(value) {
     const m = cell(value).match(/(\d{1,2}):(\d{2})/);
     return m ? `${m[1].padStart(2, '0')}:${m[2]}` : '';
@@ -52,7 +79,7 @@ function mapSubmission(formId, v, catalog) {
             eventType: 'birthday',
             customerName: cell(v.form_field),
             customerEmail: cell(v.form_field_1),
-            customerPhone: toManyChatPhone(cell(v.phone)),
+            customerPhone: submissionPhone(v.phone),
             eventDate: parseDate(v.form_field_3),
             requestedWorkshop: cell(v.form_field_4),
             participants: toInt(v.num_of_kids),
@@ -65,7 +92,7 @@ function mapSubmission(formId, v, catalog) {
         eventType: 'event',
         customerName: [cell(v.first_name_2b33), cell(v.form_field)].filter(Boolean).join(' '),
         customerEmail: cell(v.form_field_1),
-        customerPhone: toManyChatPhone(cell(v.form_field_2)),
+        customerPhone: submissionPhone(v.form_field_2),
         companyName: cell(v.form_field_4),
         companyRole: cell(v.form_field_3),
         participants: toInt(v.form_field_10),
@@ -80,7 +107,7 @@ function mapSubmission(formId, v, catalog) {
 }
 
 async function upsertLead(submission, ctx) {
-    const submissionId = submission?._id;
+    const submissionId = submission?._id || submission?.id;
     const formId = submission?.formId;
     if (!submissionId || (formId !== BIRTHDAY_FORM_ID && formId !== EVENT_FORM_ID)) return { skipped: true };
 
@@ -88,6 +115,7 @@ async function upsertLead(submission, ctx) {
     if (existing.items.length) return { skipped: true, duplicate: true };
 
     const mapped = mapSubmission(formId, submission.submissions || {}, ctx.catalog);
+    if (!mapped.customerPhone) mapped.customerPhone = await phoneFromContact(submission.contactId);
     const s = ctx.settings || {};
     const amounts = computeAmounts({
         basePrice: 0,

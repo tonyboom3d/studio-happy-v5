@@ -1,7 +1,7 @@
 // Dashboard page bridge: <quotes-dashboard> CE <-> backend/quotesAdmin.web.js. No business logic here.
+import { loadQuotesDashboard, listQuotes, getQuote } from 'backend/quotesRead.web.js';
 import {
-    listQuotes, getQuote, updateQuote, cancelQuote,
-    getSettings, listActors, syncQuoteLeads, listTemplates, saveTemplate, deleteTemplate,
+    updateQuote, cancelQuote, syncQuoteLeads, listTemplates, saveTemplate, deleteTemplate,
     previewQuote, prepareQuote, getQuoteLink, approveBankTransfer, rejectBankTransfer, sendQuote,
 } from 'backend/quotesAdmin.web.js';
 
@@ -9,10 +9,7 @@ const CE_ID = '#customElement2';
 
 // action type -> backend call (payload.actorName is self-declared by the CE)
 const handlers = {
-    init: async () => {
-        const [a, s] = await Promise.all([listActors(), getSettings()]);
-        return { actors: a.actors, addons: s.addons };
-    },
+    boot: (p) => loadQuotesDashboard({ search: p.search, filters: p.filters, sort: p.sort, paging: p.paging }),
     list: (p) => listQuotes({ search: p.search, filters: p.filters, sort: p.sort, paging: p.paging }),
     get: (p) => getQuote(p.id),
     update: (p) => updateQuote(p.id, p.patch, p.actorName),

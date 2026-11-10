@@ -38,6 +38,7 @@ h1{margin:0;font-size:22px;flex:1}
 .filters{display:flex;gap:8px;flex-wrap:wrap;align-items:end}
 .filters label{display:flex;flex-direction:column;font-size:12px;color:#475569;gap:3px}
 input,select,textarea{font:inherit;padding:7px 9px;border:1px solid #cbd5e1;border-radius:7px;background:#fff;color:#0f172a;min-width:0}
+select option{color:#0f172a;background:#fff}
 input:focus,select:focus,textarea:focus{outline:2px solid #bfdbfe;border-color:#2563eb}
 input:disabled,select:disabled,textarea:disabled{background:#f1f5f9;color:#64748b}
 button{font:inherit;cursor:pointer;border:1px solid #cbd5e1;background:#fff;color:#0f172a;border-radius:7px;padding:7px 12px}
@@ -71,6 +72,16 @@ td.wrapc{white-space:normal;max-width:220px}
 .grid label{display:flex;flex-direction:column;font-size:12px;color:#475569;gap:3px}
 .grid .full{grid-column:1/-1}
 .chk{flex-direction:row!important;align-items:center;gap:8px!important;font-size:14px!important;color:#0f172a!important}
+.addon-add{display:flex;gap:8px;align-items:center;margin-top:8px}.addon-add select{flex:1;min-width:180px;width:100%}
+.pay-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid #f1f5f9}
+.pay-row b{display:block;font-size:14px;color:#0f172a}.pay-row .sub{margin:0}
+.switch{position:relative;width:46px;height:26px;flex:none}
+.switch input{position:absolute;opacity:0;width:0;height:0}
+.switch .knob{position:absolute;inset:0;background:#cbd5e1;border-radius:999px;cursor:pointer;transition:.15s}
+.switch .knob:before{content:"";position:absolute;width:20px;height:20px;left:3px;top:3px;background:#fff;border-radius:50%;transition:.15s}
+.switch input:checked+.knob{background:#2563eb}
+.switch input:checked+.knob:before{transform:translateX(20px)}
+.switch input:disabled+.knob{opacity:.5;cursor:not-allowed}
 .sum{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:10px}
 .sum div{background:#f1f5f9;border-radius:8px;padding:8px;text-align:center}.sum b{display:block;font-size:16px}
 .extra{display:flex;gap:8px;align-items:center;padding:5px 0;border-bottom:1px dashed #e2e8f0}.extra span{flex:1}
@@ -92,6 +103,7 @@ const dmyTime = (v) => {
 const money = (n) => `₪${(Number(n) || 0).toLocaleString('he-IL')}`;
 const phoneDisp = (p) => { const d = String(p || '').replace(/\D/g, ''); return d.startsWith('972') ? `0${d.slice(3, 5)}-${d.slice(5)}` : (p || '—'); };
 const badge = (map, group, key) => `<span class="badge ${BADGE[group]?.[key] || 'gray'}">${esc(map[key] || key || '—')}</span>`;
+const paySwitch = (key, title, hint, draft, dis) => `<div class="pay-row"><div><b>${title}</b><div class="sub">${hint}</div></div><label class="switch"><input type="checkbox" data-f="${key}"${draft[key] ? ' checked' : ''}${dis}><span class="knob"></span></label></div>`;
 const errText = (e) => { const m = String(e?.message || e || 'שגיאה'); const i = m.indexOf(':'); return /^[A-Z_]+$/.test(m.slice(0, i)) ? m.slice(i + 1) : m; };
 
 const MOCK_ROWS = [
@@ -149,7 +161,7 @@ class QuotesDashboard extends HTMLElement {
 
     mockReq(type, payload) {
         const ok = (d) => new Promise((r) => setTimeout(() => r(d), 150));
-        if (type === 'init') return ok({ actors: [{ id: 'a1', name: 'מנהל בדיקה' }], addons: [{ id: 'x1', title: 'ברד', price: 200 }] });
+        if (type === 'boot' || type === 'init') return ok({ actors: [{ id: 'a1', name: 'מנהל בדיקה' }], addons: [{ id: 'x1', title: 'ברד', price: 200 }], items: MOCK_ROWS, total: MOCK_ROWS.length });
         if (type === 'list') return ok({ items: MOCK_ROWS, total: MOCK_ROWS.length });
         if (type === 'get') return ok({ quote: MOCK_ROWS.find((r) => r._id === payload.id) || MOCK_ROWS[0], log: [], payments: [] });
         if (type === 'templates') return ok({ templates: [], placeholders: ['customerName', 'totalAmount'] });
@@ -161,13 +173,19 @@ class QuotesDashboard extends HTMLElement {
     actorName() { return (this.s.actors.find((a) => a.id === this.s.actorId) || {}).name || ''; }
 
     async boot() {
-        try {
-            const init = await this.req('init');
-            this.s.actors = init.actors || [];
-            this.s.addons = init.addons || [];
-        } catch (err) { this.s.error = errText(err); }
+        this.s.loading = true;
         this.render();
-        this.load();
+        try {
+            const res = await this.req('boot', {
+                search: this.s.search, sort: this.s.sort, paging: { limit: this.s.limit, skip: 0 }, filters: {},
+            });
+            this.s.actors = res.actors || [];
+            this.s.addons = res.addons || [];
+            this.s.items = res.items || [];
+            this.s.total = res.total || 0;
+        } catch (err) { this.s.error = errText(err); }
+        this.s.loading = false;
+        this.render();
     }
 
     async load() {
@@ -203,6 +221,11 @@ class QuotesDashboard extends HTMLElement {
 
     readField(t) {
         const q = this.s.detail.draft;
+        const pay = t.dataset.f === 'allowOnlinePayment' || t.dataset.f === 'allowBankTransfer';
+        if (pay && t.type === 'checkbox') {
+            const other = t.dataset.f === 'allowOnlinePayment' ? 'allowBankTransfer' : 'allowOnlinePayment';
+            if (!t.checked && !q[other]) { t.checked = true; this.toast('חייב להישאר אמצעי תשלום אחד פעיל'); return; }
+        }
         q[t.dataset.f] = t.type === 'checkbox' ? t.checked : t.value;
     }
 
@@ -493,7 +516,10 @@ class QuotesDashboard extends HTMLElement {
         const f = (key, label, type = 'text', extra = '') => `<label>${label}<input type="${type}" data-f="${key}" value="${esc(d[key] ?? '')}"${dis} ${extra}></label>`;
         const chk = (key, label) => `<label class="chk"><input type="checkbox" data-f="${key}"${d[key] ? ' checked' : ''}${dis}> ${label}</label>`;
         const extras = d.extras.map((x, i) => `<div class="extra"><span>${esc(x.title)}</span><b>${money(x.price)}</b>${locked ? '' : `<button data-act="delExtra" data-i="${i}">✕</button>`}</div>`).join('') || '<div class="sub">אין תוספות</div>';
-        const addOpts = this.s.addons.map((a) => `<option value="${esc(a.id)}">${esc(a.title)} (${money(a.price)})</option>`).join('');
+        const addOpts = this.s.addons.map((a) => {
+            const title = a.title || a.name || '';
+            return `<option value="${esc(a.id)}" style="color:#0f172a;background:#fff">${esc(title)} (${money(a.price)})</option>`;
+        }).join('');
         const log = dt.log.map((l) => `<li><span>${L.actor[l.actorType] || ''}</span><div><b>${esc(L.action[l.action] || l.action)}</b> <span class="sub">${esc(l.actorName || '')} · ${dmyTime(l._createdDate)}</span></div></li>`).join('') || '<li class="sub">אין פעולות</li>';
         const pays = dt.payments.map((p) => `<li><div><b>${money(p.amount)}</b> · ${esc(p.stage)} · ${esc(L.method[p.method] || p.method)} · <span class="badge ${p.status === 'paid' ? 'green' : p.status === 'failed' ? 'red' : 'amber'}">${esc(p.status)}</span> <span class="sub">${dmyTime(p.paidAt || p._createdDate)}</span></div></li>`).join('') || '<li class="sub">אין תשלומים</li>';
         return `<div class="mask" data-act="close"></div><div class="drawer">
@@ -510,11 +536,13 @@ class QuotesDashboard extends HTMLElement {
                 <label>סוג מקדמה<select data-f="depositType"${dis}><option value="percent"${d.depositType !== 'fixed' ? ' selected' : ''}>אחוז</option><option value="fixed"${d.depositType === 'fixed' ? ' selected' : ''}>סכום קבוע</option></select></label>${f('depositValue', 'ערך מקדמה', 'number', 'min="0"')}
                 ${f('balanceDueDate', 'מועד אחרון לתשלום יתרה', 'date')}${f('expiresAt', 'תוקף ההצעה', 'date')}</div>
                 <div style="margin-top:10px"><b>תוספות</b>${extras}
-                  ${locked ? '' : `<div class="grid" style="margin-top:8px"><label>מהקטלוג<span style="display:flex;gap:6px"><select id="catalogSel" style="flex:1">${addOpts}</select><button data-act="addCatalogExtra">הוסף</button></span></label>
-                  <label>תוספת מותאמת<span style="display:flex;gap:6px"><input id="customTitle" placeholder="שם" style="flex:1"><input id="customPrice" type="number" min="0" placeholder="₪" style="width:80px"><button data-act="addCustomExtra">הוסף</button></span></label></div>`}</div>
+                  ${locked ? '' : `<div class="addon-add"><select id="catalogSel"><option value="">בחרו תוספת</option>${addOpts || '<option value="" disabled>אין תוספות בקטלוג</option>'}</select><button data-act="addCatalogExtra">הוסף</button></div>
+                  <label class="sub" style="display:flex;gap:6px;align-items:center;margin-top:8px">תוספת מותאמת<input id="customTitle" placeholder="שם" style="flex:1"><input id="customPrice" type="number" min="0" placeholder="₪" style="width:80px"><button data-act="addCustomExtra">הוסף</button></label>`}</div>
                 <div class="sum"><div><span class="sub">סה"כ</span><b>${money(q.totalAmount)}</b></div><div><span class="sub">מקדמה</span><b>${money(q.depositAmount)}</b></div><div><span class="sub">יתרה</span><b>${money(q.balanceAmount)}</b></div><div><span class="sub">שולם</span><b>${money(q.paidAmount)}</b></div></div>
                 <div class="sub" style="margin-top:6px">הסכומים מחושבים בשרת בעת השמירה.</div></div>
-              <div class="sec"><h3>אמצעי תשלום מותרים</h3>${chk('allowOnlinePayment', 'אונליין (ביט / אשראי / Apple Pay)')}${chk('allowBankTransfer', 'העברה בנקאית')}
+              <div class="sec"><h3>אמצעי תשלום מותרים</h3>
+                ${paySwitch('allowOnlinePayment', 'תשלום מקוון', 'ביט / אשראי / Apple Pay', d, dis)}
+                ${paySwitch('allowBankTransfer', 'העברה בנקאית', 'הלקוח מעלה אסמכתא לאישור', d, dis)}
                 <div class="sub">נבחר ע"י הלקוח: ${esc(L.method[q.selectedPaymentMethod] || '—')} · ${badge(L.pay, 'pay', q.paymentStatus)} · חתימה: ${badge(L.sig, 'sig', q.signatureStatus)}</div></div>
               <div class="sec"><h3>הערות פנימיות</h3><textarea rows="3" style="width:100%" data-f="notes">${esc(d.notes || '')}</textarea></div>
               <div class="sec"><h3>תשלומים</h3><ul class="tl">${pays}</ul>

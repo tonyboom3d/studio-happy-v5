@@ -85,6 +85,13 @@ const RESCHEDULE_SUMMARY_FLOW_NS = 'content20260923100948_424304';
 // Pre-workshop reminder (~48h) — dedicated flow with approved Utility template.
 const WORKSHOP_REMINDER_FLOW_NS = 'content20260923104716_620983';
 
+// Manager-audience WhatsApp only. Customer messages (orders, reminders, etc.) still send.
+const BLOCKED_MANAGER_SUBSCRIBER_IDS = new Set(['523269268']);
+
+function isBlockedManagerSubscriber(subscriberId) {
+    return BLOCKED_MANAGER_SUBSCRIBER_IDS.has(String(subscriberId || '').trim());
+}
+
 // Custom fields used by the staff/manager flow's routing conditions.
 const STAFF_ACTION_KEY_FIELD = 'action_key';
 const STAFF_AUDIENCE_FIELD = 'staff_audience';
@@ -1408,6 +1415,11 @@ export async function sendStaffManyChat(actionKey, phone, audience, vars = {}) {
         const subscriber = await findOrCreateSubscriber({ phone: normalizedPhone });
         if (!subscriber?.id) {
             throw new Error('No subscriber id after find/create');
+        }
+
+        if (audience === 'manager' && isBlockedManagerSubscriber(subscriber.id)) {
+            console.warn('[ManyChat] manager notification blocked. subscriberId:', subscriber.id, 'actionKey:', actionKey);
+            return { sent: false, reason: 'blocked-manager-subscriber', subscriberId: subscriber.id };
         }
 
         const fields = buildStaffCustomFields(actionKey, audience, vars);

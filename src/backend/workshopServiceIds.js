@@ -26,7 +26,11 @@ export const WORKSHOP_SERVICE_IDS = {
     '7e695ead-0363-4ede-9519-c2649674d2d4',
     'e3190974-9abc-4c6f-970f-98dad6032553',
   ],
-  ceramics: ['ad89914a-1845-48c6-804d-544cd17f179b'],
+  ceramics: [
+    'ad89914a-1845-48c6-804d-544cd17f179b',
+    'e32fde41-610e-40b1-97d4-9debbe11f35e', // סדנת צביעה בקרמיקה סופ"ש
+    '3a17b10a-0862-4b22-9480-2b5d7b0582cd', // סדנת צביעה בקרמיקה שישי
+  ],
 };
 
 /** Extra candles service — its slots are offered only through 2026-10-29 (Israel). */

@@ -62,14 +62,21 @@ function isCandlesServiceId(serviceId) {
     return !!serviceId && CANDLES_ID_SET.has(serviceId);
 }
 
-// Ceramics Workshop ("סדנת קרמיקה") — a single consolidated Wix Bookings
-// service. Ticket pricing ("יחיד" / "הורה וילד") comes from variants per
-// day-of-week; "כלי קרמיקה נוסף" is a Wix add-on (see CERAMICS_EXTRA_ITEM_*).
-// The second (legacy) ID is kept only so historical orders still classify
-// as ceramics; it is no longer used for new bookings/pricing.
+// Ceramics Workshop ("סדנת קרמיקה"). The calendar also lists the Friday
+// and weekend services. Each service has its own day-of-week ticket
+// variants ("יחיד" / "הורה וילד"); "כלי קרמיקה נוסף" is a Wix add-on
+// (see CERAMICS_EXTRA_ITEM_*). The legacy ID is kept only so historical
+// orders still classify as ceramics.
 const CERAMICS_SERVICE_ID = 'ad89914a-1845-48c6-804d-544cd17f179b';
+const CERAMICS_WEEKEND_SERVICE_ID = 'e32fde41-610e-40b1-97d4-9debbe11f35e';
+const CERAMICS_FRIDAY_SERVICE_ID = '3a17b10a-0862-4b22-9480-2b5d7b0582cd';
+const CERAMICS_BOOKABLE_SERVICE_IDS = [
+    CERAMICS_SERVICE_ID,
+    CERAMICS_WEEKEND_SERVICE_ID,
+    CERAMICS_FRIDAY_SERVICE_ID,
+];
 const CERAMICS_LEGACY_SERVICE_IDS = ['06508cd0-92ec-49d9-bd27-a3d4999afc89'];
-const CERAMICS_ID_SET = new Set([CERAMICS_SERVICE_ID, ...CERAMICS_LEGACY_SERVICE_IDS]);
+const CERAMICS_ID_SET = new Set([...CERAMICS_BOOKABLE_SERVICE_IDS, ...CERAMICS_LEGACY_SERVICE_IDS]);
 
 /** True if serviceId belongs to the ceramics ("סדנת קרמיקה") workshop (current or legacy). */
 function isCeramicsServiceId(serviceId) {
@@ -79,7 +86,7 @@ function isCeramicsServiceId(serviceId) {
 /** Resolve the full sibling-service-id group (used for multi-service availability/pricing) for a given serviceId. */
 function getServiceIdsGroupFor(serviceId) {
     if (isCandlesServiceId(serviceId)) return [...ALL_CANDLES_SERVICE_IDS];
-    if (isCeramicsServiceId(serviceId)) return [CERAMICS_SERVICE_ID];
+    if (isCeramicsServiceId(serviceId)) return [...CERAMICS_BOOKABLE_SERVICE_IDS];
     return Object.values(TUFTING_SERVICE_IDS);
 }
 
@@ -747,8 +754,8 @@ const createAndCheckoutInner = async (orderData) => {
             };
         }
     }
-    // קרמיקה: המחיר תלוי ביום בשבוע של הסלוט (ולא בסרוויס — יש סרוויס אחד
-    // מאוחד עם ticket variants לפי יום). נפתור את יום השבוע כאן, לפני חישוב basePrice.
+    // קרמיקה: המחיר תלוי ביום בשבוע של הסלוט, מתוך ה-variants של השירות
+    // שנבחר (ראשי / שישי / סופ"ש). נפתור את יום השבוע כאן, לפני חישוב basePrice.
     let ceramicsDayPricing = null;
     let ceramicsDayEnum = null;
     let ceramicsSlotStartIso = null;
@@ -2449,19 +2456,20 @@ async function getServicePricingCached(serviceIds) {
         targetServiceIds = expandCandlesServiceIds(targetServiceIds, new Date());
     }
 
-    // Ceramics: pricing comes dynamically from the single consolidated
-    // service's ticket variants (per day-of-week), never from the generic
-    // Tufting/Candles variant parser below.
+    // Ceramics: each bookable service has its own day-of-week ticket variants.
     if (targetServiceIds.every(isCeramicsServiceId)) {
-        const cacheKey = `ceramics:${CERAMICS_SERVICE_ID}`;
+        const ids = targetServiceIds.filter((id) => CERAMICS_BOOKABLE_SERVICE_IDS.includes(id));
+        const fetchIds = ids.length ? ids : [CERAMICS_SERVICE_ID];
+        const cacheKey = `ceramics:${[...fetchIds].sort().join(',')}`;
         const now = Date.now();
         const cached = _servicePricingCache.get(cacheKey);
         if (cached && (now - cached.at) < PRICING_CACHE_TTL_MS) {
-            return { [CERAMICS_SERVICE_ID]: cached.data };
+            return cached.data;
         }
-        const pricing = await _fetchCeramicsPricingInternal(CERAMICS_SERVICE_ID);
+        const entries = await Promise.all(fetchIds.map(async (id) => [id, await _fetchCeramicsPricingInternal(id)]));
+        const pricing = Object.fromEntries(entries);
         _servicePricingCache.set(cacheKey, { data: pricing, at: now });
-        return { [CERAMICS_SERVICE_ID]: pricing };
+        return pricing;
     }
 
     const cacheKey = [...targetServiceIds].sort().join(',');

@@ -76,6 +76,8 @@ function isCandlesOrder(order) {
 // Keep in sync with CERAMICS_SERVICE_IDS in bookingService.web.js
 const CERAMICS_SERVICE_ID_SET = new Set([
     'ad89914a-1845-48c6-804d-544cd17f179b',
+    'e32fde41-610e-40b1-97d4-9debbe11f35e',
+    '3a17b10a-0862-4b22-9480-2b5d7b0582cd',
     '06508cd0-92ec-49d9-bd27-a3d4999afc89',
 ]);
 

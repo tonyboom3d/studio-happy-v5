@@ -3,13 +3,16 @@ import { local } from 'wix-storage-frontend';
 import {
     createAndCheckout, getCourseSessions, getServicePricing,
 } from 'backend/bookingService.web.js';
-import { WORKSHOP_SERVICE_IDS } from 'backend/workshopServiceIds.js';
 
-// Ceramics Workshop ("סדנת קרמיקה") plus the Friday and weekend services.
-// Thin Velo bridge for the "ceramics" React route. Kept separate
-// from the Tufting/Candles pages so those flows are never touched by this file.
-const CERAMICS_SERVICE_ID_LIST = WORKSHOP_SERVICE_IDS.ceramics;
-const CERAMICS_SERVICE_ID = CERAMICS_SERVICE_ID_LIST[0];
+// Ceramics Workshop ("סדנת קרמיקה") plus Friday and weekend services.
+// IDs are local: a page can import only .web.js modules, not workshopServiceIds.js.
+// Keep in sync with WORKSHOP_SERVICE_IDS.ceramics.
+const CERAMICS_SERVICE_ID = 'ad89914a-1845-48c6-804d-544cd17f179b';
+const CERAMICS_SERVICE_ID_LIST = [
+    CERAMICS_SERVICE_ID,
+    'e32fde41-610e-40b1-97d4-9debbe11f35e', // סופ"ש
+    '3a17b10a-0862-4b22-9480-2b5d7b0582cd', // שישי
+];
 
 // GitHub Pages caches index.html — bump v= when bookingflow changes.
 const BOOKINGFLOW_IFRAME_SRC =

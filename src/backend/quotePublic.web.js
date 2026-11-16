@@ -12,10 +12,9 @@ import { computeViewState, TOKEN_RE } from 'backend/quoteState.js';
 import wixPayBackend from 'wix-pay-backend';
 import { notifyManagers } from 'backend/quoteNotify.js';
 import { QUOTE_ITEM_PREFIX, STAGE_LABELS, nextPayment } from 'backend/quotePayments.js';
-import { guard } from 'backend/quoteErrors.js';
+import { quoteError } from 'backend/quoteErrors.js';
 import { proofRows } from 'backend/quoteMedia.js';
 
-const guardPublic = (fn) => guard(fn, { exposeRaw: false });
 const SA = { suppressAuth: true, suppressHooks: true };
 const VIEW_LOG_THROTTLE_MS = 10 * 60 * 1000;
 const MAX_SIGNATURE_B64 = 280000;
@@ -77,7 +76,8 @@ async function buildContractHtml(q) {
     return out.error ? '' : out.html;
 }
 
-export const getQuoteByToken = webMethod(Permissions.Anyone, guardPublic(async (token) => {
+export const getQuoteByToken = webMethod(Permissions.Anyone, async (token) => {
+    try {
     const q = await findByToken(token);
     const viewState = computeViewState(q);
     if (viewState === 'not_found') return { viewState: 'not_found' };
@@ -92,10 +92,12 @@ export const getQuoteByToken = webMethod(Permissions.Anyone, guardPublic(async (
         dto.proofs = proofRows(rows, q).map(({ id, ...r }) => r);
     }
     return dto;
-}));
+    } catch (err) { return quoteError(err, { exposeRaw: false }); }
+});
 
 /** Creates the Wix Pay payment from stored amounts only; the page then opens the Wix Pay window. */
-export const createQuotePayment = webMethod(Permissions.Anyone, guardPublic(async (token) => {
+export const createQuotePayment = webMethod(Permissions.Anyone, async (token) => {
+    try {
     const q = await findByToken(token);
     const viewState = computeViewState(q);
     if (!['signed_choose_payment', 'balance_due'].includes(viewState)) throw new Error('STATE:אין כרגע תשלום פתוח בהצעה זו.');
@@ -119,13 +121,15 @@ export const createQuotePayment = webMethod(Permissions.Anyone, guardPublic(asyn
     }, SA);
     await writeQuoteLog(q._id, 'payment_started', { stage: step.stage, amount: step.amount }, customerActor(q));
     return { paymentId: payment.id, stage: step.stage };
-}));
+    } catch (err) { return quoteError(err, { exposeRaw: false }); }
+});
 
 const PROOF_MIME = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'application/pdf': 'pdf' };
 const MAX_PROOF_B64 = 4_500_000;
 
 /** Bank transfer receipt: client sends a (compressed) data URL; stored via Media Manager. */
-export const submitTransferProof = webMethod(Permissions.Anyone, guardPublic(async (token, input = {}) => {
+export const submitTransferProof = webMethod(Permissions.Anyone, async (token, input = {}) => {
+    try {
     const q = await findByToken(token);
     const viewState = computeViewState(q);
     const payable = viewState === 'awaiting_transfer_proof' || (viewState === 'balance_due' && q.selectedPaymentMethod === 'bank_transfer');
@@ -147,10 +151,12 @@ export const submitTransferProof = webMethod(Permissions.Anyone, guardPublic(asy
     await writeQuoteLog(q._id, 'transfer_proof_uploaded', { stage: step.stage, amount: step.amount }, customerActor(q));
     await notifyManagers('manager_quote_transfer_proof', q, { amount: step.amount });
     return { ok: true };
-}));
+    } catch (err) { return quoteError(err, { exposeRaw: false }); }
+});
 
 /** First view flips sent -> viewed; log throttled to one entry per 10 minutes. */
-export const recordView = webMethod(Permissions.Anyone, guardPublic(async (token) => {
+export const recordView = webMethod(Permissions.Anyone, async (token) => {
+    try {
     const q = await findByToken(token);
     if (!q || !['sent', 'viewed', 'signed'].includes(q.status)) return { ok: false };
     const last = q.lastViewLoggedAt ? new Date(q.lastViewLoggedAt).getTime() : 0;
@@ -164,7 +170,8 @@ export const recordView = webMethod(Permissions.Anyone, guardPublic(async (token
         if (next.lastViewLoggedAt !== q.lastViewLoggedAt) await writeQuoteLog(q._id, 'viewed', {}, customerActor(q));
     }
     return { ok: true };
-}));
+    } catch (err) { return quoteError(err, { exposeRaw: false }); }
+});
 
 async function storeSignature(dataUrl, quoteNumber) {
     const m = /^data:image\/png;base64,([A-Za-z0-9+/=]+)$/.exec(String(dataUrl || ''));
@@ -177,7 +184,8 @@ async function storeSignature(dataUrl, quoteNumber) {
     return up.fileUrl;
 }
 
-export const signQuote = webMethod(Permissions.Anyone, guardPublic(async (token, input = {}) => {
+export const signQuote = webMethod(Permissions.Anyone, async (token, input = {}) => {
+    try {
     const q = await findByToken(token);
     if (computeViewState(q) !== 'ready_to_sign') throw new Error('STATE:לא ניתן לחתום על הצעה זו כרגע. רעננו את הדף.');
     if (input.approved !== true) throw new Error('VALIDATION:יש לאשר את תנאי ההצעה.');
@@ -230,4 +238,5 @@ export const signQuote = webMethod(Permissions.Anyone, guardPublic(async (token,
     notifyManagers('manager_quote_signed', saved);
     // Conflict detection + calendar block: added in the calendar phase.
     return { viewState: computeViewState(saved) };
-}));
+    } catch (err) { return quoteError(err, { exposeRaw: false }); }
+});

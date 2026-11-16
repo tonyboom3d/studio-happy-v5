@@ -7,7 +7,7 @@ const MAX_POLLS = 10;
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
 $w.onReady(async () => {
-    const el = $w('CustomElement')[0];
+    const el = $w('#customElement2');
     if (!el) return;
     el.setAttribute('mode', 'thanks');
     const token = wixLocation.query.id || '';

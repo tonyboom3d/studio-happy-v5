@@ -143,7 +143,110 @@ td.wrapc{white-space:normal;max-width:220px}
 .modal{position:fixed;top:5vh;left:50%;transform:translateX(-50%);width:min(860px,96%);max-height:90vh;overflow:auto;background:#f8fafc;border-radius:12px;z-index:30;box-shadow:0 12px 40px rgba(0,0,0,.3)}
 .lockmsg{background:#fef3c7;color:#92400e;border-radius:8px;padding:8px 10px;margin-bottom:10px;font-size:13px}
 @media(max-width:700px){.grid,.price-top,.price .dates{grid-template-columns:1fr}.sum{grid-template-columns:repeat(2,1fr)}}
+.drawer{display:flex;flex-direction:column;overflow:hidden;background:#f8fafc}
+.drawer .db{flex:1;overflow:auto;padding:16px}
+.tabs{display:flex;gap:4px;padding:8px 10px 0;background:#fff;border-bottom:1px solid #e2e8f0;overflow-x:auto;flex:none}
+.tab{border:0;border-bottom:3px solid transparent;border-radius:8px 8px 0 0;background:transparent;padding:9px 12px;font-size:15px;font-weight:600;color:#64748b;white-space:nowrap;position:relative}
+.tab:hover{background:#f1f5f9;color:#0f172a}
+.tab.on{color:#2563eb;border-bottom-color:#2563eb;background:#eff6ff}
+.tab .dot{position:absolute;top:6px;left:5px;width:8px;height:8px;border-radius:50%;background:#f59e0b}
+.pane{background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:16px;margin-bottom:12px}
+.pane-h{margin:0 0 12px;font-size:17px;font-weight:700;color:#0f172a;display:flex;align-items:center;gap:8px}
+.drawer .grid{gap:12px 14px}
+.drawer .grid label,.fl{display:flex;flex-direction:column;gap:5px;font-size:14px;font-weight:600;color:#334155}
+.drawer :where(input:not([type=checkbox]):not([type=radio]),select,textarea){font-size:16px;padding:10px 12px;border:1px solid #e2e8f0;border-radius:10px;background:#fff;transition:border-color .15s,box-shadow .15s;width:100%;font-weight:400;color:#0f172a}
+.drawer .ws-btn{border-radius:10px;padding:10px 12px;border-color:#e2e8f0;font-size:16px}
+.drawer :where(input:not([type=checkbox]):not([type=radio]),select,textarea):hover{border-color:#cbd5e1}
+.drawer :where(input,select,textarea):focus{outline:0;border-color:#3b82f6;box-shadow:0 0 0 3px rgba(59,130,246,.18)}
+.drawer :where(input,select,textarea):disabled{background:#f8fafc;color:#64748b}
+.drawer .ex-custom #customTitle{flex:1;min-width:0}
+.foot{flex:none;position:static;flex-direction:column;gap:8px;padding:10px 14px}
+.stepnav{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.stepnav .sub{font-size:14px}
+.stepnav button{min-width:96px;font-weight:600}
+.acts{display:flex;gap:6px;flex-wrap:wrap;justify-content:space-between;border-top:1px solid #f1f5f9;padding-top:8px}
+.acts span{display:flex;gap:6px;flex-wrap:wrap}
+.exw{position:relative;margin-top:10px}
+.ex-btn{width:100%;text-align:right;display:flex;justify-content:space-between;align-items:center;border:1px dashed #94a3b8;border-radius:10px;padding:10px 12px;font-weight:600;color:#1d4ed8;background:#f8fafc}
+.ex-pop{position:absolute;inset-inline:0;top:calc(100% + 4px);background:#fff;border:1px solid #e2e8f0;border-radius:12px;box-shadow:0 12px 30px rgba(15,23,42,.15);z-index:5;overflow:hidden}
+.ex-list{max-height:220px;overflow:auto}
+.ex-opt{display:flex;justify-content:space-between;width:100%;border:0;border-radius:0;border-bottom:1px solid #f1f5f9;padding:10px 12px;text-align:right;font-size:15px}
+.ex-opt:hover{background:#eff6ff}.ex-opt:disabled{opacity:.55}
+.ex-custom{display:flex;gap:6px;padding:10px;background:#f8fafc;border-top:1px solid #e2e8f0}
+.drawer .ex-custom input{padding:8px 10px;font-size:15px}
+.ex-custom input[type=number]{width:96px;flex:none}
+.xrow{display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid #f1f5f9}
+.xrow .nm{flex:1;font-size:15px}.xrow .nm small{display:block;color:#94a3b8;font-size:12px}
+.xprice{display:flex;align-items:center;border:1px solid #e2e8f0;border-radius:10px;overflow:hidden;width:120px;flex:none;background:#fff}
+.xprice span{padding:0 8px;color:#64748b;background:#f8fafc;align-self:stretch;display:flex;align-items:center}
+.drawer .xprice input{border:0;border-radius:0;padding:7px 8px;font-size:15px;box-shadow:none}
+.xrow .x{border:0;background:transparent;color:#94a3b8;font-size:16px;padding:4px}.xrow .x:hover{color:#dc2626}
+.pgrid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.dep{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px;border:1px solid #e2e8f0;border-radius:12px;margin-top:12px}
+.dep b{font-size:15px}.dep .sub{font-size:13px}
+.depv{display:flex;align-items:center;gap:8px;margin-top:10px}
+.drawer .depv input{width:110px;flex:none;border-start-end-radius:0;border-end-end-radius:0}
+.depv .seg button:last-child{border-start-end-radius:10px;border-end-end-radius:10px}
+.depv .fl{white-space:nowrap}
+.depv .seg button{padding:8px 12px}
+.psum{border-radius:14px;border:1px solid #e2e8f0;overflow:hidden;margin-top:4px}
+.psum .ln{display:flex;justify-content:space-between;padding:8px 14px;font-size:15px;color:#334155}
+.psum .ln s{color:#94a3b8;margin-inline-end:6px}
+.psum .tot{display:flex;justify-content:space-between;align-items:center;padding:12px 14px;background:#0f172a;color:#fff;font-size:16px}
+.psum .tot b{font-size:22px}
+.split{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:10px}
+.split.one{grid-template-columns:1fr}
+.split div{border-radius:10px;padding:10px 12px;background:#f0fdf4;border:1px solid #dcfce7}
+.split div.bal{background:#fffbeb;border-color:#fde68a}
+.split span{display:block;font-size:13px;color:#475569}.split b{display:block;font-size:19px}.split small{color:#64748b;font-size:12px}
+.psum .paid{padding:0 14px 10px;font-size:14px;color:#15803d;font-weight:600}
+.cal-t{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin-bottom:12px}
+.ct{display:flex;flex-direction:column;align-items:flex-start;gap:2px;text-align:right;border:2px solid #e2e8f0;border-radius:12px;padding:8px 10px;background:#fff;position:relative}
+.ct.on{border-color:var(--c);background:color-mix(in srgb,var(--c) 8%,#fff)}
+.ct span{font-size:13px;color:#64748b}.ct b{font-size:15px}
+.ct .clr{position:absolute;top:4px;left:6px;border:0;background:transparent;color:#94a3b8;padding:0 2px;font-size:14px}
+.ct .clr:hover{color:#dc2626}
+.ev{--c:#7c3aed}.bal{--c:#d97706}.exp{--c:#2563eb}
+.cal{border:1px solid #e2e8f0;border-radius:14px;padding:10px}
+.cal-h{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+.cal-h b{font-size:16px}.cal-h button{border:0;font-size:18px;padding:4px 10px}
+.cal-g{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+.cal-g .wd{text-align:center;font-size:12px;color:#94a3b8;font-weight:600;padding:4px 0}
+.day{position:relative;height:40px;border:1px solid transparent;border-radius:10px;background:#fff;font-size:15px;padding:0;display:flex;align-items:center;justify-content:center;flex-direction:column}
+.day:hover:not(:disabled){background:#eff6ff;border-color:#bfdbfe}
+.day:disabled{color:#cbd5e1;background:transparent;text-decoration:line-through}
+.day.today{border-color:#94a3b8;font-weight:700}
+.day.m-ev{background:#7c3aed;color:#fff}.day.m-bal{background:#d97706;color:#fff}.day.m-exp{background:#2563eb;color:#fff}
+.day.sel{box-shadow:0 0 0 3px color-mix(in srgb,var(--c) 40%,transparent)}
+.day .dots{display:flex;gap:2px;position:absolute;bottom:3px}
+.day .dots i{width:5px;height:5px;border-radius:50%;background:var(--c)}
+.day.m-ev .dots i,.day.m-bal .dots i,.day.m-exp .dots i{background:#fff}
+.legend{display:flex;gap:12px;flex-wrap:wrap;margin-top:8px;font-size:13px;color:#475569}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:3px;background:var(--c);margin-inline-end:4px;vertical-align:middle}
+.tline{list-style:none;margin:0;padding:0}
+.tline li{display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-bottom:1px dashed #e2e8f0}
+.tline li:last-child{border-bottom:0}
+.tline .ic{width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:#f1f5f9;flex:none}
+.tline span{display:block;font-size:13px;color:#64748b}.tline b{font-size:15px}
+@media(max-width:700px){.pgrid,.split{grid-template-columns:1fr}.tab{padding:8px 9px;font-size:14px}}
 `;
+
+const STEPS = [
+    ['customer', 'פרטי לקוח', '👤'], ['event', 'האירוע', '🎨'], ['dates', 'תאריכים', '📅'],
+    ['pricing', 'תמחור', '💰'], ['payment', 'תשלום', '💳'], ['activity', 'מעקב', '🕘'],
+];
+const WEEKDAYS = ['א', 'ב', 'ג', 'ד', 'ה', 'ו', 'ש'];
+const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
+/** Display-only preview; the server recomputes amounts on save. */
+const previewAmounts = (d) => {
+    const extras = round2((d.extras || []).reduce((s, x) => s + (Number(x.price) || 0), 0));
+    const base = Number(d.basePrice) || 0;
+    const ov = d.priceOverride === '' || d.priceOverride === null || d.priceOverride === undefined ? null : Number(d.priceOverride);
+    const total = round2(ov ?? base + extras);
+    const v = d.hasDeposit ? Number(d.depositValue) || 0 : 0;
+    const dep = round2(d.depositType === 'fixed' ? Math.min(v, total) : (total * v) / 100);
+    return { base, extras, ov, total, dep, bal: round2(total - dep) };
+};
 
 const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const ymd = (v) => { if (!v) return ''; const d = new Date(v); return Number.isNaN(d.getTime()) ? '' : d.toISOString().slice(0, 10); };
@@ -344,6 +447,11 @@ class QuotesDashboard extends HTMLElement {
     // ---------- events ----------
     onInput(e) {
         const t = e.target;
+        if (t.dataset.xp !== undefined && this.s.detail?.draft && !this.isLocked()) {
+            const x = this.s.detail.draft.extras[Number(t.dataset.xp)];
+            if (x) { x.price = Math.max(0, Number(t.value) || 0); this.refreshSum(); }
+            return;
+        }
         if (t.dataset.f && this.s.detail?.draft) this.readField(t);
         if (t.dataset.t && this.s.modal?.tpl) this.s.modal.tpl[t.dataset.t] = t.type === 'checkbox' ? t.checked : t.value;
         if (t.dataset.c && this.s.modal?.tpl) this.s.modal.tpl.config[t.dataset.c] = t.value;
@@ -388,6 +496,16 @@ class QuotesDashboard extends HTMLElement {
             return;
         }
         q[t.dataset.f] = t.type === 'checkbox' ? t.checked : t.value;
+        if (t.dataset.f === 'hasDeposit') {
+            if (q.hasDeposit && !(Number(q.depositValue) > 0)) { q.depositType = 'percent'; q.depositValue = 30; }
+            return this.render();
+        }
+        if (['basePrice', 'priceOverride', 'depositValue'].includes(t.dataset.f)) this.refreshSum();
+    }
+
+    refreshSum() {
+        const box = this.root.getElementById('sumBox');
+        if (box) box.innerHTML = this.priceSummary(this.s.detail.draft, this.s.detail.quote);
     }
 
     onClick(e) {
@@ -398,9 +516,23 @@ class QuotesDashboard extends HTMLElement {
         if (this.s.dialog) return;
         const outsideWs = this.s.wsOpen && !e.target.closest('.ws');
         if (outsideWs) this.s.wsOpen = false;
+        const outsideEx = this.s.exOpen && !e.target.closest('.exw');
+        if (outsideEx) this.s.exOpen = false;
         const el = e.target.closest('[data-act]');
-        if (!el) { if (outsideWs) this.render(); return; }
+        if (!el) { if (outsideWs || outsideEx) this.render(); return; }
         const a = el.dataset.act;
+        if (a === 'tab') { this.s.tab = el.dataset.k; return this.renderDrawerTop(); }
+        if (a === 'stepPrev' || a === 'stepNext') {
+            const i = STEPS.findIndex(([k]) => k === (this.s.tab || 'customer')) + (a === 'stepNext' ? 1 : -1);
+            if (STEPS[i]) this.s.tab = STEPS[i][0];
+            return this.renderDrawerTop();
+        }
+        if (a === 'exToggle') { if (this.isLocked()) return; this.s.exOpen = !this.s.exOpen; return this.render(); }
+        if (a === 'addCatalog') return this.addCatalogExtra(el.dataset.id);
+        if (a === 'calTarget') { this.calState().target = el.dataset.k; return this.render(); }
+        if (a === 'calClear') { if (this.isLocked()) return; this.s.detail.draft[el.dataset.k] = ''; return this.render(); }
+        if (a === 'calMonth') { this.calState().month = el.dataset.m; return this.render(); }
+        if (a === 'calDay') return this.pickDay(el.dataset.d);
         if (a === 'row') return this.openDetail(el.dataset.id);
         if (a === 'sort') { const f = el.dataset.field; this.s.sort = { field: f, dir: this.s.sort.field === f && this.s.sort.dir === 'desc' ? 'asc' : 'desc' }; this.s.skip = 0; return this.load(); }
         if (a === 'prev') { this.s.skip = Math.max(0, this.s.skip - this.s.limit); return this.load(); }
@@ -427,7 +559,6 @@ class QuotesDashboard extends HTMLElement {
         if (a === 'delStaff') { this.toggleStaff(el.dataset.id, false); return this.render(); }
         if (a === 'approveTransfer' || a === 'rejectTransfer') return this.reviewTransfer(a === 'approveTransfer');
         if (a === 'sendEmail' || a === 'sendWhatsapp') return this.sendQuote(a === 'sendEmail' ? 'email' : 'whatsapp');
-        if (a === 'toggleSec') { this.s.open[el.dataset.k] = !this.s.open[el.dataset.k]; return this.render(); }
         if (a === 'prepare') return this.prepare();
         if (a === 'preview') return this.preview();
         if (a === 'copyLink') return this.copyLink();
@@ -455,14 +586,14 @@ class QuotesDashboard extends HTMLElement {
     }
 
     async openDetail(id) {
-        if (this.s.detail?.id !== id) this.s.open = { customer: true };
+        if (this.s.detail?.id !== id) { this.s.tab = 'customer'; this.s.cal = null; this.s.exOpen = false; }
         this.s.detail = { id, loading: true }; this.render();
         try {
             const d = await this.req('get', { id });
             const q = d.quote;
             this.s.detail = {
                 id, quote: q, log: d.log || [], payments: d.payments || [], proofs: d.proofs || [], busyStaff: {}, staff: [], staffLoading: true,
-                draft: { ...q, extras: (q.extras || []).map((x) => ({ ...x })), assignedStaffIds: [...(q.assignedStaffIds || [])], workshops: splitWs(q.requestedWorkshop), eventDate: ymd(q.eventDate), expiresAt: ymd(q.expiresAt), balanceDueDate: ymd(q.balanceDueDate) },
+                draft: { ...q, extras: (q.extras || []).map((x) => ({ ...x })), assignedStaffIds: [...(q.assignedStaffIds || [])], workshops: splitWs(q.requestedWorkshop), eventDate: ymd(q.eventDate), expiresAt: ymd(q.expiresAt), balanceDueDate: ymd(q.balanceDueDate), hasDeposit: Number(q.depositValue) > 0 },
             };
             this.render();
             this.loadStaff(id, q.eventDate);
@@ -483,19 +614,49 @@ class QuotesDashboard extends HTMLElement {
 
     isLocked() { return ['signed', 'expired', 'cancelled'].includes(this.s.detail?.quote?.status); }
 
-    addCatalogExtra() {
-        const sel = this.root.getElementById('catalogSel');
-        const a = this.s.addons.find((x) => x.id === sel?.value);
-        if (!a) return;
-        this.s.detail.draft.extras.push({ id: a.id, title: a.title, price: a.price, source: 'catalog' });
+    addCatalogExtra(id) {
+        const a = this.s.addons.find((x) => x.id === id);
+        if (!a || this.isLocked()) return;
+        this.s.detail.draft.extras.push({ id: a.id, title: a.title || a.name, price: a.price, source: 'catalog' });
+        this.s.exOpen = false;
         this.render();
     }
 
     addCustomExtra() {
         const title = this.root.getElementById('customTitle')?.value.trim();
-        const price = Number(this.root.getElementById('customPrice')?.value);
-        if (!title || !(price >= 0)) return this.fail('יש להזין שם ומחיר לתוספת');
+        const raw = this.root.getElementById('customPrice')?.value;
+        const price = Number(raw);
+        if (!title || raw === '' || !(price >= 0)) return this.fail('יש להזין שם ומחיר לתוספת');
         this.s.detail.draft.extras.push({ id: `custom-${Date.now()}`, title, price, source: 'custom' });
+        this.s.exOpen = false;
+        this.render();
+    }
+
+    // Swaps the drawer body only, so the tab bar keeps its scroll position.
+    renderDrawerTop() {
+        this.s.exOpen = false;
+        this.render();
+        this.root.querySelector('.drawer .db')?.scrollTo(0, 0);
+    }
+
+    calState() {
+        const d = this.s.detail.draft;
+        if (!this.s.cal) this.s.cal = { month: (d.eventDate || ilToday()).slice(0, 7), target: 'eventDate' };
+        return this.s.cal;
+    }
+
+    pickDay(day) {
+        if (this.isLocked() || !day || day < ilToday()) return;
+        const d = this.s.detail.draft;
+        const c = this.calState();
+        if (c.target !== 'eventDate' && d.eventDate && day > d.eventDate) return this.fail('התאריך חייב להיות עד יום האירוע');
+        d[c.target] = day;
+        if (c.target === 'eventDate') {
+            const reset = ['balanceDueDate', 'expiresAt'].filter((k) => d[k] && d[k] > day);
+            reset.forEach((k) => { d[k] = ''; });
+            if (reset.length) this.toast('תאריכים שחלו אחרי יום האירוע אופסו');
+            this.loadStaff(this.s.detail.id, day);
+        }
         this.render();
     }
 
@@ -506,6 +667,7 @@ class QuotesDashboard extends HTMLElement {
         const num = (v) => (v === '' || v === null || v === undefined ? null : Number(v));
         const originalDate = ymd(this.s.detail.quote.eventDate);
         if (!locked && d.eventDate && d.eventDate < ilToday() && d.eventDate !== originalDate) { await this.fail('לא ניתן לבחור תאריך שעבר'); return false; }
+        if (!locked && d.hasDeposit && !(Number(d.depositValue) > 0)) { this.s.tab = 'pricing'; await this.fail('יש להזין סכום מקדמה, או לכבות את המקדמה'); return false; }
         const patch = locked
             ? { notes: d.notes || '' }
             : {
@@ -514,7 +676,7 @@ class QuotesDashboard extends HTMLElement {
                 participants: num(d.participants) ?? 0, adults: num(d.adults) ?? 0, eventDate: d.eventDate || null,
                 eventStartTime: d.eventStartTime || '', eventEndTime: d.eventEndTime || '', workshopClosed: !!d.workshopClosed,
                 requiredInstructors: num(d.requiredInstructors) ?? 0, extras: d.extras, basePrice: num(d.basePrice) ?? 0,
-                priceOverride: num(d.priceOverride), depositType: d.depositType, depositValue: num(d.depositValue) ?? 0,
+                priceOverride: num(d.priceOverride), depositType: d.depositType, depositValue: d.hasDeposit ? num(d.depositValue) ?? 0 : 0,
                 balanceDueDate: d.balanceDueDate || null, expiresAt: d.expiresAt || null,
                 allowOnlinePayment: !!d.allowOnlinePayment, allowBankTransfer: !!d.allowBankTransfer, notes: d.notes || '',
                 assignedStaffIds: d.assignedStaffIds || [],
@@ -744,8 +906,7 @@ class QuotesDashboard extends HTMLElement {
         const options = [...new Set([...(this.s.workshops || []), ...selected])];
         const tags = selected.map((n) => `<span class="tag">${esc(n)}${locked ? '' : `<button type="button" data-act="wsRemove" data-name="${esc(n)}" aria-label="הסר">✕</button>`}</span>`).join('');
         const box = this.s.wsOpen ? `<div class="ws-drop">${options.map((n) => `<label class="ws-opt"><input type="checkbox" data-ws="${esc(n)}" value="${esc(n)}"${chosen.has(n) ? ' checked' : ''}>${esc(n)}</label>`).join('') || '<div class="sub" style="padding:8px">אין סדנאות ברשימה</div>'}</div>` : '';
-        return `<div class="ws"><span style="color:#475569">סדנאות</span>
-            <button type="button" class="ws-btn" data-act="wsToggle"${locked ? ' disabled' : ''}>${selected.length ? `${selected.length} נבחרו` : 'בחירת סדנאות'} ${this.s.wsOpen ? '▲' : '▼'}</button>
+        return `<div class="ws"><button type="button" class="ws-btn" data-act="wsToggle"${locked ? ' disabled' : ''}>${selected.length ? `${selected.length} נבחרו` : 'בחירת סדנאות'} ${this.s.wsOpen ? '▲' : '▼'}</button>
             ${box}<div class="tags">${tags || '<span class="sub">לא נבחרו סדנאות</span>'}</div></div>`;
     }
 
@@ -774,60 +935,163 @@ class QuotesDashboard extends HTMLElement {
         return `${pick}<div class="staffList">${selected}</div>`;
     }
 
-    drawerHtml() {
-        const dt = this.s.detail;
-        if (!dt) return '';
-        if (dt.loading) return '<div class="mask" data-act="close"></div><div class="drawer"><div class="loading">טוען...</div></div>';
+    // ---------- drawer ----------
+    tabIssues(d) {
+        return {
+            customer: !d.customerName || (!d.customerPhone && !d.customerEmail),
+            event: !d.eventStartTime || !d.eventEndTime || !(Number(d.participants) > 0),
+            dates: !d.eventDate,
+            pricing: !(previewAmounts(d).total > 0),
+        };
+    }
+
+    priceSummary(d, q) {
+        const a = previewAmounts(d);
+        const n = (d.extras || []).length;
+        const depLabel = d.depositType === 'fixed' ? 'סכום קבוע' : `${Number(d.depositValue) || 0}%`;
+        const balDate = d.balanceDueDate ? dmy(d.balanceDueDate) : 'יוגדר אוטומטית';
+        const lines = `<div class="ln"><span>מחיר בסיס</span><span>${a.ov !== null ? `<s>${money(a.base)}</s>` : money(a.base)}</span></div>
+            <div class="ln"><span>תוספות${n ? ` (${n})` : ''}</span><span>${a.ov !== null ? `<s>${money(a.extras)}</s>` : money(a.extras)}</span></div>
+            ${a.ov !== null ? `<div class="ln"><span>מחיר מותאם (עוקף את החישוב)</span><b>${money(a.ov)}</b></div>` : ''}`;
+        const split = d.hasDeposit && a.dep > 0 && a.bal > 0
+            ? `<div class="split"><div><span>💳 מקדמה — בחתימה</span><b>${money(a.dep)}</b><small>${esc(depLabel)}</small></div>
+                <div class="bal"><span>⏳ יתרה לתשלום</span><b>${money(a.bal)}</b><small>עד ${esc(balDate)}</small></div></div>`
+            : `<div class="split one"><div><span>✅ תשלום מלא בחתימה</span><b>${money(a.total)}</b><small>${d.hasDeposit ? 'המקדמה מכסה את כל הסכום' : 'ללא מקדמה'}</small></div></div>`;
+        const paid = Number(q.paidAmount) > 0 ? `<div class="paid">שולם עד כה: ${money(q.paidAmount)}</div>` : '';
+        return `${lines}<div class="tot"><span>סה"כ לתשלום</span><b>${money(a.total)}</b></div>${split}${paid}`;
+    }
+
+    extrasEditor(d, locked) {
+        const rows = (d.extras || []).map((x, i) => `<div class="xrow"><div class="nm">${esc(x.title)}<small>${x.source === 'custom' ? 'תוספת מותאמת' : 'מהקטלוג'}</small></div>
+            <label class="xprice"><span>₪</span><input type="number" min="0" data-xp="${i}" value="${esc(x.price ?? 0)}"${locked ? ' disabled' : ''} aria-label="מחיר ${esc(x.title)}"></label>
+            ${locked ? '' : `<button type="button" class="x" data-act="delExtra" data-i="${i}" aria-label="הסר">✕</button>`}</div>`).join('') || '<div class="sub">לא נוספו תוספות</div>';
+        if (locked) return rows;
+        const added = new Set((d.extras || []).filter((x) => x.source === 'catalog').map((x) => x.id));
+        const opts = this.s.addons.map((a) => `<button type="button" class="ex-opt" data-act="addCatalog" data-id="${esc(a.id)}"${added.has(a.id) ? ' disabled' : ''}>
+            <span>${added.has(a.id) ? '✓ ' : ''}${esc(a.title || a.name || '')}</span><b>${money(a.price)}</b></button>`).join('') || '<div class="sub" style="padding:10px">אין תוספות בקטלוג</div>';
+        const pop = this.s.exOpen ? `<div class="ex-pop"><div class="ex-list">${opts}</div>
+            <div class="ex-custom"><input id="customTitle" placeholder="תוספת מותאמת"><input id="customPrice" type="number" min="0" placeholder="₪ מחיר"><button type="button" class="btn-p" data-act="addCustomExtra">הוסף</button></div></div>` : '';
+        return `${rows}<div class="exw"><button type="button" class="ex-btn" data-act="exToggle"><span>＋ הוספת תוספת</span><span>${this.s.exOpen ? '▲' : '▼'}</span></button>${pop}</div>`;
+    }
+
+    calendarHtml(d, locked) {
+        const today = ilToday();
+        const c = this.calState();
+        const targets = [
+            ['eventDate', '🎨', 'תאריך הסדנה', 'ev', false],
+            ...(d.hasDeposit ? [['balanceDueDate', '💳', 'תשלום יתרה עד', 'bal', true]] : []),
+            ['expiresAt', '⏳', 'תוקף ההצעה (אופציונלי)', 'exp', true],
+        ];
+        if (!targets.some(([k]) => k === c.target)) c.target = 'eventDate';
+        const chips = targets.map(([k, ic, label, cls, optional]) => `<button type="button" class="ct ${cls}${c.target === k ? ' on' : ''}" data-act="calTarget" data-k="${k}">
+            <span>${ic} ${label}</span><b>${d[k] ? dmy(d[k]) : 'לא נבחר'}</b>
+            ${optional && d[k] && !locked ? `<span class="clr" data-act="calClear" data-k="${k}" title="ניקוי">✕</span>` : ''}</button>`).join('');
+        const [y, m] = c.month.split('-').map(Number);
+        const first = new Date(Date.UTC(y, m - 1, 1)).getUTCDay();
+        const days = new Date(Date.UTC(y, m, 0)).getUTCDate();
+        const monthKey = (yy, mm) => `${yy}-${String(mm).padStart(2, '0')}`;
+        const prev = m === 1 ? monthKey(y - 1, 12) : monthKey(y, m - 1);
+        const next = m === 12 ? monthKey(y + 1, 1) : monthKey(y, m + 1);
+        const marks = targets.filter(([k]) => d[k]).map(([k, , , cls]) => [d[k], cls]);
+        const active = targets.find(([k]) => k === c.target);
+        let cells = WEEKDAYS.map((w) => `<div class="wd">${w}</div>`).join('') + '<div></div>'.repeat(first);
+        for (let i = 1; i <= days; i++) {
+            const key = `${c.month}-${String(i).padStart(2, '0')}`;
+            const on = marks.filter(([v]) => v === key).map(([, cls]) => cls);
+            const off = locked || key < today || (c.target !== 'eventDate' && d.eventDate && key > d.eventDate);
+            const sel = d[c.target] === key;
+            const cls = ['day', key === today ? 'today' : '', on[0] ? `m-${on[0]} ${on[0]}` : '', sel ? `sel ${active[3]}` : ''].filter(Boolean).join(' ');
+            const dots = on.length > 1 ? `<span class="dots">${on.slice(1).map((x) => `<i class="${x}"></i>`).join('')}</span>` : '';
+            cells += `<button type="button" class="${cls}" data-act="calDay" data-d="${key}"${off ? ' disabled' : ''}>${i}${dots}</button>`;
+        }
+        const label = new Intl.DateTimeFormat('he-IL', { month: 'long', year: 'numeric', timeZone: 'UTC' }).format(new Date(Date.UTC(y, m - 1, 1)));
+        const legend = targets.map(([, , l, cls]) => `<span class="${cls}"><i></i>${l.replace(' (אופציונלי)', '')}</span>`).join('');
+        return `<div class="cal-t">${chips}</div>
+            <div class="cal"><div class="cal-h"><button type="button" data-act="calMonth" data-m="${prev}"${prev < today.slice(0, 7) ? ' disabled' : ''} aria-label="חודש קודם">›</button><b>${label}</b><button type="button" data-act="calMonth" data-m="${next}" aria-label="חודש הבא">‹</button></div>
+            <div class="cal-g">${cells}</div>
+            <div class="legend">${legend}<span class="sub">ימים שחלפו חסומים${d.eventDate ? ' · תוקף ותשלום — עד יום האירוע' : ''}</span></div></div>
+            <div class="sub" style="margin-top:6px">בוחרים למעלה איזה תאריך לקבוע, ואז לוחצים על יום בלוח.</div>`;
+    }
+
+    datesTimeline(d, q) {
+        const items = [
+            ['📝', 'תחילת ההסכם', q.signedAt ? `נחתם ב-${dmy(q.signedAt)}` : 'ביום חתימת הלקוח'],
+            ['⏳', 'ההצעה בתוקף עד', d.expiresAt ? dmy(d.expiresAt) : 'ברירת מחדל (מחושב בהכנה לשליחה)'],
+            ...(d.hasDeposit ? [['💳', 'מקדמה', 'משולמת בחתימה'], ['💰', 'תשלום יתרה עד', d.balanceDueDate ? dmy(d.balanceDueDate) : 'ברירת מחדל לפי ההגדרות']] : [['💳', 'תשלום', 'מלא, בחתימה']]),
+            ['🎨', 'יום הסדנה', d.eventDate ? `${dmy(d.eventDate)}${d.eventStartTime ? ` · ${d.eventStartTime}${d.eventEndTime ? `–${d.eventEndTime}` : ''}` : ''}` : 'טרם נקבע'],
+        ];
+        return `<ul class="tline">${items.map(([ic, t, v]) => `<li><span class="ic">${ic}</span><div><span>${t}</span><b>${esc(v)}</b></div></li>`).join('')}</ul>`;
+    }
+
+    paneHtml(tab, dt) {
         const q = dt.quote; const d = dt.draft; const locked = this.isLocked(); const dis = locked ? ' disabled' : '';
-        const sec = (key, title) => `<div class="sec${this.s.open[key] ? '' : ' col'}"><h3 data-act="toggleSec" data-k="${key}">${title}</h3>`;
         const f = (key, label, type = 'text', extra = '') => `<label>${label}<input type="${type}" data-f="${key}" value="${esc(d[key] ?? '')}"${dis} ${extra}></label>`;
-        const dateMin = (key, label) => f(key, label, 'date', `min="${ilToday()}"`);
         const chk = (key, label) => `<label class="chk"><input type="checkbox" data-f="${key}"${d[key] ? ' checked' : ''}${dis}> ${label}</label>`;
-        const extras = d.extras.map((x, i) => `<div class="extra"><span>${esc(x.title)}</span><b>${money(x.price)}</b>${locked ? '' : `<button type="button" class="x" data-act="delExtra" data-i="${i}" aria-label="הסר">✕</button>`}</div>`).join('') || '<div class="sub">אין תוספות</div>';
-        const depFixed = d.depositType === 'fixed';
-        const depSeg = (v, icon, title) => `<button type="button" class="${(v === 'fixed' ? depFixed : !depFixed) ? 'on' : ''}" data-act="depType" data-v="${v}" title="${title}"${dis}>${icon}</button>`;
-        const addOpts = this.s.addons.map((a) => {
-            const title = a.title || a.name || '';
-            return `<option value="${esc(a.id)}" style="color:#0f172a;background:#fff">${esc(title)} (${money(a.price)})</option>`;
-        }).join('');
+        const pane = (title, body) => `<div class="pane"><h3 class="pane-h">${title}</h3>${body}</div>`;
+        if (tab === 'customer') {
+            return pane('👤 פרטי לקוח', `<div class="grid">${f('customerName', 'שם מלא')}${f('customerPhone', 'טלפון', 'tel')}${f('customerEmail', 'אימייל', 'email')}${f('companyName', 'חברה')}</div>`)
+                + pane('🎨 סדנאות', this.workshopPicker(d, locked))
+                + (q.customerNotes ? pane('💬 הערות הלקוח', `<div class="lockmsg" style="background:#f8fafc;color:#334155;margin:0">${esc(q.customerNotes)}</div>`) : '');
+        }
+        if (tab === 'event') {
+            return pane('🎨 פרטי האירוע', `<div class="grid">${f('eventStartTime', 'שעת התחלה', 'time')}${f('eventEndTime', 'שעת סיום', 'time')}${f('participants', 'משתתפים', 'number', 'min="0"')}${f('adults', 'מלווים', 'number', 'min="0"')}${f('requiredInstructors', 'מדריכים נדרשים', 'number', 'min="0"')}
+                <div style="display:flex;align-items:end">${chk('workshopClosed', 'סדנה סגורה (פרטית)')}</div></div>
+                <div class="sub" style="margin-top:10px">📅 תאריך האירוע נקבע בלשונית "תאריכים"${d.eventDate ? `: <b>${dmy(d.eventDate)}</b>` : ''}.</div>`)
+                + pane('👥 צוות משובץ', this.staffPicker(dt, d, q.status === 'cancelled'));
+        }
+        if (tab === 'dates') {
+            return pane('📅 לוח תאריכים', this.calendarHtml(d, locked)) + pane('🗓️ ציר זמנים', this.datesTimeline(d, q));
+        }
+        if (tab === 'pricing') {
+            const depFixed = d.depositType === 'fixed';
+            const depSeg = (v, icon, title) => `<button type="button" class="${(v === 'fixed' ? depFixed : !depFixed) ? 'on' : ''}" data-act="depType" data-v="${v}" title="${title}"${dis}>${icon}</button>`;
+            const dep = `<div class="dep"><div><b>יש מקדמה בעסקה</b><div class="sub">${d.hasDeposit ? 'הלקוח משלם מקדמה בחתימה ואת היתרה עד מועד שנקבע' : 'הלקוח ישלם את כל הסכום בחתימה'}</div></div>
+                <label class="switch"><input type="checkbox" data-f="hasDeposit"${d.hasDeposit ? ' checked' : ''}${dis}><span class="knob"></span></label></div>
+                ${d.hasDeposit ? `<div class="depv"><span class="fl" style="flex-direction:row;align-items:center">גובה המקדמה</span><input type="number" min="0" data-f="depositValue" value="${esc(d.depositValue ?? '')}"${dis}><span class="seg">${depSeg('percent', '%', 'אחוז מהסכום')}${depSeg('fixed', '₪', 'סכום קבוע')}</span></div>` : ''}`;
+            return pane('💰 מחיר', `<div class="pgrid">${f('basePrice', 'מחיר בסיס (₪)', 'number', 'min="0"')}${f('priceOverride', 'מחיר מותאם (₪, אופציונלי)', 'number', 'min="0" placeholder="ללא"')}</div>
+                    <div class="sub" style="margin-top:6px">מחיר מותאם מחליף את החישוב של בסיס + תוספות.</div>${dep}`)
+                + pane('✨ תוספות', this.extrasEditor(d, locked))
+                + pane('🧾 סיכום', `<div class="psum" id="sumBox">${this.priceSummary(d, q)}</div><div class="sub" style="margin-top:6px">תצוגה מקדימה — הסכומים הסופיים נשמרים בלחיצה על "שמור".</div>`);
+        }
+        if (tab === 'payment') {
+            const pays = dt.payments.map((p) => `<li><div><b>${money(p.amount)}</b> · ${esc(p.stage)} · ${esc(L.method[p.method] || p.method)} · <span class="badge ${p.status === 'paid' ? 'green' : p.status === 'failed' ? 'red' : 'amber'}">${esc(p.status)}</span> <span class="sub">${dmyTime(p.paidAt || p._createdDate)}</span></div></li>`).join('') || '<li class="sub">אין תשלומים</li>';
+            return pane('💳 אמצעי תשלום מותרים', `${paySwitch('allowOnlinePayment', 'תשלום מקוון', 'ביט / אשראי / Apple Pay', d, dis)}${paySwitch('allowBankTransfer', 'העברה בנקאית', 'הלקוח מעלה אסמכתא לאישור', d, dis)}
+                    <div class="sub" style="margin-top:8px">נבחר ע"י הלקוח: ${esc(L.method[q.selectedPaymentMethod] || '—')} · ${badge(L.pay, 'pay', q.paymentStatus)} · חתימה: ${badge(L.sig, 'sig', q.signatureStatus)}</div>`)
+                + pane('🧾 תשלומים ואסמכתאות', `<ul class="tl">${pays}</ul>${this.proofsTable(dt.proofs)}`);
+        }
         const logDetail = (l) => {
             const ch = l.details?.changes;
             if (!Array.isArray(ch) || !ch.length) return '';
             return `<ul class="chg">${ch.map((c) => `<li><b>${esc(c.label)}:</b> ${c.text ? esc(c.text) : `מ-${esc(c.from)} ל-${esc(c.to)}`}</li>`).join('')}</ul>`;
         };
         const log = dt.log.map((l) => `<li><span>${L.actor[l.actorType] || ''}</span><div><b>${esc(L.action[l.action] || l.action)}</b> <span class="sub">${esc(l.actorName || '')} · ${dmyTime(l._createdDate)}</span>${logDetail(l)}</div></li>`).join('') || '<li class="sub">אין פעולות</li>';
-        const pays = dt.payments.map((p) => `<li><div><b>${money(p.amount)}</b> · ${esc(p.stage)} · ${esc(L.method[p.method] || p.method)} · <span class="badge ${p.status === 'paid' ? 'green' : p.status === 'failed' ? 'red' : 'amber'}">${esc(p.status)}</span> <span class="sub">${dmyTime(p.paidAt || p._createdDate)}</span></div></li>`).join('') || '<li class="sub">אין תשלומים</li>';
+        return pane('📝 הערות פנימיות', `<textarea rows="4" data-f="notes" placeholder="הערות לצוות (לא מוצגות ללקוח)">${esc(d.notes || '')}</textarea>`)
+            + pane('🕘 היסטוריית פעולות', `<ul class="tl">${log}</ul>`);
+    }
+
+    drawerHtml() {
+        const dt = this.s.detail;
+        if (!dt) return '';
+        if (dt.loading) return '<div class="mask" data-act="close"></div><div class="drawer"><div class="loading">טוען...</div></div>';
+        const q = dt.quote; const locked = this.isLocked();
+        const tab = STEPS.some(([k]) => k === this.s.tab) ? this.s.tab : 'customer';
+        const idx = STEPS.findIndex(([k]) => k === tab);
+        const issues = locked ? {} : this.tabIssues(dt.draft);
+        const tabs = STEPS.map(([k, label, ic]) => `<button type="button" class="tab${k === tab ? ' on' : ''}" data-act="tab" data-k="${k}">${ic} ${label}${issues[k] ? '<i class="dot" title="חסרים פרטים"></i>' : ''}</button>`).join('');
+        const prev = STEPS[idx - 1]; const next = STEPS[idx + 1];
         return `<div class="mask" data-act="close"></div><div class="drawer">
             <div class="dh"><h2>${esc(q.customerName || 'הצעה')} ${q.quoteNumber ? `<span class="sub">#${q.quoteNumber}</span>` : ''}</h2>${badge(L.status, 'status', q.status)}<button data-act="close">✕</button></div>
+            <div class="tabs">${tabs}</div>
             <div class="db">
               ${locked ? '<div class="lockmsg">ההצעה נעולה לעריכה (נחתמה / פגה / בוטלה). ניתן לערוך הערות בלבד.</div>' : ''}
               ${dt.banner ? `<div class="err">${esc(dt.banner)}</div>` : ''}
               ${(q.conflicts || []).length ? `<div class="err">🔴 התנגשות ביומן: ${esc(q.conflicts.map((c) => c.summary || c.key).join(' | '))}</div>` : ''}
-              ${sec('customer', 'פרטי לקוח')}<div class="grid">${f('customerName', 'שם')}${f('customerPhone', 'טלפון')}${f('customerEmail', 'אימייל')}${f('companyName', 'חברה')}
-                <div class="full">${this.workshopPicker(d, locked)}</div>
-                <label class="full">הערות הלקוח<textarea rows="2" disabled>${esc(q.customerNotes || '')}</textarea></label></div></div>
-              ${sec('event', 'האירוע')}<div class="grid">${dateMin('eventDate', 'תאריך')}${f('participants', 'משתתפים', 'number', 'min="0"')}${f('eventStartTime', 'שעת התחלה', 'time')}${f('eventEndTime', 'שעת סיום', 'time')}${f('adults', 'מלווים', 'number', 'min="0"')}${f('requiredInstructors', 'מדריכים נדרשים', 'number', 'min="0"')}
-                <div class="full">${chk('workshopClosed', 'סדנה סגורה (פרטית)')}</div></div></div>
-              ${sec('staff', 'צוות משובץ')}${this.staffPicker(dt, d, q.status === 'cancelled')}</div>
-              ${sec('pricing', 'תמחור')}<div class="price">
-                <div class="price-top">${f('basePrice', 'מחיר בסיס', 'number', 'min="0"')}${f('priceOverride', 'מחיר מותאם', 'number', 'min="0" title="עוקף את המחיר המחושב"')}
-                  <label>מקדמה<span class="dep-row"><input type="number" min="0" data-f="depositValue" value="${esc(d.depositValue ?? '')}"${dis}><span class="seg">${depSeg('percent', '%', 'אחוז')}${depSeg('fixed', '₪', 'סכום קבוע')}</span></span></label></div>
-                <div class="dates">${f('balanceDueDate', 'תשלום יתרה עד', 'date')}${f('expiresAt', 'תוקף ההצעה', 'date')}</div>
-                <div class="extras"><div class="extras-h">תוספות</div>${extras}
-                  ${locked ? '' : `<div class="addon-add"><select id="catalogSel"><option value="">בחרו תוספת</option>${addOpts || '<option value="" disabled>אין תוספות בקטלוג</option>'}</select><button type="button" data-act="addCatalogExtra">הוסף</button></div>
-                  <div class="addon-add"><input id="customTitle" placeholder="תוספת מותאמת"><input id="customPrice" type="number" min="0" placeholder="₪"><button type="button" data-act="addCustomExtra">הוסף</button></div>`}</div>
-                <div class="sum"><div><span class="sub">סה"כ</span><b>${money(q.totalAmount)}</b></div><div><span class="sub">מקדמה</span><b>${money(q.depositAmount)}</b></div><div><span class="sub">יתרה</span><b>${money(q.balanceAmount)}</b></div><div><span class="sub">שולם</span><b>${money(q.paidAmount)}</b></div></div>
-                <div class="sub hint">הסכומים מחושבים בשמירה.</div></div></div>
-              ${sec('methods', 'אמצעי תשלום מותרים')}
-                ${paySwitch('allowOnlinePayment', 'תשלום מקוון', 'ביט / אשראי / Apple Pay', d, dis)}
-                ${paySwitch('allowBankTransfer', 'העברה בנקאית', 'הלקוח מעלה אסמכתא לאישור', d, dis)}
-                <div class="sub">נבחר ע"י הלקוח: ${esc(L.method[q.selectedPaymentMethod] || '—')} · ${badge(L.pay, 'pay', q.paymentStatus)} · חתימה: ${badge(L.sig, 'sig', q.signatureStatus)}</div></div>
-              ${sec('notes', 'הערות פנימיות')}<textarea rows="3" style="width:100%" data-f="notes">${esc(d.notes || '')}</textarea></div>
-              ${sec('payments', 'תשלומים')}<ul class="tl">${pays}</ul>
-                ${this.proofsTable(dt.proofs)}</div>
-              ${sec('log', 'היסטוריית פעולות')}<ul class="tl">${log}</ul></div>
+              ${this.paneHtml(tab, dt)}
             </div>
-            <div class="foot"><button class="btn-d" data-act="cancel"${q.status === 'cancelled' ? ' disabled' : ''}>בטל הצעה</button><span><button data-act="preview">תצוגה מקדימה</button> <button data-act="copyLink"${q.publicToken ? '' : ' disabled'}>העתק קישור</button> ${q.publicToken && ['draft', 'sent', 'viewed'].includes(q.status) ? '<button data-act="sendEmail">שלח במייל</button> <button data-act="sendWhatsapp">שלח בוואטסאפ</button> ' : ''}${['lead', 'draft'].includes(q.status) ? '<button data-act="prepare">הכן לשליחה</button> ' : ''}<button data-act="close">סגור</button> <button class="btn-p" data-act="save"${this.s.saving ? ' disabled' : ''}>${this.s.saving ? 'שומר...' : 'שמור'}</button></span></div>
+            <div class="foot">
+              <div class="stepnav"><button type="button" data-act="stepPrev"${prev ? '' : ' disabled'}>→ ${prev ? esc(prev[1]) : 'הקודם'}</button><span class="sub">שלב ${idx + 1} מתוך ${STEPS.length} · ${STEPS[idx][1]}</span><button type="button" class="btn-p" data-act="stepNext"${next ? '' : ' disabled'}>${next ? esc(next[1]) : 'הבא'} ←</button></div>
+              <div class="acts"><button class="btn-d" data-act="cancel"${q.status === 'cancelled' ? ' disabled' : ''}>בטל הצעה</button><span><button data-act="preview">תצוגה מקדימה</button><button data-act="copyLink"${q.publicToken ? '' : ' disabled'}>העתק קישור</button>${q.publicToken && ['draft', 'sent', 'viewed'].includes(q.status) ? '<button data-act="sendEmail">שלח במייל</button><button data-act="sendWhatsapp">שלח בוואטסאפ</button>' : ''}${['lead', 'draft'].includes(q.status) ? '<button data-act="prepare">הכן לשליחה</button>' : ''}<button class="btn-p" data-act="save"${this.s.saving ? ' disabled' : ''}>${this.s.saving ? 'שומר...' : 'שמור'}</button></span></div>
+            </div>
           </div>`;
     }
 }

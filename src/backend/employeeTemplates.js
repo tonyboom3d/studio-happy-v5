@@ -114,20 +114,36 @@ export const EMPLOYEE_ACTION_KEYS = {
         placeholders: ['organizerName', 'organizerPhone', 'workshopName', 'currentDate', 'requestedDate', 'orderNumber', 'reviewLink'],
     },
     manager_quote_conflict: {
-        label: '🔴 התנגשות ביומן בהצעת מחיר',
-        placeholders: ['customerName', 'eventDate', 'quoteNumber', 'detail', 'reviewLink'],
+        label: '🔴 התנגשות ביומן בהצעת מחיר / חסימת יומן נכשלה',
+        placeholders: ['customerName', 'eventDate', 'eventTime', 'quoteNumber', 'totalAmount', 'workshopName', 'eventMode', 'participants', 'overlapCount', 'detail'],
     },
     manager_quote_signed: {
         label: 'הצעת מחיר נחתמה',
-        placeholders: ['customerName', 'eventDate', 'quoteNumber', 'totalAmount', 'reviewLink'],
+        placeholders: ['customerName', 'eventDate', 'eventTime', 'quoteNumber', 'totalAmount'],
     },
     manager_quote_transfer_proof: {
         label: 'הועלתה אסמכתת העברה להצעת מחיר (ממתין לאישור)',
-        placeholders: ['customerName', 'quoteNumber', 'amount', 'reviewLink'],
+        placeholders: ['customerName', 'eventDate', 'eventTime', 'quoteNumber', 'totalAmount', 'amount', 'stage'],
     },
     manager_quote_paid: {
         label: 'התקבל תשלום להצעת מחיר',
-        placeholders: ['customerName', 'quoteNumber', 'amount', 'stage', 'reviewLink'],
+        placeholders: ['customerName', 'eventDate', 'eventTime', 'quoteNumber', 'totalAmount', 'amount', 'stage'],
+    },
+    customer_quote_paid: {
+        label: 'ללקוח — אישור תשלום להצעת מחיר (audience=customer)',
+        placeholders: ['customerName', 'quoteNumber', 'amount', 'stage', 'paidAmount', 'totalAmount', 'balanceAmount', 'balanceDueDate', 'isFullyPaid', 'paymentSummary', 'eventDate', 'eventTime', 'workshopName', 'eventMode', 'participants', 'eventAddress', 'quoteLink'],
+    },
+    employee_quote_assigned: {
+        label: 'שיבוץ עובד לאירוע פרטי (הצעת מחיר) — כולל תפקיד והגעה מוקדמת',
+        placeholders: ['displayName', 'customerName', 'quoteNumber', 'eventDate', 'eventTime', 'workshopName', 'eventMode', 'participants', 'eventAddress', 'role', 'arrivalTime', 'arrivalEarly', 'arrivalNote'],
+    },
+    employee_quote_unassigned: {
+        label: 'הסרת עובד מאירוע פרטי',
+        placeholders: ['displayName', 'customerName', 'quoteNumber', 'eventDate', 'eventTime'],
+    },
+    employee_quote_cancelled: {
+        label: 'ביטול אירוע פרטי — לעובדים ששובצו',
+        placeholders: ['displayName', 'customerName', 'quoteNumber', 'eventDate', 'eventTime'],
     },
     addon_out_of_stock: {
         label: 'התראת מלאי — תוסף בסטודיו נגמר (אוטומטי)',

@@ -20,6 +20,8 @@ const L = {
         calendar_released: 'יומן שוחרר', conflict_detected: 'התגלתה התנגשות', conflict_alert_sent: 'נשלחה התראת התנגשות',
         payment_refunded: 'תשלום הוחזר', transfer_rejected: 'העברה נדחתה', quote_prepared: 'הוכנה לשליחה', quote_reprepared: 'הוכנה מחדש',
         quote_updated: 'עדכונים להצעה', staff_assigned: 'שובץ עובד', expired: 'פג תוקף', cancelled: 'בוטל',
+        calendar_block_failed: 'חסימת יומן נכשלה', paid_email_sent: 'נשלח מייל אישור תשלום', paid_whatsapp_sent: 'נשלח וואטסאפ אישור תשלום',
+        staff_notified: 'נשלחה הודעה לצוות',
     },
     actor: { admin: '👤', customer: '🙋', system: '⚙️' },
 };

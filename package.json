@@ -6,6 +6,7 @@
   },
   "dependencies": {
     "@wix/bookings": "1.0.1393",
+    "@wix/calendar": "^1.0.303",
     "@wix/ecom": "1.0.2072",
     "@wix/email-subscriptions": "^1.0.44",
     "@wix/embeds": "1.0.15",

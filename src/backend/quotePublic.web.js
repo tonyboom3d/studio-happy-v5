@@ -241,7 +241,6 @@ export const signQuote = webMethod(Permissions.Anyone, async (token, input = {})
     }, SA);
     await writeQuoteLog(q._id, 'signed', { plan, method, hash, signerName, signerEmail, signerPhone }, customerActor(q));
     notifyManagers('manager_quote_signed', saved);
-    // Conflict detection + calendar block: added in the calendar phase.
     return { viewState: computeViewState(saved) };
     } catch (err) { return quoteError(err, { exposeRaw: false }); }
 });

@@ -3,6 +3,7 @@ import wixData from 'wix-data';
 import { httpClient } from '@wix/essentials';
 import { writeQuoteLog } from 'backend/quoteLog.js';
 import { notifyManagers } from 'backend/quoteNotify.js';
+import { onQuotePaid } from 'backend/quotePostPayment.js';
 
 const SA = { suppressAuth: true, suppressHooks: true };
 
@@ -85,6 +86,7 @@ export async function handleQuotePaymentUpdate(payment) {
     if (next === 'paid' && updated) await notifyManagers('manager_quote_paid', updated, { amount: row.amount, stage: STAGE_LABELS[row.stage] || row.stage });
     const action = next === 'paid' ? 'payment_succeeded' : next === 'refunded' ? 'payment_refunded' : next === 'failed' ? 'payment_failed' : null;
     if (action) await writeQuoteLog(row.quoteId, action, { stage: row.stage, amount: row.amount, method: 'online' }, { type: 'system', name: 'Wix Pay', userId: '' });
+    if (next === 'paid' && updated) await onQuotePaid(row.quoteId, row);
     return true;
 }
 
@@ -98,6 +100,7 @@ export async function syncPendingOnlinePayments(quoteId) {
     const data = await res.json();
     const byOrder = new Map((data.transactions || []).filter((t) => t.order?.id).map((t) => [t.order.id, t.status]));
     let changed = false;
+    const paidRows = [];
     for (const row of pending.items) {
         const next = normalizePayStatus(byOrder.get(row.wixPaymentId));
         if (!next || next === 'pending' || next === row.status) continue;
@@ -107,9 +110,11 @@ export async function syncPendingOnlinePayments(quoteId) {
         if (next === 'paid') {
             const quote = await wixData.get('Quotes', quoteId, SA);
             if (quote) await notifyManagers('manager_quote_paid', quote, { amount: row.amount, stage: STAGE_LABELS[row.stage] || row.stage });
+            paidRows.push(row);
         }
         changed = true;
     }
     if (changed) await recomputePaymentState(quoteId);
+    for (const row of paidRows) await onQuotePaid(quoteId, row);
     return changed;
 }

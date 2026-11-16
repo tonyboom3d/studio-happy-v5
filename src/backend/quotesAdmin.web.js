@@ -11,6 +11,9 @@ import { backfillQuoteLeads } from 'backend/quoteLeadsSync.js';
 import { buildPreparedFields, buildQuoteUrl, resolveTemplate } from 'backend/quoteBuilder.js';
 import { recomputePaymentState } from 'backend/quotePayments.js';
 import { sendQuoteEmail } from 'backend/quoteNotify.js';
+import { onQuotePaid } from 'backend/quotePostPayment.js';
+import { releaseQuoteCalendar } from 'backend/quoteCalendar.js';
+import { syncStaffNotifications, notifyStaffCancelled } from 'backend/quoteStaffNotify.js';
 import { sendQuoteLinkManyChat } from 'backend/manychatService.jsw';
 import {
     renderTemplate, sanitizeHtml, PLACEHOLDERS, FIELD_OPTIONS, DEFAULT_TEMPLATE_FIELDS, buildTemplateHtml, parseTemplateConfig,
@@ -106,10 +109,11 @@ export const updateQuote = webMethod(Permissions.Admin, async (quoteId, patch = 
         Object.assign(next, fields);
     }
 
-    const saved = await wixData.update('Quotes', next, SA);
+    let saved = await wixData.update('Quotes', next, SA);
     const actor = await getActor(actorName);
     const diff = await diffQuote(quote, saved, Object.keys(changes)).catch(() => []);
     if (diff.length) await writeQuoteLog(quoteId, 'quote_updated', { changes: diff }, actor);
+    if ('assignedStaffIds' in changes) saved = await syncStaffNotifications(saved);
     return { quote: saved, changed: Object.keys(changes) };
     } catch (err) { return quoteError(err); }
 });
@@ -119,9 +123,14 @@ export const cancelQuote = webMethod(Permissions.Admin, async (quoteId, actorNam
     const quote = await wixData.get('Quotes', quoteId, SA);
     if (!quote) throw new Error('NOT_FOUND:ההצעה לא נמצאה.');
     if (quote.status === 'cancelled') return { quote };
-    const saved = await wixData.update('Quotes', { ...quote, status: 'cancelled' }, SA);
+    let saved = await wixData.update('Quotes', { ...quote, status: 'cancelled' }, SA);
     await writeQuoteLog(quoteId, 'cancelled', { previousStatus: quote.status }, await getActor(actorName));
-    // Calendar release is added in the calendar phase.
+    const rel = await releaseQuoteCalendar(saved);
+    if (rel.released) {
+        saved = await wixData.update('Quotes', { ...saved, calendarEventId: null }, SA);
+        await writeQuoteLog(quoteId, 'calendar_released', { eventId: quote.calendarEventId }, { type: 'system', name: 'מערכת', userId: '' });
+    }
+    await notifyStaffCancelled(quote);
     return { quote: saved };
     } catch (err) { return quoteError(err); }
 });
@@ -263,9 +272,10 @@ export const approveBankTransfer = webMethod(Permissions.Admin, async (quoteId, 
     const row = await pendingBankRow(quoteId);
     const actor = await getActor(actorName);
     await wixData.update('QuotePayments', { ...row, status: 'paid', paidAt: new Date(), approvedBy: actor.name || actor.userId }, SA);
-    const quote = await recomputePaymentState(quoteId);
+    await recomputePaymentState(quoteId);
     await writeQuoteLog(quoteId, 'transfer_approved', { stage: row.stage, amount: row.amount }, actor);
-    return { quote };
+    await onQuotePaid(quoteId, row);
+    return { quote: await wixData.get('Quotes', quoteId, SA) };
     } catch (err) { return quoteError(err); }
 });
 

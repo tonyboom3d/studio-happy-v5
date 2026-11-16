@@ -101,6 +101,29 @@ async function getAddons() {
     return addonCache.data;
 }
 
+function workshopTitle(item) {
+    const raw = item?.title || item?.workshopName || item?.name;
+    if (typeof raw === 'string') return raw.trim();
+    if (raw && typeof raw === 'object') return String(raw.he || raw.en || '').trim();
+    return '';
+}
+
+let workshopCache = null;
+async function getWorkshopNames() {
+    if (workshopCache && Date.now() - workshopCache.at < 10 * 60 * 1000) return workshopCache.data;
+    const [birthdays, studio] = await Promise.all([
+        wixData.query('birthdayWorkshops').ascending('order').limit(50).find(SA).catch(() => ({ items: [] })),
+        wixData.query('workshops').limit(50).find(SA).catch(() => ({ items: [] })),
+    ]);
+    const names = [
+        ...(birthdays.items || []).map(workshopTitle),
+        ...(studio.items || []).map((item) => String(item.workshopName || '').trim()),
+    ];
+    const data = [...new Set(names.filter(Boolean))].sort((a, b) => a.localeCompare(b, 'he'));
+    workshopCache = { at: Date.now(), data };
+    return data;
+}
+
 let actorCache = null;
 async function getActors() {
     if (actorCache && Date.now() - actorCache.at < 10 * 60 * 1000) return actorCache.data;
@@ -158,7 +181,11 @@ export const listActors = webMethod(Permissions.Admin, async () => ({ actors: aw
 export const loadQuotesDashboard = webMethod(Permissions.Admin, async (opts = {}) => {
     const t0 = Date.now();
     const timed = async (name, p) => { const s = Date.now(); const r = await p; console.log(`[quotes-BE] ${name}: ${Date.now() - s}ms`); return r; };
-    const [list, addons] = await Promise.all([timed('queryQuotes', queryQuotes(opts)), timed('addons', getAddons())]);
+    const [list, addons, workshops] = await Promise.all([
+        timed('queryQuotes', queryQuotes(opts)),
+        timed('addons', getAddons()),
+        timed('workshops', getWorkshopNames()),
+    ]);
     console.log(`[quotes-BE] loadQuotesDashboard total ${Date.now() - t0}ms (module age ${Math.round(process.uptime?.() ?? 0)}s)`);
-    return { ...list, addons };
+    return { ...list, addons, workshops };
 });

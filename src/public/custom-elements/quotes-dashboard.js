@@ -64,9 +64,16 @@ td.wrapc{white-space:normal;max-width:220px}
 .err{background:#fee2e2;color:#b91c1c;border:1px solid #fecaca;padding:10px;border-radius:8px;margin-bottom:10px}
 .toast{position:fixed;bottom:18px;left:18px;background:#0f172a;color:#fff;padding:10px 16px;border-radius:8px;z-index:50}
 .mask{position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:20}
-.drawer{position:fixed;top:0;bottom:0;left:0;width:min(720px,100%);background:#f8fafc;z-index:21;overflow:auto;box-shadow:4px 0 24px rgba(0,0,0,.2)}
+.drawer{position:fixed;top:0;bottom:0;left:0;width:min(720px,100%);background:#f8fafc;z-index:21;overflow:auto;box-shadow:4px 0 24px rgba(0,0,0,.2);font-size:16px}
+.drawer input,.drawer select,.drawer textarea{font-size:17px;padding:10px 12px}
+.drawer .grid label{font-size:15px}
+.drawer .chk{font-size:16px!important}
+.drawer .sub,.drawer .tl .chg,.drawer .lockmsg{font-size:15px}
+.drawer .badge{font-size:14px}
+.drawer .sec h3{font-size:18px}
+.drawer .pay-row b,.drawer .sum b{font-size:17px}
 .dh{position:sticky;top:0;background:#fff;border-bottom:1px solid #e2e8f0;padding:12px 16px;display:flex;gap:10px;align-items:center;z-index:2}
-.dh h2{margin:0;font-size:18px;flex:1}
+.dh h2{margin:0;font-size:22px;flex:1}
 .db{padding:14px}
 .sec{background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:12px;margin-bottom:12px}
 .tl .chg{margin:4px 0 0;padding:0 16px 0 0;font-size:12px;color:#334155;list-style:disc}.tl .chg li{display:list-item;padding:1px 0;border:0}
@@ -94,6 +101,14 @@ td.wrapc{white-space:normal;max-width:220px}
 .sum{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:10px}
 .sum div{background:#f1f5f9;border-radius:8px;padding:8px;text-align:center}.sum b{display:block;font-size:16px}
 .extra{display:flex;gap:8px;align-items:center;padding:5px 0;border-bottom:1px dashed #e2e8f0}.extra span{flex:1}
+.tags{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.tag{display:inline-flex;align-items:center;gap:4px;background:#dbeafe;color:#1e40af;border-radius:999px;padding:5px 8px 5px 12px;font-size:15px;font-weight:600}
+.tag button{border:0;background:transparent;color:#1e40af;padding:0 2px;font-size:16px;line-height:1}
+.ws-btn{width:100%;text-align:right;background:#fff}
+.ws-drop{margin-top:6px;background:#fff;border:1px solid #cbd5e1;border-radius:8px;max-height:220px;overflow:auto}
+.ws-opt{display:flex;gap:8px;align-items:center;padding:8px 10px;cursor:pointer;font-size:16px;color:#0f172a}
+.ws-opt:hover{background:#eff6ff}
+.ws-opt input{width:16px;height:16px;padding:0}
 .tl{list-style:none;margin:0;padding:0}.tl li{padding:7px 0;border-bottom:1px solid #f1f5f9;display:flex;gap:8px}
 .foot{position:sticky;bottom:0;background:#fff;border-top:1px solid #e2e8f0;padding:10px 16px;display:flex;gap:8px;justify-content:space-between}
 .modal{position:fixed;top:5vh;left:50%;transform:translateX(-50%);width:min(860px,96%);max-height:90vh;overflow:auto;background:#f8fafc;border-radius:12px;z-index:30;box-shadow:0 12px 40px rgba(0,0,0,.3)}
@@ -110,13 +125,15 @@ const dmyTime = (v) => {
     return Number.isNaN(d.getTime()) ? '—' : new Intl.DateTimeFormat('he-IL', { timeZone: 'Asia/Jerusalem', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }).format(d);
 };
 const money = (n) => `₪${(Number(n) || 0).toLocaleString('he-IL')}`;
+const ilToday = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jerusalem', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+const splitWs = (v) => [...new Set(String(v || '').split(',').map((s) => s.trim()).filter(Boolean))];
 const phoneDisp = (p) => { const d = String(p || '').replace(/\D/g, ''); return d.startsWith('972') ? `0${d.slice(3, 5)}-${d.slice(5)}` : (p || '—'); };
 const badge = (map, group, key) => `<span class="badge ${BADGE[group]?.[key] || 'gray'}">${esc(map[key] || key || '—')}</span>`;
 const paySwitch = (key, title, hint, draft, dis) => `<div class="pay-row"><div><b>${title}</b><div class="sub">${hint}</div></div><label class="switch"><input type="checkbox" data-f="${key}"${draft[key] ? ' checked' : ''}${dis}><span class="knob"></span></label></div>`;
 const errText = (e) => { const m = String(e?.message || e || 'שגיאה'); const i = m.indexOf(':'); return /^[A-Z_]+$/.test(m.slice(0, i)) ? m.slice(i + 1) : m; };
 
 const MOCK_ROWS = [
-    { _id: 'm1', _createdDate: new Date().toISOString(), customerName: 'דנה כהן', customerPhone: '972521234567', eventType: 'birthday', status: 'lead', signatureStatus: 'pending', paymentStatus: 'unpaid', totalAmount: 2500, depositAmount: 750, balanceAmount: 1750, participants: 12, extras: [{ title: 'ברד', price: 200 }], conflicts: [] },
+    { _id: 'm1', _createdDate: new Date().toISOString(), customerName: 'דנה כהן', customerPhone: '972521234567', eventType: 'birthday', status: 'lead', signatureStatus: 'pending', paymentStatus: 'unpaid', totalAmount: 2500, depositAmount: 750, balanceAmount: 1750, participants: 12, requestedWorkshop: 'קרמיקה, נרות', extras: [{ title: 'ברד', price: 200 }], conflicts: [] },
     { _id: 'm2', _createdDate: new Date().toISOString(), customerName: 'חברת אלפא', customerPhone: '972501112233', eventType: 'event', status: 'signed', signatureStatus: 'signed', paymentStatus: 'deposit_paid', totalAmount: 9000, depositAmount: 3000, balanceAmount: 6000, workshopClosed: true, requiredInstructors: 2, conflicts: [{ key: 'x' }], extras: [] },
 ];
 
@@ -130,7 +147,7 @@ class QuotesDashboard extends HTMLElement {
         this.seq = 0;
         this.s = {
             items: [], total: 0, loading: true, error: '', search: '', filters: {}, sort: { field: '_createdDate', dir: 'desc' },
-            skip: 0, limit: 25, actors: [], addons: [], actorId: '', detail: null, open: { customer: true }, modal: null, detailLoading: false, saving: false, toast: '',
+            skip: 0, limit: 25, actors: [], addons: [], workshops: [], actorId: '', detail: null, open: { customer: true }, modal: null, detailLoading: false, saving: false, toast: '', wsOpen: false,
         };
     }
 
@@ -176,7 +193,7 @@ class QuotesDashboard extends HTMLElement {
 
     mockReq(type, payload) {
         const ok = (d) => new Promise((r) => setTimeout(() => r(d), 150));
-        if (type === 'boot' || type === 'init') return ok({ actors: [{ id: 'a1', name: 'מנהל בדיקה' }], addons: [{ id: 'x1', title: 'ברד', price: 200 }], items: MOCK_ROWS, total: MOCK_ROWS.length });
+        if (type === 'boot' || type === 'init') return ok({ actors: [{ id: 'a1', name: 'מנהל בדיקה' }], addons: [{ id: 'x1', title: 'ברד', price: 200 }], workshops: ['קרמיקה', 'נרות', 'טאפטינג', "צ'ארמס"], items: MOCK_ROWS, total: MOCK_ROWS.length });
         if (type === 'list') return ok({ items: MOCK_ROWS, total: MOCK_ROWS.length });
         if (type === 'get') return ok({ quote: MOCK_ROWS.find((r) => r._id === payload.id) || MOCK_ROWS[0], log: [], payments: [] });
         if (type === 'staff') return ok({ actors: [{ id: 'a1', name: 'מנהל בדיקה', trainings: [{ id: 'x1', title: 'ברד' }] }], busyStaff: {} });
@@ -194,6 +211,7 @@ class QuotesDashboard extends HTMLElement {
         try { cached = JSON.parse(localStorage.getItem('quotesBootCache') || 'null'); } catch (_) { /* ignore */ }
         if (cached?.items) {
             this.s.addons = cached.addons || [];
+            this.s.workshops = cached.workshops || [];
             this.s.items = cached.items; this.s.total = cached.total || 0;
             this.s.loading = false;
             this.cached = true;
@@ -233,9 +251,10 @@ class QuotesDashboard extends HTMLElement {
             });
             this.s.actors = res.actors || [];
             this.s.addons = res.addons || [];
+            this.s.workshops = res.workshops || [];
             this.s.items = res.items || [];
             this.s.total = res.total || 0;
-            try { localStorage.setItem('quotesBootCache', JSON.stringify({ actors: this.s.actors, addons: this.s.addons, items: this.s.items, total: this.s.total })); } catch (_) { /* quota */ }
+            try { localStorage.setItem('quotesBootCache', JSON.stringify({ actors: this.s.actors, addons: this.s.addons, workshops: this.s.workshops, items: this.s.items, total: this.s.total })); } catch (_) { /* quota */ }
         } catch (err) { if (!cached) this.s.error = errText(err); }
         this.s.loading = false;
         this.render();
@@ -269,7 +288,13 @@ class QuotesDashboard extends HTMLElement {
         const t = e.target;
         if (t.dataset.filter) { this.s.filters[t.dataset.filter] = t.value || undefined; if (t.dataset.filter === 'workshopClosed') this.s.filters.workshopClosed = t.value; this.s.skip = 0; this.load(); }
         else if (t.id === 'staffPick' && t.value && this.s.detail?.draft) { this.toggleStaff(t.value, true); this.render(); }
-        else if (t.dataset.f && this.s.detail) { this.readField(t); }
+        else if (t.dataset.ws && this.s.detail?.draft && !this.isLocked()) {
+            const set = new Set(this.s.detail.draft.workshops || []);
+            t.checked ? set.add(t.value) : set.delete(t.value);
+            this.s.detail.draft.workshops = [...set];
+            this.s.wsOpen = true;
+            this.render();
+        } else if (t.dataset.f && this.s.detail) { this.readField(t); }
         else if (t.dataset.cf && this.s.modal?.tpl) {
             const f = new Set(this.s.modal.tpl.config.fields);
             t.checked ? f.add(t.dataset.cf) : f.delete(t.dataset.cf);
@@ -291,12 +316,19 @@ class QuotesDashboard extends HTMLElement {
             const other = t.dataset.f === 'allowOnlinePayment' ? 'allowBankTransfer' : 'allowOnlinePayment';
             if (!t.checked && !q[other]) { t.checked = true; this.toast('חייב להישאר אמצעי תשלום אחד פעיל'); return; }
         }
+        if (t.dataset.f === 'eventDate' && t.value && t.value < ilToday()) {
+            t.value = q.eventDate && q.eventDate >= ilToday() ? q.eventDate : '';
+            this.toast('לא ניתן לבחור תאריך שעבר');
+            return;
+        }
         q[t.dataset.f] = t.type === 'checkbox' ? t.checked : t.value;
     }
 
     onClick(e) {
+        const outsideWs = this.s.wsOpen && !e.target.closest('.ws');
+        if (outsideWs) this.s.wsOpen = false;
         const el = e.target.closest('[data-act]');
-        if (!el) return;
+        if (!el) { if (outsideWs) this.render(); return; }
         const a = el.dataset.act;
         if (a === 'row') return this.openDetail(el.dataset.id);
         if (a === 'sort') { const f = el.dataset.field; this.s.sort = { field: f, dir: this.s.sort.field === f && this.s.sort.dir === 'desc' ? 'asc' : 'desc' }; this.s.skip = 0; return this.load(); }
@@ -304,7 +336,13 @@ class QuotesDashboard extends HTMLElement {
         if (a === 'next') { this.s.skip += this.s.limit; return this.load(); }
         if (a === 'refresh') return this.load();
         if (a === 'sync') return this.sync();
-        if (a === 'close') { this.s.detail = null; return this.render(); }
+        if (a === 'close') { this.s.detail = null; this.s.wsOpen = false; return this.render(); }
+        if (a === 'wsToggle') { if (this.isLocked()) return; this.s.wsOpen = !this.s.wsOpen; return this.render(); }
+        if (a === 'wsRemove') {
+            if (this.isLocked()) return;
+            this.s.detail.draft.workshops = (this.s.detail.draft.workshops || []).filter((n) => n !== el.dataset.name);
+            return this.render();
+        }
         if (a === 'save') return this.save();
         if (a === 'cancel') return this.cancelQuote();
         if (a === 'addCatalogExtra') return this.addCatalogExtra();
@@ -348,7 +386,7 @@ class QuotesDashboard extends HTMLElement {
             const q = d.quote;
             this.s.detail = {
                 id, quote: q, log: d.log || [], payments: d.payments || [], busyStaff: {}, staff: [], staffLoading: true,
-                draft: { ...q, extras: (q.extras || []).map((x) => ({ ...x })), assignedStaffIds: [...(q.assignedStaffIds || [])], eventDate: ymd(q.eventDate), expiresAt: ymd(q.expiresAt), balanceDueDate: ymd(q.balanceDueDate) },
+                draft: { ...q, extras: (q.extras || []).map((x) => ({ ...x })), assignedStaffIds: [...(q.assignedStaffIds || [])], workshops: splitWs(q.requestedWorkshop), eventDate: ymd(q.eventDate), expiresAt: ymd(q.expiresAt), balanceDueDate: ymd(q.balanceDueDate) },
             };
             this.render();
             this.loadStaff(id, q.eventDate);
@@ -390,10 +428,13 @@ class QuotesDashboard extends HTMLElement {
         const d = this.s.detail.draft;
         const locked = this.isLocked();
         const num = (v) => (v === '' || v === null || v === undefined ? null : Number(v));
+        const originalDate = ymd(this.s.detail.quote.eventDate);
+        if (!locked && d.eventDate && d.eventDate < ilToday() && d.eventDate !== originalDate) { this.toast('לא ניתן לבחור תאריך שעבר'); return false; }
         const patch = locked
             ? { notes: d.notes || '' }
             : {
                 customerName: d.customerName, customerEmail: d.customerEmail, customerPhone: d.customerPhone, companyName: d.companyName,
+                requestedWorkshop: (d.workshops || []).join(', '),
                 participants: num(d.participants) ?? 0, adults: num(d.adults) ?? 0, eventDate: d.eventDate || null,
                 eventStartTime: d.eventStartTime || '', eventEndTime: d.eventEndTime || '', workshopClosed: !!d.workshopClosed,
                 requiredInstructors: num(d.requiredInstructors) ?? 0, extras: d.extras, basePrice: num(d.basePrice) ?? 0,
@@ -581,6 +622,17 @@ class QuotesDashboard extends HTMLElement {
             <div class="pager"><span class="sub">${from}-${to} מתוך ${this.s.total}</span><span><button data-act="prev"${this.s.skip === 0 ? ' disabled' : ''}>הקודם</button> <button data-act="next"${to >= this.s.total ? ' disabled' : ''}>הבא</button></span></div></div>`;
     }
 
+    workshopPicker(d, locked) {
+        const selected = d.workshops || [];
+        const chosen = new Set(selected);
+        const options = [...new Set([...(this.s.workshops || []), ...selected])];
+        const tags = selected.map((n) => `<span class="tag">${esc(n)}${locked ? '' : `<button type="button" data-act="wsRemove" data-name="${esc(n)}" aria-label="הסר">✕</button>`}</span>`).join('');
+        const box = this.s.wsOpen ? `<div class="ws-drop">${options.map((n) => `<label class="ws-opt"><input type="checkbox" data-ws="${esc(n)}" value="${esc(n)}"${chosen.has(n) ? ' checked' : ''}>${esc(n)}</label>`).join('') || '<div class="sub" style="padding:8px">אין סדנאות ברשימה</div>'}</div>` : '';
+        return `<div class="ws"><span style="color:#475569">סדנאות</span>
+            <button type="button" class="ws-btn" data-act="wsToggle"${locked ? ' disabled' : ''}>${selected.length ? `${selected.length} נבחרו` : 'בחירת סדנאות'} ${this.s.wsOpen ? '▲' : '▼'}</button>
+            ${box}<div class="tags">${tags || '<span class="sub">לא נבחרו סדנאות</span>'}</div></div>`;
+    }
+
     staffPicker(dt, d, blocked) {
         if (dt.staffLoading) return '<div class="sub">טוען עובדים...</div>';
         if (!dt.staff.length) return '<div class="sub">אין עובדים פעילים</div>';
@@ -613,6 +665,7 @@ class QuotesDashboard extends HTMLElement {
         const q = dt.quote; const d = dt.draft; const locked = this.isLocked(); const dis = locked ? ' disabled' : '';
         const sec = (key, title) => `<div class="sec${this.s.open[key] ? '' : ' col'}"><h3 data-act="toggleSec" data-k="${key}">${title}</h3>`;
         const f = (key, label, type = 'text', extra = '') => `<label>${label}<input type="${type}" data-f="${key}" value="${esc(d[key] ?? '')}"${dis} ${extra}></label>`;
+        const dateMin = (key, label) => f(key, label, 'date', `min="${ilToday()}"`);
         const chk = (key, label) => `<label class="chk"><input type="checkbox" data-f="${key}"${d[key] ? ' checked' : ''}${dis}> ${label}</label>`;
         const extras = d.extras.map((x, i) => `<div class="extra"><span>${esc(x.title)}</span><b>${money(x.price)}</b>${locked ? '' : `<button data-act="delExtra" data-i="${i}">✕</button>`}</div>`).join('') || '<div class="sub">אין תוספות</div>';
         const addOpts = this.s.addons.map((a) => {
@@ -632,9 +685,9 @@ class QuotesDashboard extends HTMLElement {
               ${locked ? '<div class="lockmsg">ההצעה נעולה לעריכה (נחתמה / פגה / בוטלה). ניתן לערוך הערות בלבד.</div>' : ''}
               ${(q.conflicts || []).length ? `<div class="err">🔴 התנגשות ביומן: ${esc(q.conflicts.map((c) => c.summary || c.key).join(' | '))}</div>` : ''}
               ${sec('customer', 'פרטי לקוח')}<div class="grid">${f('customerName', 'שם')}${f('customerPhone', 'טלפון')}${f('customerEmail', 'אימייל')}${f('companyName', 'חברה')}
-                <label class="full">בקשת הלקוח בטופס<input value="${esc(q.requestedWorkshop || '')}" disabled></label>
+                <div class="full">${this.workshopPicker(d, locked)}</div>
                 <label class="full">הערות הלקוח<textarea rows="2" disabled>${esc(q.customerNotes || '')}</textarea></label></div></div>
-              ${sec('event', 'האירוע')}<div class="grid">${f('eventDate', 'תאריך', 'date')}${f('participants', 'משתתפים', 'number', 'min="0"')}${f('eventStartTime', 'שעת התחלה', 'time')}${f('eventEndTime', 'שעת סיום', 'time')}${f('adults', 'מלווים', 'number', 'min="0"')}${f('requiredInstructors', 'מדריכים נדרשים', 'number', 'min="0"')}
+              ${sec('event', 'האירוע')}<div class="grid">${dateMin('eventDate', 'תאריך')}${f('participants', 'משתתפים', 'number', 'min="0"')}${f('eventStartTime', 'שעת התחלה', 'time')}${f('eventEndTime', 'שעת סיום', 'time')}${f('adults', 'מלווים', 'number', 'min="0"')}${f('requiredInstructors', 'מדריכים נדרשים', 'number', 'min="0"')}
                 <div class="full">${chk('workshopClosed', 'סדנה סגורה (פרטית)')}</div></div></div>
               ${sec('staff', 'צוות משובץ')}${this.staffPicker(dt, d, q.status === 'cancelled')}</div>
               ${sec('pricing', 'תמחור')}<div class="grid">${f('basePrice', 'מחיר בסיס (₪)', 'number', 'min="0"')}${f('priceOverride', 'מחיר מותאם (עוקף הכול)', 'number', 'min="0"')}

@@ -19,7 +19,7 @@ const SA = { suppressAuth: true, suppressHooks: true };
 
 const EDITABLE_FIELDS = [
     'customerName', 'customerEmail', 'customerPhone', 'companyName', 'companyRole', 'eventLocation', 'eventAddress',
-    'participants', 'adults', 'eventDate', 'eventStartTime', 'eventEndTime', 'workshopId', 'workshopClosed',
+    'participants', 'adults', 'eventDate', 'eventStartTime', 'eventEndTime', 'workshopId', 'requestedWorkshop', 'workshopClosed',
     'requiredInstructors', 'extras', 'basePrice', 'priceOverride', 'depositType', 'depositValue',
     'balanceDueDate', 'expiresAt', 'allowOnlinePayment', 'allowBankTransfer', 'notes', 'assignedStaffIds',
 ];
@@ -54,6 +54,12 @@ function toDate(value) {
     return Number.isNaN(d.getTime()) ? null : d;
 }
 
+const ilDay = (value) => {
+    const d = value instanceof Date ? value : new Date(value);
+    if (Number.isNaN(d.getTime())) return '';
+    return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jerusalem', year: 'numeric', month: '2-digit', day: '2-digit' }).format(d);
+};
+
 export const updateQuote = webMethod(Permissions.Admin, async (quoteId, patch = {}, actorName) => {
     const quote = await wixData.get('Quotes', quoteId, SA);
     if (!quote) throw new Error('NOT_FOUND:ההצעה לא נמצאה.');
@@ -67,10 +73,19 @@ export const updateQuote = webMethod(Permissions.Admin, async (quoteId, patch = 
     DATE_FIELDS.forEach((k) => { if (k in changes) changes[k] = toDate(changes[k]); });
     if ('customerPhone' in changes) changes.customerPhone = toManyChatPhone(changes.customerPhone);
     if ('requiredInstructors' in changes) changes.requiredInstructors = Math.max(0, parseInt(changes.requiredInstructors, 10) || 0);
+    if ('requestedWorkshop' in changes) {
+        const tags = [...new Set(String(changes.requestedWorkshop || '').split(',').map((s) => s.trim()).filter(Boolean))].slice(0, 20);
+        changes.requestedWorkshop = tags.map((t) => t.slice(0, 80)).join(', ');
+    }
 
     const next = { ...quote, ...changes };
 
     if (!locked) {
+        if (changes.eventDate) {
+            const nextDay = ilDay(changes.eventDate);
+            const prevDay = quote.eventDate ? ilDay(quote.eventDate) : '';
+            if (nextDay && nextDay < ilDay(new Date()) && nextDay !== prevDay) throw new Error('VALIDATION:לא ניתן לבחור תאריך שעבר.');
+        }
         if (next.eventStartTime && next.eventEndTime && next.eventStartTime >= next.eventEndTime) {
             throw new Error('VALIDATION:שעת הסיום חייבת להיות אחרי שעת ההתחלה.');
         }

@@ -461,7 +461,7 @@ class QuotesDashboard extends HTMLElement {
             const d = await this.req('get', { id });
             const q = d.quote;
             this.s.detail = {
-                id, quote: q, log: d.log || [], payments: d.payments || [], busyStaff: {}, staff: [], staffLoading: true,
+                id, quote: q, log: d.log || [], payments: d.payments || [], proofs: d.proofs || [], busyStaff: {}, staff: [], staffLoading: true,
                 draft: { ...q, extras: (q.extras || []).map((x) => ({ ...x })), assignedStaffIds: [...(q.assignedStaffIds || [])], workshops: splitWs(q.requestedWorkshop), eventDate: ymd(q.eventDate), expiresAt: ymd(q.expiresAt), balanceDueDate: ymd(q.balanceDueDate) },
             };
             this.render();
@@ -564,6 +564,22 @@ class QuotesDashboard extends HTMLElement {
             await this.openDetail(this.s.detail.id);
             this.load();
         } catch (err) { await this.fail(err); }
+    }
+
+    proofsTable(rows = []) {
+        if (!rows.length) return '';
+        const ST = { pending: ['ממתין לאישור', 'amber'], paid: ['אושר', 'green'], rejected: ['נדחה', 'red'] };
+        const STAGE = { deposit: 'מקדמה', full: 'תשלום מלא', balance: 'יתרה' };
+        const firstPending = rows.find((p) => p.status === 'pending');
+        const tr = rows.map((p) => {
+            const [label, color] = ST[p.status] || [p.status, 'amber'];
+            const view = /^https?:\/\//.test(p.url || '') ? `<a href="${esc(p.url)}" target="_blank" rel="noopener">${p.isPdf ? '📄' : '🖼️'} צפייה</a>` : '—';
+            const acts = p === firstPending ? `<button class="btn-p" data-act="approveTransfer">אשר</button> <button class="btn-d" data-act="rejectTransfer">דחה</button>` : '';
+            return `<tr><td>${dmyTime(p.at)}</td><td>${esc(STAGE[p.stage] || p.stage)}</td><td>${money(p.amount)}</td><td><span class="badge ${color}">${esc(label)}</span></td><td>${view}</td><td>${acts}</td></tr>`;
+        }).join('');
+        return `<div class="extras-h" style="margin-top:12px">אסמכתאות העברה</div>
+            <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:14px"><thead><tr style="text-align:right;color:#64748b"><th>תאריך</th><th>עבור</th><th>סכום</th><th>סטטוס</th><th>קובץ</th><th></th></tr></thead>
+            <tbody>${tr}</tbody></table></div>`;
     }
 
     async reviewTransfer(approve) {
@@ -808,8 +824,7 @@ class QuotesDashboard extends HTMLElement {
                 <div class="sub">נבחר ע"י הלקוח: ${esc(L.method[q.selectedPaymentMethod] || '—')} · ${badge(L.pay, 'pay', q.paymentStatus)} · חתימה: ${badge(L.sig, 'sig', q.signatureStatus)}</div></div>
               ${sec('notes', 'הערות פנימיות')}<textarea rows="3" style="width:100%" data-f="notes">${esc(d.notes || '')}</textarea></div>
               ${sec('payments', 'תשלומים')}<ul class="tl">${pays}</ul>
-                ${q.transferProof && /^https?:\/\//.test(q.transferProof) ? `<div class="lockmsg">אסמכתת העברה התקבלה (${dmyTime(q.transferProofAt)}): <a href="${esc(q.transferProof)}" target="_blank" rel="noopener">צפייה בקובץ</a>
-                  <div style="margin-top:8px"><button class="btn-p" data-act="approveTransfer">אשר העברה</button> <button class="btn-d" data-act="rejectTransfer">דחה</button></div></div>` : ''}</div>
+                ${this.proofsTable(dt.proofs)}</div>
               ${sec('log', 'היסטוריית פעולות')}<ul class="tl">${log}</ul></div>
             </div>
             <div class="foot"><button class="btn-d" data-act="cancel"${q.status === 'cancelled' ? ' disabled' : ''}>בטל הצעה</button><span><button data-act="preview">תצוגה מקדימה</button> <button data-act="copyLink"${q.publicToken ? '' : ' disabled'}>העתק קישור</button> ${q.publicToken && ['draft', 'sent', 'viewed'].includes(q.status) ? '<button data-act="sendEmail">שלח במייל</button> <button data-act="sendWhatsapp">שלח בוואטסאפ</button> ' : ''}${['lead', 'draft'].includes(q.status) ? '<button data-act="prepare">הכן לשליחה</button> ' : ''}<button data-act="close">סגור</button> <button class="btn-p" data-act="save"${this.s.saving ? ' disabled' : ''}>${this.s.saving ? 'שומר...' : 'שמור'}</button></span></div>

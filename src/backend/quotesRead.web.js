@@ -3,6 +3,7 @@ import { Permissions, webMethod } from 'wix-web-module';
 import wixData from 'wix-data';
 import { loadAddonsCatalog } from 'backend/quoteCore.js';
 import { listQuoteLog } from 'backend/quoteLog.js';
+import { proofRows } from 'backend/quoteMedia.js';
 const SA = { suppressAuth: true, suppressHooks: true };
 
 const LIST_FIELDS = [
@@ -163,7 +164,7 @@ export const getQuote = webMethod(Permissions.Admin, async (quoteId) => {
         listQuoteLog(quoteId),
         wixData.query('QuotePayments').eq('quoteId', quoteId).descending('_createdDate').limit(50).find(SA),
     ]);
-    return { quote, log, payments: payments.items };
+    return { quote, log, payments: payments.items, proofs: proofRows(payments.items, quote) };
 });
 
 /** Staff picker, loaded after the drawer is already open. */

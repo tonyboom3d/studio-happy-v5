@@ -93,7 +93,20 @@ canvas{width:100%;height:170px;border:2px dashed #d1d5db;border-radius:14px;back
 .approve input{margin-top:5px;width:18px;height:18px;accent-color:#16a34a;flex:none}
 .dlg-f{display:flex;gap:10px;padding:12px 20px 16px;position:sticky;bottom:0;background:#fff;border-top:1px solid #f1f5f9}
 .dlg-f>*{flex:1}
-@media(max-width:640px){.card{padding:20px 14px}.contract{font-size:17px}.btn{padding:12px 28px}
+.next{border:1px solid #e5e7eb;border-radius:14px;padding:14px 16px;margin-top:14px;background:#fff}
+.next h3{margin:0 0 8px;font-size:19px}
+.next ul{margin:0;padding:0;list-style:none}.next li{display:flex;gap:10px;align-items:flex-start;margin:6px 0}.next li i{font-style:normal;flex:none}
+.note{background:#eff6ff;border:1px solid #dbeafe;color:#1e3a8a;border-radius:12px;padding:10px 14px;font-size:16px;margin-top:12px}
+.drop{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;border:2px dashed #d1d5db;border-radius:14px;padding:22px 14px;text-align:center;cursor:pointer;background:#f9fafb;margin-top:8px}
+.drop:hover{border-color:#16a34a;background:#f0fdf4}.drop input{display:none}.drop .ic{font-size:34px}
+.prev{display:flex;gap:12px;align-items:center;margin-top:10px;border:1px solid #e5e7eb;border-radius:12px;padding:8px 10px}
+.prev img{width:72px;height:72px;object-fit:cover;border-radius:8px;flex:none}.prev .pdf{font-size:40px}
+.tbl{width:100%;border-collapse:collapse;font-size:16px;margin-top:6px}
+.tbl th{text-align:right;color:#6b7280;font-weight:600;font-size:14px;padding:8px;border-bottom:1px solid #e5e7eb}
+.tbl td{padding:9px 8px;border-bottom:1px solid #f1f5f9;vertical-align:middle}
+.st{display:inline-block;border-radius:999px;padding:2px 10px;font-size:14px;font-weight:600}
+.st.pending{background:#fef3c7;color:#92400e}.st.paid{background:#dcfce7;color:#166534}.st.rejected{background:#fee2e2;color:#991b1b}
+@media(max-width:640px){.tbl{font-size:14px}.tbl th,.tbl td{padding:6px 4px}.card{padding:20px 14px}.contract{font-size:17px}.btn{padding:12px 28px}
 .facts{grid-template-columns:1fr 1fr;gap:8px}.fact{padding:8px;gap:6px}.fact .ic{font-size:18px}.fact b{font-size:15px}
 .money{gap:6px}.money div{padding:9px 4px}.money b{font-size:17px}.money span{font-size:12px}}
 `;
@@ -191,6 +204,7 @@ class QuoteContract extends HTMLElement {
 
     onInput(e) {
         const t = e.target;
+        if (t.id === 'proofFile' && e.type === 'change') return this.pickProof(t.files?.[0]);
         if (!this.form || !t.dataset.k) return;
         this.form[t.dataset.k] = t.type === 'checkbox' ? t.checked : t.value;
     }
@@ -208,13 +222,23 @@ class QuoteContract extends HTMLElement {
         if (a === 'upload') return this.upload();
     }
 
+    // The input is re-created on every render, so the chosen file lives on the instance.
+    pickProof(file) {
+        if (this.proofPreview) URL.revokeObjectURL(this.proofPreview);
+        this.proofFile = file || null;
+        this.proofPreview = file && /^image\//.test(file.type) ? URL.createObjectURL(file) : '';
+        this.error = '';
+        this.render();
+    }
+
     async upload() {
-        const file = this.root.querySelector('#proofFile')?.files?.[0];
-        if (!file) { this.error = 'יש לבחור קובץ.'; return this.render(); }
+        const file = this.proofFile;
+        if (!file) { this.error = 'יש לבחור צילום מסך או קובץ של האסמכתא.'; return this.render(); }
         this.busy = true; this.error = ''; this.render();
         try {
             const dataUrl = await this.prepareProof(file);
             await this.req('proof', { dataUrl, fileName: file.name });
+            this.pickProof(null);
         } catch (err) { this.error = errText(err); }
         this.busy = false; this.render();
     }
@@ -427,10 +451,35 @@ class QuoteContract extends HTMLElement {
         return `<div class="cta" style="margin-top:14px"><button class="btn" data-act="pay" data-stage="${stage}" ${this.busy ? 'disabled' : ''}>${this.busy ? 'מעבד...' : `לתשלום מאובטח ${money(amount)}`}</button><div class="sub" style="margin-top:6px">ביט / כרטיס אשראי / Apple Pay</div></div>`;
     }
 
-    uploadBox(err) {
-        return `<h3 class="t">העלאת אסמכתא</h3><p class="sub">לאחר ביצוע ההעברה, צרפו צילום או PDF של האישור.</p>
-            <input type="file" id="proofFile" accept="image/*,application/pdf" ${this.busy ? 'disabled' : ''}>${err}
-            <div class="cta" style="margin-top:12px"><button class="btn" data-act="upload" ${this.busy ? 'disabled' : ''}>${this.busy ? 'מעלה...' : 'שליחת אסמכתא'}</button></div>`;
+    uploadBox(d, err) {
+        const f = this.proofFile;
+        const dis = this.busy ? ' disabled' : '';
+        const prev = f ? `<div class="prev">${this.proofPreview ? `<img src="${esc(this.proofPreview)}" alt="">` : '<span class="pdf">📄</span>'}
+            <div><b>${esc(f.name)}</b><div class="sub">${Math.max(1, Math.round(f.size / 1024))} KB</div></div></div>` : '';
+        const rejected = (d.proofs || [])[0]?.status === 'rejected'
+            ? '<div class="err" style="margin:0 0 10px">האסמכתא הקודמת נדחתה. נא להעלות אסמכתא תקינה.</div>' : '';
+        return `<h3 class="t">📤 העלאת אסמכתא</h3>${rejected}
+            <p class="sub" style="margin:0">לאחר ביצוע ההעברה, צרפו צילום מסך של האישור (תמונה או PDF).</p>
+            <label class="drop"><input type="file" id="proofFile" accept="image/*,application/pdf"${dis}>
+              <span class="ic">🖼️</span><b>${f ? 'החלפת קובץ' : 'לחצו לבחירת צילום מסך'}</b><span class="sub">JPG / PNG / PDF</span></label>
+            ${prev}${err}
+            <div class="cta" style="margin-top:14px"><button class="btn" data-act="upload"${f ? dis : ' disabled'}>${this.busy ? 'מעלה...' : 'שליחה לאישור'}</button></div>`;
+    }
+
+    statusNote(d) {
+        const email = d.signerEmail || d.customerEmail;
+        return `<div class="note">🔗 ניתן לחזור לקישור זה בכל עת כדי לצפות בסטטוס ההזמנה.<br>📧 לאחר אישור ההעברה תישלח אליכם חשבונית${email ? ` לכתובת <b>${esc(email)}</b>` : ' למייל'}.</div>`;
+    }
+
+    proofsTable(d) {
+        const rows = d.proofs || [];
+        if (!rows.length) return '';
+        const ST = { pending: 'ממתין לאישור', paid: 'אושר', rejected: 'נדחה' };
+        const STAGE = { deposit: 'מקדמה', full: 'תשלום מלא', balance: 'יתרה' };
+        const tr = rows.map((p) => `<tr><td>${esc(dmy(p.at))}</td><td>${esc(STAGE[p.stage] || p.stage)}</td><td>${money(p.amount)}</td>
+            <td><span class="st ${esc(p.status)}">${esc(ST[p.status] || p.status)}</span></td>
+            <td>${safeUrl(p.url) ? `<a href="${esc(p.url)}" target="_blank" rel="noopener">צפייה</a>` : '—'}</td></tr>`).join('');
+        return `<h3 class="t">🧾 אסמכתאות שנשלחו</h3><div style="overflow-x:auto"><table class="tbl"><thead><tr><th>תאריך</th><th>עבור</th><th>סכום</th><th>סטטוס</th><th>קובץ</th></tr></thead><tbody>${tr}</tbody></table></div>`;
     }
 
     thanksScreen(d) {
@@ -438,10 +487,19 @@ class QuoteContract extends HTMLElement {
         const back = /^\/[^/]/.test(d.backUrl || '') ? `<p style="text-align:center"><a href="${esc(d.backUrl)}">חזרה להצעה</a></p>` : '';
         const stage = { deposit: 'מקדמה', full: 'תשלום מלא', balance: 'יתרה' }[p?.stage] || '';
         const remaining = Math.max(0, (Number(d.totalAmount) || 0) - (Number(d.paidAmount) || 0));
+        const email = d.signerEmail || d.customerEmail;
         let body;
         if (p?.status === 'paid') {
-            body = `<div class="msg"><div class="ic">✅</div><h2>התשלום התקבל, תודה!</h2><p>${esc(stage)} על סך <b>${money(p.amount)}</b></p>
-                ${remaining > 0 ? `<p class="sub">יתרה לתשלום: ${money(remaining)} עד ${esc(dmy(d.balanceDueDate))}</p>` : '<p class="sub">ההצעה שולמה במלואה.</p>'}</div>`;
+            const steps = remaining > 0
+                ? [['💳', `נותרה יתרה של <b>${money(remaining)}</b> לתשלום${d.balanceDueDate ? ` עד <b>${esc(longDate(d.balanceDueDate))}</b>` : ''}.`],
+                    ['🔗', 'את היתרה ניתן לשלם בכל עת דרך הקישור להצעה (נשלח אליכם בוואטסאפ / במייל).']]
+                : [['🎉', 'ההצעה שולמה במלואה — אין צורך בפעולה נוספת.']];
+            steps.push(['📧', `חשבונית על התשלום תישלח אליכם${email ? ` לכתובת <b>${esc(email)}</b>` : ' למייל'}.`]);
+            if (d.eventDate) steps.push(['📅', `נתראה ב<b>${esc(weekday(d.eventDate))}, ${esc(longDate(d.eventDate))}</b>${d.eventStartTime ? ` בשעה <b>${esc(d.eventStartTime)}</b>` : ''}!`]);
+            body = `<div class="msg" style="padding-bottom:6px"><div class="ic">✅</div><h2>התשלום התקבל, תודה!</h2><p>${esc(stage)} על סך <b>${money(p.amount)}</b></p></div>
+                <div class="next"><h3>מה הלאה?</h3><ul>${steps.map(([ic, t]) => `<li><i>${ic}</i><span>${t}</span></li>`).join('')}</ul></div>
+                ${remaining > 0 && back ? `<div class="cta"><a class="btn" style="text-decoration:none;display:inline-block" href="${esc(d.backUrl)}">לתשלום היתרה</a></div>` : ''}`;
+            return this.frame(d, 'תודה!', `<div class="card">${this.logo(d)}${body}</div>${this.summary(d)}`);
         } else if (p?.status === 'failed' || p?.status === 'refunded') {
             body = '<div class="msg"><div class="ic">⚠️</div><h2>התשלום לא הושלם</h2><p class="sub">ניתן לחזור להצעה ולנסות שוב.</p></div>';
         } else if (d.timedOut) {
@@ -463,14 +521,17 @@ class QuoteContract extends HTMLElement {
             const amount = stage === 'deposit' ? d.depositAmount : d.totalAmount;
             body = `<div class="ok">תודה! ההצעה נחתמה בהצלחה.</div>${d.selectedPaymentMethod === 'online' ? this.payButton(stage, amount) : ''}${err}`;
         } else if (vs === 'awaiting_transfer_proof') {
-            body = `<div class="ok">תודה! ההצעה נחתמה. נותר לבצע את ההעברה.</div>${bank}${this.uploadBox(err)}`;
+            const amount = d.selectedPaymentPlan === 'deposit' ? d.depositAmount : Math.max(0, (Number(d.totalAmount) || 0) - (Number(d.paidAmount) || 0));
+            body = `<div class="ok">תודה! ההצעה נחתמה. נותר לבצע העברה בנקאית על סך ${money(amount)}.</div>${bank}${this.uploadBox(d, err)}${this.statusNote(d)}`;
         } else if (vs === 'awaiting_transfer_approval') {
-            body = `<div class="ok">האסמכתא התקבלה וממתינה לאישור.</div>${err}`;
+            body = `<div class="msg" style="padding:8px"><div class="ic">⏳</div><h2>האסמכתא נשלחה לאישור</h2><p class="sub">נעדכן אותך ברגע שההעברה תאושר.</p></div>${this.statusNote(d)}${err}`;
         } else if (vs === 'balance_due') {
-            body = `<div class="ok">שולמה מקדמה ${money(d.paidAmount)}.</div><p>יתרה לתשלום <b>${money(d.balanceAmount)}</b> עד ${esc(dmy(d.balanceDueDate))}</p>${d.selectedPaymentMethod === 'bank_transfer' ? bank + this.uploadBox(err) : this.payButton('balance', d.balanceAmount) + err}`;
+            const byBank = d.selectedPaymentMethod === 'bank_transfer';
+            body = `<div class="ok">שולמה מקדמה ${money(d.paidAmount)}.</div><p>יתרה לתשלום <b>${money(d.balanceAmount)}</b> עד ${esc(dmy(d.balanceDueDate))}</p>${byBank ? bank + this.uploadBox(d, err) + this.statusNote(d) : this.payButton('balance', d.balanceAmount) + err}`;
         } else if (vs === 'paid_full') {
             body = `<div class="ok">ההצעה שולמה במלואה, תודה! 🎉</div>${pdf}`;
         }
+        body += this.proofsTable(d);
         return this.frame(d, 'חוזה התקשרות', `<div class="card">${this.logo(d)}${body}</div>${this.summary(d)}
             <details class="card"><summary>צפייה בהסכם</summary><div class="contract" style="margin-top:12px">${d.contractHtml || ''}</div></details>`);
     }

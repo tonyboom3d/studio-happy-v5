@@ -5,6 +5,7 @@ import { auth } from '@wix/essentials';
 import { computeAmounts } from 'backend/quotePricing.js';
 import { toManyChatPhone, getQuoteSettings, LOCKED_STATUSES, SIGNED_EDITABLE_FIELDS } from 'backend/quoteCore.js';
 import { writeQuoteLog } from 'backend/quoteLog.js';
+import { guard } from 'backend/quoteErrors.js';
 import { diffQuote } from 'backend/quoteDiff.js';
 import { backfillQuoteLeads } from 'backend/quoteLeadsSync.js';
 import { buildPreparedFields, buildQuoteUrl, resolveTemplate } from 'backend/quoteBuilder.js';
@@ -60,7 +61,7 @@ const ilDay = (value) => {
     return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jerusalem', year: 'numeric', month: '2-digit', day: '2-digit' }).format(d);
 };
 
-export const updateQuote = webMethod(Permissions.Admin, async (quoteId, patch = {}, actorName) => {
+export const updateQuote = webMethod(Permissions.Admin, guard(async (quoteId, patch = {}, actorName) => {
     const quote = await wixData.get('Quotes', quoteId, SA);
     if (!quote) throw new Error('NOT_FOUND:ההצעה לא נמצאה.');
 
@@ -109,9 +110,9 @@ export const updateQuote = webMethod(Permissions.Admin, async (quoteId, patch = 
     const diff = await diffQuote(quote, saved, Object.keys(changes)).catch(() => []);
     if (diff.length) await writeQuoteLog(quoteId, 'quote_updated', { changes: diff }, actor);
     return { quote: saved, changed: Object.keys(changes) };
-});
+}));
 
-export const cancelQuote = webMethod(Permissions.Admin, async (quoteId, actorName) => {
+export const cancelQuote = webMethod(Permissions.Admin, guard(async (quoteId, actorName) => {
     const quote = await wixData.get('Quotes', quoteId, SA);
     if (!quote) throw new Error('NOT_FOUND:ההצעה לא נמצאה.');
     if (quote.status === 'cancelled') return { quote };
@@ -119,23 +120,23 @@ export const cancelQuote = webMethod(Permissions.Admin, async (quoteId, actorNam
     await writeQuoteLog(quoteId, 'cancelled', { previousStatus: quote.status }, await getActor(actorName));
     // Calendar release is added in the calendar phase.
     return { quote: saved };
-});
+}));
 
-export const saveSettings = webMethod(Permissions.Admin, async (patch = {}) => {
+export const saveSettings = webMethod(Permissions.Admin, guard(async (patch = {}) => {
     const current = await getQuoteSettings();
     if (!current) throw new Error('NOT_FOUND:שורת ההגדרות לא נמצאה.');
     const saved = await wixData.update('QuoteSettings', { ...current, ...pick(patch, SETTINGS_FIELDS) }, SA);
     return { settings: saved };
-});
+}));
 
 // ---- Templates ----
-export const listTemplates = webMethod(Permissions.Admin, async () => {
+export const listTemplates = webMethod(Permissions.Admin, guard(async () => {
     const res = await wixData.query('QuoteTemplates').eq('active', true).ascending('name').limit(100).find(SA);
     const templates = res.items.map((t) => ({ ...t, config: parseTemplateConfig(t.bodyHtml) }));
     return { templates, placeholders: PLACEHOLDERS, fieldOptions: FIELD_OPTIONS, defaultFields: DEFAULT_TEMPLATE_FIELDS };
-});
+}));
 
-export const saveTemplate = webMethod(Permissions.Admin, async (tpl = {}, actorName) => {
+export const saveTemplate = webMethod(Permissions.Admin, guard(async (tpl = {}, actorName) => {
     const name = String(tpl.name || '').trim().slice(0, 120);
     const bodyHtml = tpl.config ? buildTemplateHtml(tpl.config) : sanitizeHtml(tpl.bodyHtml);
     if (!name) throw new Error('VALIDATION:חסר שם לתבנית.');
@@ -159,17 +160,17 @@ export const saveTemplate = webMethod(Permissions.Admin, async (tpl = {}, actorN
     }
     console.log('[quotesAdmin] template saved', saved._id, (await getActor(actorName)).name);
     return { template: saved };
-});
+}));
 
-export const deleteTemplate = webMethod(Permissions.Admin, async (templateId) => {
+export const deleteTemplate = webMethod(Permissions.Admin, guard(async (templateId) => {
     const cur = await wixData.get('QuoteTemplates', templateId, SA);
     if (!cur) throw new Error('NOT_FOUND:התבנית לא נמצאה.');
     await wixData.update('QuoteTemplates', { ...cur, active: false, isDefault: false }, SA);
     return { ok: true };
-});
+}));
 
 // ---- Builder ----
-export const previewQuote = webMethod(Permissions.Admin, async (quoteId, templateId) => {
+export const previewQuote = webMethod(Permissions.Admin, guard(async (quoteId, templateId) => {
     const quote = await wixData.get('Quotes', quoteId, SA);
     if (!quote) throw new Error('NOT_FOUND:ההצעה לא נמצאה.');
     const tpl = await resolveTemplate(templateId || quote.templateId, quote.eventType).catch((e) => { throw new Error(e?.message || 'VALIDATION:שגיאה בטעינת תבנית.'); });
@@ -179,10 +180,10 @@ export const previewQuote = webMethod(Permissions.Admin, async (quoteId, templat
     const out = renderTemplate(tpl.bodyHtml, view);
     if (out.error) throw new Error(`VALIDATION:${out.error}`);
     return { html: out.html, templateId: tpl._id };
-});
+}));
 
 /** lead|draft -> draft: validates, assigns token + number, defaults dates. */
-export const prepareQuote = webMethod(Permissions.Admin, async (quoteId, templateId, actorName) => {
+export const prepareQuote = webMethod(Permissions.Admin, guard(async (quoteId, templateId, actorName) => {
     const rethrow = (err, fallback) => { throw new Error(/^(VALIDATION|NOT_FOUND|ACCESS_DENIED):/.test(err?.message || '') ? err.message : (fallback || `VALIDATION:${err?.message || 'שגיאה לא ידועה'}`)); };
     const quote = await wixData.get('Quotes', quoteId, SA).catch((e) => rethrow(e, 'NOT_FOUND:ההצעה לא נמצאה.'));
     if (!quote) throw new Error('NOT_FOUND:ההצעה לא נמצאה.');
@@ -197,9 +198,9 @@ export const prepareQuote = webMethod(Permissions.Admin, async (quoteId, templat
     const url = await buildQuoteUrl(saved.publicToken).catch((e) => rethrow(e));
     await writeQuoteLog(quoteId, quote.status === 'lead' ? 'quote_prepared' : 'quote_reprepared', { templateId: tpl._id }, await getActor(actorName).catch(() => ({ type: 'admin', name: actorName || '' })));
     return { quote: saved, url };
-});
+}));
 
-export const getQuoteLink = webMethod(Permissions.Admin, async (quoteId, actorName) => {
+export const getQuoteLink = webMethod(Permissions.Admin, guard(async (quoteId, actorName) => {
     let quote = await wixData.get('Quotes', quoteId, SA);
     if (!quote?.publicToken) throw new Error('VALIDATION:ההצעה עדיין לא הוכנה לשליחה.');
     if (quote.status === 'draft') { // link handed out manually = sent
@@ -207,11 +208,11 @@ export const getQuoteLink = webMethod(Permissions.Admin, async (quoteId, actorNa
         await writeQuoteLog(quoteId, 'link_copied', {}, await getActor(actorName));
     }
     return { url: await buildQuoteUrl(quote.publicToken) };
-});
+}));
 
 // ---- Sending ----
 /** channels: ['email','whatsapp']. Marks draft as sent when at least one channel succeeds. */
-export const sendQuote = webMethod(Permissions.Admin, async (quoteId, channels = [], actorName) => {
+export const sendQuote = webMethod(Permissions.Admin, guard(async (quoteId, channels = [], actorName) => {
     let quote = await wixData.get('Quotes', quoteId, SA);
     if (!quote?.publicToken || !['draft', 'sent', 'viewed'].includes(quote.status)) throw new Error('VALIDATION:ההצעה אינה ניתנת לשליחה (יש להכין אותה קודם).');
     const actor = await getActor(actorName);
@@ -228,7 +229,7 @@ export const sendQuote = webMethod(Permissions.Admin, async (quoteId, channels =
         quote = await wixData.update('Quotes', { ...(await wixData.get('Quotes', quoteId, SA)), status: 'sent' }, SA);
     }
     return { results, status: quote.status };
-});
+}));
 
 // ---- Bank transfer review ----
 async function pendingBankRow(quoteId) {
@@ -237,25 +238,25 @@ async function pendingBankRow(quoteId) {
     return res.items[0];
 }
 
-export const approveBankTransfer = webMethod(Permissions.Admin, async (quoteId, actorName) => {
+export const approveBankTransfer = webMethod(Permissions.Admin, guard(async (quoteId, actorName) => {
     const row = await pendingBankRow(quoteId);
     const actor = await getActor(actorName);
     await wixData.update('QuotePayments', { ...row, status: 'paid', paidAt: new Date(), approvedBy: actor.name || actor.userId }, SA);
     const quote = await recomputePaymentState(quoteId);
     await writeQuoteLog(quoteId, 'transfer_approved', { stage: row.stage, amount: row.amount }, actor);
     return { quote };
-});
+}));
 
-export const rejectBankTransfer = webMethod(Permissions.Admin, async (quoteId, actorName) => {
+export const rejectBankTransfer = webMethod(Permissions.Admin, guard(async (quoteId, actorName) => {
     const row = await pendingBankRow(quoteId);
     const actor = await getActor(actorName);
     await wixData.update('QuotePayments', { ...row, status: 'rejected', approvedBy: actor.name || actor.userId }, SA);
     const quote = await recomputePaymentState(quoteId);
     await writeQuoteLog(quoteId, 'transfer_rejected', { stage: row.stage, amount: row.amount }, actor);
     return { quote };
-});
+}));
 
-export const syncQuoteLeads = webMethod(Permissions.Admin, async (actorName) => {
+export const syncQuoteLeads = webMethod(Permissions.Admin, guard(async (actorName) => {
     const summary = await backfillQuoteLeads();
     return { summary, by: (await getActor(actorName)).name };
-});
+}));

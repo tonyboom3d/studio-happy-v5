@@ -47,6 +47,7 @@ $w.onReady(() => {
         try {
             if (!handlers[type]) throw new Error(`UNKNOWN_ACTION:${type}`);
             const data = await handlers[type](payload || {});
+            if (data?.__error) throw new Error(data.__error);
             console.log(`[quotes-PAGE] ← ${type} backend call took ${Date.now() - t0}ms`, data?.items ? { items: data.items.length, total: data.total } : '');
             reply({ ok: true, data });
         } catch (err) {

@@ -19,7 +19,8 @@ $w.onReady(async () => {
 
     for (let i = 0; i < MAX_POLLS; i++) {
         let data;
-        try { data = await getQuoteByToken(token); } catch (_) { data = { viewState: 'not_found' }; }
+        try { data = await getQuoteByToken(token); } catch (_) { data = null; }
+        if (!data || data.__error) data = { viewState: 'not_found' };
         if (data.viewState === 'not_found' || data.viewState === 'cancelled') return push(data);
         const st = data.lastPayment?.status;
         if (st === 'paid' || st === 'failed' || st === 'refunded') return push(data);

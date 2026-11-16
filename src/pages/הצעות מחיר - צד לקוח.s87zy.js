@@ -4,17 +4,19 @@ import wixPay from 'wix-pay';
 import { getQuoteByToken, recordView, signQuote, createQuotePayment, submitTransferProof } from 'backend/quotePublic.web.js';
 
 const ce = () => $w('CustomElement')[0];
+const unwrap = (r) => { if (r?.__error) throw new Error(r.__error); return r; };
 
 $w.onReady(async () => {
     const el = ce();
     if (!el) return;
     const token = wixLocation.query.id || '';
     const push = (data) => el.setAttribute('quote-data', JSON.stringify({ ...data, __ts: Date.now() }));
+    const thanks = () => wixLocation.to(`/thank-you-page-offers?id=${encodeURIComponent(token)}`);
 
     const load = async () => {
         if (!token) return push({ viewState: 'missing_id' });
         try {
-            const data = await getQuoteByToken(token);
+            const data = unwrap(await getQuoteByToken(token));
             push(data);
             return data;
         } catch (err) {
@@ -26,21 +28,18 @@ $w.onReady(async () => {
     const handlers = {
         refresh: () => load(),
         pay: async () => {
-            const { paymentId } = await createQuotePayment(token);
+            const { paymentId } = unwrap(await createQuotePayment(token));
             // Authoritative result comes from the backend webhook; this only drives navigation.
             const res = await wixPay.startPayment(paymentId, { showThankYouPage: false });
-            if (res?.status === 'Successful' || res?.status === 'Pending' || res?.status === 'Offline') {
-                wixLocation.to(`/thank-you-page-offers?id=${encodeURIComponent(token)}`);
-                return;
-            }
+            if (res?.status === 'Successful' || res?.status === 'Pending' || res?.status === 'Offline') return thanks();
             throw new Error('PAYMENT:התשלום לא הושלם. ניתן לנסות שוב.');
         },
         proof: async (p) => {
-            await submitTransferProof(token, p);
+            unwrap(await submitTransferProof(token, p));
             return load();
         },
         sign: async (p) => {
-            await signQuote(token, p);
+            unwrap(await signQuote(token, p));
             return load();
         },
     };

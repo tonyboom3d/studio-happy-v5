@@ -23,6 +23,9 @@ function formatDate(dateValue) {
 }
 
 export const getReviews = webMethod(Permissions.Anyone, async () => {
+    // customerReviews query disabled
+    return [];
+    /*
     try {
         const results = await wixData.query('customerReviews')
             .descending('reviewDate')
@@ -42,4 +45,5 @@ export const getReviews = webMethod(Permissions.Anyone, async () => {
         console.error('Error fetching reviews:', error);
         return [];
     }
+    */
 });

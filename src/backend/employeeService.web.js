@@ -26,7 +26,6 @@ import {
     toDateKey,
     toMonthKey,
     getOpenMonthKeys,
-    isFutureWindowOpen,
     getPeriodForDate,
     shiftHours,
     getMinShiftHours,
@@ -389,58 +388,32 @@ function filterAssignedWorkshopDetails(details, board, serviceIdToTypeId, employ
         .map(({ serviceId, ...rest }) => rest);
 }
 
-/** 'YYYY-MM' key `n` months after `monthKey`. */
-function addMonthKey(monthKey, n) {
-    const [y, m] = monthKey.split('-').map(Number);
-    const total = y * 12 + (m - 1) + n;
-    const ny = Math.floor(total / 12);
-    const nm = (total % 12) + 1;
-    return `${ny}-${String(nm).padStart(2, '0')}`;
-}
-
-/**
- * Month keys to show the employee: the usual `getOpenMonthKeys` baseline
- * (current + settings.monthsAheadAllowed), extended with any further month
- * whose first 2-week window is already unlocked via the "stay caught up"
- * quota-chain bonus (see `isFutureWindowOpen`) — otherwise an employee who
- * gets ahead of the default horizon would have nowhere to submit into.
- */
-function getVisibleMonthKeys(role, settings, submissions, now, vacations) {
-    const keys = getOpenMonthKeys(settings, now);
-    for (let guard = 0; guard < 12; guard++) {
-        const next = addMonthKey(keys[keys.length - 1], 1);
-        if (!isFutureWindowOpen(`${next}-01`, role, settings, now, submissions, vacations)) break;
-        keys.push(next);
-    }
-    return keys;
+/** Month keys the employee can submit into: current month + monthsAheadAllowed. */
+function getVisibleMonthKeys(settings, now) {
+    return getOpenMonthKeys(settings, now);
 }
 
 function buildMonthsSummary(role, settings, submissions, now, vacations) {
     // evaluateQuota/evaluateWeekendCompliance expect { status, date|dateKey, startTime }.
     const subsForRules = submissions.map(s => ({ status: s.status, dateKey: s.date, startTime: s.startTime }));
-    const openMonths = getVisibleMonthKeys(role, settings, subsForRules, now, vacations);
+    const openMonths = getVisibleMonthKeys(settings, now);
     return openMonths.map(monthKey => {
         const quota = evaluateQuota(role, settings, monthKey, subsForRules, vacations);
         const weekend = evaluateWeekendCompliance(role, settings, monthKey, subsForRules, vacations);
         const isCurrent = monthKey === toMonthKey(now);
 
-        // Non-current months are gated per 2-week window (days 1–15 / 16–end)
-        // rather than as one blanket monthly deadline — this is what lets the
-        // "submit ~2 weeks ahead, further once caught up" rule apply exactly
-        // at the mid-month boundary instead of at an unrelated whole-month cutoff.
+        // Submission is open for every future day in the visible range.
+        // Period bounds stay on the payload for quota progress only.
         const periodA = getPeriodForDate(`${monthKey}-01`);
         const periodB = getPeriodForDate(`${monthKey}-16`);
-        const windowAOpen = isCurrent ? true : isFutureWindowOpen(periodA.start, role, settings, now, subsForRules, vacations);
-        const windowBOpen = isCurrent ? true : isFutureWindowOpen(periodB.start, role, settings, now, subsForRules, vacations);
-        const nextDeadline = !windowAOpen ? periodA.deadline : (!windowBOpen ? periodB.deadline : null);
 
         return {
             monthKey,
             isCurrentMonth: isCurrent,
-            deadline: isCurrent ? null : (nextDeadline ? nextDeadline.toISOString() : null),
-            open: isCurrent ? quota.bonusUnlocked : (windowAOpen || windowBOpen),
-            windowA: { start: periodA.start, end: periodA.end, deadline: periodA.deadline.toISOString(), open: windowAOpen },
-            windowB: { start: periodB.start, end: periodB.end, deadline: periodB.deadline.toISOString(), open: windowBOpen },
+            deadline: null,
+            open: true,
+            windowA: { start: periodA.start, end: periodA.end, deadline: periodA.deadline.toISOString(), open: true },
+            windowB: { start: periodB.start, end: periodB.end, deadline: periodB.deadline.toISOString(), open: true },
             quota,
             weekend,
             // Consolidated progress-bar payload: three components summing to 100%.
@@ -509,10 +482,8 @@ export const getMyPortalData = webMethod(Permissions.Anyone, async () => {
     for (const s of scheduled) scheduledByDate[s.date] = s;
 
     // Personalized day states + offers/open calls (per-skill capacity model).
-    // Uses the same dynamic horizon as the months summary, so an employee who
-    // unlocked a further month (by staying caught up on quota) also gets
-    // board/day-state data for it.
-    const openMonths = getVisibleMonthKeys(roleRow, settings, submissions, now, vacations);
+    // Same horizon as the months summary: current month through monthsAheadAllowed.
+    const openMonths = getVisibleMonthKeys(settings, now);
     const lastMonth = openMonths[openMonths.length - 1];
     const [ly, lm] = lastMonth.split('-').map(Number);
     const rangeFrom = toDateKey(now);

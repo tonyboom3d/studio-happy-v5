@@ -1809,39 +1809,11 @@ class EmployeePortal extends HTMLElement {
         const system = [];
         const viewInfo = this._monthInfo(this._viewMonth);
 
-        if (viewInfo && !viewInfo.isCurrentMonth && viewInfo.deadline) {
-            const dl = new Date(viewInfo.deadline);
-            const daysLeft = Math.ceil((dl.getTime() - Date.now()) / 86400000);
-            if (viewInfo.open) {
-                system.push({
-                    id: `dyn-deadline-${viewInfo.monthKey}`,
-                    title: 'מועד אחרון להגשת זמינות',
-                    body: `⏰ המועד האחרון להגשת זמינות ל${monthTitle(viewInfo.monthKey)}: ${formatDateHe(viewInfo.deadline.slice(0, 10))}${daysLeft >= 0 ? ` (עוד ${daysLeft} ימים)` : ''}`,
-                });
-            } else {
-                system.push({
-                    id: `dyn-deadline-closed-${viewInfo.monthKey}`,
-                    title: 'מועד ההגשה עבר',
-                    body: `🔒 חלף המועד האחרון להגשת זמינות ל${monthTitle(viewInfo.monthKey)}. לחריגים יש לפנות למנהל/ת.`,
-                });
-            }
-        }
-
         system.push({
             id: 'dyn-rules',
             title: 'כללי הגשת זמינות',
-            body: `📋 מינימום ${rules.requiredShiftsPerWeek} משמרות בשבוע, אורך משמרת מינימלי ${rules.minShiftHours} שעות. שעות פעילות: ${rules.shiftMinTime}–${rules.shiftMaxTime}.`,
+            body: `📋 ניתן להגיש זמינות בכל עת לימים עתידיים בטווח החודשים הפתוחים. מינימום ${rules.requiredShiftsPerWeek} משמרות בשבוע, אורך משמרת מינימלי ${rules.minShiftHours} שעות. שעות פעילות: ${rules.shiftMinTime}–${rules.shiftMaxTime}.`,
         });
-
-        if (viewInfo?.isCurrentMonth) {
-            personal.push({
-                id: `dyn-bonus-${viewInfo.monthKey}`,
-                title: 'משמרות נוספות לחודש הנוכחי',
-                body: viewInfo.quota.bonusUnlocked
-                    ? '🎉 השלמת את המכסה השבועית — ניתן להגיש משמרות נוספות לחודש הנוכחי.'
-                    : 'הגשת משמרות נוספות לחודש הנוכחי נפתחת לאחר השלמת המכסה השבועית של אותו שבוע.',
-            });
-        }
 
         if (viewInfo && !viewInfo.quota.met) {
             const unmetWeeks = (viewInfo.quota.weeks || []).filter(w => !w.met);
@@ -2263,12 +2235,6 @@ class EmployeePortal extends HTMLElement {
             const full = (rules.fullDates || []).includes(dateKey);
             const promoted = (rules.promotedDates || []).includes(dateKey);
             const quotaMet = !!viewInfo?.quota?.bonusUnlocked;
-            // Openness is gated per 2-week window (days 1–15 / 16–end), not
-            // as one blanket flag for the whole month — a future month can
-            // have its first half open while the second half isn't yet.
-            const monthOpen = viewInfo?.isCurrentMonth
-                ? true
-                : !!(day <= 15 ? viewInfo?.windowA?.open : viewInfo?.windowB?.open);
             const fullLocked = full && !quotaMet;
             const selected = this._selected.has(dateKey);
             // Personalized per-skill state from the scheduling engine.
@@ -2311,8 +2277,6 @@ class EmployeePortal extends HTMLElement {
                 cls += ' blocked';
                 badge = `<span class="ep-day-badge ep-badge-blocked">חסום</span>`;
                 addDot('#ef4444', 'חסום להגשה');
-            } else if (!monthOpen) {
-                cls += ' disabled';
             } else if (fullLocked) {
                 cls += ' full locked';
                 badge = `<span class="ep-day-badge ep-badge-full">מאויש</span>`;
@@ -2415,15 +2379,13 @@ class EmployeePortal extends HTMLElement {
         return new Date(Date.UTC(y, m - 1, d)).getUTCDay();
     }
 
-    /** Nearest upcoming 2-week submission window still open, with its deadline + missing-shifts count. */
+    /** Nearest period still short of its quota. Submission itself stays open. */
     _renderUpcomingWindow() {
         const w = (this._data.upcomingWindows || [])[0];
         if (!w) return '';
-        const deadlineKey = String(w.deadline).slice(0, 10);
-        const daysLeft = Math.ceil((new Date(`${deadlineKey}T23:59:59+02:00`).getTime() - Date.now()) / 86400000);
         const range = `${formatDateHe(w.start)} – ${formatDateHe(w.end)}`;
         if (w.met) {
-            return `<div class="ep-window-line ok">✔ הוגשה זמינות מלאה לתקופה ${range} (עד ${formatDateHe(deadlineKey)}).</div>`;
+            return `<div class="ep-window-line ok">✔ הוגשה זמינות מלאה לתקופה ${range}.</div>`;
         }
         // `missing` is only the raw shift-count gap. A window can have zero
         // shifts left to submit and still be unmet, because every week also
@@ -2432,11 +2394,8 @@ class EmployeePortal extends HTMLElement {
         const gaps = [];
         if (w.missing > 0) gaps.push(`עוד <b>${w.missing}</b> משמרות`);
         if (w.aeMissing > 0) gaps.push(`עוד <b>${w.aeMissing}</b> משמרות צהריים/ערב`);
-        const what = gaps.length ? gaps.join(' ו') : 'את יתר דרישות התקופה';
-        const until = `עד <b>${formatDateHe(deadlineKey)}</b>${daysLeft >= 0 ? ` (עוד ${daysLeft} ימים)` : ''}`;
-        return `<div class="ep-window-line ${daysLeft <= 3 ? 'urgent' : ''}">
-            ⏰ יש להגיש ${what} לתקופה ${range} — ${until}.
-        </div>`;
+        const what = gaps.length ? `חסרות ${gaps.join(' ו')}` : 'טרם הושלמו כל דרישות התקופה';
+        return `<div class="ep-window-line">לתקופה ${range} ${what}. אפשר להגיש בכל עת.</div>`;
     }
 
     /**
@@ -2565,7 +2524,7 @@ class EmployeePortal extends HTMLElement {
             { dot: 'background:#fffbeb;border:1px solid #fbbf24', title: 'רשימת המתנה', desc: 'ניתן להגיש — המשמרת מלאה, תיכנסו לרשימת המתנה' },
             { dot: 'background:#f3f4f6;border:1px solid #e5e7eb', title: 'מאויש', desc: 'אין מקומות פנויים ליום זה' },
             { dot: 'background:#f9fafb;border:1px solid #e5e7eb', title: 'לא בהכשרה', desc: 'אין לכם הכשרה מתאימה לסדנה ביום זה — ניתן להגיש בכל זאת' },
-            { dot: 'background:#fef2f2;border:1px solid #fecaca', title: 'חסום', desc: 'היום חסום להגשה (חג, מועד אחרון וכד׳)' },
+            { dot: 'background:#fef2f2;border:1px solid #fecaca', title: 'חסום', desc: 'היום חסום להגשה (חג או חסימה ידנית)' },
             { dot: 'background:#fef2f2;border:1px solid #fecaca', title: 'עסק סגור', desc: 'חג בו העסק סגור — לא ניתן להגיש זמינות' },
             { dot: 'background:#fffbeb;border:1px solid #fbbf24', title: 'יום מקוצר', desc: 'חג עם שעות פעילות מקוצרות — ניתן להגיש רק בטווח השעות המצוין' },
             { dot: 'background:#f9fafb;border:1px solid #e5e7eb;opacity:.5', title: 'מסונן', desc: 'יום ללא סדנה מהסוג שנבחר בסינון' },

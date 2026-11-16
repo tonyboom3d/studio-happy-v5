@@ -1851,7 +1851,7 @@ function renderSettingsPage(ce, d) {
                 ${settingsField(ce, 'epaS_end', SETTINGS_FIELD_LABELS.epaS_end, `<input id="epaS_end" class="epa-time-input" type="text" inputmode="numeric" maxlength="5" placeholder="HH:MM" value="${esc(s.defaultShiftEnd || '16:00')}">`)}
                 ${settingsField(ce, 'epaS_reqFri', SETTINGS_FIELD_LABELS.epaS_reqFri, `<input id="epaS_reqFri" type="number" min="0" value="${s.requiredFridaysPerMonth ?? 2}">`, 'מספר ימי שישי שיש להגיש לחודש (חופשה מאושרת על יום שישי מקטינה את הדרישה)')}
                 ${settingsField(ce, 'epaS_reqSat', SETTINGS_FIELD_LABELS.epaS_reqSat, `<input id="epaS_reqSat" type="number" min="0" value="${s.requiredSaturdaysPerMonth ?? 2}">`, 'מספר ימי שבת שיש להגיש לחודש (חופשה מאושרת על יום שבת מקטינה את הדרישה)')}
-                <label class="epa-toggle"><input id="epaS_bonus" type="checkbox" ${s.bonusUnlockEnabled !== false ? 'checked' : ''}> פתיחת משמרות נוספות לאחר השלמת מכסה השבועית</label>
+                <label class="epa-toggle"><input id="epaS_bonus" type="checkbox" ${s.bonusUnlockEnabled !== false ? 'checked' : ''}> פתיחת ימים מאוישים לאחר השלמת מכסה השבועית</label>
                 <label class="epa-toggle" title="כשמופעל: הגשה ביום עם הזמנות פעילות משבצת אוטומטית עובדים עם ההכשרה המתאימה. כשכבוי: כל ההגשות ממתינות לאישור ידני של מנהל/ת."><input id="epaS_autoApprove" type="checkbox" ${s.autoApproveShifts !== false ? 'checked' : ''}> אישור אוטומטי של משמרות</label>
             </div>
             <div class="epa-inline">

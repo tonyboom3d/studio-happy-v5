@@ -575,13 +575,12 @@ export function evaluateWeekendCompliance(profile, settings, monthKey, allSubmis
  * @param {object} settings       normalized settings
  * @param {Array}  existing       employee's existing non-rejected submissions (all open months),
  *                                each with { status, dateKey|date, startTime }
- * @param {object} [opts]         { managerOverride?: boolean, now?: Date, vacations?: Array }
+ * @param {object} [opts]         { managerOverride?: boolean, now?: Date }
  * @returns {{ ok: boolean, errors: Array<{date: string|null, code: string, message: string}> }}
  */
 export function validateSubmission(shifts, profile, settings, existing, opts = {}) {
     const now = opts.now || new Date();
     const managerOverride = !!opts.managerOverride;
-    const vacations = opts.vacations || [];
     const errors = [];
 
     if (!Array.isArray(shifts) || !shifts.length) {
@@ -605,7 +604,7 @@ export function validateSubmission(shifts, profile, settings, existing, opts = {
         existingByWeek[weekStart] = (existingByWeek[weekStart] || 0) + 1;
     }
     const requiredPerWeek = getRequiredShiftsPerWeek(profile, settings);
-    const currentPeriod = getPeriodForDate(todayKey);
+    const openMonths = new Set(getOpenMonthKeys(settings, now));
     const holidayByDate = {};
     for (const h of (settings.holidays || [])) {
         if (h?.date) holidayByDate[h.date] = h;
@@ -662,6 +661,11 @@ export function validateSubmission(shifts, profile, settings, existing, opts = {
 
         if (managerOverride) continue; // manager bypasses date-level gates below
 
+        if (!openMonths.has(dateKey.slice(0, 7))) {
+            errors.push({ date: dateKey, code: 'OUT_OF_RANGE', message: `לא ניתן להגיש זמינות לתאריך ${dateKey} — מעבר לטווח החודשים הפתוחים.` });
+            continue;
+        }
+
         if (settings.blockedDates.includes(dateKey)) {
             errors.push({ date: dateKey, code: 'DATE_BLOCKED', message: `תאריך ${dateKey} חסום להגשה.` });
             continue;
@@ -678,28 +682,11 @@ export function validateSubmission(shifts, profile, settings, existing, opts = {
             continue;
         }
 
-        // Biweekly submission window: a date belongs to a 2-week window whose
-        // deadline sits one day before the window starts (submit ~2 weeks
-        // ahead). The currently-active window's own deadline has necessarily
-        // already passed (the bonus rule below governs it instead). A window
-        // further than "2 weeks ahead" only opens once every intervening
-        // window's quota was met — the "look further ahead" bonus.
-        const period = getPeriodForDate(dateKey);
-        const isFutureWindow = period.start > currentPeriod.end;
-        if (isFutureWindow && !isFutureWindowOpen(dateKey, profile, settings, now, existing, vacations)) {
-            errors.push({ date: dateKey, code: 'DEADLINE_PASSED', message: `החלון להגשת זמינות לתקופה ${period.start}–${period.end} טרם נפתח, או שחלף המועד להגשה מוקדמת אליו.` });
-            continue;
-        }
-
-        // Additions to the currently-active window are a bonus perk: allowed
-        // only once the employee met the quota for that shift's own week.
+        // Employees may submit any future day inside the open month range.
+        // Weekly quota is tracked, but it no longer closes the submission window.
+        // "Full" days stay limited to employees who met that week's quota.
         const weekStart = getWeekStart(dateKey);
         const weekBonusUnlocked = settings.bonusUnlockEnabled && (existingByWeek[weekStart] || 0) >= requiredPerWeek;
-        if (!isFutureWindow && !weekBonusUnlocked) {
-            errors.push({ date: dateKey, code: 'BONUS_LOCKED', message: 'הגשת משמרות נוספות לשבוע זה בתקופה הנוכחית נפתחת רק לאחר עמידה במכסה השבועית.' });
-            continue;
-        }
-
         // "Full" days: open only to employees who met their week's quota.
         if (settings.fullDates.includes(dateKey) && !weekBonusUnlocked) {
             errors.push({ date: dateKey, code: 'DAY_FULL', message: `תאריך ${dateKey} מאויש — פתוח רק לעובדים שעמדו במכסה השבועית.` });

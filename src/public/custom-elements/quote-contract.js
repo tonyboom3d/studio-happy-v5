@@ -99,7 +99,7 @@ canvas{width:100%;height:170px;border:2px dashed #d1d5db;border-radius:14px;back
 .note{background:#eff6ff;border:1px solid #dbeafe;color:#1e3a8a;border-radius:12px;padding:10px 14px;font-size:16px;margin-top:12px}
 .drop{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;border:2px dashed #d1d5db;border-radius:14px;padding:22px 14px;text-align:center;cursor:pointer;background:#f9fafb;margin-top:8px}
 .drop:hover{border-color:#16a34a;background:#f0fdf4}.drop input{display:none}.drop .ic{font-size:34px}
-.prev{display:flex;gap:12px;align-items:center;margin-top:10px;border:1px solid #e5e7eb;border-radius:12px;padding:8px 10px}
+.prev{display:flex;gap:12px;align-items:center;margin-top:10px;border:1px solid #e5e7eb;border-radius:12px;padding:8px 10px;flex-wrap:wrap}
 .prev img{width:72px;height:72px;object-fit:cover;border-radius:8px;flex:none}.prev .pdf{font-size:40px}
 .tbl{width:100%;border-collapse:collapse;font-size:16px;margin-top:6px}
 .tbl th{text-align:right;color:#6b7280;font-weight:600;font-size:14px;padding:8px;border-bottom:1px solid #e5e7eb}
@@ -477,10 +477,11 @@ class QuoteContract extends HTMLElement {
         if (!rows.length) return '';
         const ST = { pending: 'ממתין לאישור', paid: 'אושר', rejected: 'נדחה' };
         const STAGE = { deposit: 'מקדמה', full: 'תשלום מלא', balance: 'יתרה' };
-        const tr = rows.map((p) => `<tr><td>${esc(dmy(p.at))}</td><td>${esc(STAGE[p.stage] || p.stage)}</td><td>${money(p.amount)}</td>
-            <td><span class="st ${esc(p.status)}">${esc(ST[p.status] || p.status)}</span></td>
-            <td>${safeUrl(p.url) ? `<a href="${esc(p.url)}" target="_blank" rel="noopener">צפייה</a>` : '—'}</td></tr>`).join('');
-        return `<h3 class="t">🧾 אסמכתאות שנשלחו</h3><div style="overflow-x:auto"><table class="tbl"><thead><tr><th>תאריך</th><th>עבור</th><th>סכום</th><th>סטטוס</th><th>קובץ</th></tr></thead><tbody>${tr}</tbody></table></div>`;
+        const cards = rows.map((p) => `<div class="prev" style="margin-top:8px">
+            <div style="flex:1"><b>${esc(STAGE[p.stage] || p.stage)} · ${money(p.amount)}</b><div class="sub">${esc(dmy(p.at))}</div></div>
+            <span class="st ${esc(p.status)}">${esc(ST[p.status] || p.status)}</span>
+            ${safeUrl(p.url) ? `<a href="${esc(p.url)}" target="_blank" rel="noopener">צפייה</a>` : ''}</div>`).join('');
+        return `<h3 class="t">🧾 אסמכתאות שנשלחו</h3>${cards}`;
     }
 
     paidLinkScreen(d) {

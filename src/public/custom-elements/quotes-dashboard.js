@@ -9,7 +9,7 @@ const dbg = (msg, extra) => console.log(`[quotes-FE +${Math.round(performance.no
 const L = {
     status: { lead: 'ליד', draft: 'טיוטה', sent: 'נשלחה', viewed: 'נצפתה', signed: 'נחתמה', expired: 'פגה', cancelled: 'בוטלה' },
     sig: { pending: 'ממתין', signed: 'נחתם' },
-    pay: { unpaid: 'לא שולם', deposit_paid: 'שולמה מקדמה', paid_full: 'שולם במלואו', awaiting_transfer_approval: 'ממתין לאישור העברה' },
+    pay: { unpaid: 'לא שולם', deposit_paid: 'שולמה מקדמה', paid_full: 'שולם במלואו', awaiting_transfer_approval: 'אסמכתא לאישור' },
     type: { birthday: 'יום הולדת', event: 'אירוע' },
     method: { online: 'אונליין', bank_transfer: 'העברה בנקאית' },
     action: {
@@ -26,7 +26,7 @@ const L = {
 const BADGE = {
     status: { lead: 'gray', draft: 'gray', sent: 'blue', viewed: 'blue', signed: 'green', expired: 'amber', cancelled: 'red' },
     sig: { pending: 'amber', signed: 'green' },
-    pay: { unpaid: 'gray', deposit_paid: 'blue', paid_full: 'green', awaiting_transfer_approval: 'amber' },
+    pay: { unpaid: 'gray', deposit_paid: 'blue', paid_full: 'green', awaiting_transfer_approval: 'red' },
 };
 
 const CSS = `
@@ -58,6 +58,17 @@ td.wrapc{white-space:normal;max-width:220px}
 .badge{display:inline-block;padding:2px 9px;border-radius:999px;font-size:12px;font-weight:600}
 .gray{background:#e2e8f0;color:#334155}.blue{background:#dbeafe;color:#1d4ed8}.green{background:#dcfce7;color:#15803d}
 .amber{background:#fef3c7;color:#b45309}.red{background:#fee2e2;color:#b91c1c}.purple{background:#ede9fe;color:#6d28d9}
+@keyframes ping{0%{box-shadow:0 0 0 0 rgba(220,38,38,.7)}70%{box-shadow:0 0 0 8px rgba(220,38,38,0)}100%{box-shadow:0 0 0 0 rgba(220,38,38,0)}}
+.ping{display:inline-block;width:10px;height:10px;border-radius:50%;background:#dc2626;margin-inline-end:6px;vertical-align:middle;animation:ping 1.2s ease-out infinite;flex:none}
+tr.row.alert td{background:#fff1f2}tr.row.alert:hover td{background:#ffe4e6}
+.alertbar{display:flex;align-items:center;gap:8px;background:#fee2e2;color:#991b1b;border:1px solid #fecaca;border-radius:10px;padding:8px 12px;margin-bottom:10px;font-weight:700}
+.proof{border:1px solid #e2e8f0;border-radius:12px;padding:10px 12px;margin-top:8px;background:#f8fafc;overflow-wrap:anywhere}
+.proof.wait{border-color:#fecaca;background:#fff7f7}
+.proof.ok{border-color:#bbf7d0;background:#f0fdf4}
+.proof-top{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+.proof-top b{font-size:15px}
+.proof-acts{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px}
+.proof-acts a{font-weight:600}
 .conflict{color:#dc2626;font-weight:700}
 .pager{display:flex;gap:8px;align-items:center;justify-content:space-between;margin-top:10px}
 .empty,.loading{padding:40px;text-align:center;color:#64748b}
@@ -78,7 +89,7 @@ td.wrapc{white-space:normal;max-width:220px}
 .drawer .badge{font-size:14px}
 .drawer .sec h3{font-size:18px}
 .drawer .pay-row b,.drawer .sum b{font-size:17px}
-.dh{position:sticky;top:0;background:#fff;border-bottom:1px solid #e2e8f0;padding:12px 16px;display:flex;gap:10px;align-items:center;z-index:2}
+.dh{position:sticky;top:0;background:#fff;border-bottom:1px solid #e2e8f0;padding:12px 16px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;z-index:2}
 .dh h2{margin:0;font-size:22px;flex:1}
 .db{padding:14px}
 .sec{background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:12px;margin-bottom:12px}
@@ -277,6 +288,7 @@ const errText = (e) => {
 const MOCK_ROWS = [
     { _id: 'm1', _createdDate: new Date().toISOString(), customerName: 'דנה כהן', customerPhone: '972521234567', eventType: 'birthday', status: 'lead', signatureStatus: 'pending', paymentStatus: 'unpaid', totalAmount: 2500, depositAmount: 750, balanceAmount: 1750, participants: 12, requestedWorkshop: 'קרמיקה, נרות', extras: [{ title: 'ברד', price: 200 }], conflicts: [] },
     { _id: 'm2', _createdDate: new Date().toISOString(), customerName: 'חברת אלפא', customerPhone: '972501112233', eventType: 'event', status: 'signed', signatureStatus: 'signed', paymentStatus: 'deposit_paid', totalAmount: 9000, depositAmount: 3000, balanceAmount: 6000, workshopClosed: true, requiredInstructors: 2, conflicts: [{ key: 'x' }], extras: [] },
+    { _id: 'm3', _createdDate: new Date().toISOString(), customerName: 'נועה לוי', customerPhone: '972541112233', eventType: 'birthday', status: 'signed', signatureStatus: 'signed', paymentStatus: 'awaiting_transfer_approval', totalAmount: 2300, depositAmount: 690, balanceAmount: 1610, participants: 10, extras: [], conflicts: [] },
 ];
 
 class QuotesDashboard extends HTMLElement {
@@ -337,7 +349,13 @@ class QuotesDashboard extends HTMLElement {
         const ok = (d) => new Promise((r) => setTimeout(() => r(d), 150));
         if (type === 'boot' || type === 'init') return ok({ actors: [{ id: 'a1', name: 'מנהל בדיקה' }], addons: [{ id: 'x1', title: 'ברד', price: 200 }], workshops: ['קרמיקה', 'נרות', 'טאפטינג', "צ'ארמס"], items: MOCK_ROWS, total: MOCK_ROWS.length });
         if (type === 'list') return ok({ items: MOCK_ROWS, total: MOCK_ROWS.length });
-        if (type === 'get') return ok({ quote: MOCK_ROWS.find((r) => r._id === payload.id) || MOCK_ROWS[0], log: [], payments: [] });
+        if (type === 'get') {
+            const quote = MOCK_ROWS.find((r) => r._id === payload.id) || MOCK_ROWS[0];
+            const proofs = quote.paymentStatus === 'awaiting_transfer_approval'
+                ? [{ at: new Date().toISOString(), stage: 'deposit', amount: quote.depositAmount, status: 'pending', url: 'https://static.wixstatic.com/media/6b73e9_3d8054d68ecb422a82c328f8c4c163f3~mv2.png', isPdf: false }]
+                : [];
+            return ok({ quote, log: [], payments: [], proofs });
+        }
         if (type === 'staff') return ok({ actors: [{ id: 'a1', name: 'מנהל בדיקה', trainings: [{ id: 'x1', title: 'ברד' }] }], busyStaff: {} });
         if (type === 'templates') return ok({ templates: [], placeholders: ['customerName', 'totalAmount'] });
         if (type === 'preview') return ok({ html: '<h1>תצוגה לדוגמה</h1>' });
@@ -730,18 +748,20 @@ class QuotesDashboard extends HTMLElement {
 
     proofsTable(rows = []) {
         if (!rows.length) return '';
-        const ST = { pending: ['ממתין לאישור', 'amber'], paid: ['אושר', 'green'], rejected: ['נדחה', 'red'] };
+        const ST = { pending: ['אסמכתא לאישור', 'red'], paid: ['אושר', 'green'], rejected: ['נדחה', 'red'] };
         const STAGE = { deposit: 'מקדמה', full: 'תשלום מלא', balance: 'יתרה' };
         const firstPending = rows.find((p) => p.status === 'pending');
-        const tr = rows.map((p) => {
+        const cards = rows.map((p) => {
             const [label, color] = ST[p.status] || [p.status, 'amber'];
-            const view = /^https?:\/\//.test(p.url || '') ? `<a href="${esc(p.url)}" target="_blank" rel="noopener">${p.isPdf ? '📄' : '🖼️'} צפייה</a>` : '—';
-            const acts = p === firstPending ? `<button class="btn-p" data-act="approveTransfer">אשר</button> <button class="btn-d" data-act="rejectTransfer">דחה</button>` : '';
-            return `<tr><td>${dmyTime(p.at)}</td><td>${esc(STAGE[p.stage] || p.stage)}</td><td>${money(p.amount)}</td><td><span class="badge ${color}">${esc(label)}</span></td><td>${view}</td><td>${acts}</td></tr>`;
+            const waiting = p.status === 'pending';
+            const view = /^https?:\/\//.test(p.url || '') ? `<a href="${esc(p.url)}" target="_blank" rel="noopener">${p.isPdf ? '📄 צפייה בקובץ' : '🖼️ צפייה באסמכתא'}</a>` : '<span class="sub">אין קובץ</span>';
+            const acts = p === firstPending ? `<button class="btn-p" data-act="approveTransfer">אשר</button><button class="btn-d" data-act="rejectTransfer">דחה</button>` : '';
+            return `<div class="proof${waiting ? ' wait' : p.status === 'paid' ? ' ok' : ''}">
+                <div class="proof-top"><b>${esc(STAGE[p.stage] || p.stage)} · ${money(p.amount)}</b><span class="badge ${color}">${waiting ? '<i class="ping"></i>' : ''}${esc(label)}</span></div>
+                <div class="sub">${dmyTime(p.at)}</div>
+                <div class="proof-acts">${view}${acts}</div></div>`;
         }).join('');
-        return `<div class="extras-h" style="margin-top:12px">אסמכתאות העברה</div>
-            <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:14px"><thead><tr style="text-align:right;color:#64748b"><th>תאריך</th><th>עבור</th><th>סכום</th><th>סטטוס</th><th>קובץ</th><th></th></tr></thead>
-            <tbody>${tr}</tbody></table></div>`;
+        return `<div class="extras-h" style="margin-top:12px">אסמכתאות העברה</div>${cards}`;
     }
 
     async reviewTransfer(approve) {
@@ -880,11 +900,13 @@ class QuotesDashboard extends HTMLElement {
         if (this.s.loading) return '<div class="card loading">טוען הצעות...</div>';
         if (!this.s.items.length) return '<div class="card empty">לא נמצאו הצעות</div>';
         const th = (label, field) => field ? `<th class="s" data-act="sort" data-field="${field}">${label}${this.s.sort.field === field ? (this.s.sort.dir === 'asc' ? ' ▲' : ' ▼') : ''}</th>` : `<th>${label}</th>`;
+        const waiting = this.s.items.filter((q) => q.paymentStatus === 'awaiting_transfer_approval').length;
         const rows = this.s.items.map((q) => {
             const extras = (q.extras || []).map((x) => x.title).join(', ');
             const assigned = (q.assignedStaffIds || []).length;
-            return `<tr class="row" data-act="row" data-id="${esc(q._id)}">
-                <td>${(q.conflicts || []).length ? '<span class="conflict" title="התנגשות ביומן">🔴 </span>' : ''}<b>${esc(q.customerName || '—')}</b><div class="sub">${esc(phoneDisp(q.customerPhone))}</div></td>
+            const proof = q.paymentStatus === 'awaiting_transfer_approval';
+            return `<tr class="row${proof ? ' alert' : ''}" data-act="row" data-id="${esc(q._id)}">
+                <td>${proof ? '<i class="ping" title="אסמכתא ממתינה לאישור"></i>' : ''}${(q.conflicts || []).length ? '<span class="conflict" title="התנגשות ביומן">🔴 </span>' : ''}<b>${esc(q.customerName || '—')}</b><div class="sub">${esc(phoneDisp(q.customerPhone))}</div></td>
                 <td><span class="badge purple">${esc(L.type[q.eventType] || q.eventType || '—')}</span></td>
                 <td>${badge(L.sig, 'sig', q.signatureStatus)}</td><td>${badge(L.pay, 'pay', q.paymentStatus)}</td>
                 <td>${q.totalAmount != null ? money(q.totalAmount) : '-'}</td><td>${money(q.depositAmount)}</td><td>${money(q.balanceAmount)}</td><td>${esc(L.method[q.selectedPaymentMethod] || '—')}</td>
@@ -894,7 +916,7 @@ class QuotesDashboard extends HTMLElement {
                 <td>${badge(L.status, 'status', q.status)}</td></tr>`;
         }).join('');
         const from = this.s.skip + 1; const to = Math.min(this.s.skip + this.s.limit, this.s.total);
-        return `<div class="card"><div class="tablewrap"><table><thead><tr>
+        return `${waiting ? `<div class="alertbar"><i class="ping"></i>בעמוד זה ${waiting === 1 ? 'אסמכתא ממתינה' : `${waiting} אסמכתאות ממתינות`} לאישור</div>` : ''}<div class="card"><div class="tablewrap"><table><thead><tr>
             ${th('לקוח')}${th('סוג')}${th('חתימה')}${th('תשלום')}${th('סה"כ', 'totalAmount')}${th('מקדמה')}${th('יתרה')}${th('אמצעי תשלום')}${th('נוצרה', '_createdDate')}${th('תוקף', 'expiresAt')}${th('תאריך אירוע', 'eventDate')}${th('סדנה')}${th('מדריכים (נדרש/משובץ)')}${th('תוספות')}${th('הערות')}${th('סטטוס')}
             </tr></thead><tbody>${rows}</tbody></table></div>
             <div class="pager"><span class="sub">${from}-${to} מתוך ${this.s.total}</span><span><button data-act="prev"${this.s.skip === 0 ? ' disabled' : ''}>הקודם</button> <button data-act="next"${to >= this.s.total ? ' disabled' : ''}>הבא</button></span></div></div>`;
@@ -1077,10 +1099,11 @@ class QuotesDashboard extends HTMLElement {
         const tab = STEPS.some(([k]) => k === this.s.tab) ? this.s.tab : 'customer';
         const idx = STEPS.findIndex(([k]) => k === tab);
         const issues = locked ? {} : this.tabIssues(dt.draft);
-        const tabs = STEPS.map(([k, label, ic]) => `<button type="button" class="tab${k === tab ? ' on' : ''}" data-act="tab" data-k="${k}">${ic} ${label}${issues[k] ? '<i class="dot" title="חסרים פרטים"></i>' : ''}</button>`).join('');
+        const proofWait = q.paymentStatus === 'awaiting_transfer_approval' || (dt.proofs || []).some((p) => p.status === 'pending');
+        const tabs = STEPS.map(([k, label, ic]) => `<button type="button" class="tab${k === tab ? ' on' : ''}" data-act="tab" data-k="${k}">${k === 'payment' && proofWait ? '<i class="ping" title="אסמכתא ממתינה"></i>' : ''}${ic} ${label}${issues[k] ? '<i class="dot" title="חסרים פרטים"></i>' : ''}</button>`).join('');
         const prev = STEPS[idx - 1]; const next = STEPS[idx + 1];
         return `<div class="mask" data-act="close"></div><div class="drawer">
-            <div class="dh"><h2>${esc(q.customerName || 'הצעה')} ${q.quoteNumber ? `<span class="sub">#${q.quoteNumber}</span>` : ''}</h2>${badge(L.status, 'status', q.status)}<button data-act="close">✕</button></div>
+            <div class="dh"><h2>${esc(q.customerName || 'הצעה')} ${q.quoteNumber ? `<span class="sub">#${q.quoteNumber}</span>` : ''}</h2>${badge(L.status, 'status', q.status)}${proofWait ? badge(L.pay, 'pay', 'awaiting_transfer_approval') : ''}<button data-act="close">✕</button></div>
             <div class="tabs">${tabs}</div>
             <div class="db">
               ${locked ? '<div class="lockmsg">ההצעה נעולה לעריכה (נחתמה / פגה / בוטלה). ניתן לערוך הערות בלבד.</div>' : ''}

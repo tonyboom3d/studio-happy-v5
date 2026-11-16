@@ -101,6 +101,29 @@ td.wrapc{white-space:normal;max-width:220px}
 .sum{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:10px}
 .sum div{background:#f1f5f9;border-radius:8px;padding:8px;text-align:center}.sum b{display:block;font-size:16px}
 .extra{display:flex;gap:8px;align-items:center;padding:5px 0;border-bottom:1px dashed #e2e8f0}.extra span{flex:1}
+.price-top{display:grid;grid-template-columns:1fr 1fr minmax(150px,1.15fr);gap:8px}
+.price-top>*{min-width:0}
+.price-top label,.price .dates label{display:flex;flex-direction:column;gap:3px;font-size:13px;color:#475569}
+.seg button.on:hover{background:#1d4ed8;color:#fff}
+.dep-row{display:inline-flex;align-items:stretch;max-width:100%}
+.dep-row input{width:78px;flex:none;min-width:0;border-start-end-radius:0;border-end-end-radius:0}
+.seg{display:flex;flex:none}
+.seg button{border-radius:0;margin-inline-start:-1px;padding:0 8px;min-width:30px;font-size:14px;font-weight:700}
+.seg button:last-child{border-start-end-radius:7px;border-end-end-radius:7px}
+.seg button.on{background:#2563eb;border-color:#2563eb;color:#fff}
+.price .dates{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
+.price .extras{margin-top:8px}
+.price .extras-h{font-size:14px;font-weight:700;margin-bottom:2px}
+.price .extra{padding:2px 0;gap:6px}
+.price .extra b{font-variant-numeric:tabular-nums}
+.price .x{border:0;background:transparent;color:#94a3b8;padding:0 4px;line-height:1}
+.price .x:hover{color:#dc2626;background:transparent}
+.price .addon-add{margin-top:6px}
+.price .addon-add input[type=number]{width:84px;flex:none}
+.price .sum{gap:6px;margin-top:8px}
+.price .sum div{padding:6px 4px}
+.price .hint{margin-top:4px;font-size:12px}
+.drawer .price input,.drawer .price select{font-size:15px;padding:6px 8px}
 .tags{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
 .tag{display:inline-flex;align-items:center;gap:4px;background:#dbeafe;color:#1e40af;border-radius:999px;padding:5px 8px 5px 12px;font-size:15px;font-weight:600}
 .tag button{border:0;background:transparent;color:#1e40af;padding:0 2px;font-size:16px;line-height:1}
@@ -113,7 +136,7 @@ td.wrapc{white-space:normal;max-width:220px}
 .foot{position:sticky;bottom:0;background:#fff;border-top:1px solid #e2e8f0;padding:10px 16px;display:flex;gap:8px;justify-content:space-between}
 .modal{position:fixed;top:5vh;left:50%;transform:translateX(-50%);width:min(860px,96%);max-height:90vh;overflow:auto;background:#f8fafc;border-radius:12px;z-index:30;box-shadow:0 12px 40px rgba(0,0,0,.3)}
 .lockmsg{background:#fef3c7;color:#92400e;border-radius:8px;padding:8px 10px;margin-bottom:10px;font-size:13px}
-@media(max-width:700px){.grid{grid-template-columns:1fr}.sum{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:700px){.grid,.price-top,.price .dates{grid-template-columns:1fr}.sum{grid-template-columns:repeat(2,1fr)}}
 `;
 
 const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -341,6 +364,11 @@ class QuotesDashboard extends HTMLElement {
         if (a === 'wsRemove') {
             if (this.isLocked()) return;
             this.s.detail.draft.workshops = (this.s.detail.draft.workshops || []).filter((n) => n !== el.dataset.name);
+            return this.render();
+        }
+        if (a === 'depType') {
+            if (this.isLocked()) return;
+            this.s.detail.draft.depositType = el.dataset.v === 'fixed' ? 'fixed' : 'percent';
             return this.render();
         }
         if (a === 'save') return this.save();
@@ -667,7 +695,9 @@ class QuotesDashboard extends HTMLElement {
         const f = (key, label, type = 'text', extra = '') => `<label>${label}<input type="${type}" data-f="${key}" value="${esc(d[key] ?? '')}"${dis} ${extra}></label>`;
         const dateMin = (key, label) => f(key, label, 'date', `min="${ilToday()}"`);
         const chk = (key, label) => `<label class="chk"><input type="checkbox" data-f="${key}"${d[key] ? ' checked' : ''}${dis}> ${label}</label>`;
-        const extras = d.extras.map((x, i) => `<div class="extra"><span>${esc(x.title)}</span><b>${money(x.price)}</b>${locked ? '' : `<button data-act="delExtra" data-i="${i}">✕</button>`}</div>`).join('') || '<div class="sub">אין תוספות</div>';
+        const extras = d.extras.map((x, i) => `<div class="extra"><span>${esc(x.title)}</span><b>${money(x.price)}</b>${locked ? '' : `<button type="button" class="x" data-act="delExtra" data-i="${i}" aria-label="הסר">✕</button>`}</div>`).join('') || '<div class="sub">אין תוספות</div>';
+        const depFixed = d.depositType === 'fixed';
+        const depSeg = (v, icon, title) => `<button type="button" class="${(v === 'fixed' ? depFixed : !depFixed) ? 'on' : ''}" data-act="depType" data-v="${v}" title="${title}"${dis}>${icon}</button>`;
         const addOpts = this.s.addons.map((a) => {
             const title = a.title || a.name || '';
             return `<option value="${esc(a.id)}" style="color:#0f172a;background:#fff">${esc(title)} (${money(a.price)})</option>`;
@@ -690,14 +720,15 @@ class QuotesDashboard extends HTMLElement {
               ${sec('event', 'האירוע')}<div class="grid">${dateMin('eventDate', 'תאריך')}${f('participants', 'משתתפים', 'number', 'min="0"')}${f('eventStartTime', 'שעת התחלה', 'time')}${f('eventEndTime', 'שעת סיום', 'time')}${f('adults', 'מלווים', 'number', 'min="0"')}${f('requiredInstructors', 'מדריכים נדרשים', 'number', 'min="0"')}
                 <div class="full">${chk('workshopClosed', 'סדנה סגורה (פרטית)')}</div></div></div>
               ${sec('staff', 'צוות משובץ')}${this.staffPicker(dt, d, q.status === 'cancelled')}</div>
-              ${sec('pricing', 'תמחור')}<div class="grid">${f('basePrice', 'מחיר בסיס (₪)', 'number', 'min="0"')}${f('priceOverride', 'מחיר מותאם (עוקף הכול)', 'number', 'min="0"')}
-                <label>סוג מקדמה<select data-f="depositType"${dis}><option value="percent"${d.depositType !== 'fixed' ? ' selected' : ''}>אחוז</option><option value="fixed"${d.depositType === 'fixed' ? ' selected' : ''}>סכום קבוע</option></select></label>${f('depositValue', 'ערך מקדמה', 'number', 'min="0"')}
-                ${f('balanceDueDate', 'מועד אחרון לתשלום יתרה', 'date')}${f('expiresAt', 'תוקף ההצעה', 'date')}</div>
-                <div style="margin-top:10px"><b>תוספות</b>${extras}
-                  ${locked ? '' : `<div class="addon-add"><select id="catalogSel"><option value="">בחרו תוספת</option>${addOpts || '<option value="" disabled>אין תוספות בקטלוג</option>'}</select><button data-act="addCatalogExtra">הוסף</button></div>
-                  <label class="sub" style="display:flex;gap:6px;align-items:center;margin-top:8px">תוספת מותאמת<input id="customTitle" placeholder="שם" style="flex:1"><input id="customPrice" type="number" min="0" placeholder="₪" style="width:80px"><button data-act="addCustomExtra">הוסף</button></label>`}</div>
+              ${sec('pricing', 'תמחור')}<div class="price">
+                <div class="price-top">${f('basePrice', 'מחיר בסיס', 'number', 'min="0"')}${f('priceOverride', 'מחיר מותאם', 'number', 'min="0" title="עוקף את המחיר המחושב"')}
+                  <label>מקדמה<span class="dep-row"><input type="number" min="0" data-f="depositValue" value="${esc(d.depositValue ?? '')}"${dis}><span class="seg">${depSeg('percent', '%', 'אחוז')}${depSeg('fixed', '₪', 'סכום קבוע')}</span></span></label></div>
+                <div class="dates">${f('balanceDueDate', 'תשלום יתרה עד', 'date')}${f('expiresAt', 'תוקף ההצעה', 'date')}</div>
+                <div class="extras"><div class="extras-h">תוספות</div>${extras}
+                  ${locked ? '' : `<div class="addon-add"><select id="catalogSel"><option value="">בחרו תוספת</option>${addOpts || '<option value="" disabled>אין תוספות בקטלוג</option>'}</select><button type="button" data-act="addCatalogExtra">הוסף</button></div>
+                  <div class="addon-add"><input id="customTitle" placeholder="תוספת מותאמת"><input id="customPrice" type="number" min="0" placeholder="₪"><button type="button" data-act="addCustomExtra">הוסף</button></div>`}</div>
                 <div class="sum"><div><span class="sub">סה"כ</span><b>${money(q.totalAmount)}</b></div><div><span class="sub">מקדמה</span><b>${money(q.depositAmount)}</b></div><div><span class="sub">יתרה</span><b>${money(q.balanceAmount)}</b></div><div><span class="sub">שולם</span><b>${money(q.paidAmount)}</b></div></div>
-                <div class="sub" style="margin-top:6px">הסכומים מחושבים בשרת בעת השמירה.</div></div>
+                <div class="sub hint">הסכומים מחושבים בשמירה.</div></div></div>
               ${sec('methods', 'אמצעי תשלום מותרים')}
                 ${paySwitch('allowOnlinePayment', 'תשלום מקוון', 'ביט / אשראי / Apple Pay', d, dis)}
                 ${paySwitch('allowBankTransfer', 'העברה בנקאית', 'הלקוח מעלה אסמכתא לאישור', d, dis)}

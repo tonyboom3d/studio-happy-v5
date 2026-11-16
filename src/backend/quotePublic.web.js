@@ -32,6 +32,14 @@ function toDto(q, viewState, settings, contractHtml) {
         viewState,
         quoteNumber: q.quoteNumber,
         customerName: q.customerName,
+        customerEmail: q.customerEmail || '',
+        customerPhone: String(q.customerPhone || '').replace(/^972/, '0'),
+        companyName: q.companyName || '',
+        requestedWorkshop: q.requestedWorkshop || '',
+        participants: q.participants || 0,
+        adults: q.adults || 0,
+        eventLocation: q.eventLocation || '',
+        eventAddress: q.eventAddress || '',
         eventType: q.eventType,
         eventDate: q.eventDate,
         eventStartTime: q.eventStartTime,
@@ -168,6 +176,12 @@ export const signQuote = webMethod(Permissions.Anyone, async (token, input = {})
     const q = await findByToken(token);
     if (computeViewState(q) !== 'ready_to_sign') throw new Error('STATE:לא ניתן לחתום על הצעה זו כרגע. רעננו את הדף.');
     if (input.approved !== true) throw new Error('VALIDATION:יש לאשר את תנאי ההצעה.');
+    const signerName = String(input.signerName || '').trim().slice(0, 120);
+    const signerEmail = String(input.signerEmail || '').trim().slice(0, 160);
+    const signerPhone = String(input.signerPhone || '').trim().slice(0, 30);
+    if (signerName.length < 2) throw new Error('VALIDATION:יש להזין שם מלא.');
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(signerEmail)) throw new Error('VALIDATION:כתובת האימייל אינה תקינה.');
+    if (signerPhone.replace(/\D/g, '').length < 9) throw new Error('VALIDATION:מספר הטלפון אינו תקין.');
 
     const plan = input.selectedPaymentPlan;
     const method = input.selectedPaymentMethod;
@@ -198,13 +212,16 @@ export const signQuote = webMethod(Permissions.Anyone, async (token, input = {})
         signedAt: new Date(),
         signatureImage,
         signerUserAgent: String(input.userAgent || '').slice(0, 300),
+        signerName,
+        signerEmail,
+        signerPhone,
         contractSnapshotHtml: rendered.html,
         contractHash: hash,
         selectedPaymentPlan: plan,
         selectedPaymentMethod: method,
         pdfPending: true,
     }, SA);
-    await writeQuoteLog(q._id, 'signed', { plan, method, hash }, customerActor(q));
+    await writeQuoteLog(q._id, 'signed', { plan, method, hash, signerName, signerEmail, signerPhone }, customerActor(q));
     notifyManagers('manager_quote_signed', saved);
     // Conflict detection + calendar block: added in the calendar phase.
     return { viewState: computeViewState(saved) };

@@ -3,6 +3,7 @@
 // via attribute `action-result` JSON {requestId, ok, error}. Add mock="ready_to_sign" (any viewState) for local dev.
 
 const TAG = 'quote-contract';
+const DEFAULT_LOGO = 'https://static.wixstatic.com/media/6b73e9_3d8054d68ecb422a82c328f8c4c163f3~mv2.png';
 
 const MSG = {
     missing_id: ['הקישור אינו תקין', 'חסר מזהה הצעה בכתובת. אנא השתמשו בקישור שנשלח אליכם.'],
@@ -10,40 +11,106 @@ const MSG = {
     cancelled: ['ההצעה בוטלה', 'להצעה חדשה או לשאלות, אנא צרו קשר.'],
     expired: ['תוקף ההצעה פג', 'לחידוש ההצעה פנו אלינו ונשמח לעדכן.'],
 };
+const EVENT_TYPE = { birthday: 'יום הולדת', event: 'אירוע' };
+
+const FONT_URL = 'https://fonts.googleapis.com/css2?family=Assistant:wght@400;500;600;700;800&display=swap';
+
+// @font-face inside shadow DOM is ignored, so the font must be registered on the document.
+function ensureFont() {
+    if (document.getElementById('qc-font')) return;
+    const link = document.createElement('link');
+    link.id = 'qc-font'; link.rel = 'stylesheet'; link.href = FONT_URL;
+    document.head.appendChild(link);
+}
 
 const CSS = `
-@import url('https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;600;700&display=swap');
-:host{display:block;direction:rtl;font-family:Rubik,Arial,sans-serif;color:#0f172a;background:#f1f5f9;padding:16px;--brand:#2563eb}
+:host{display:block;direction:rtl;font-family:Assistant,Arial,sans-serif;color:#09090b;background:#f9fafb;font-size:18px;line-height:1.6;--brand:#16a34a;min-height:100%}
 *{box-sizing:border-box}
-.box{max-width:760px;margin:0 auto}
-.card{background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:18px;margin-bottom:14px}
-.hdr{display:flex;align-items:center;gap:12px;margin-bottom:14px}.hdr img{max-height:48px}.hdr h1{margin:0;font-size:22px;flex:1}
-.sub{color:#64748b;font-size:13px}
-.contract{line-height:1.7;overflow-wrap:anywhere}
-.msg{text-align:center;padding:40px 16px}.msg h2{margin:0 0 8px}.msg .ic{font-size:44px}
-.sk{height:16px;border-radius:8px;background:linear-gradient(90deg,#e2e8f0,#f1f5f9,#e2e8f0);background-size:200% 100%;animation:sh 1.2s infinite;margin:12px 0}
+.top{background:#fff;border-bottom:1px solid #e5e7eb;padding:14px 16px;text-align:center}
+.top h1{margin:0;font-size:22px;font-weight:700;color:#111827}
+.top .exp{display:inline-flex;align-items:center;gap:6px;color:#6b7280;font-size:15px;margin-top:2px}
+.wrap{max-width:980px;margin:0 auto;padding:28px 16px 40px}
+.card{background:#fff;border:1px solid #e5e7eb;border-radius:16px;box-shadow:0 1px 2px rgba(0,0,0,.05);padding:32px 40px;margin-bottom:18px}
+.logo{display:block;margin:4px auto 26px;max-width:min(360px,80%);height:auto}
+.contract{font-size:18px;line-height:1.8;overflow-wrap:anywhere}
+.contract,.contract *{font-family:Assistant,Arial,sans-serif!important}
+.contract h1{font-size:26px;margin:0 0 12px}
+.contract h2,.contract h3{font-size:19px;font-weight:700;margin:20px 0 4px}
+.contract p{margin:0 0 4px}
+.contract ul{margin:2px 0 8px;padding:0 22px 0 0}
+.contract li{margin:2px 0}
+.contract strong,.contract b{font-weight:700}
+.contract .dyn{font-weight:800;color:#111827}
+.contract table td{font-size:17px}
+.cta{text-align:center;margin-top:28px}
+.btn{font:inherit;font-weight:700;font-size:18px;cursor:pointer;border:0;border-radius:14px;padding:12px 40px;background:var(--brand);color:#fff;box-shadow:0 2px 6px rgba(22,163,74,.25)}
+.btn:hover{filter:brightness(.95)}.btn:disabled{opacity:.55;cursor:not-allowed}
+.btn.dark{background:#111827;box-shadow:none}
+.btn.wide{width:100%}
+.ghost{font:inherit;font-size:17px;cursor:pointer;border:1px solid #e5e7eb;border-radius:12px;padding:11px 18px;background:#fff;color:#111827}
+.sub{color:#6b7280;font-size:15px}
+.sumh{display:flex;align-items:center;gap:8px;margin:0 0 14px;font-size:21px}
+.facts{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px}
+.fact{display:flex;gap:10px;align-items:flex-start;background:#f9fafb;border:1px solid #f1f5f9;border-radius:12px;padding:10px 12px}
+.fact .ic{font-size:22px;line-height:1.2;flex:none}
+.fact span{display:block;color:#6b7280;font-size:14px;line-height:1.3}
+.fact b{display:block;font-size:17px;line-height:1.35;overflow-wrap:anywhere}
+.money{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:12px}
+.money div{border-radius:12px;padding:12px;text-align:center;background:#f0fdf4;border:1px solid #dcfce7}
+.money div.total{background:#111827;border-color:#111827;color:#fff}.money div.total span{color:#d1d5db}
+.money span{display:block;font-size:14px;color:#4b5563}.money b{display:block;font-size:22px;font-weight:800}
+.msg{text-align:center;padding:24px 8px}.msg h2{margin:0 0 8px;font-size:24px}.msg .ic{font-size:46px}
+.sk{height:16px;border-radius:8px;background:linear-gradient(90deg,#e5e7eb,#f3f4f6,#e5e7eb);background-size:200% 100%;animation:sh 1.2s infinite;margin:12px 0}
 @keyframes sh{to{background-position:-200% 0}}
-.sum{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:10px 0}
-.sum div{background:#f1f5f9;border-radius:10px;padding:10px;text-align:center}.sum b{display:block;font-size:18px}
-.opt{display:flex;gap:10px;align-items:flex-start;border:1px solid #cbd5e1;border-radius:10px;padding:10px;margin:8px 0;cursor:pointer}
-.opt input{margin-top:4px}
-h3{margin:0 0 8px;font-size:16px;color:var(--brand)}
-canvas{width:100%;height:180px;border:1px dashed #94a3b8;border-radius:10px;background:#fff;touch-action:none;display:block}
-button{font:inherit;cursor:pointer;border-radius:10px;padding:11px 18px;border:1px solid #cbd5e1;background:#fff;color:#0f172a}
-.btn{background:var(--brand);border-color:var(--brand);color:#fff;font-weight:700;width:100%;margin-top:10px}
-.btn:disabled{opacity:.55;cursor:not-allowed}
-.row{display:flex;gap:8px;align-items:center;justify-content:space-between;margin-top:6px}
-.err{background:#fee2e2;color:#b91c1c;border:1px solid #fecaca;padding:10px;border-radius:8px;margin-top:10px}
-.ok{background:#dcfce7;color:#15803d;border:1px solid #bbf7d0;padding:10px;border-radius:8px;margin-bottom:10px}
-.bank{white-space:pre-wrap;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:12px}
-a{color:var(--brand)}
-@media(max-width:560px){.sum{grid-template-columns:1fr}}
+.err{background:#fee2e2;color:#b91c1c;border:1px solid #fecaca;padding:10px 12px;border-radius:10px;margin-top:12px;font-size:16px}
+.ok{background:#dcfce7;color:#15803d;border:1px solid #bbf7d0;padding:12px;border-radius:10px;margin-bottom:14px;font-weight:600}
+.bank{white-space:pre-wrap;background:#f9fafb;border:1px solid #e5e7eb;border-radius:12px;padding:12px;margin-bottom:10px}
+h3.t{margin:16px 0 8px;font-size:19px}
+a{color:#2563eb}
+details.card summary{cursor:pointer;font-weight:700}
+input[type=file]{font:inherit;font-size:16px;margin:6px 0}
+.mask{position:fixed;inset:0;background:rgba(17,24,39,.45);backdrop-filter:blur(3px);z-index:1000}
+.dlg{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:min(560px,94vw);max-height:92vh;overflow:auto;background:#fff;border-radius:18px;z-index:1001;box-shadow:0 24px 60px rgba(0,0,0,.25)}
+.dlg-h{display:flex;align-items:center;gap:12px;padding:16px 20px;background:#eff6ff;border-bottom:1px solid #dbeafe}
+.dlg-h .shield{width:38px;height:38px;border-radius:50%;background:#dbeafe;color:#2563eb;display:flex;align-items:center;justify-content:center;flex:none}
+.dlg-h b{display:block;font-size:19px}.dlg-h span{font-size:14px;color:#6b7280}
+.dlg-b{padding:18px 20px 6px}
+.fld{display:block;margin-bottom:14px}
+.fld>span{display:block;font-size:16px;font-weight:600;margin-bottom:6px}.fld>span i{color:#dc2626;font-style:normal}
+.fld .txt{width:100%;font:inherit;font-size:17px;padding:10px 12px;border:1px solid #e5e7eb;border-radius:12px;background:#fff;color:#111827}
+.fld .txt:focus{outline:2px solid #bfdbfe;border-color:#3b82f6}
+.chips{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:8px}
+.chip{display:flex;gap:8px;align-items:flex-start;border:1px solid #e5e7eb;border-radius:12px;padding:9px 11px;cursor:pointer;font-size:16px;line-height:1.35}
+.chip:has(input:checked){border-color:#16a34a;background:#f0fdf4}
+.chip input{margin:3px 0 0;flex:none;width:16px;height:16px;accent-color:#16a34a}
+.chip small{display:block;color:#6b7280;font-size:13px;margin-top:2px}
+canvas{width:100%;height:170px;border:2px dashed #d1d5db;border-radius:14px;background:#fff;touch-action:none;display:block}
+.sigwrap{position:relative}
+.sigph{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#9ca3af;font-size:17px;pointer-events:none}
+.sigrow{display:flex;justify-content:space-between;align-items:center;margin-top:6px}
+.link{font:inherit;font-size:14px;background:none;border:0;color:#2563eb;cursor:pointer;padding:0}
+.approve{display:flex;gap:10px;align-items:flex-start;font-size:16px;margin:4px 0 8px;cursor:pointer}
+.approve input{margin-top:5px;width:18px;height:18px;accent-color:#16a34a;flex:none}
+.dlg-f{display:flex;gap:10px;padding:12px 20px 16px;position:sticky;bottom:0;background:#fff;border-top:1px solid #f1f5f9}
+.dlg-f>*{flex:1}
+@media(max-width:640px){.card{padding:20px 14px}.contract{font-size:17px}.btn{padding:12px 28px}
+.facts{grid-template-columns:1fr 1fr;gap:8px}.fact{padding:8px;gap:6px}.fact .ic{font-size:18px}.fact b{font-size:15px}
+.money{gap:6px}.money div{padding:9px 4px}.money b{font-size:17px}.money span{font-size:12px}}
 `;
+
+const SHIELD = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>';
+const CLOCK = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>';
 
 const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const money = (n) => `₪${(Number(n) || 0).toLocaleString('he-IL')}`;
 const dmy = (v) => (v ? new Date(v).toLocaleDateString('he-IL', { timeZone: 'Asia/Jerusalem' }) : '');
-const errText = (e) => { const m = String(e?.message || e || 'שגיאה'); const i = m.indexOf(':'); return /^[A-Z_]+$/.test(m.slice(0, i)) ? m.slice(i + 1) : m; };
+const longDate = (v) => (v ? new Date(v).toLocaleDateString('he-IL', { timeZone: 'Asia/Jerusalem', day: 'numeric', month: 'long', year: 'numeric' }) : '');
+const weekday = (v) => (v ? new Date(v).toLocaleDateString('he-IL', { timeZone: 'Asia/Jerusalem', weekday: 'long' }) : '');
+const errText = (e) => {
+    const m = String(e?.message || e || 'שגיאה');
+    const tagged = m.match(/(?:VALIDATION|NOT_FOUND|STATE|PAYMENT|UNKNOWN_ACTION):([^"\n]+)/);
+    return tagged ? tagged[1].trim() : m;
+};
 const safeColor = (c) => (/^#[0-9a-f]{3,8}$/i.test(c || '') ? c : '');
 const safeUrl = (u) => (/^https?:\/\//i.test(u || '') ? u : '');
 
@@ -59,12 +126,17 @@ class QuoteContract extends HTMLElement {
         this.busy = false;
         this.error = '';
         this.ink = 0;
+        this.signOpen = false;
+        this.form = null;
     }
 
     connectedCallback() {
         this.setAttribute('dir', 'rtl');
+        ensureFont();
         this.root.innerHTML = `<style>${CSS}</style><div id="app"></div>`;
         this.root.addEventListener('click', (e) => this.onClick(e));
+        this.root.addEventListener('input', (e) => this.onInput(e));
+        this.root.addEventListener('change', (e) => this.onInput(e));
         const mock = this.getAttribute('mock');
         if (mock) this.data = this.mockData(mock);
         this.render();
@@ -74,7 +146,7 @@ class QuoteContract extends HTMLElement {
         if (!val) return;
         try {
             const msg = JSON.parse(val);
-            if (name === 'quote-data') { this.data = msg; this.error = ''; this.render(); return; }
+            if (name === 'quote-data') { this.data = msg; this.error = ''; if (msg.viewState !== 'ready_to_sign') this.signOpen = false; this.render(); return; }
             const p = this.pending.get(msg.requestId);
             if (!p) return;
             this.pending.delete(msg.requestId);
@@ -94,12 +166,33 @@ class QuoteContract extends HTMLElement {
     }
 
     mockData(state) {
+        const day = 24 * 3600 * 1000;
         return {
-            viewState: state, quoteNumber: 1001, customerName: 'דנה כהן', totalAmount: 2500, depositAmount: 750, balanceAmount: 1750,
-            balanceDueDate: new Date().toISOString(), paidAmount: 750, allowOnlinePayment: true, allowBankTransfer: true,
+            viewState: state, quoteNumber: 1001, customerName: 'דנה כהן', customerEmail: 'dana@example.com', customerPhone: '052-1234567',
+            eventType: 'birthday', eventDate: new Date(Date.now() + 20 * day).toISOString(), eventStartTime: '16:00', eventEndTime: '18:30',
+            requestedWorkshop: 'קרמיקה, נרות', participants: 14, adults: 2, extras: [{ title: 'ברד', price: 200 }],
+            totalAmount: 2500, depositAmount: 750, balanceAmount: 1750, balanceDueDate: new Date(Date.now() + 18 * day).toISOString(),
+            expiresAt: new Date(Date.now() + 7 * day).toISOString(), paidAmount: 0, allowOnlinePayment: true, allowBankTransfer: true,
             selectedPaymentPlan: 'deposit', selectedPaymentMethod: 'online', bankDetailsText: 'בנק לדוגמה\nחשבון 123456',
-            contractHtml: '<h2>הסכם לדוגמה</h2><p>תוכן החוזה...</p>',
+            contractHtml: '<h3>פרטי הסדנה</h3><p>סוג הפעילות: <strong class="dyn">יום הולדת</strong> ב-Studio Happy</p><ul><li>מספר משתתפים: התחייבות ל-<strong class="dyn">14</strong> משתתפים</li></ul><h3>עלויות</h3><p>מחיר למשתתף: <strong class="dyn">₪164</strong></p>',
         };
+    }
+
+    // ---------- form state ----------
+    initForm(d) {
+        if (this.form) return;
+        const hasDep = Number(d.depositAmount) > 0 && Number(d.balanceAmount) > 0;
+        const methods = [d.allowOnlinePayment && 'online', d.allowBankTransfer && 'bank_transfer'].filter(Boolean);
+        this.form = {
+            name: d.customerName || '', email: d.customerEmail || '', phone: d.customerPhone || '',
+            plan: hasDep ? '' : 'full', method: methods.length === 1 ? methods[0] : '', approve: false,
+        };
+    }
+
+    onInput(e) {
+        const t = e.target;
+        if (!this.form || !t.dataset.k) return;
+        this.form[t.dataset.k] = t.type === 'checkbox' ? t.checked : t.value;
     }
 
     // ---------- interactions ----------
@@ -107,6 +200,8 @@ class QuoteContract extends HTMLElement {
         const el = e.target.closest('[data-act]');
         if (!el || this.busy) return;
         const a = el.dataset.act;
+        if (a === 'openSign') { this.initForm(this.data); this.signOpen = true; this.error = ''; return this.render(); }
+        if (a === 'closeSign') { this.signOpen = false; this.error = ''; return this.render(); }
         if (a === 'clear') return this.clearSig();
         if (a === 'sign') return this.sign();
         if (a === 'pay') return this.action('pay', { stage: el.dataset.stage });
@@ -154,37 +249,54 @@ class QuoteContract extends HTMLElement {
         this.busy = false; this.render();
     }
 
+    validate() {
+        const f = this.form;
+        if (String(f.name).trim().length < 2) return 'יש להזין שם מלא.';
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(f.email).trim())) return 'יש להזין כתובת אימייל תקינה.';
+        if (String(f.phone).replace(/\D/g, '').length < 9) return 'יש להזין מספר טלפון תקין.';
+        if (!f.plan) return 'יש לבחור מסלול תשלום.';
+        if (!f.method) return 'יש לבחור אמצעי תשלום.';
+        if (this.ink < 25) return 'יש לחתום בתיבת החתימה.';
+        if (!f.approve) return 'יש לאשר את תנאי ההסכם.';
+        return '';
+    }
+
     async sign() {
-        const q = (s) => this.root.querySelector(s);
-        if (!q('#approve')?.checked) { this.error = 'יש לאשר את תנאי ההצעה.'; return this.render(true); }
-        const plan = q('input[name=plan]:checked')?.value;
-        const method = q('input[name=method]:checked')?.value;
-        if (!plan) { this.error = 'יש לבחור מסלול תשלום.'; return this.render(true); }
-        if (!method) { this.error = 'יש לבחור אמצעי תשלום.'; return this.render(true); }
-        if (this.ink < 25) { this.error = 'יש לחתום בתיבת החתימה.'; return this.render(true); }
+        const f = this.form;
+        this.error = this.validate();
+        if (this.error) return this.render();
         const png = this.canvas.toDataURL('image/png');
-        const keep = { plan, method, approved: true, png };
-        this.busy = true; this.error = ''; this.render(true);
+        this.busy = true; this.render();
         try {
-            await this.req('sign', { signaturePngDataUrl: keep.png, selectedPaymentPlan: plan, selectedPaymentMethod: method, approved: true, userAgent: navigator.userAgent });
+            await this.req('sign', {
+                signaturePngDataUrl: png, selectedPaymentPlan: f.plan, selectedPaymentMethod: f.method, approved: true,
+                signerName: f.name.trim(), signerEmail: f.email.trim(), signerPhone: f.phone.trim(), userAgent: navigator.userAgent,
+            });
+            this.signOpen = false;
         } catch (err) { this.error = errText(err); }
-        this.busy = false; this.render(!this.error ? false : true);
+        this.busy = false; this.render();
     }
 
     // ---------- signature canvas ----------
-    initCanvas() {
+    initCanvas(restoreUrl, restoreInk) {
         const c = this.root.querySelector('#sig');
         if (!c) { this.canvas = null; return; }
         this.canvas = c;
         const dpr = Math.min(window.devicePixelRatio || 1, 2);
-        const w = c.clientWidth || 600; const h = 180;
+        const w = c.clientWidth || 480; const h = 170;
         c.width = Math.round(w * dpr); c.height = Math.round(h * dpr);
         const ctx = c.getContext('2d');
         ctx.scale(dpr, dpr);
-        ctx.lineWidth = 2.2; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.strokeStyle = '#0f172a';
+        ctx.lineWidth = 2.4; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.strokeStyle = '#111827';
+        const ph = this.root.querySelector('.sigph');
         let drawing = false; let last = null;
         const pos = (ev) => { const r = c.getBoundingClientRect(); return { x: ev.clientX - r.left, y: ev.clientY - r.top }; };
-        c.onpointerdown = (ev) => { if (this.busy) return; drawing = true; last = pos(ev); c.setPointerCapture(ev.pointerId); ctx.beginPath(); ctx.moveTo(last.x, last.y); ctx.lineTo(last.x + 0.1, last.y + 0.1); ctx.stroke(); };
+        c.onpointerdown = (ev) => {
+            if (this.busy) return;
+            drawing = true; last = pos(ev); c.setPointerCapture(ev.pointerId);
+            if (ph) ph.style.display = 'none';
+            ctx.beginPath(); ctx.moveTo(last.x, last.y); ctx.lineTo(last.x + 0.1, last.y + 0.1); ctx.stroke();
+        };
         c.onpointermove = (ev) => {
             if (!drawing) return;
             const p = pos(ev);
@@ -195,88 +307,130 @@ class QuoteContract extends HTMLElement {
         const end = () => { drawing = false; };
         c.onpointerup = end; c.onpointercancel = end; c.onpointerleave = end;
         this.ink = 0;
+        if (restoreUrl) {
+            const img = new Image();
+            img.onload = () => { ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.drawImage(img, 0, 0); ctx.restore(); this.ink = restoreInk; if (ph) ph.style.display = 'none'; };
+            img.src = restoreUrl;
+        }
     }
 
     clearSig() {
         if (!this.canvas) return;
         this.canvas.getContext('2d').clearRect(0, 0, this.canvas.width, this.canvas.height);
         this.ink = 0;
+        const ph = this.root.querySelector('.sigph');
+        if (ph) ph.style.display = '';
     }
 
     // ---------- render ----------
-    render(keepForm = false) {
+    render() {
         const app = this.root.getElementById('app');
         if (!app) return;
         const d = this.data;
         const brand = safeColor(d?.brandColor);
         if (brand) this.style.setProperty('--brand', brand);
-        const form = keepForm ? this.snapshotForm() : null;
-        app.innerHTML = `<div class="box">${this.screen(d)}</div>`;
-        this.initCanvas();
-        if (form) this.restoreForm(form);
+        const keepSig = this.canvas && this.ink > 0 && this.signOpen ? { url: this.canvas.toDataURL(), ink: this.ink } : null;
+        app.innerHTML = this.screen(d);
+        this.initCanvas(keepSig?.url, keepSig?.ink);
+        if (this.signOpen && this.error) this.root.querySelector('.dlg .err')?.scrollIntoView({ block: 'nearest' });
     }
 
-    snapshotForm() {
-        const q = (s) => this.root.querySelector(s);
-        if (!q('#approve')) return null;
-        let img = null;
-        if (this.canvas) { img = new Image(); img.src = this.canvas.toDataURL(); }
-        return { approve: q('#approve').checked, plan: q('input[name=plan]:checked')?.value, method: q('input[name=method]:checked')?.value, img, ink: this.ink };
+    topBar(d, title) {
+        const exp = d?.viewState === 'ready_to_sign' && d?.expiresAt ? `<div class="exp">${CLOCK} בתוקף עד: ${esc(longDate(d.expiresAt))}</div>` : '';
+        return `<div class="top"><h1>${esc(title)}</h1>${exp}</div>`;
     }
 
-    restoreForm(f) {
-        const q = (s) => this.root.querySelector(s);
-        if (q('#approve')) q('#approve').checked = f.approve;
-        if (f.plan) { const r = q(`input[name=plan][value=${f.plan}]`); if (r) r.checked = true; }
-        if (f.method) { const r = q(`input[name=method][value=${f.method}]`); if (r) r.checked = true; }
-        if (f.img && this.canvas) {
-            const draw = () => { const ctx = this.canvas.getContext('2d'); ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.drawImage(f.img, 0, 0); ctx.restore(); this.ink = f.ink; };
-            if (f.img.complete) draw(); else f.img.onload = draw;
-        }
+    logo(d) {
+        return `<img class="logo" src="${esc(safeUrl(d?.logo) || DEFAULT_LOGO)}" alt="Studio Happy">`;
     }
 
-    header(d) {
-        const logo = safeUrl(d?.logo);
-        return `<div class="hdr">${logo ? `<img src="${esc(logo)}" alt="">` : ''}<h1>הצעת מחיר${d?.quoteNumber ? ` #${esc(d.quoteNumber)}` : ''}</h1></div>`;
+    frame(d, title, inner) {
+        return `${this.topBar(d, title)}<div class="wrap">${inner}</div>`;
     }
 
     screen(d) {
-        if (!d) return `<div class="card"><div class="sk" style="width:40%"></div><div class="sk"></div><div class="sk"></div><div class="sk" style="width:70%"></div></div>`;
+        if (!d) return this.frame(null, 'חוזה התקשרות', `<div class="card"><div class="sk" style="width:40%"></div><div class="sk"></div><div class="sk"></div><div class="sk" style="width:70%"></div></div>`);
         const vs = d.viewState;
         if (d.thanks && !MSG[vs]) return this.thanksScreen(d);
-        if (MSG[vs]) return `<div class="card msg"><div class="ic">${vs === 'expired' ? '⏰' : vs === 'cancelled' ? '🚫' : '🔎'}</div><h2>${MSG[vs][0]}</h2><p class="sub">${MSG[vs][1]}</p></div>`;
+        if (MSG[vs]) return this.frame(d, 'חוזה התקשרות', `<div class="card">${this.logo(d)}<div class="msg"><div class="ic">${vs === 'expired' ? '⏰' : vs === 'cancelled' ? '🚫' : '🔎'}</div><h2>${MSG[vs][0]}</h2><p class="sub">${MSG[vs][1]}</p></div></div>`);
         if (vs === 'ready_to_sign') return this.signScreen(d);
         return this.postSignScreen(d);
     }
 
     summary(d) {
-        return `<div class="sum"><div><span class="sub">סה"כ</span><b>${money(d.totalAmount)}</b></div><div><span class="sub">שולם</span><b>${money(d.paidAmount)}</b></div><div><span class="sub">יתרה</span><b>${money(Math.max(0, (Number(d.totalAmount) || 0) - (Number(d.paidAmount) || 0)))}</b></div></div>`;
+        const time = [d.eventStartTime, d.eventEndTime].filter(Boolean).join(' עד ');
+        const place = [d.eventLocation, d.eventAddress].filter(Boolean).join(', ');
+        const extras = (d.extras || []).map((x) => `${x.title}${x.price ? ` (${money(x.price)})` : ''}`).join(', ');
+        const fact = (ic, label, val) => (val ? `<div class="fact"><div class="ic">${ic}</div><div><span>${label}</span><b>${esc(val)}</b></div></div>` : '');
+        const paid = Number(d.paidAmount) || 0;
+        const third = paid > 0
+            ? `<div><span>שולם</span><b>${money(paid)}</b></div>`
+            : `<div><span>יתרה${d.balanceDueDate ? ` עד ${esc(dmy(d.balanceDueDate))}` : ''}</span><b>${money(d.balanceAmount)}</b></div>`;
+        return `<div class="card"><h2 class="sumh">📋 סיכום ההצעה${d.quoteNumber ? ` <span class="sub">#${esc(d.quoteNumber)}</span>` : ''}</h2>
+            <div class="facts">
+              ${fact('🎉', 'סוג האירוע', EVENT_TYPE[d.eventType] || d.eventType)}
+              ${fact('🎨', 'סדנה', d.requestedWorkshop)}
+              ${fact('📅', 'תאריך', d.eventDate ? `${weekday(d.eventDate)}, ${longDate(d.eventDate)}` : '')}
+              ${fact('🕐', 'שעות', time)}
+              ${fact('👥', 'משתתפים', Number(d.participants) > 0 ? `${d.participants} משתתפים` : '')}
+              ${fact('🧑‍🤝‍🧑', 'מלווים', Number(d.adults) > 0 ? `${d.adults}` : '')}
+              ${fact('📍', 'מיקום', place)}
+              ${fact('✨', 'תוספות', extras)}
+              ${fact('👤', 'שם המזמין', d.customerName)}
+              ${fact('⏳', 'ההצעה בתוקף עד', d.viewState === 'ready_to_sign' ? longDate(d.expiresAt) : '')}
+            </div>
+            <div class="money">
+              <div class="total"><span>סה"כ לתשלום</span><b>${money(d.totalAmount)}</b></div>
+              <div><span>מקדמה</span><b>${money(d.depositAmount)}</b></div>
+              ${third}
+            </div></div>`;
     }
 
     signScreen(d) {
+        return this.frame(d, 'חוזה התקשרות', `<div class="card">${this.logo(d)}<div class="contract">${d.contractHtml || ''}</div></div>
+            ${this.summary(d)}
+            <div class="cta"><button class="btn" data-act="openSign">לאישור וחתימה</button></div>
+            ${this.signOpen ? this.signDialog(d) : ''}`);
+    }
+
+    signDialog(d) {
+        const f = this.form;
+        const dis = this.busy ? ' disabled' : '';
         const hasDep = Number(d.depositAmount) > 0 && Number(d.balanceAmount) > 0;
-        const plans = `<label class="opt"><input type="radio" name="plan" value="full"><span><b>תשלום מלא — ${money(d.totalAmount)}</b></span></label>
-            ${hasDep ? `<label class="opt"><input type="radio" name="plan" value="deposit"><span><b>מקדמה ${money(d.depositAmount)} כעת</b><br><span class="sub">והשלמת ${money(d.balanceAmount)} עד ${esc(dmy(d.balanceDueDate))}</span></span></label>` : ''}`;
-        const methods = `${d.allowOnlinePayment ? '<label class="opt"><input type="radio" name="method" value="online"><span><b>תשלום מקוון</b><br><span class="sub">ביט / כרטיס אשראי / Apple Pay</span></span></label>' : ''}
-            ${d.allowBankTransfer ? '<label class="opt"><input type="radio" name="method" value="bank_transfer"><span><b>העברה בנקאית</b><br><span class="sub">פרטי החשבון יוצגו לאחר החתימה</span></span></label>' : ''}`;
-        return `${this.header(d)}<div class="card contract">${d.contractHtml || ''}</div>
-            ${d.expiresAt ? `<div class="sub" style="margin:-6px 4px 10px">ההצעה בתוקף עד ${esc(dmy(d.expiresAt))}</div>` : ''}
-            <div class="card"><h3>מסלול תשלום</h3>${plans}<h3 style="margin-top:14px">אמצעי תשלום</h3>${methods}</div>
-            <div class="card"><label class="opt" style="border:0;padding:0"><input type="checkbox" id="approve"><span>קראתי ואני מאשר/ת את תנאי ההצעה</span></label>
-              <h3 style="margin-top:14px">חתימה</h3><canvas id="sig"></canvas>
-              <div class="row"><span class="sub">חתמו באמצעות האצבע או העכבר</span><button data-act="clear" ${this.busy ? 'disabled' : ''}>נקה חתימה</button></div>
-              ${this.error ? `<div class="err">${esc(this.error)}</div>` : ''}
-              <button class="btn" data-act="sign" ${this.busy ? 'disabled' : ''}>${this.busy ? 'שולח...' : 'אישור וחתימה'}</button></div>`;
+        const radio = (name, value, title, hint) => `<label class="chip"><input type="radio" name="${name}" data-k="${name}" value="${value}"${f[name] === value ? ' checked' : ''}${dis}><span><b>${title}</b>${hint ? `<small>${hint}</small>` : ''}</span></label>`;
+        const plans = `${radio('plan', 'full', `תשלום מלא — ${money(d.totalAmount)}`, '')}
+            ${hasDep ? radio('plan', 'deposit', `מקדמה ${money(d.depositAmount)} כעת`, `והשלמת ${money(d.balanceAmount)} עד ${esc(dmy(d.balanceDueDate))}`) : ''}`;
+        const methods = `${d.allowOnlinePayment ? radio('method', 'online', 'תשלום מקוון', 'ביט / כרטיס אשראי / Apple Pay') : ''}
+            ${d.allowBankTransfer ? radio('method', 'bank_transfer', 'העברה בנקאית', 'פרטי החשבון יוצגו לאחר החתימה') : ''}`;
+        const field = (k, label, type, ph) => `<label class="fld"><span>${label} <i>*</i></span><input class="txt" type="${type}" data-k="${k}" value="${esc(f[k])}" placeholder="${ph}"${dis}></label>`;
+        return `<div class="mask" data-act="closeSign"></div>
+            <div class="dlg" role="dialog" aria-modal="true">
+              <div class="dlg-h"><div class="shield">${SHIELD}</div><div><b>אישור וחתימה</b><span>נא למלא את הפרטים ולחתום לסיום</span></div></div>
+              <div class="dlg-b">
+                ${field('name', 'שם מלא', 'text', 'ישראל ישראלי')}
+                ${field('email', 'אימייל', 'email', 'name@example.com')}
+                ${field('phone', 'טלפון', 'tel', '050-0000000')}
+                <div class="fld"><span>מסלול תשלום <i>*</i></span><div class="chips">${plans}</div></div>
+                <div class="fld"><span>אמצעי תשלום <i>*</i></span><div class="chips">${methods}</div></div>
+                <div class="fld"><span>חתימה דיגיטלית <i>*</i></span>
+                  <div class="sigwrap"><canvas id="sig"></canvas><div class="sigph">חתום כאן באמצעות העכבר או המגע</div></div>
+                  <div class="sigrow"><span class="sub">החתימה תישמר כחתימה דיגיטלית מאושרת</span><button class="link" data-act="clear"${dis}>נקה חתימה</button></div>
+                </div>
+                <label class="approve"><input type="checkbox" data-k="approve"${f.approve ? ' checked' : ''}${dis}><span>קראתי ואני מאשר/ת את תנאי ההסכם</span></label>
+                ${this.error ? `<div class="err">${esc(this.error)}</div>` : ''}
+              </div>
+              <div class="dlg-f"><button class="ghost" data-act="closeSign"${dis}>ביטול</button><button class="btn dark" data-act="sign"${dis}>${this.busy ? 'שולח...' : 'אישור סופי'}</button></div>
+            </div>`;
     }
 
     payButton(stage, amount) {
-        return `<button class="btn" data-act="pay" data-stage="${stage}" ${this.busy ? 'disabled' : ''}>${this.busy ? 'מעבד...' : `לתשלום מאובטח ${money(amount)}`}</button><div class="sub" style="text-align:center;margin-top:6px">ביט / כרטיס אשראי / Apple Pay</div>`;
+        return `<div class="cta" style="margin-top:14px"><button class="btn" data-act="pay" data-stage="${stage}" ${this.busy ? 'disabled' : ''}>${this.busy ? 'מעבד...' : `לתשלום מאובטח ${money(amount)}`}</button><div class="sub" style="margin-top:6px">ביט / כרטיס אשראי / Apple Pay</div></div>`;
     }
 
     uploadBox(err) {
-        return `<h3 style="margin-top:14px">העלאת אסמכתא</h3><p class="sub">לאחר ביצוע ההעברה, צרפו צילום או PDF של האישור.</p>
+        return `<h3 class="t">העלאת אסמכתא</h3><p class="sub">לאחר ביצוע ההעברה, צרפו צילום או PDF של האישור.</p>
             <input type="file" id="proofFile" accept="image/*,application/pdf" ${this.busy ? 'disabled' : ''}>${err}
-            <button class="btn" data-act="upload" ${this.busy ? 'disabled' : ''}>${this.busy ? 'מעלה...' : 'שליחת אסמכתא'}</button>`;
+            <div class="cta" style="margin-top:12px"><button class="btn" data-act="upload" ${this.busy ? 'disabled' : ''}>${this.busy ? 'מעלה...' : 'שליחת אסמכתא'}</button></div>`;
     }
 
     thanksScreen(d) {
@@ -295,29 +449,30 @@ class QuoteContract extends HTMLElement {
         } else {
             body = '<div class="msg"><div class="ic">⏳</div><h2>מאמתים את התשלום...</h2><div class="sk" style="width:60%;margin:12px auto"></div></div>';
         }
-        return `${this.header(d)}<div class="card">${body}</div>${back}`;
+        return this.frame(d, 'תודה!', `<div class="card">${this.logo(d)}${body}</div>${back}`);
     }
 
     postSignScreen(d) {
         const vs = d.viewState;
         const err = this.error ? `<div class="err">${esc(this.error)}</div>` : '';
-        const bank = d.bankDetailsText ? `<h3>פרטי העברה בנקאית</h3><div class="bank">${esc(d.bankDetailsText)}</div>` : '';
+        const bank = d.bankDetailsText ? `<h3 class="t">פרטי העברה בנקאית</h3><div class="bank">${esc(d.bankDetailsText)}</div>` : '';
         const pdf = safeUrl(d.signedPdf) ? `<p><a href="${esc(safeUrl(d.signedPdf))}" target="_blank" rel="noopener">הורדת ההצעה החתומה (PDF)</a></p>` : '';
         let body = '';
         if (vs === 'signed_choose_payment') {
             const stage = d.selectedPaymentPlan === 'deposit' ? 'deposit' : 'full';
             const amount = stage === 'deposit' ? d.depositAmount : d.totalAmount;
-            body = `<div class="ok">תודה! ההצעה נחתמה בהצלחה.</div>${this.summary(d)}${d.selectedPaymentMethod === 'online' ? this.payButton(stage, amount) : ''}${err}`;
+            body = `<div class="ok">תודה! ההצעה נחתמה בהצלחה.</div>${d.selectedPaymentMethod === 'online' ? this.payButton(stage, amount) : ''}${err}`;
         } else if (vs === 'awaiting_transfer_proof') {
-            body = `<div class="ok">תודה! ההצעה נחתמה. נותר לבצע את ההעברה.</div>${this.summary(d)}${bank}${this.uploadBox(err)}`;
+            body = `<div class="ok">תודה! ההצעה נחתמה. נותר לבצע את ההעברה.</div>${bank}${this.uploadBox(err)}`;
         } else if (vs === 'awaiting_transfer_approval') {
-            body = `<div class="ok">האסמכתא התקבלה וממתינה לאישור.</div>${this.summary(d)}${err}`;
+            body = `<div class="ok">האסמכתא התקבלה וממתינה לאישור.</div>${err}`;
         } else if (vs === 'balance_due') {
-            body = `<div class="ok">שולמה מקדמה ${money(d.paidAmount)}.</div><p>יתרה לתשלום <b>${money(d.balanceAmount)}</b> עד ${esc(dmy(d.balanceDueDate))}</p>${this.summary(d)}${d.selectedPaymentMethod === 'bank_transfer' ? bank + this.uploadBox(err) : this.payButton('balance', d.balanceAmount) + err}`;
+            body = `<div class="ok">שולמה מקדמה ${money(d.paidAmount)}.</div><p>יתרה לתשלום <b>${money(d.balanceAmount)}</b> עד ${esc(dmy(d.balanceDueDate))}</p>${d.selectedPaymentMethod === 'bank_transfer' ? bank + this.uploadBox(err) : this.payButton('balance', d.balanceAmount) + err}`;
         } else if (vs === 'paid_full') {
-            body = `<div class="ok">ההצעה שולמה במלואה, תודה! 🎉</div>${this.summary(d)}${pdf}`;
+            body = `<div class="ok">ההצעה שולמה במלואה, תודה! 🎉</div>${pdf}`;
         }
-        return `${this.header(d)}<div class="card">${body}</div><details class="card"><summary>צפייה בהסכם</summary><div class="contract">${d.contractHtml || ''}</div></details>`;
+        return this.frame(d, 'חוזה התקשרות', `<div class="card">${this.logo(d)}${body}</div>${this.summary(d)}
+            <details class="card"><summary>צפייה בהסכם</summary><div class="contract" style="margin-top:12px">${d.contractHtml || ''}</div></details>`);
     }
 }
 

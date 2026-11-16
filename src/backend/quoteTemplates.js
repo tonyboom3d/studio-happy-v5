@@ -3,6 +3,7 @@ export const PLACEHOLDERS = [
     'customerName', 'customerEmail', 'customerPhone', 'companyName', 'eventType', 'eventDate', 'eventStartTime',
     'eventEndTime', 'eventLocation', 'eventAddress', 'workshop', 'participants', 'adults', 'extrasList',
     'totalAmount', 'depositAmount', 'balanceAmount', 'balanceDueDate', 'expiresAt', 'quoteNumber',
+    'eventTime', 'pricePerParticipant',
 ];
 
 /** Selectable dynamic fields for the uniform template layout (key = placeholder, label = row title). */
@@ -17,6 +18,7 @@ export const FIELD_OPTIONS = [
     { key: 'extrasList', label: 'תוספות' }, { key: 'totalAmount', label: 'סה"כ לתשלום' },
     { key: 'depositAmount', label: 'מקדמה' }, { key: 'balanceAmount', label: 'יתרה' },
     { key: 'balanceDueDate', label: 'מועד תשלום יתרה' }, { key: 'expiresAt', label: 'תוקף ההצעה' },
+    { key: 'eventTime', label: 'שעות האירוע' }, { key: 'pricePerParticipant', label: 'מחיר למשתתף' },
 ];
 export const DEFAULT_TEMPLATE_FIELDS = [
     'customerName', 'eventType', 'eventDate', 'eventStartTime', 'eventEndTime', 'participants',
@@ -24,7 +26,25 @@ export const DEFAULT_TEMPLATE_FIELDS = [
 ];
 const CFG_RE = /^<!--tpl:([^>]*?)-->/;
 
-const textHtml = (s) => esc(s).replace(/\r?\n/g, '<br>');
+const inlineHtml = (s) => esc(s).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+
+/** Plain text with light markup: "## heading", "• / - / * item", "**bold**". Blank line ends a list. */
+function textHtml(s) {
+    const out = [];
+    let list = [];
+    const flush = () => { if (list.length) out.push(`<ul>${list.map((x) => `<li>${x}</li>`).join('')}</ul>`); list = []; };
+    for (const raw of String(s || '').split(/\r?\n/)) {
+        const line = raw.trim();
+        if (!line) { flush(); continue; }
+        const li = /^[•*-]\s+(.*)$/.exec(line);
+        if (li) { list.push(inlineHtml(li[1])); continue; }
+        flush();
+        const h = /^#{1,3}\s+(.*)$/.exec(line);
+        out.push(h ? `<h3>${inlineHtml(h[1])}</h3>` : `<p>${inlineHtml(line)}</p>`);
+    }
+    flush();
+    return out.join('');
+}
 
 /** Fixed layout: title, intro, selected-fields table, terms, footer. Config rides in a leading comment. */
 export function buildTemplateHtml(config = {}) {
@@ -41,12 +61,12 @@ export function buildTemplateHtml(config = {}) {
         return `<tr><td style="padding:6px 10px;border-bottom:1px solid #e2e8f0;color:#64748b;width:38%">${esc(label)}</td><td style="padding:6px 10px;border-bottom:1px solid #e2e8f0;font-weight:600">{{${k}}}</td></tr>`;
     }).join('');
     return `<!--tpl:${encodeURIComponent(JSON.stringify(cfg))}-->`
-        + '<div dir="rtl" style="font-family:Rubik,Arial,sans-serif;line-height:1.7">'
+        + '<div dir="rtl" style="line-height:1.75">'
         + (cfg.title ? `<h1 style="font-size:24px;margin:0 0 12px">${esc(cfg.title)}</h1>` : '')
-        + (cfg.intro ? `<p>${textHtml(cfg.intro)}</p>` : '')
+        + (cfg.intro ? textHtml(cfg.intro) : '')
         + (rows ? `<table style="width:100%;border-collapse:collapse;margin:14px 0"><tbody>${rows}</tbody></table>` : '')
-        + (cfg.terms ? `<h3 style="margin:18px 0 6px">תנאים</h3><p>${textHtml(cfg.terms)}</p>` : '')
-        + (cfg.footer ? `<p style="margin-top:18px;color:#475569">${textHtml(cfg.footer)}</p>` : '')
+        + (cfg.terms ? `${/^\s*#/.test(cfg.terms) ? '' : '<h3>תנאים</h3>'}${textHtml(cfg.terms)}` : '')
+        + (cfg.footer ? `<div style="margin-top:18px;color:#475569">${textHtml(cfg.footer)}</div>` : '')
         + '</div>';
 }
 
@@ -72,9 +92,12 @@ export function sanitizeHtml(html) {
         .replace(/(href|src)\s*=\s*("|')\s*javascript:[^"']*\2/gi, '$1=$2#$2');
 }
 
+// Every filled-in value renders bold so the customer sees what was set for them.
 function valuesFor(q) {
-    const extras = (q.extras || []).map((e) => `<li>${esc(e.title || e.name)}${e.price ? ` – ${money(e.price)}` : ''}</li>`).join('');
-    return {
+    const extras = (q.extras || []).map((e) => `${esc(e.title || e.name)}${e.price ? ` (${money(e.price)})` : ''}`).join(', ');
+    const people = Number(q.participants) || 0;
+    const time = [q.eventStartTime, q.eventEndTime].filter(Boolean).join(' עד ');
+    const raw = {
         customerName: esc(q.customerName),
         customerEmail: esc(q.customerEmail),
         customerPhone: esc(String(q.customerPhone || '').replace(/^972/, '0')),
@@ -83,19 +106,22 @@ function valuesFor(q) {
         eventDate: esc(fmtDate(q.eventDate)),
         eventStartTime: esc(q.eventStartTime),
         eventEndTime: esc(q.eventEndTime),
+        eventTime: esc(time),
         eventLocation: esc(q.eventLocation),
         eventAddress: esc(q.eventAddress),
         workshop: esc(q.requestedWorkshop),
         participants: esc(q.participants),
         adults: esc(q.adults),
-        extrasList: extras ? `<ul>${extras}</ul>` : '—',
+        extrasList: extras || '—',
         totalAmount: money(q.totalAmount),
+        pricePerParticipant: people > 0 && Number(q.basePrice) > 0 ? money(Math.round(Number(q.basePrice) / people)) : '',
         depositAmount: money(q.depositAmount),
         balanceAmount: money(q.balanceAmount),
         balanceDueDate: esc(fmtDate(q.balanceDueDate)),
         expiresAt: esc(fmtDate(q.expiresAt)),
         quoteNumber: esc(q.quoteNumber),
     };
+    return Object.fromEntries(Object.entries(raw).map(([k, v]) => [k, v === '' || v == null ? '' : `<strong class="dyn">${v}</strong>`]));
 }
 
 /** @returns {{html: string, error: string|null}} */

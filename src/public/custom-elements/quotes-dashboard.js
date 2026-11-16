@@ -662,7 +662,8 @@ class QuotesDashboard extends HTMLElement {
               <label class="full">כותרת<input data-c="title" value="${esc(t.config.title)}"></label>
               <label class="full">פתיחה<textarea data-c="intro" rows="3">${esc(t.config.intro)}</textarea></label>
               <div class="full"><b>שדות דינאמיים להצגה</b><div class="fieldPick">${m.fieldOptions.map((o) => `<label class="chk"><input type="checkbox" data-cf="${o.key}"${t.config.fields.includes(o.key) ? ' checked' : ''}> ${esc(o.label)}</label>`).join('')}</div></div>
-              <label class="full">תנאים<textarea data-c="terms" rows="6">${esc(t.config.terms)}</textarea></label>
+              <label class="full">תנאים<textarea data-c="terms" rows="14">${esc(t.config.terms)}</textarea>
+                <span class="sub">עיצוב: <b>## כותרת</b> · <b>• פריט ברשימה</b> · <b>**מודגש**</b>. שדות דינאמיים (יוצגו מודגשים): ${m.placeholders.map((p) => `{{${esc(p)}}}`).join(' ')}</span></label>
               <label class="full">שורת סיום<input data-c="footer" value="${esc(t.config.footer)}"></label>
               ${t.legacy ? '<div class="full lockmsg">תבנית ישנה (HTML חופשי): שמירה תחליף אותה במבנה האחיד.</div>' : ''}</div>
               <div style="margin-top:10px"><button class="btn-p" data-act="tplSave">שמור תבנית</button></div></div>` : '';

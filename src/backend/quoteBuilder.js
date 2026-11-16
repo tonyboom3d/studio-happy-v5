@@ -51,11 +51,14 @@ export async function buildPreparedFields(quote, templateId) {
     return f;
 }
 
+const SITE_ORIGIN = 'https://www.studiohappy.art';
+
 export async function buildQuoteUrl(publicToken) {
     const s = await getQuoteSettings();
-    const base = String(s?.quotePageUrl || '').replace(/\/+$/, '');
+    const base = String(s?.quotePageUrl || '').trim().replace(/\/+$/, '');
     if (!base) throw new Error('VALIDATION:לא הוגדר quotePageUrl בהגדרות.');
-    return `${base}?id=${encodeURIComponent(publicToken)}`;
+    const abs = /^https?:\/\//i.test(base) ? base : `${SITE_ORIGIN}${base.startsWith('/') ? '' : '/'}${base}`;
+    return `${abs}?id=${encodeURIComponent(publicToken)}`;
 }
 
 export async function resolveTemplate(templateId, eventType) {

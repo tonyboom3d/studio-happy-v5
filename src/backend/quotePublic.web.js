@@ -11,7 +11,7 @@ import { writeQuoteLog } from 'backend/quoteLog.js';
 import { computeViewState, TOKEN_RE } from 'backend/quoteState.js';
 import wixPayBackend from 'wix-pay-backend';
 import { notifyManagers } from 'backend/quoteNotify.js';
-import { QUOTE_ITEM_PREFIX, STAGE_LABELS, nextPayment } from 'backend/quotePayments.js';
+import { QUOTE_ITEM_PREFIX, STAGE_LABELS, nextPayment, syncPendingOnlinePayments } from 'backend/quotePayments.js';
 import { quoteError } from 'backend/quoteErrors.js';
 import { proofRows } from 'backend/quoteMedia.js';
 
@@ -65,6 +65,7 @@ function toDto(q, viewState, settings, contractHtml) {
         bankDetailsText: showBank ? (settings?.bankDetailsText || '') : '',
         brandColor: settings?.brandColor || '',
         logo: settings?.logo || '',
+        support: { address: 'הדובדבן 7, קריית אונו', site: 'https://www.studiohappy.art' },
     };
 }
 
@@ -78,7 +79,10 @@ async function buildContractHtml(q) {
 
 export const getQuoteByToken = webMethod(Permissions.Anyone, async (token) => {
     try {
-    const q = await findByToken(token);
+    let q = await findByToken(token);
+    if (q?.status === 'signed' && await syncPendingOnlinePayments(q._id).catch((err) => { console.error('[quotePublic] payment sync failed', err?.message || err); return false; })) {
+        q = await findByToken(token);
+    }
     const viewState = computeViewState(q);
     if (viewState === 'not_found') return { viewState: 'not_found' };
     if (viewState === 'cancelled') return { viewState, quoteNumber: q.quoteNumber };
@@ -87,7 +91,8 @@ export const getQuoteByToken = webMethod(Permissions.Anyone, async (token) => {
     const dto = toDto(q, viewState, settings, html);
     if (q.status === 'signed') {
         const rows = (await wixData.query('QuotePayments').eq('quoteId', q._id).descending('_createdDate').limit(50).find(SA)).items;
-        const p = rows.find((r) => r.method === 'online');
+        const online = rows.filter((r) => r.method === 'online');
+        const p = online.find((r) => r.status === 'paid') || online[0];
         if (p) dto.lastPayment = { stage: p.stage, amount: p.amount, status: p.status };
         dto.proofs = proofRows(rows, q).map(({ id, ...r }) => r);
     }

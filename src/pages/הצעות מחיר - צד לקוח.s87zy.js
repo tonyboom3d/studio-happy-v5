@@ -12,6 +12,7 @@ $w.onReady(async () => {
     const token = wixLocation.query.id || '';
     const push = (data) => el.setAttribute('quote-data', JSON.stringify({ ...data, __ts: Date.now() }));
     const thanks = () => wixLocation.to(`/thank-you-page-offers?id=${encodeURIComponent(token)}`);
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
     const load = async () => {
         if (!token) return push({ viewState: 'missing_id' });
@@ -29,10 +30,16 @@ $w.onReady(async () => {
         refresh: () => load(),
         pay: async () => {
             const { paymentId } = unwrap(await createQuotePayment(token));
-            // Authoritative result comes from the backend webhook; this only drives navigation.
+            // The payment window stays on this page. Thank-you navigation happens only after the charge is confirmed.
             const res = await wixPay.startPayment(paymentId, { showThankYouPage: false });
-            if (res?.status === 'Successful' || res?.status === 'Pending' || res?.status === 'Offline') return thanks();
-            throw new Error('PAYMENT:התשלום לא הושלם. ניתן לנסות שוב.');
+            if (!['Successful', 'Pending', 'Offline'].includes(res?.status)) throw new Error('PAYMENT:התשלום לא הושלם. ניתן לנסות שוב.');
+            for (let i = 0; i < 8; i++) {
+                const data = unwrap(await getQuoteByToken(token));
+                push(data);
+                if (data.lastPayment?.status === 'paid') return thanks();
+                if (i < 7) await wait(1500);
+            }
+            throw new Error('PAYMENT:התשלום עדיין לא אושר. אם חויבתם, רעננו את הדף בעוד רגע.');
         },
         proof: async (p) => {
             unwrap(await submitTransferProof(token, p));

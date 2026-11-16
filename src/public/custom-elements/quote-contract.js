@@ -376,6 +376,7 @@ class QuoteContract extends HTMLElement {
         if (!d) return this.frame(null, 'חוזה התקשרות', `<div class="card"><div class="sk" style="width:40%"></div><div class="sk"></div><div class="sk"></div><div class="sk" style="width:70%"></div></div>`);
         const vs = d.viewState;
         if (d.thanks && !MSG[vs]) return this.thanksScreen(d);
+        if (vs === 'paid_full') return this.paidLinkScreen(d);
         if (MSG[vs]) return this.frame(d, 'חוזה התקשרות', `<div class="card">${this.logo(d)}<div class="msg"><div class="ic">${vs === 'expired' ? '⏰' : vs === 'cancelled' ? '🚫' : '🔎'}</div><h2>${MSG[vs][0]}</h2><p class="sub">${MSG[vs][1]}</p></div></div>`);
         if (vs === 'ready_to_sign') return this.signScreen(d);
         return this.postSignScreen(d);
@@ -480,6 +481,20 @@ class QuoteContract extends HTMLElement {
             <td><span class="st ${esc(p.status)}">${esc(ST[p.status] || p.status)}</span></td>
             <td>${safeUrl(p.url) ? `<a href="${esc(p.url)}" target="_blank" rel="noopener">צפייה</a>` : '—'}</td></tr>`).join('');
         return `<h3 class="t">🧾 אסמכתאות שנשלחו</h3><div style="overflow-x:auto"><table class="tbl"><thead><tr><th>תאריך</th><th>עבור</th><th>סכום</th><th>סטטוס</th><th>קובץ</th></tr></thead><tbody>${tr}</tbody></table></div>`;
+    }
+
+    paidLinkScreen(d) {
+        const s = d.support || {};
+        const rows = [
+            s.address ? `<div class="fact"><div class="ic">📍</div><div><span>הסטודיו</span><b>${esc(s.address)}</b></div></div>` : '',
+            safeUrl(s.site) ? `<div class="fact"><div class="ic">🌐</div><div><span>אתר</span><b><a href="${esc(s.site)}" target="_blank" rel="noopener">studiohappy.art</a></b></div></div>` : '',
+        ].join('');
+        return this.frame(d, 'הקישור אינו פעיל', `<div class="card">${this.logo(d)}
+            <div class="msg"><div class="ic">🔒</div><h2>הקישור פג תוקף</h2><p>ההצעה ${d.quoteNumber ? `#${esc(d.quoteNumber)} ` : ''}כבר שולמה, ולכן הקישור אינו פעיל יותר.</p></div>
+            <h3 class="t">שירות לקוחות</h3>
+            <div class="facts">${rows}</div>
+            <p class="sub" style="margin-top:10px">לכל שאלה אפשר לפנות אלינו גם דרך כפתור "שירות לקוחות" באתר.</p>
+            </div>`);
     }
 
     thanksScreen(d) {

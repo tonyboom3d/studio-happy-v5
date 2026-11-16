@@ -22,10 +22,10 @@ $w.onReady(async () => {
         try { data = await getQuoteByToken(token); } catch (_) { data = null; }
         if (!data || data.__error) data = { viewState: 'not_found' };
         if (data.viewState === 'not_found' || data.viewState === 'cancelled') return push(data);
-        const st = data.lastPayment?.status;
-        if (st === 'paid' || st === 'failed' || st === 'refunded') return push(data);
-        const last = i === MAX_POLLS - 1;
-        push({ ...data, timedOut: last });
-        if (!last) await wait(POLL_MS);
+        const paid = data.lastPayment?.status === 'paid' || data.viewState === 'paid_full' || (data.viewState === 'balance_due' && Number(data.paidAmount) > 0);
+        if (paid) return push(data);
+        if (i < MAX_POLLS - 1) { push({ ...data, timedOut: false }); await wait(POLL_MS); }
     }
+    // Landed here before the charge was confirmed: the payment window belongs on the quote page.
+    if (token) wixLocation.to(`/offers?id=${encodeURIComponent(token)}`);
 });

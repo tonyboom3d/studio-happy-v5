@@ -212,7 +212,7 @@ function handleSketchUpgradePayment(event) {
  */
 export async function wixPay_onPaymentUpdate(event) {
     const payment = event?.payment;
-    if (payment?.id && (!Array.isArray(payment.items) || isQuotePayment(payment))) {
+    if (payment?.id) {
         try {
             if (await handleQuotePaymentUpdate(payment)) return;
         } catch (err) {

@@ -1,5 +1,6 @@
 // Quote payment rules: routing prefix, stage amounts, state recompute, Wix Pay webhook handling.
 import wixData from 'wix-data';
+import { httpClient } from '@wix/essentials';
 import { writeQuoteLog } from 'backend/quoteLog.js';
 import { notifyManagers } from 'backend/quoteNotify.js';
 
@@ -10,7 +11,19 @@ export const QUOTE_ITEM_PREFIX = 'תשלום עבור הצעת מחיר';
 export const STAGE_LABELS = { deposit: 'מקדמה', full: 'תשלום מלא', balance: 'יתרה' };
 
 const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
-const PAY_STATUS_MAP = { Successful: 'paid', Charged: 'paid', Declined: 'failed', Refunded: 'refunded', Pending: 'pending' };
+const PAID_STATUSES = ['SUCCESSFUL', 'CHARGED', 'APPROVED', 'COMPLETED_FUNDS_HELD'];
+const FAILED_STATUSES = ['DECLINED', 'FAILED', 'BUYER_CANCELED', 'TIMEOUT', 'TPA_CANCELED', 'VOID', 'EXPIRED', 'CANCELLED', 'CANCELED'];
+const REFUND_STATUSES = ['REFUNDED', 'REFUND'];
+
+/** Wix Pay events say "Successful"; the cashier transaction list says "APPROVED". Both mean paid. */
+export function normalizePayStatus(status) {
+    const s = String(status || '').toUpperCase();
+    if (PAID_STATUSES.includes(s)) return 'paid';
+    if (FAILED_STATUSES.includes(s)) return 'failed';
+    if (REFUND_STATUSES.includes(s)) return 'refunded';
+    if (s) return 'pending';
+    return null;
+}
 
 export function isQuotePayment(payment) {
     return Array.isArray(payment?.items) && payment.items.some((i) => String(i?.name || '').startsWith(QUOTE_ITEM_PREFIX));
@@ -62,8 +75,8 @@ export async function handleQuotePaymentUpdate(payment) {
         if (isQuotePayment(payment)) console.warn('[quotePayments] quote-prefixed payment without row:', payment.id);
         return isQuotePayment(payment);
     }
-    const next = PAY_STATUS_MAP[payment.status];
-    if (!next || row.status === next) return true;
+    const next = normalizePayStatus(payment.status);
+    if (!next || next === 'pending' || row.status === next) return true;
     if (row.status === 'paid' && next !== 'refunded') return true; // never downgrade
     await wixData.update('QuotePayments', {
         ...row, status: next, rawStatus: String(payment.status), paidAt: next === 'paid' ? new Date() : row.paidAt,
@@ -73,4 +86,30 @@ export async function handleQuotePaymentUpdate(payment) {
     const action = next === 'paid' ? 'payment_succeeded' : next === 'refunded' ? 'payment_refunded' : next === 'failed' ? 'payment_failed' : null;
     if (action) await writeQuoteLog(row.quoteId, action, { stage: row.stage, amount: row.amount, method: 'online' }, { type: 'system', name: 'Wix Pay', userId: '' });
     return true;
+}
+
+/** The payment event often never arrives. Pending rows are checked against the cashier transaction list (order.id = wixPaymentId). */
+export async function syncPendingOnlinePayments(quoteId) {
+    const pending = await wixData.query('QuotePayments').eq('quoteId', quoteId).eq('method', 'online').eq('status', 'pending').limit(20).find(SA);
+    if (!pending.items.length) return false;
+    const from = new Date(Math.min(...pending.items.map((r) => new Date(r._createdDate).getTime())) - 60 * 60 * 1000).toISOString();
+    const res = await httpClient.fetchWithAuth(`https://www.wixapis.com/payments/v2/transactions?from=${encodeURIComponent(from)}&limit=100&order=date:desc`);
+    if (!res.ok) { console.error('[quotePayments] cashier list failed', res.status); return false; }
+    const data = await res.json();
+    const byOrder = new Map((data.transactions || []).filter((t) => t.order?.id).map((t) => [t.order.id, t.status]));
+    let changed = false;
+    for (const row of pending.items) {
+        const next = normalizePayStatus(byOrder.get(row.wixPaymentId));
+        if (!next || next === 'pending' || next === row.status) continue;
+        await wixData.update('QuotePayments', { ...row, status: next, rawStatus: String(byOrder.get(row.wixPaymentId)), paidAt: next === 'paid' ? new Date() : row.paidAt }, SA);
+        const action = next === 'paid' ? 'payment_succeeded' : next === 'refunded' ? 'payment_refunded' : 'payment_failed';
+        await writeQuoteLog(quoteId, action, { stage: row.stage, amount: row.amount, method: 'online', via: 'cashier' }, { type: 'system', name: 'Wix Pay', userId: '' });
+        if (next === 'paid') {
+            const quote = await wixData.get('Quotes', quoteId, SA);
+            if (quote) await notifyManagers('manager_quote_paid', quote, { amount: row.amount, stage: STAGE_LABELS[row.stage] || row.stage });
+        }
+        changed = true;
+    }
+    if (changed) await recomputePaymentState(quoteId);
+    return changed;
 }

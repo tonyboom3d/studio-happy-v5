@@ -7,6 +7,15 @@ import {
 
 const CE_ID = '#customElement2';
 
+function errorText(err) {
+    const bits = [err?.message, err?.errorDescription];
+    try { if (err?.details) bits.push(JSON.stringify(err.details)); } catch (_) { /* ignore */ }
+    const blob = bits.filter(Boolean).join('\n');
+    const tagged = blob.match(/(VALIDATION|NOT_FOUND|ACCESS_DENIED|STATE|PAYMENT|UNKNOWN_ACTION):([^"\n]+)/);
+    if (tagged) return `${tagged[1]}:${tagged[2].trim()}`;
+    return err?.message || String(err || 'שגיאה');
+}
+
 // action type -> backend call (payload.actorName is self-declared by the CE)
 const handlers = {
     ping: () => ({ pong: true }),
@@ -42,7 +51,7 @@ $w.onReady(() => {
             reply({ ok: true, data });
         } catch (err) {
             console.error(`[quotes-PAGE] ✖ ${type} after ${Date.now() - t0}ms`, err?.message || err);
-            reply({ ok: false, error: err?.message || String(err) });
+            reply({ ok: false, error: errorText(err) });
         }
     });
     console.log('[quotes-PAGE] listener attached, bridge-ready set');

@@ -1,26 +1,27 @@
 /**
  * Readable source copy for the promo popup.
  * Wix Custom Code limit: 15,000 chars — paste promo-popup-standalone.html (minified, ~10k).
- * Edit CONFIG here, then sync changes into the minified .html before pasting into Wix.
+ * Copy stays in CONFIG. CMS (single item) supplies enabled, startsAt, and endsAt.
+ * Paste the minified .html into Wix. Popup stays hidden until that response says show.
  */
 (function () {
     'use strict';
 
-    // --- CONFIG (edit here in Custom Code, or mirror promoCampaignConfig.js) ---
+    // Schedule fields stay empty until GET /_functions/promoPopup. Copy is hardcoded.
     var CONFIG = {
-        enabled: true,
-        endsAt: '2026-11-01T00:00:00+03:00',
-        previewToken: 'studio-happy-tufting-promo',
+        enabled: false,
+        startsAt: '',
+        endsAt: '',
         logoUrl: 'https://static.wixstatic.com/media/6b73e9_6e7c52763bb24ba6812aaac51ecb4296~mv2.png',
-        title: '🔥 מבצע חד פעמי - לזמן מוגבל!',
-        subtitle: 'על כל שטיח שקונים בסדנת הטאפטינג — מקבלים סדנת צביעת קרמיקה בחינם! המבצע מסתיים בסוף אוקטובר ומספר המקומות מוגבל.',
+        title: '🔥 הטבה חד פעמית - לזמן מוגבל!',
+        subtitle: 'על כל שטיח שקונים בסדנת הטאפטינג — מקבלים סדנת צביעת קרמיקה בחינם! ',
         ctaText: '← להזמנה עכשיו לפני שייגמר!',
-        cdLabel: '⏰ המבצע נסגר בסוף השבוע — נותרו:',
+        cdLabel: '⏰ ההטבה מסתיימת בעוד:',
         ctaUrl: 'https://www.studiohappy.art/booking-flow-tufting',
         termsText: [
             '• סדנת צביעת הקרמיקה במתנה הינה באורך של עד שעה.',
             '• עבור כל שטיח שמוזמן במסגרת סדנת הטאפטינג, מקבלים כלי קרמיקה אחד לצביעה במתנה.',
-            '• המבצע תקף למימוש בימים א׳–ה׳ בלבד, כולל ימי חול המועד סוכות.',
+            '• ההטבה תקפה למימוש בימים א׳–ה׳ בלבד, כולל ימי חול המועד סוכות.',
             '• לאחר הזמנת סדנת הטאפטינג יישלח ללקוח קוד קופון אישי במייל וב-WhatsApp.',
             '• הקופון הינו אישי, חד-פעמי ואינו ניתן להעברה.',
             '• ניתן לממש את הקופון עד 6 חודשים ממועד הזמנת סדנת הטאפטינג.',
@@ -30,7 +31,7 @@
             '• מימוש ההטבה כפוף לזמינות המקומות בסדנאות ולביצוע הזמנה מראש.',
             '• הקופון אינו ניתן להמרה לכסף או לזיכוי.',
             '• כלי הצביעה הינם מתוך מבחר משתנה שנבחר על ידי צוות הסטודיו והמלאי הקיים.',
-            '• הסטודיו רשאי להפסיק את המבצע בכל עת.',
+            '• הסטודיו רשאי להפסיק את ההטבה בכל עת.',
             'ט.ל.ח',
         ].join('\n'),
     };
@@ -63,6 +64,13 @@
     function isCampaignExpired() {
         if (!CONFIG.endsAt) return false;
         return Date.now() >= new Date(CONFIG.endsAt).getTime();
+    }
+
+    function inWindow() {
+        var now = Date.now();
+        var start = CONFIG.startsAt ? new Date(CONFIG.startsAt).getTime() : NaN;
+        var end = CONFIG.endsAt ? new Date(CONFIG.endsAt).getTime() : NaN;
+        return start > 0 && end > start && now >= start && now < end;
     }
 
     function pad2(n) {
@@ -157,47 +165,18 @@
             ctaUrl: CONFIG.ctaUrl,
             termsText: CONFIG.termsText,
         };
-        var token = String(getQueryParam('promo') || '').trim();
-        var tokenMatch = !!(token && CONFIG.previewToken && token === CONFIG.previewToken);
         var termsParam = isTruthyParam('terms');
-
-        // Share link: ?promo=<token>&terms=1 — terms-only popup, ignores campaign end date.
-        if (termsParam && tokenMatch && content.termsText) {
-            return {
-                show: true,
-                content: content,
-                termsOnly: true,
-                termsOpen: false,
-                forceShow: true,
-            };
-        }
-
-        if (isCampaignExpired()) {
+        var live = !!(CONFIG.enabled && inWindow());
+        if (!live) {
             return { show: false, content: content, termsOpen: false, termsOnly: false, forceShow: false };
         }
-        var deepLink = termsParam && (CONFIG.enabled || tokenMatch);
-
-        if (CONFIG.enabled) {
-            return {
-                show: true,
-                preview: false,
-                content: content,
-                termsOpen: termsParam,
-                termsOnly: false,
-                forceShow: deepLink,
-            };
-        }
-        if (tokenMatch) {
-            return {
-                show: true,
-                preview: true,
-                content: content,
-                termsOpen: termsParam,
-                termsOnly: false,
-                forceShow: true,
-            };
-        }
-        return { show: false, content: content, termsOpen: false, termsOnly: false, forceShow: false };
+        return {
+            show: true,
+            content: content,
+            termsOpen: termsParam,
+            termsOnly: false,
+            forceShow: termsParam,
+        };
     }
 
     function seenKey(c) {
@@ -363,7 +342,7 @@
             '  <div class="pp-card pp-terms-only" role="dialog" aria-modal="true" aria-labelledby="sh-pp-terms-title">' +
             '    <button type="button" class="pp-close" data-action="close" aria-label="סגירה">×</button>' +
             '    <img class="pp-logo" src="' + escapeHtml(CONFIG.logoUrl) + '" alt="Studio Happy">' +
-            '    <h2 class="pp-title" id="sh-pp-terms-title">תנאי המבצע</h2>' +
+            '    <h2 class="pp-title" id="sh-pp-terms-title">תנאי ההטבה</h2>' +
             '    <div class="pp-terms">' + escapeHtml(c.termsText) + '</div>' +
             '  </div>' +
             '</div>';
@@ -400,7 +379,7 @@
             : '';
         var termsHtml = c.termsText
             ? '<button type="button" class="pp-terms-toggle" data-action="terms">' +
-              (termsOpen ? 'הסתרת תנאי המבצע' : 'תנאי המבצע') +
+              (termsOpen ? 'הסתרת תנאי ההטבה' : 'תנאי ההטבה') +
               '</button>' +
               '<div class="pp-terms ' + (termsOpen ? '' : 'pp-hidden') + '">' +
               escapeHtml(c.termsText) + '</div>'
@@ -412,7 +391,7 @@
             '    <button type="button" class="pp-close" data-action="close" aria-label="סגירה">×</button>' +
             '    <img class="pp-logo" src="' + escapeHtml(CONFIG.logoUrl) + '" alt="Studio Happy">' +
             '    <span class="pp-fomo-badge">מוגבל בזמן · מקומות אחרונים</span>' +
-            '    <h2 class="pp-title">' + escapeHtml(c.title || 'מבצע מיוחד') + '</h2>' +
+            '    <h2 class="pp-title">' + escapeHtml(c.title || 'הטבה מיוחדת') + '</h2>' +
             '    <p class="pp-subtitle">' + escapeHtml(c.subtitle || '') + '</p>' +
             countdownHtml +
             '    <a href="' + escapeHtml(c.ctaUrl || '#') + '" class="pp-cta" data-action="cta">' +
@@ -450,23 +429,38 @@
             if (!termsEl || !btn) return;
             var open = termsEl.classList.contains('pp-hidden');
             termsEl.classList.toggle('pp-hidden', !open);
-            btn.textContent = open ? 'הסתרת תנאי המבצע' : 'תנאי המבצע';
+            btn.textContent = open ? 'הסתרת תנאי ההטבה' : 'תנאי ההטבה';
         });
 
         startCountdownTimer(root, state);
     }
 
+    function applyPayload(data) {
+        if (!data || !data.show) return;
+        CONFIG.enabled = !!data.active;
+        CONFIG.startsAt = data.startsAt || '';
+        CONFIG.endsAt = data.endsAt || '';
+    }
+
+    function loadCampaign() {
+        return fetch('/_functions/promoPopup', { cache: 'no-store' })
+            .then(function (res) { return res && res.ok ? res.json() : null; })
+            .then(applyPayload)
+            .catch(function () {});
+    }
+
     function boot() {
         injectFonts();
         injectStyles();
-        var resolved = resolveCampaign();
-        render({
-            show: resolved.show,
-            preview: resolved.preview,
-            content: resolved.content,
-            termsOpen: !!resolved.termsOpen,
-            termsOnly: !!resolved.termsOnly,
-            forceShow: !!resolved.forceShow,
+        loadCampaign().then(function () {
+            var resolved = resolveCampaign();
+            render({
+                show: resolved.show,
+                content: resolved.content,
+                termsOpen: !!resolved.termsOpen,
+                termsOnly: !!resolved.termsOnly,
+                forceShow: !!resolved.forceShow,
+            });
         });
     }
 

@@ -1,6 +1,6 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { X, Check, Crop as CropIcon, Loader2, Square, Shapes, RotateCcw } from 'lucide-react';
+import { X, Check, Crop as CropIcon, Loader2, Square, Circle, Shapes, RotateCcw } from 'lucide-react';
 import ReactCrop, { centerCrop, makeAspectCrop } from 'react-image-crop';
 import 'react-image-crop/dist/ReactCrop.css';
 
@@ -64,7 +64,34 @@ function renderRectCanvas(imageEl, crop, scaleX, scaleY, outWidth, outHeight) {
   return canvas;
 }
 
-function getCroppedBase64(imageEl, crop) {
+function renderCircleCanvas(imageEl, crop, scaleX, scaleY, outWidth, outHeight) {
+  const canvas = document.createElement('canvas');
+  canvas.width = outWidth;
+  canvas.height = outHeight;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, outWidth, outHeight);
+  ctx.save();
+  ctx.beginPath();
+  ctx.ellipse(outWidth / 2, outHeight / 2, outWidth / 2, outHeight / 2, 0, 0, Math.PI * 2);
+  ctx.closePath();
+  ctx.clip();
+  ctx.drawImage(
+    imageEl,
+    crop.x * scaleX,
+    crop.y * scaleY,
+    crop.width * scaleX,
+    crop.height * scaleY,
+    0,
+    0,
+    outWidth,
+    outHeight,
+  );
+  ctx.restore();
+  return canvas;
+}
+
+function getCroppedBase64(imageEl, crop, shape) {
   const scaleX = imageEl.naturalWidth / imageEl.width;
   const scaleY = imageEl.naturalHeight / imageEl.height;
 
@@ -77,12 +104,44 @@ function getCroppedBase64(imageEl, crop) {
   outWidth = Math.round(outWidth * scaleDown);
   outHeight = Math.round(outHeight * scaleDown);
 
+  const render = shape === 'circle' ? renderCircleCanvas : renderRectCanvas;
   return encodeCanvasWithBudget(
-    (w, h) => renderRectCanvas(imageEl, crop, scaleX, scaleY, w, h),
+    (w, h) => render(imageEl, crop, scaleX, scaleY, w, h),
     outWidth,
     outHeight,
   );
 }
+
+function buildInitialCrop(width, height, nextMode) {
+  const aspect = nextMode === 'circle' ? 1 : width / height;
+  return centerCrop(
+    makeAspectCrop({ unit: '%', width: 80 }, aspect, width, height),
+    width,
+    height,
+  );
+}
+
+function toPixelCrop(percentCrop, width, height) {
+  return {
+    unit: 'px',
+    x: (percentCrop.x / 100) * width,
+    y: (percentCrop.y / 100) * height,
+    width: (percentCrop.width / 100) * width,
+    height: (percentCrop.height / 100) * height,
+  };
+}
+
+const CROP_MODES = [
+  { id: 'rect', label: 'ריבוע / מלבן', Icon: Square },
+  { id: 'free', label: 'צורנית', Icon: Shapes },
+  { id: 'circle', label: 'עיגול', Icon: Circle },
+];
+
+const CROP_HINTS = {
+  rect: 'גררו את המסגרת כדי למקד את האזור שיהפוך לסקיצה',
+  circle: 'גררו את העיגול כדי למקד את האזור העגול של השטיח',
+  free: 'ציירו עם האצבע סביב האזור המדויק שתרצו לשמור',
+};
 
 function renderFreeShapeCanvas(imageEl, natural, minX, minY, cropW, cropH, outWidth, outHeight) {
   const canvas = document.createElement('canvas');
@@ -267,10 +326,11 @@ function FreeShapeCanvas({ imageUrl, imgRef, points, setPoints, isClosed, setIsC
 }
 
 /**
- * Crop modal with two modes:
- *  - 'rect' (default): rectangular / square drag crop
- *  - 'free': freehand lasso — the user draws the exact area to keep
- * Returns a white-flattened PNG base64 via onConfirm(base64, mode).
+ * Crop modal. Modes map to the rug shape saved on the sketch:
+ *  - 'rect': square / rectangle drag crop
+ *  - 'free': organic freehand lasso
+ *  - 'circle': circular drag crop (white outside the circle)
+ * Returns a white-flattened JPEG base64 via onConfirm(base64, mode).
  */
 export default function ImageCropModal({ isOpen, imageUrl, onCancel, onConfirm }) {
   const [mode, setMode] = useState('rect');
@@ -281,6 +341,8 @@ export default function ImageCropModal({ isOpen, imageUrl, onCancel, onConfirm }
   const [processing, setProcessing] = useState(false);
   const imgRef = useRef(null);
   const freeImgRef = useRef(null);
+  const modeRef = useRef(mode);
+  modeRef.current = mode;
 
   // Reset state each time the modal opens
   useEffect(() => {
@@ -294,27 +356,46 @@ export default function ImageCropModal({ isOpen, imageUrl, onCancel, onConfirm }
     }
   }, [isOpen, imageUrl]);
 
-  const onImageLoad = useCallback((e) => {
-    const { width, height } = e.currentTarget;
-    const initial = centerCrop(
-      makeAspectCrop({ unit: '%', width: 80 }, width / height, width, height),
-      width,
-      height,
-    );
+  const applyDisplayedCrop = useCallback((img) => {
+    if (!img?.width || !img?.height) return;
+    const initial = buildInitialCrop(img.width, img.height, modeRef.current);
     setCrop(initial);
+    setCompletedCrop(toPixelCrop(initial, img.width, img.height));
   }, []);
 
-  const canConfirm = mode === 'rect'
-    ? !!(completedCrop?.width && completedCrop?.height)
-    : (freeClosed && freePoints.length >= 3);
+  const onImageLoad = useCallback((e) => {
+    applyDisplayedCrop(e.currentTarget);
+  }, [applyDisplayedCrop]);
+
+  // Data/blob URLs can finish loading before React binds onLoad.
+  useEffect(() => {
+    if (!isOpen || mode === 'free') return;
+    const img = imgRef.current;
+    if (img?.complete && img.naturalWidth) applyDisplayedCrop(img);
+  }, [isOpen, imageUrl, mode, applyDisplayedCrop]);
+
+  const switchMode = useCallback((next) => {
+    modeRef.current = next;
+    setMode(next);
+    if (next === 'free') return;
+    const img = imgRef.current;
+    if (!img?.width || !img?.height) return;
+    const initial = buildInitialCrop(img.width, img.height, next);
+    setCrop(initial);
+    setCompletedCrop(toPixelCrop(initial, img.width, img.height));
+  }, []);
+
+  const canConfirm = mode === 'free'
+    ? (freeClosed && freePoints.length >= 3)
+    : !!(completedCrop?.width && completedCrop?.height);
 
   const handleConfirm = useCallback(() => {
     setProcessing(true);
     try {
       let base64 = null;
-      if (mode === 'rect') {
+      if (mode === 'rect' || mode === 'circle') {
         if (imgRef.current && completedCrop?.width && completedCrop?.height) {
-          base64 = getCroppedBase64(imgRef.current, completedCrop);
+          base64 = getCroppedBase64(imgRef.current, completedCrop, mode);
         }
       } else if (freeImgRef.current && freeClosed && freePoints.length >= 3) {
         base64 = getFreeShapeCroppedBase64(freeImgRef.current, freePoints);
@@ -351,46 +432,38 @@ export default function ImageCropModal({ isOpen, imageUrl, onCancel, onConfirm }
           </button>
         </div>
 
-        {/* Mode tabs */}
+        {/* Rug shape */}
         <div className="px-3 pt-3 shrink-0">
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              type="button"
-              onClick={() => setMode('rect')}
-              className={`flex items-center justify-center gap-1.5 py-2 rounded-xl border-2 text-[13px] font-bold transition-all ${
-                mode === 'rect'
-                  ? 'border-[#5E2F88] bg-[#f5f0fa] text-[#5E2F88]'
-                  : 'border-[#e8e8e8] bg-white text-[#464646]/60'
-              }`}
-            >
-              <Square className="w-4 h-4" /> ריבוע / מלבן
-            </button>
-            <button
-              type="button"
-              onClick={() => setMode('free')}
-              className={`flex items-center justify-center gap-1.5 py-2 rounded-xl border-2 text-[13px] font-bold transition-all ${
-                mode === 'free'
-                  ? 'border-[#5E2F88] bg-[#f5f0fa] text-[#5E2F88]'
-                  : 'border-[#e8e8e8] bg-white text-[#464646]/60'
-              }`}
-            >
-              <Shapes className="w-4 h-4" /> צורה חופשית
-            </button>
+          <div className="grid grid-cols-3 gap-2">
+            {CROP_MODES.map(({ id, label, Icon }) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => switchMode(id)}
+                className={`flex flex-col items-center justify-center gap-1 py-2 px-1 rounded-xl border-2 text-[11px] font-bold leading-tight text-center transition-all ${
+                  mode === id
+                    ? 'border-[#5E2F88] bg-[#f5f0fa] text-[#5E2F88]'
+                    : 'border-[#e8e8e8] bg-white text-[#464646]/60'
+                }`}
+              >
+                <Icon className="w-4 h-4" /> {label}
+              </button>
+            ))}
           </div>
         </div>
 
         <div className="p-3 overflow-y-auto">
           <p className="text-[12px] text-[#464646]/60 mb-2 text-center">
-            {mode === 'rect'
-              ? 'גררו את המסגרת כדי למקד את האזור שיהפוך לסקיצה'
-              : 'ציירו עם האצבע סביב האזור המדויק שתרצו לשמור'}
+            {CROP_HINTS[mode]}
           </p>
           <div className="flex justify-center bg-[#f5f5f5] rounded-xl p-2 overflow-hidden">
-            {mode === 'rect' ? (
+            {mode !== 'free' ? (
               <ReactCrop
                 crop={crop}
                 onChange={(c) => setCrop(c)}
                 onComplete={(c) => setCompletedCrop(c)}
+                aspect={mode === 'circle' ? 1 : undefined}
+                circularCrop={mode === 'circle'}
                 keepSelection
               >
                 <img

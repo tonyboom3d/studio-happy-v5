@@ -10,15 +10,21 @@ import {
 import ImageCropModal from './ImageCropModal';
 
 const FRAME_OPTIONS = [
-  { id: 'square', label: 'ריבוע', Icon: Square },
+  { id: 'square', label: 'ריבוע / מלבן', Icon: Square },
+  { id: 'custom', label: 'צורנית', Icon: Shapes },
   { id: 'circle', label: 'עיגול', Icon: Circle },
-  { id: 'custom', label: 'צורה חופשית', Icon: Shapes },
 ];
 
 export const FRAME_TYPE_LABELS = {
-  square: 'ריבוע',
+  square: 'ריבוע / מלבן',
   circle: 'עיגול',
-  custom: 'צורה חופשית',
+  custom: 'צורנית',
+};
+
+const CROP_MODE_TO_FRAME = {
+  rect: 'square',
+  free: 'custom',
+  circle: 'circle',
 };
 
 const STEPS = ['העלאה', 'אישור', 'סקיצה'];
@@ -756,7 +762,9 @@ export default function AISketchModal({
     }
   }, [onValidateImage, onCheckRateLimit, animateProgress, applyRateLimitState]);
 
-  const handleCropConfirm = useCallback(async (base64) => {
+  const handleCropConfirm = useCallback(async (base64, cropMode) => {
+    const mappedFrame = CROP_MODE_TO_FRAME[cropMode];
+    if (mappedFrame) setFrameType(mappedFrame);
     setCropOpen(false);
     setCroppedBase64(base64);
     const dims = await getImageDimensionsFromUrl(base64);

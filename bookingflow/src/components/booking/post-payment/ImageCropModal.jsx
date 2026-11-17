@@ -1,6 +1,6 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { X, Check, Crop as CropIcon, Loader2, Square, Circle, Shapes, RotateCcw } from 'lucide-react';
+import { X, Check, Crop as CropIcon, Loader2, Square, RectangleHorizontal, Circle, Shapes, RotateCcw } from 'lucide-react';
 import ReactCrop, { centerCrop, makeAspectCrop } from 'react-image-crop';
 import 'react-image-crop/dist/ReactCrop.css';
 
@@ -113,7 +113,7 @@ function getCroppedBase64(imageEl, crop, shape) {
 }
 
 function buildInitialCrop(width, height, nextMode) {
-  const aspect = nextMode === 'circle' ? 1 : width / height;
+  const aspect = (nextMode === 'circle' || nextMode === 'square') ? 1 : width / height;
   return centerCrop(
     makeAspectCrop({ unit: '%', width: 80 }, aspect, width, height),
     width,
@@ -132,12 +132,14 @@ function toPixelCrop(percentCrop, width, height) {
 }
 
 const CROP_MODES = [
-  { id: 'rect', label: 'ריבוע / מלבן', Icon: Square },
-  { id: 'free', label: 'צורנית', Icon: Shapes },
+  { id: 'square', label: 'ריבוע', Icon: Square },
+  { id: 'rect', label: 'מלבן', Icon: RectangleHorizontal },
   { id: 'circle', label: 'עיגול', Icon: Circle },
+  { id: 'free', label: 'צורנית', Icon: Shapes },
 ];
 
 const CROP_HINTS = {
+  square: 'גררו את המסגרת (יחס 1:1) כדי למקד את האזור הריבועי של השטיח',
   rect: 'גררו את המסגרת כדי למקד את האזור שיהפוך לסקיצה',
   circle: 'גררו את העיגול כדי למקד את האזור העגול של השטיח',
   free: 'ציירו עם האצבע סביב האזור המדויק שתרצו לשמור',
@@ -393,7 +395,7 @@ export default function ImageCropModal({ isOpen, imageUrl, onCancel, onConfirm }
     setProcessing(true);
     try {
       let base64 = null;
-      if (mode === 'rect' || mode === 'circle') {
+      if (mode !== 'free') {
         if (imgRef.current && completedCrop?.width && completedCrop?.height) {
           base64 = getCroppedBase64(imgRef.current, completedCrop, mode);
         }
@@ -434,7 +436,7 @@ export default function ImageCropModal({ isOpen, imageUrl, onCancel, onConfirm }
 
         {/* Rug shape */}
         <div className="px-3 pt-3 shrink-0">
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-4 gap-1.5">
             {CROP_MODES.map(({ id, label, Icon }) => (
               <button
                 key={id}
@@ -462,7 +464,7 @@ export default function ImageCropModal({ isOpen, imageUrl, onCancel, onConfirm }
                 crop={crop}
                 onChange={(c) => setCrop(c)}
                 onComplete={(c) => setCompletedCrop(c)}
-                aspect={mode === 'circle' ? 1 : undefined}
+                aspect={(mode === 'circle' || mode === 'square') ? 1 : undefined}
                 circularCrop={mode === 'circle'}
                 keepSelection
               >

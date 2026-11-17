@@ -5,24 +5,27 @@ import {
   X, Upload, Loader2, Check, ChevronLeft, ChevronRight,
   RotateCcw, Image as ImageIcon, Info, AlertTriangle, MessageSquare,
   Sparkles, Star, GripHorizontal, Plus, Trash2, ZoomIn,
-  Square, Circle, Shapes, Crop as CropIcon,
+  Square, RectangleHorizontal, Circle, Shapes, Crop as CropIcon,
 } from 'lucide-react';
 import ImageCropModal from './ImageCropModal';
 
 const FRAME_OPTIONS = [
-  { id: 'square', label: 'ריבוע / מלבן', Icon: Square },
-  { id: 'custom', label: 'צורנית', Icon: Shapes },
+  { id: 'square', label: 'ריבוע', Icon: Square },
+  { id: 'rectangle', label: 'מלבן', Icon: RectangleHorizontal },
   { id: 'circle', label: 'עיגול', Icon: Circle },
+  { id: 'custom', label: 'צורנית', Icon: Shapes },
 ];
 
 export const FRAME_TYPE_LABELS = {
-  square: 'ריבוע / מלבן',
+  square: 'ריבוע',
+  rectangle: 'מלבן',
   circle: 'עיגול',
   custom: 'צורנית',
 };
 
 const CROP_MODE_TO_FRAME = {
-  rect: 'square',
+  square: 'square',
+  rect: 'rectangle',
   free: 'custom',
   circle: 'circle',
 };
@@ -1172,7 +1175,7 @@ export default function AISketchModal({
                     {/* Frame selection */}
                     <div>
                       <h3 className="text-[12px] font-bold text-[#464646] mb-1.5">בחירת מסגרת לשטיח:</h3>
-                      <div className="grid grid-cols-3 gap-2">
+                      <div className="grid grid-cols-4 gap-1.5">
                         {FRAME_OPTIONS.map(({ id, label, Icon }) => (
                           <button
                             key={id}

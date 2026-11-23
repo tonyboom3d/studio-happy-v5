@@ -1503,7 +1503,6 @@ export async function sendStaffManyChat(actionKey, phone, audience, vars = {}) {
         }
 
         if (audience === 'manager' && isBlockedManagerSubscriber(subscriber.id)) {
-            console.warn('[ManyChat] manager notification blocked. subscriberId:', subscriber.id, 'actionKey:', actionKey);
             return { sent: false, reason: 'blocked-manager-subscriber', subscriberId: subscriber.id };
         }
 

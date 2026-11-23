@@ -108,16 +108,26 @@ function cashierStatusByOrder(transactions) {
     return byOrder;
 }
 
+/** This site's backend identity is not allowed to list cashier transactions (403). Don't call it again. */
+let cashierListDenied = false;
+
 /**
  * The payment event often never arrives. Open rows are checked against the cashier transaction list (order.id = wixPaymentId).
  * Recently failed rows are re-checked too, so a successful retry corrects an earlier decline.
+ * When the list API is forbidden, confirmation stays on wixPay_onPaymentUpdate.
  */
 export async function syncPendingOnlinePayments(quoteId) {
+    if (cashierListDenied) return false;
     const rows = await wixData.query('QuotePayments').eq('quoteId', quoteId).eq('method', 'online').hasSome('status', ['pending', 'failed']).limit(20).find(SA);
     const pending = { items: rows.items.filter((r) => r.status === 'pending' || Date.now() - new Date(r._createdDate).getTime() < RECHECK_FAILED_MS) };
     if (!pending.items.length) return false;
     const from = new Date(Math.min(...pending.items.map((r) => new Date(r._createdDate).getTime())) - 60 * 60 * 1000).toISOString();
     const res = await httpClient.fetchWithAuth(`https://www.wixapis.com/payments/v2/transactions?from=${encodeURIComponent(from)}&limit=100&order=date:desc`);
+    if (res.status === 401 || res.status === 403) {
+        cashierListDenied = true;
+        console.warn('[quotePayments] cashier list is not permitted (' + res.status + '). Quote payments are confirmed by the Wix Pay event.');
+        return false;
+    }
     if (!res.ok) { console.error('[quotePayments] cashier list failed', res.status); return false; }
     const data = await res.json();
     const byOrder = cashierStatusByOrder(data.transactions);

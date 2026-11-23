@@ -891,7 +891,7 @@ class QuotesDashboard extends HTMLElement {
     /** Purple linked block: text + field shown together; stored as {{?key|pre|suf}} and hidden as one unit when empty. */
     segTag(key, pre, suf) {
         const part = (s) => (s ? `<span class="optt">${esc(s)}</span>` : '');
-        return `<span class="optg" contenteditable="false" data-seg="${esc(key)}" data-pre="${esc(pre)}" data-suf="${esc(suf)}" title="לחצו לעריכה · מוצג ללקוח רק כשיש ערך">🔗${part(pre)}<span class="ph opt">${esc(this.phLabel(key))}</span>${part(suf)}</span>`;
+        return `<span class="optg" contenteditable="false" data-seg="${esc(key)}" data-pre="${esc(pre)}" data-suf="${esc(suf)}" title="לחצו לעריכה · מוצג ללקוח רק כשיש ערך">${part(pre)}<span class="ph opt">${esc(this.phLabel(key))}</span>${part(suf)}</span>`;
     }
 
     /** Stored text keeps {{key}} / {{?key|pre|suf}}; the editor shows them as non-editable tags. */
@@ -1033,7 +1033,7 @@ class QuotesDashboard extends HTMLElement {
               <label class="full">כותרת<input data-c="title" value="${esc(t.config.title)}"></label>
               ${this.rteHtml('intro', 'פתיחה', t.config.intro, '')}
               ${this.rteHtml('terms', 'תנאים', t.config.terms, ' tall')}
-              <div class="full phLegend"><span class="ph">כחול</span> שדה שתמיד מוצג · <span class="optg">🔗<span class="optt">טקסט</span><span class="ph opt">סגול</span></span> שדה אופציונלי עם טקסט מחובר: אם בהצעה אין לו ערך (למשל אין מקדמה), הטקסט המחובר והשדה לא יוצגו ללקוח, ושאר השורה נשארת. לחיצה על הבלוק לעריכה.</div>
+              <div class="full phLegend"><span class="ph">כחול</span> שדה שתמיד מוצג · <span class="optg"><span class="optt">טקסט</span><span class="ph opt">סגול</span></span> שדה אופציונלי עם טקסט מחובר: אם בהצעה אין לו ערך (למשל אין מקדמה), הטקסט המחובר והשדה לא יוצגו ללקוח, ושאר השורה נשארת. לחיצה על הבלוק לעריכה.</div>
               <label class="full">שורת סיום<input data-c="footer" value="${esc(t.config.footer)}"></label>
               ${t.legacy ? '<div class="full lockmsg">תבנית ישנה (HTML חופשי): שמירה תחליף אותה במבנה האחיד.</div>' : ''}</div>
               <div style="margin-top:10px"><button class="btn-p" data-act="tplSave">שמור תבנית</button></div></div>` : '';

@@ -1424,7 +1424,7 @@ const QUOTE_SENT_NOTIFICATION_TYPE = 'quote_sent';
 /**
  * Sends the quote link to the customer via the shared order-confirmation flow
  * (notification_type = quote_sent → needs a matching branch + approved template in ManyChat).
- * Needs custom fields: quote_link, customer_name, event_date, quote_amount. Never throws.
+ * Needs custom fields: quote_link, customer_name, event_date, total_amount. Never throws.
  */
 export async function sendQuoteLinkManyChat(quoteId) {
     try {
@@ -1448,7 +1448,7 @@ export async function sendQuoteLinkManyChat(quoteId) {
             { name: 'quote_link', value: `${base}?id=${encodeURIComponent(quote.publicToken)}` },
             { name: 'customer_name', value: quote.customerName || '' },
             { name: 'event_date', value: quote.eventDate ? new Date(quote.eventDate).toLocaleDateString('he-IL', { timeZone: ISRAEL_TZ }) : '' },
-            { name: 'quote_amount', value: String(quote.totalAmount ?? '') },
+            { name: 'total_amount', value: String(quote.totalAmount ?? '') },
         ]);
         await sendFlow(subscriber.id, ORDER_CONFIRMATION_FLOW_NS);
         await wixData.update('Quotes', { ...quote, manychatSubscriberId: String(subscriber.id) }, SA);

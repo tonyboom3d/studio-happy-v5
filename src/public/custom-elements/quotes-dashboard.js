@@ -153,7 +153,17 @@ tr.row.alert td{background:#fff1f2}tr.row.alert:hover td{background:#ffe4e6}
 .ws-opt input{width:16px;height:16px;padding:0}
 .tl{list-style:none;margin:0;padding:0}.tl li{padding:7px 0;border-bottom:1px solid #f1f5f9;display:flex;gap:8px}
 .foot{position:sticky;bottom:0;background:#fff;border-top:1px solid #e2e8f0;padding:10px 16px;display:flex;gap:8px;justify-content:space-between}
-.modal{position:fixed;top:5vh;left:50%;transform:translateX(-50%);width:min(860px,96%);max-height:90vh;overflow:auto;background:#f8fafc;border-radius:12px;z-index:30;box-shadow:0 12px 40px rgba(0,0,0,.3)}
+.modal{position:fixed;top:4vh;left:50%;transform:translateX(-50%);width:min(1180px,96%);max-height:92vh;overflow:auto;background:#f8fafc;border-radius:12px;z-index:30;box-shadow:0 12px 40px rgba(0,0,0,.3);font-size:17px}
+.modal .sec h3{font-size:20px}
+.modal :where(input:not([type=checkbox]),select,textarea),.modal .rte{font-size:17px;padding:10px 12px}
+.modal .chk,.modal .sub,.modal .grid label,.modal .rteHead b,.modal .full>b{font-size:16px}
+.modal .extra{font-size:17px}
+.rte{min-height:90px;max-height:60vh;overflow:auto;border:1px solid #cbd5e1;border-radius:7px;background:#fff;color:#0f172a;white-space:pre-wrap;line-height:1.8;margin-top:4px}
+.rte.tall{min-height:340px}
+.rte:focus{outline:2px solid #bfdbfe;border-color:#2563eb}
+.ph{display:inline-block;background:#dbeafe;color:#1d4ed8;border:1px solid #93c5fd;border-radius:6px;padding:0 7px;margin:0 2px;font-weight:600;font-size:.9em;line-height:1.6;user-select:all;cursor:default}
+.rteHead{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+.rteHead select{width:auto;min-width:220px}
 .lockmsg{background:#fef3c7;color:#92400e;border-radius:8px;padding:8px 10px;margin-bottom:10px;font-size:13px}
 @media(max-width:700px){.grid,.price-top,.price .dates{grid-template-columns:1fr}.sum{grid-template-columns:repeat(2,1fr)}}
 .drawer{display:flex;flex-direction:column;overflow:hidden;background:#f8fafc}
@@ -314,6 +324,12 @@ class QuotesDashboard extends HTMLElement {
         this.root.addEventListener('click', (e) => this.onClick(e));
         this.root.addEventListener('input', (e) => this.onInput(e));
         this.root.addEventListener('change', (e) => this.onChange(e));
+        ['keyup', 'mouseup'].forEach((ev) => this.root.addEventListener(ev, (e) => { if (e.target.closest?.('.rte')) this.saveRteRange(); }));
+        this.root.addEventListener('paste', (e) => {
+            if (!e.target.closest?.('.rte')) return;
+            e.preventDefault();
+            document.execCommand('insertText', false, e.clipboardData?.getData('text/plain') || '');
+        });
         this.paintCache();
         dbg('connected', { cachedItems: this.s.items.length, bridgeReady: this.hasAttribute('bridge-ready') });
         this.render();
@@ -359,7 +375,7 @@ class QuotesDashboard extends HTMLElement {
             return ok({ quote, log: [], payments: [], proofs });
         }
         if (type === 'staff') return ok({ actors: [{ id: 'a1', name: 'מנהל בדיקה', trainings: [{ id: 'x1', title: 'ברד' }] }], busyStaff: {} });
-        if (type === 'templates') return ok({ templates: [], placeholders: ['customerName', 'totalAmount'] });
+        if (type === 'templates') return ok({ templates: [], placeholders: ['customerName', 'totalAmount'], fieldOptions: [{ key: 'customerName', label: 'שם הלקוח' }, { key: 'totalAmount', label: 'סה"כ לתשלום' }], defaultFields: ['customerName'] });
         if (type === 'preview') return ok({ html: '<h1>תצוגה לדוגמה</h1>' });
         if (type === 'update') return ok({ quote: { ...MOCK_ROWS[0], ...payload.patch } });
         return ok({ summary: { scanned: 0, created: 0, skipped: 0 } });
@@ -475,6 +491,7 @@ class QuotesDashboard extends HTMLElement {
         if (t.dataset.f && this.s.detail?.draft) this.readField(t);
         if (t.dataset.t && this.s.modal?.tpl) this.s.modal.tpl[t.dataset.t] = t.type === 'checkbox' ? t.checked : t.value;
         if (t.dataset.c && this.s.modal?.tpl) this.s.modal.tpl.config[t.dataset.c] = t.value;
+        if (t.dataset?.rc && this.s.modal?.tpl) { this.s.modal.tpl.config[t.dataset.rc] = this.rteText(t); this.saveRteRange(); }
         if (t.id === 'search') { clearTimeout(this.st); this.st = setTimeout(() => { this.s.search = t.value; this.s.skip = 0; this.load(); }, 400); }
     }
 
@@ -489,6 +506,7 @@ class QuotesDashboard extends HTMLElement {
             this.s.wsOpen = true;
             this.render();
         } else if (t.dataset.f && this.s.detail) { this.readField(t); }
+        else if (t.dataset.ins && this.s.modal?.tpl) { this.insertPh(t.dataset.ins, t.value); t.value = ''; }
         else if (t.dataset.cf && this.s.modal?.tpl) {
             const f = new Set(this.s.modal.tpl.config.fields);
             t.checked ? f.add(t.dataset.cf) : f.delete(t.dataset.cf);
@@ -841,6 +859,62 @@ class QuotesDashboard extends HTMLElement {
             <div class="row"><button class="${d.danger ? 'btn-d' : 'btn-p'}" data-act="dlgOk">${esc(d.ok || 'אישור')}</button>${alert ? '' : `<button data-act="dlgNo">${esc(d.cancel || 'ביטול')}</button>`}</div></div>`;
     }
 
+    phLabel(key) {
+        return (this.s.modal?.fieldOptions || []).find((o) => o.key === key)?.label || key;
+    }
+
+    /** Stored text keeps {{key}}; the editor shows each as a blue, non-editable tag with its Hebrew label. */
+    rteHtml(field, title, text, cls) {
+        const keys = this.s.modal?.placeholders || [];
+        const body = esc(text || '').replace(/\{\{\s*(\w+)\s*\}\}/g, (_, k) => `<span class="ph" contenteditable="false" data-ph="${k}">${esc(this.phLabel(k))}</span>`).replace(/\n/g, '<br>');
+        const opts = keys.map((k) => `<option value="${esc(k)}">${esc(this.phLabel(k))}</option>`).join('');
+        return `<div class="full"><div class="rteHead"><b>${title}</b><select data-ins="${field}"><option value="">+ הוספת שדה דינאמי</option>${opts}</select></div>
+            <div class="rte${cls}" contenteditable="true" data-rc="${field}">${body}</div></div>`;
+    }
+
+    rteText(ed) {
+        let out = '';
+        const walk = (node) => {
+            node.childNodes.forEach((n, i) => {
+                if (n.nodeType === 3) out += n.nodeValue.replace(/\u00A0/g, ' ');
+                else if (n.dataset?.ph) out += `{{${n.dataset.ph}}}`;
+                else if (n.nodeName === 'BR') { if (!(node !== ed && i === node.childNodes.length - 1)) out += '\n'; }
+                else if (/^(DIV|P)$/.test(n.nodeName)) { if (out && !out.endsWith('\n')) out += '\n'; walk(n); if (!out.endsWith('\n')) out += '\n'; }
+                else walk(n);
+            });
+        };
+        walk(ed);
+        return out.replace(/\n$/, '');
+    }
+
+    saveRteRange() {
+        const sel = this.root.getSelection ? this.root.getSelection() : document.getSelection();
+        if (!sel?.rangeCount) return;
+        const r = sel.getRangeAt(0);
+        const ed = (r.startContainer.nodeType === 1 ? r.startContainer : r.startContainer.parentElement)?.closest?.('.rte');
+        if (ed) this.rteSel = { field: ed.dataset.rc, range: r.cloneRange() };
+    }
+
+    insertPh(field, key) {
+        const ed = this.root.querySelector(`.rte[data-rc="${field}"]`);
+        if (!ed || !key) return;
+        let r = this.rteSel?.field === field && ed.contains(this.rteSel.range.startContainer) ? this.rteSel.range : null;
+        if (!r) { r = document.createRange(); r.selectNodeContents(ed); r.collapse(false); }
+        const chip = document.createElement('span');
+        chip.className = 'ph'; chip.contentEditable = 'false'; chip.dataset.ph = key; chip.textContent = this.phLabel(key);
+        const space = document.createTextNode(' ');
+        r.deleteContents();
+        r.insertNode(space);
+        r.insertNode(chip);
+        const after = document.createRange();
+        after.setStartAfter(space); after.collapse(true);
+        ed.focus();
+        const sel = this.root.getSelection ? this.root.getSelection() : document.getSelection();
+        sel?.removeAllRanges(); sel?.addRange(after);
+        this.rteSel = { field, range: after.cloneRange() };
+        if (this.s.modal?.tpl) this.s.modal.tpl.config[field] = this.rteText(ed);
+    }
+
     blankConfig() {
         return { title: 'הצעת מחיר', intro: '', terms: '', footer: '', fields: [...(this.s.modal?.defaultFields || [])] };
     }
@@ -860,10 +934,9 @@ class QuotesDashboard extends HTMLElement {
               <label>סוג אירוע<select data-t="eventType"><option value="birthday"${t.eventType === 'birthday' ? ' selected' : ''}>יום הולדת</option><option value="event"${t.eventType === 'event' ? ' selected' : ''}>אירוע חברה / פרטי</option></select></label>
               <label class="chk full"><input type="checkbox" data-t="isDefault"${t.isDefault ? ' checked' : ''}> ברירת מחדל לסוג האירוע</label>
               <label class="full">כותרת<input data-c="title" value="${esc(t.config.title)}"></label>
-              <label class="full">פתיחה<textarea data-c="intro" rows="3">${esc(t.config.intro)}</textarea></label>
+              ${this.rteHtml('intro', 'פתיחה', t.config.intro, '')}
               <div class="full"><b>שדות דינאמיים להצגה</b><div class="fieldPick">${m.fieldOptions.map((o) => `<label class="chk"><input type="checkbox" data-cf="${o.key}"${t.config.fields.includes(o.key) ? ' checked' : ''}> ${esc(o.label)}</label>`).join('')}</div></div>
-              <label class="full">תנאים<textarea data-c="terms" rows="14">${esc(t.config.terms)}</textarea>
-                <span class="sub">עיצוב: <b>## כותרת</b> · <b>• פריט ברשימה</b> · <b>**מודגש**</b>. שדות דינאמיים (יוצגו מודגשים): ${m.placeholders.map((p) => `{{${esc(p)}}}`).join(' ')}</span></label>
+              ${this.rteHtml('terms', 'תנאים', t.config.terms, ' tall')}
               <label class="full">שורת סיום<input data-c="footer" value="${esc(t.config.footer)}"></label>
               ${t.legacy ? '<div class="full lockmsg">תבנית ישנה (HTML חופשי): שמירה תחליף אותה במבנה האחיד.</div>' : ''}</div>
               <div style="margin-top:10px"><button class="btn-p" data-act="tplSave">שמור תבנית</button></div></div>` : '';

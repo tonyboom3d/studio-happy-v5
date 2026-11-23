@@ -4,7 +4,7 @@ import { sendEmployeeTemplateMessage, sendEmployeeTemplateToManagers } from 'bac
 import { buildQuoteUrl } from 'backend/quoteBuilder.js';
 
 const QUOTE_EMAIL_TEMPLATE_ID = 'VaYNbMG'; // must be Published
-const QUOTE_PAID_EMAIL_TEMPLATE_ID = ''; // payment confirmation email; must be Published
+const QUOTE_PAID_EMAIL_TEMPLATE_ID = 'VbmrtAt'; // payment confirmation email; must be Published
 const ISRAEL_TZ = 'Asia/Jerusalem';
 
 export const fmtDateHe = (d) => (d ? new Date(d).toLocaleDateString('he-IL', { timeZone: ISRAEL_TZ }) : '');

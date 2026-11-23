@@ -592,7 +592,6 @@ class QuotesDashboard extends HTMLElement {
         if (a === 'prev') { this.s.skip = Math.max(0, this.s.skip - this.s.limit); return this.load(); }
         if (a === 'next') { this.s.skip += this.s.limit; return this.load(); }
         if (a === 'refresh') return this.load();
-        if (a === 'sync') return this.sync();
         if (a === 'close') { this.s.detail = null; this.s.wsOpen = false; return this.render(); }
         if (a === 'wsToggle') { if (this.isLocked()) return; this.s.wsOpen = !this.s.wsOpen; return this.render(); }
         if (a === 'wsRemove') {
@@ -630,16 +629,6 @@ class QuotesDashboard extends HTMLElement {
         if (a === 'tplSave') return this.saveTpl();
         if (a === 'tplDel') return this.delTpl(el.dataset.id);
         if (a === 'clearFilters') { this.s.filters = {}; this.s.search = ''; this.s.skip = 0; return this.load(); }
-    }
-
-    async sync() {
-        this.toast('מסנכרן לידים...');
-        try {
-            const r = await this.req('sync');
-            const s = r.summary || {};
-            this.toast(`סנכרון הסתיים: ${s.created || 0} חדשים, ${s.skipped || 0} קיימים`);
-            this.load();
-        } catch (err) { await this.fail(err); }
     }
 
     async openDetail(id) {
@@ -1070,7 +1059,7 @@ class QuotesDashboard extends HTMLElement {
 
     topHtml() {
         return `<div class="top"><h1>הצעות מחיר</h1>
-            <button data-act="tplOpen">תבניות</button><button data-act="sync">סנכרון לידים</button><button data-act="refresh">רענון</button></div>`;
+            <button data-act="tplOpen">תבניות</button><button data-act="refresh">רענון</button></div>`;
     }
 
     filtersHtml() {

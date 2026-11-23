@@ -156,7 +156,7 @@ export const submitTransferProof = webMethod(Permissions.Anyone, async (token, i
     }, SA);
     await wixData.update('Quotes', { ...q, transferProof: up.fileUrl, transferProofAt: new Date(), paymentStatus: 'awaiting_transfer_approval' }, SA);
     await writeQuoteLog(q._id, 'transfer_proof_uploaded', { stage: step.stage, amount: step.amount }, customerActor(q));
-    await notifyManagers('manager_quote_transfer_proof', q, { amount: step.amount });
+    await notifyManagers('manager_quote_transfer_proof', q, { amount: step.amount, stage: STAGE_LABELS[step.stage] || step.stage });
     return { ok: true };
     } catch (err) { return quoteError(err, { exposeRaw: false }); }
 });

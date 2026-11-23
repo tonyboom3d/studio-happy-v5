@@ -153,8 +153,9 @@ export async function notifyManagers(actionKey, quote, extra = {}) {
             eventDate: fmtDateHe(quote.eventDate),
             eventTime: [quote.eventStartTime, quote.eventEndTime].filter(Boolean).join('–'),
             quoteNumber: String(quote.quoteNumber ?? ''),
-            totalAmount: String(quote.totalAmount ?? ''),
+            totalAmount: fmtMoney(quote.totalAmount),
             ...extra,
+            ...(extra.amount != null && extra.amount !== '' ? { amount: fmtMoney(extra.amount) } : {}),
         });
         return await sendEmployeeTemplateToManagers(actionKey, vars);
     } catch (err) {

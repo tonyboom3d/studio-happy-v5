@@ -16,6 +16,7 @@ const ELEMENT_ID = '#customElement2';
 const FORM_ID = '#form1';
 const PHONE_FIELD = 'phone';
 const WORKSHOP_QUERY_KEY = 'workshop';
+const CUSTOMER_FIELD_KEYS = ['form_field', 'form_field_1', 'phone'];
 
 $w.onReady(function () {
     const el = $w(ELEMENT_ID);
@@ -69,9 +70,37 @@ async function handleSubmitLead(el, detail) {
         return;
     }
 
+    const form = $w(FORM_ID);
+    let revealed = null;
     try {
-        $w(FORM_ID).setFieldValues(prep.submissionValues);
-        await $w(FORM_ID).submit();
+        form.setFieldValues(prep.submissionValues);
+        let applied = readFormValues(form);
+        if (applied && missingCustomerFields(prep.submissionValues, applied).length) {
+            revealed = revealForm(form);
+            form.setFieldValues(prep.submissionValues);
+            applied = readFormValues(form);
+        }
+        const missing = applied ? missingCustomerFields(prep.submissionValues, applied) : [];
+        if (missing.length) {
+            console.error('[birthday-landing][velo] form did not keep customer fields:', missing);
+            pushLeadResult(el, requestId, {
+                ok: false,
+                message: 'הפנייה לא נשמרה כי פרטי הקשר לא נקלטו. נסו שוב.',
+            });
+            return;
+        }
+        const submitted = await form.submit();
+        const missingAfterSubmit = isFieldMap(submitted, prep.submissionValues)
+            ? missingCustomerFields(prep.submissionValues, submitted)
+            : [];
+        if (missingAfterSubmit.length) {
+            console.error('[birthday-landing][velo] submitted form is missing customer fields:', missingAfterSubmit);
+            pushLeadResult(el, requestId, {
+                ok: false,
+                message: 'הפנייה לא נשמרה כי פרטי הקשר לא נקלטו. נסו שוב.',
+            });
+            return;
+        }
     } catch (err) {
         console.error('[birthday-landing][velo] real form submit error:', err?.message || err);
         const formRejected = /validation failed|doesn't satisfy form requirements/i.test(String(err?.message || err || ''));
@@ -83,6 +112,8 @@ async function handleSubmitLead(el, detail) {
                 : 'אירעה שגיאה בשליחת הפנייה. נסו שוב מאוחר יותר.',
         });
         return;
+    } finally {
+        restoreForm(form, revealed);
     }
 
     // Best-effort — only runs once the real Wix Form submission succeeded.
@@ -91,6 +122,57 @@ async function handleSubmitLead(el, detail) {
     });
 
     pushLeadResult(el, requestId, { ok: true, message: prep.message });
+}
+
+function readField(value) {
+    if (value == null || value === false) return '';
+    if (typeof value === 'string' || typeof value === 'number') return String(value).trim();
+    if (typeof value === 'object') {
+        return String(value.formattedPhone || value.e164Phone || value.phone || value.formatted || value.number || '').trim();
+    }
+    return '';
+}
+
+function missingCustomerFields(expected, actual) {
+    if (!actual || typeof actual !== 'object') return [];
+    return CUSTOMER_FIELD_KEYS.filter((key) => readField(expected?.[key]) && !readField(actual[key]));
+}
+
+function isFieldMap(actual, expected) {
+    if (!actual || typeof actual !== 'object' || Array.isArray(actual)) return false;
+    return CUSTOMER_FIELD_KEYS.some((key) => Object.prototype.hasOwnProperty.call(actual, key))
+        || Object.keys(expected || {}).some((key) => Object.prototype.hasOwnProperty.call(actual, key));
+}
+
+function readFormValues(form) {
+    try {
+        if (typeof form.getFieldValues !== 'function') return null;
+        return form.getFieldValues() || {};
+    } catch (err) {
+        console.error('[birthday-landing][velo] getFieldValues error:', err?.message || err);
+        return null;
+    }
+}
+
+function revealForm(form) {
+    const state = { hidden: !!form.hidden, collapsed: !!form.collapsed };
+    try {
+        if (state.collapsed && typeof form.expand === 'function') form.expand();
+        if (state.hidden && typeof form.show === 'function') form.show();
+    } catch (err) {
+        console.error('[birthday-landing][velo] reveal form error:', err?.message || err);
+    }
+    return state;
+}
+
+function restoreForm(form, state) {
+    if (!state) return;
+    try {
+        if (state.hidden && typeof form.hide === 'function') form.hide();
+        if (state.collapsed && typeof form.collapse === 'function') form.collapse();
+    } catch (err) {
+        console.error('[birthday-landing][velo] restore form error:', err?.message || err);
+    }
 }
 
 /** Drops an invalid phone from #form1. The next submit writes it again. */

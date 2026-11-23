@@ -32,6 +32,13 @@ function isIsraeliMobile(value) {
     return /^05\d{8}$/.test(digits) || /^9725\d{8}$/.test(digits) || /^97205\d{8}$/.test(digits);
 }
 
+/** Wix Form phone field expects a local 05 number. 972… is dropped as invalid. */
+function toLocalIsraeliMobile(value) {
+    let digits = String(value || '').replace(/\D/g, '');
+    if (digits.startsWith('972')) digits = '0' + digits.slice(digits.startsWith('9720') ? 4 : 3);
+    return digits;
+}
+
 // Apps Script Web App URL for the "ימי הולדת" leads sheet — see
 // wix/apps-script/birthdayLeads.gs. Left blank until supplied; the sheet
 // append is skipped (no-op) while empty.
@@ -79,6 +86,7 @@ function validate(payload) {
             fullName,
             email,
             phone: toIsraeliInternationalPhone(phone),
+            phoneLocal: toLocalIsraeliMobile(phone),
             workshopTypes: Array.isArray(payload.workshopTypes) ? payload.workshopTypes.map((t) => sanitizeText(t, 200)).filter(Boolean) : [],
             addons,
             addonsTotal: addons.reduce((sum, a) => sum + (Number(a.price) || 0), 0),
@@ -106,7 +114,7 @@ function buildWixFormSubmission(row) {
     const submissionValues = {
         [FORM_FIELDS.fullName]: row.fullName,
         [FORM_FIELDS.email]: row.email,
-        [FORM_FIELDS.phone]: row.phone,
+        [FORM_FIELDS.phone]: row.phoneLocal || row.phone,
         [FORM_FIELDS.workshopType]: (row.workshopTypes || []).join(', '),
         [FORM_FIELDS.childrenCount]: row.childrenCount,
         [FORM_FIELDS.adultsCount]: row.adultsCount,
@@ -131,6 +139,7 @@ async function appendBirthdayLeadToSheet(row) {
     try {
         await postSheetWebhook(APPSCRIPT_ENDPOINT, {
             ...buildWixFormSubmission(row),
+            form_field_2: row.phoneLocal || row.phone,
             addons: formatAddonsList(row.addons),
             addons_total: row.addonsTotal || 0,
             inquiry_date: formatInquiryDate(),

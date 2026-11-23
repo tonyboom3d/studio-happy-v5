@@ -145,6 +145,47 @@ export function buildWorkshopReminderMetaExample(workshopType = 'tufting') {
 }
 
 /**
+ * Self check-in hurry reminder — sent from checkin/checkinReminders.js via
+ * sendCheckinReminderManyChat (notification_type = checkin_reminder) when a
+ * paid customer is within ±10 minutes of workshop start and has not checked in.
+ *
+ * Paste CHECKIN_REMINDER_META_BODY into Meta/ManyChat as a Utility template
+ * named CHECKIN_REMINDER_META_NAME, map {{1}}–{{3}} per
+ * CHECKIN_REMINDER_META_TO_MANYCHAT, then put the flow namespace into
+ * CHECKIN_REMINDER_FLOW_NS in manychatService.jsw.
+ */
+export const CHECKIN_REMINDER_META_NAME = 'checkin_hurry';
+export const CHECKIN_REMINDER_NOTIFICATION_TYPE = 'checkin_reminder';
+
+export const CHECKIN_REMINDER_META_BODY = `היי {{1}}, הסדנה שלך מתחילה עכשיו.
+
+{{2}} בשעה {{3}}
+
+עדיין לא ביצעת צ'ק-אין. גשו לסטודיו וסרקו את קוד ה-QR בכניסה כדי להירשם.
+
+כתובת: הדובדבן 7, קריית אונו, קומה 5`;
+
+export const CHECKIN_REMINDER_META_TO_MANYCHAT = [
+    { metaVar: 1, manyChatField: 'organizer_name', label: 'שם מזמין/ה' },
+    { metaVar: 2, manyChatField: 'workshop_name', label: 'סוג סדנה' },
+    { metaVar: 3, manyChatField: 'workshop_time', label: 'שעה' },
+];
+
+export const CHECKIN_REMINDER_META_SAMPLES = {
+    1: 'נועה',
+    2: 'טאפטינג',
+    3: '18:00',
+};
+
+export const CHECKIN_REMINDER_NAMED_BODY = `היי {{organizer_name}}, הסדנה שלך מתחילה עכשיו.
+
+{{workshop_name}} בשעה {{workshop_time}}
+
+עדיין לא ביצעת צ'ק-אין. גשו לסטודיו וסרקו את קוד ה-QR בכניסה כדי להירשם.
+
+כתובת: הדובדבן 7, קריית אונו, קומה 5`;
+
+/**
  * "מוכן לאיסוף" (ready-for-pickup) notice — sent from the order dashboard
  * (see pickupService.web.js → sendPickupReadyManyChat, notification_type =
  * pickup_ready) when staff mark one or more items of an order ready. One

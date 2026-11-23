@@ -3290,7 +3290,7 @@ export const saveSketchSelection = webMethod(Permissions.Anyone, async (selectio
         aiOriginalImage: aiOriginalImage || null,
         aiColors: Array.isArray(aiColors) ? aiColors.join(',') : (aiColors || null),
         aiTaskId: aiTaskId || null,
-        frameType: ['square', 'circle', 'custom'].includes(frameType) ? frameType : null,
+        frameType: ['square', 'rectangle', 'circle', 'custom'].includes(frameType) ? frameType : null,
         aiCroppedImage: aiCroppedImage || null,
     } : {};
 

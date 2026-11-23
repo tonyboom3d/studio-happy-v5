@@ -16,7 +16,7 @@ const CERAMICS_SERVICE_ID_LIST = [
 
 // GitHub Pages caches index.html — bump v= when bookingflow changes.
 const BOOKINGFLOW_IFRAME_SRC =
-    'https://tonyboom3d.github.io/studio-happy-v5/?v=20261001-full-date-wa#/ceramics';
+    'https://tonyboom3d.github.io/studio-happy-v5/?v=20261117-sketch-shapes3#/ceramics';
 
 $w.onReady(function () {
     const mainIframe = $w('#htmlComponent1');

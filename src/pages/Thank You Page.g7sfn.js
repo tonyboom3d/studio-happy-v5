@@ -143,6 +143,12 @@ function startOrderContextRefresh(iframe, workshopOrderId) {
 $w.onReady(async function () {
     const thankYouPage = $w('#thankYouPage');
     const iframe = $w('#htmlComponent1');
+    // GitHub Pages caches index.html. Force the sketch-shape build.
+    if (iframe) {
+        const current = iframe.src || '';
+        const hash = current.includes('#') ? current.slice(current.indexOf('#')) : '#/order';
+        iframe.src = `https://tonyboom3d.github.io/studio-happy-v5/?v=20261117-sketch-shapes3${hash}`;
+    }
 
     // section4 is always visible (set in Editor).
     // thankYouPage and section16 start hidden or collapsed (set in Editor).

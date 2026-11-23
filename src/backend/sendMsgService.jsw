@@ -150,6 +150,40 @@ export async function sendIncomingCallSms(phone) {
     }
 }
 
+/**
+ * 5-digit OTP for the self check-in flow (QR scan at the studio). The
+ * trailing "@domain #code" line lets Android's WebOTP API
+ * (navigator.credentials.get({ otp })) auto-fill the code on the /checkin
+ * page without opening the SMS app — see self-checkin.js. iOS Safari
+ * autofills via the input's autocomplete="one-time-code" attribute alone,
+ * no special SMS format needed there.
+ */
+export async function sendCheckinOtpSms(phone, code) {
+    const cellphone = toSendMsgLocalPhone(phone);
+    if (!cellphone) {
+        console.error('[SendMsg] sendCheckinOtpSms: no valid phone', phone);
+        return { sent: false, reason: 'no-phone' };
+    }
+
+    try {
+        await sendMsgRequest('/AddUsersAndSendSMS', {
+            Users: [{ Cellphone: cellphone }],
+            Message: {
+                MessageContent: `קוד האימות שלך לצ'ק-אין בסטודיו: ${code}\n\n@studiohappy.art #${code}`,
+                SenderPhone: SENDMSG_SENDER_PHONE,
+                MessageInnerName: 'checkin_otp',
+                MessageSubject: '',
+                MessageType: 1,
+                TypeSms: 1,
+            },
+        });
+        return { sent: true };
+    } catch (err) {
+        console.error('[SendMsg] ❌ sendCheckinOtpSms failed:', err?.message || err);
+        return { sent: false, reason: 'error', error: err?.message || String(err) };
+    }
+}
+
 /** 5-digit OTP for ManyChat alternate-phone order lookup (process 2). */
 export async function sendOrderLookupOtpSms(phone, code) {
     const cellphone = toSendMsgLocalPhone(phone);

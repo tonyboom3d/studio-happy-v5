@@ -106,6 +106,11 @@ async function refreshIframeContext(iframe) {
 
 $w.onReady(function () {
     const iframe = $w('#htmlComponent1');
+    if (iframe) {
+        const current = iframe.src || '';
+        const hash = current.includes('#') ? current.slice(current.indexOf('#')) : '#/order';
+        iframe.src = `https://tonyboom3d.github.io/studio-happy-v5/?v=20261117-sketch-shapes3${hash}`;
+    }
     if (!iframe) {
         console.error('[UserSelections] #htmlComponent1 not found on page!');
         return;

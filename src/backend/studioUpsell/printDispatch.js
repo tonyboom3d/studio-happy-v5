@@ -40,6 +40,13 @@ const FETCH_TIMEOUT_MS = 25000; // raster render + MQTT round trip observed up t
 export const MAX_ATTEMPTS = 5;
 const STUCK_PRINTING_MS = 10 * 60 * 1000; // a row left 'printing' this long means the previous attempt's process died mid-flight
 
+// Self check-in receipts (checkin/checkinReceipts.js) are time-sensitive —
+// a customer/staff copy auto-printing 40+ minutes late (after the hourly
+// safety net finally runs) is more confusing than useful. Staff reprint
+// manually from the order dashboard instead; see the skip rule below.
+const CHECKIN_PRINT_KINDS = ['checkin_customer', 'checkin_staff'];
+const CHECKIN_RETRY_MAX_AGE_MS = 30 * 60 * 1000;
+
 /**
  * Per-workshop-type/business printer override hook. Single studio, single
  * printer today (Worker falls back to its own DEFAULT_PRINTER), but the
@@ -72,6 +79,14 @@ function buildReceiptBody(row, { forceNewTicket = false } = {}) {
         qrUrl: p.qrUrl || undefined,
         ticketId,
         printer: resolvePrinterConfig(row),
+        // Optional overrides used by the self check-in receipts (see
+        // checkin/checkinReceipts.js) — undefined for every existing add-on
+        // payload, so the Worker's defaults (header "התשלום אושר", prices
+        // shown) are unaffected for those.
+        title: p.title || undefined,
+        infoLines: p.infoLines || undefined,
+        noteLines: p.noteLines || undefined,
+        hidePrices: p.hidePrices || undefined,
     };
 }
 
@@ -200,6 +215,11 @@ export async function retryPendingPrintJobs() {
         if (row.status === 'printing') {
             const stuckForMs = row.lastAttemptAt ? Date.now() - new Date(row.lastAttemptAt).getTime() : Infinity;
             if (stuckForMs < STUCK_PRINTING_MS) continue; // likely still in-flight from a very recent immediate dispatch
+        }
+
+        if (CHECKIN_PRINT_KINDS.includes(row.kind)) {
+            const ageMs = row._createdDate ? Date.now() - new Date(row._createdDate).getTime() : Infinity;
+            if (ageMs > CHECKIN_RETRY_MAX_AGE_MS) continue; // stale — leave failed/unconfirmed for manual reprint
         }
 
         await dispatchPrintJob(row);

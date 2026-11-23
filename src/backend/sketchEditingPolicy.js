@@ -70,9 +70,9 @@ export function getSketchUploadWindowState(order, now = new Date()) {
     const { deadline: originalDeadline } = computeSketchEditingDeadline(order.workshopStart, order._createdDate);
     return {
         open: win.allowed,
-        overridden: !!win.overridden,
         deadline: win.deadline,
         originalDeadline,
+        overridden: !!win.overridden,
         overrideUntil: order.sketchUploadOverrideUntil || null,
     };
 }

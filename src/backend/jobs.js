@@ -10,6 +10,7 @@ import { retryPendingPrintJobs } from 'backend/studioUpsell/printDispatch.js';
 import { retryUnsentPromoCoupons } from 'backend/promoSendDispatch.js';
 import { deleteConversation } from 'backend/openaiService.jsw';
 import { processPickupStaffNotifications } from 'backend/pickupScheduling.js';
+import { processCheckinReminders } from 'backend/checkin/checkinReminders.js';
 
 const SA = { suppressAuth: true, suppressHooks: true };
 
@@ -268,6 +269,33 @@ const CONVERSATION_STALE_HOURS = 72;
  * reached lastActive (e.g. rate-limit-only or guardrail-only contacts) are
  * cleaned up too, keyed off _createdDate as a fallback.
  */
+/**
+ * Self check-in reminder — 3 identical functions at :00/:20/:40 (see
+ * jobs.config). Wix's native job scheduler has a 1-hour minimum interval
+ * per function, but the reminder window (checkin/checkinReminders.js) is
+ * only ±10 minutes around each workshop's start time; registering the same
+ * logic 3x/hour instead of 1x keeps every workshop start within ~10 minutes
+ * of a run, without adding an external scheduler (Cloudflare cron, etc.).
+ */
+export async function processCheckinRemindersTick0() {
+    return processCheckinReminders().catch((err) => {
+        console.error('[jobs] processCheckinRemindersTick0 failed:', err?.message || err);
+        return { sent: 0, skipped: 0, scanned: 0 };
+    });
+}
+export async function processCheckinRemindersTick20() {
+    return processCheckinReminders().catch((err) => {
+        console.error('[jobs] processCheckinRemindersTick20 failed:', err?.message || err);
+        return { sent: 0, skipped: 0, scanned: 0 };
+    });
+}
+export async function processCheckinRemindersTick40() {
+    return processCheckinReminders().catch((err) => {
+        console.error('[jobs] processCheckinRemindersTick40 failed:', err?.message || err);
+        return { sent: 0, skipped: 0, scanned: 0 };
+    });
+}
+
 export async function cleanupStaleConversations() {
     const cutoff = new Date(Date.now() - CONVERSATION_STALE_HOURS * 3600000);
 

@@ -28,7 +28,9 @@ export function wixMediaToPublicUrl(wixUrl) {
     return match?.[1] ? `https://static.wixstatic.com/media/${match[1]}` : null;
 }
 
-export async function uploadBase64ImageToWixMedia(base64, filename) {
+export async function uploadBase64ImageToWixMedia(base64, filename, uploadOptions = {}) {
+    const folder = uploadOptions.folder || UPLOAD_FOLDER;
+    const source = uploadOptions.source || 'studio-upsell-addon';
     if (!base64 || !base64.startsWith('data:')) {
         throw new Error('לא התקבל קובץ תמונה תקין.');
     }
@@ -41,12 +43,12 @@ export async function uploadBase64ImageToWixMedia(base64, filename) {
     if (buffer.byteLength > MAX_BYTES) throw new Error('התמונה גדולה מהמותר (מקסימום 8MB).');
 
     const upload = await mediaManager.upload(
-        UPLOAD_FOLDER,
+        folder,
         buffer,
         filename || `addon-${Date.now()}.png`,
         {
             mediaOptions: { mimeType, mediaType: 'image' },
-            metadataOptions: { isPrivate: false, isVisitorUpload: false, context: { source: 'studio-upsell-addon' } },
+            metadataOptions: { isPrivate: false, isVisitorUpload: false, context: { source } },
         },
     );
 

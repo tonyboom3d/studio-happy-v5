@@ -116,6 +116,10 @@ async function upsertLead(submission, ctx) {
 
     const mapped = mapSubmission(formId, submission.submissions || {}, ctx.catalog);
     if (!mapped.customerPhone) mapped.customerPhone = await phoneFromContact(submission.contactId);
+    if (!mapped.customerName && !mapped.customerEmail && !mapped.customerPhone) {
+        console.warn('[quoteLeadsSync] skipped submission with no customer details', submissionId);
+        return { skipped: true, empty: true };
+    }
     const s = ctx.settings || {};
     const amounts = computeAmounts({
         basePrice: 0,

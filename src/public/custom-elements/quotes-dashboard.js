@@ -96,7 +96,6 @@ tr.row.alert td{background:#fff1f2}tr.row.alert:hover td{background:#ffe4e6}
 .db{padding:14px}
 .sec{background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:12px;margin-bottom:12px}
 .tl .chg{margin:4px 0 0;padding:0 16px 0 0;font-size:12px;color:#334155;list-style:disc}.tl .chg li{display:list-item;padding:1px 0;border:0}
-.fieldPick{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:6px;margin-top:6px}
 .staffList{display:flex;flex-direction:column;gap:8px}
 .staffRow{padding:6px 0;border-bottom:1px solid #f1f5f9}
 .sec h3{margin:0 0 10px;font-size:14px;color:#1d4ed8;cursor:pointer;display:flex;justify-content:space-between;align-items:center;user-select:none}
@@ -163,7 +162,6 @@ tr.row.alert td{background:#fff1f2}tr.row.alert:hover td{background:#ffe4e6}
 .rte:focus{outline:2px solid #bfdbfe;border-color:#2563eb}
 .ph{display:inline-block;background:#dbeafe;color:#1d4ed8;border:1px solid #93c5fd;border-radius:6px;padding:0 7px;margin:0 2px;font-weight:600;font-size:.9em;line-height:1.6;user-select:all;cursor:default}
 .ph.opt{background:#f3e8ff;color:#7e22ce;border-color:#d8b4fe}
-.optc{color:#7e22ce;font-weight:600}
 .phLegend{font-size:15px;color:#475569;background:#fff;border:1px dashed #cbd5e1;border-radius:8px;padding:8px 10px}
 .rteHead{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
 .rteHead select{width:auto;min-width:220px}
@@ -510,11 +508,7 @@ class QuotesDashboard extends HTMLElement {
             this.render();
         } else if (t.dataset.f && this.s.detail) { this.readField(t); }
         else if (t.dataset.ins && this.s.modal?.tpl) { this.insertPh(t.dataset.ins, t.value); t.value = ''; }
-        else if (t.dataset.cf && this.s.modal?.tpl) {
-            const f = new Set(this.s.modal.tpl.config.fields);
-            t.checked ? f.add(t.dataset.cf) : f.delete(t.dataset.cf);
-            this.s.modal.tpl.config.fields = this.s.modal.fieldOptions.map((o) => o.key).filter((k) => f.has(k));
-        } else if (t.dataset.t && this.s.modal?.tpl) { this.s.modal.tpl[t.dataset.t] = t.type === 'checkbox' ? t.checked : t.value; }
+        else if (t.dataset.t && this.s.modal?.tpl) { this.s.modal.tpl[t.dataset.t] = t.type === 'checkbox' ? t.checked : t.value; }
     }
 
     toggleStaff(id, checked) {
@@ -948,9 +942,8 @@ class QuotesDashboard extends HTMLElement {
               <label class="chk full"><input type="checkbox" data-t="isDefault"${t.isDefault ? ' checked' : ''}> ברירת מחדל לסוג האירוע</label>
               <label class="full">כותרת<input data-c="title" value="${esc(t.config.title)}"></label>
               ${this.rteHtml('intro', 'פתיחה', t.config.intro, '')}
-              <div class="full"><b>שדות דינאמיים להצגה</b><div class="fieldPick">${m.fieldOptions.map((o) => `<label class="chk${this.isOptionalPh(o.key) ? ' optc' : ''}"><input type="checkbox" data-cf="${o.key}"${t.config.fields.includes(o.key) ? ' checked' : ''}> ${esc(o.label)}</label>`).join('')}</div></div>
-              <div class="full phLegend"><span class="ph">כחול</span> שדה שתמיד מוצג · <span class="ph opt">סגול</span> שדה אופציונלי: אם בהצעה אין לו ערך (למשל אין מקדמה), השורה או הפסקה שבה הוא מופיע לא תוצג ללקוח.</div>
               ${this.rteHtml('terms', 'תנאים', t.config.terms, ' tall')}
+              <div class="full phLegend"><span class="ph">כחול</span> שדה שתמיד מוצג · <span class="ph opt">סגול</span> שדה אופציונלי: אם בהצעה אין לו ערך (למשל אין מקדמה), השורה או הפסקה שבה הוא מופיע לא תוצג ללקוח.</div>
               <label class="full">שורת סיום<input data-c="footer" value="${esc(t.config.footer)}"></label>
               ${t.legacy ? '<div class="full lockmsg">תבנית ישנה (HTML חופשי): שמירה תחליף אותה במבנה האחיד.</div>' : ''}</div>
               <div style="margin-top:10px"><button class="btn-p" data-act="tplSave">שמור תבנית</button></div></div>` : '';

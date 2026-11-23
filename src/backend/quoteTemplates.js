@@ -46,7 +46,7 @@ function textHtml(s) {
     return out.join('');
 }
 
-/** Fixed layout: title, intro, selected-fields table, terms, footer. Config rides in a leading comment. */
+/** Fixed layout: title, intro, terms, footer. Config rides in a leading comment. */
 export function buildTemplateHtml(config = {}) {
     const keys = FIELD_OPTIONS.map((f) => f.key);
     const cfg = {
@@ -56,15 +56,10 @@ export function buildTemplateHtml(config = {}) {
         footer: String(config.footer || '').slice(0, 1000),
         fields: (Array.isArray(config.fields) ? config.fields : []).filter((k) => keys.includes(k)),
     };
-    const rows = cfg.fields.map((k) => {
-        const label = FIELD_OPTIONS.find((f) => f.key === k).label;
-        return `<tr><td style="padding:6px 10px;border-bottom:1px solid #e2e8f0;color:#64748b;width:38%">${esc(label)}</td><td style="padding:6px 10px;border-bottom:1px solid #e2e8f0;font-weight:600">{{${k}}}</td></tr>`;
-    }).join('');
     return `<!--tpl:${encodeURIComponent(JSON.stringify(cfg))}-->`
         + '<div dir="rtl" style="line-height:1.75">'
         + (cfg.title ? `<h1 style="font-size:24px;margin:0 0 12px">${esc(cfg.title)}</h1>` : '')
         + (cfg.intro ? textHtml(cfg.intro) : '')
-        + (rows ? `<table style="width:100%;border-collapse:collapse;margin:14px 0"><tbody>${rows}</tbody></table>` : '')
         + (cfg.terms ? `${/^\s*#/.test(cfg.terms) ? '' : '<h3>תנאים</h3>'}${textHtml(cfg.terms)}` : '')
         + (cfg.footer ? `<div style="margin-top:18px;color:#475569">${textHtml(cfg.footer)}</div>` : '')
         + '</div>';
@@ -161,5 +156,6 @@ export function renderTemplate(bodyHtml, quote) {
         .filter((k) => !PLACEHOLDERS.includes(k));
     if (unknown.length) return { html: '', error: `משתנים לא מוכרים בתבנית: ${unknown.join(', ')}` };
     const vals = valuesFor(quote);
-    return { html: hideEmptyBlocks(body, quote).replace(/\{\{\s*(\w+)\s*\}\}/g, (_, k) => vals[k] ?? ''), error: null };
+    const withoutFieldTable = body.replace(/<table style="width:100%;border-collapse:collapse;margin:14px 0"><tbody>[\s\S]*?<\/tbody><\/table>/g, '');
+    return { html: hideEmptyBlocks(withoutFieldTable, quote).replace(/\{\{\s*(\w+)\s*\}\}/g, (_, k) => vals[k] ?? ''), error: null };
 }

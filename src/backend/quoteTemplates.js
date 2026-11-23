@@ -92,6 +92,36 @@ export function sanitizeHtml(html) {
         .replace(/(href|src)\s*=\s*("|')\s*javascript:[^"']*\2/gi, '$1=$2#$2');
 }
 
+/** Fields the admin may leave empty per quote. A row/paragraph/list item holding an empty one is hidden from the customer. */
+export const OPTIONAL_FIELDS = [
+    'companyName', 'customerEmail', 'eventLocation', 'eventAddress', 'workshop', 'participants', 'adults',
+    'extrasList', 'pricePerParticipant', 'depositAmount', 'balanceAmount', 'balanceDueDate', 'expiresAt',
+];
+
+function emptyOptional(q) {
+    const noDeposit = !(Number(q.depositAmount) > 0);
+    const empty = {
+        companyName: !q.companyName, customerEmail: !q.customerEmail, eventLocation: !q.eventLocation, eventAddress: !q.eventAddress,
+        workshop: !q.requestedWorkshop, participants: !(Number(q.participants) > 0), adults: !(Number(q.adults) > 0),
+        extrasList: !(q.extras || []).length,
+        pricePerParticipant: !(Number(q.participants) > 0 && Number(q.basePrice) > 0),
+        depositAmount: noDeposit, balanceAmount: noDeposit || !(Number(q.balanceAmount) > 0), balanceDueDate: noDeposit || !q.balanceDueDate,
+        expiresAt: !q.expiresAt,
+    };
+    return new Set(OPTIONAL_FIELDS.filter((k) => empty[k]));
+}
+
+/** Drops <tr>/<p>/<li>/<h3> blocks that reference an empty optional field, then empty lists. */
+function hideEmptyBlocks(body, q) {
+    const empty = emptyOptional(q);
+    if (!empty.size) return body;
+    const refsEmpty = (blk) => [...blk.matchAll(/\{\{\s*(\w+)\s*\}\}/g)].some((m) => empty.has(m[1]));
+    return body
+        .replace(/<(tr|p|li|h3)\b[^>]*>(?:(?!<\/\1>)[\s\S])*<\/\1>/gi, (blk) => (refsEmpty(blk) ? '' : blk))
+        .replace(/<ul>\s*<\/ul>/gi, '')
+        .replace(/<table[^>]*><tbody>\s*<\/tbody><\/table>/gi, '');
+}
+
 // Every filled-in value renders bold so the customer sees what was set for them.
 function valuesFor(q) {
     const extras = (q.extras || []).map((e) => `${esc(e.title || e.name)}${e.price ? ` (${money(e.price)})` : ''}`).join(', ');
@@ -131,5 +161,5 @@ export function renderTemplate(bodyHtml, quote) {
         .filter((k) => !PLACEHOLDERS.includes(k));
     if (unknown.length) return { html: '', error: `משתנים לא מוכרים בתבנית: ${unknown.join(', ')}` };
     const vals = valuesFor(quote);
-    return { html: body.replace(/\{\{\s*(\w+)\s*\}\}/g, (_, k) => vals[k] ?? ''), error: null };
+    return { html: hideEmptyBlocks(body, quote).replace(/\{\{\s*(\w+)\s*\}\}/g, (_, k) => vals[k] ?? ''), error: null };
 }

@@ -16,7 +16,7 @@ import { releaseQuoteCalendar } from 'backend/quoteCalendar.js';
 import { syncStaffNotifications, notifyStaffCancelled } from 'backend/quoteStaffNotify.js';
 import { sendQuoteLinkManyChat } from 'backend/manychatService.jsw';
 import {
-    renderTemplate, sanitizeHtml, PLACEHOLDERS, FIELD_OPTIONS, DEFAULT_TEMPLATE_FIELDS, buildTemplateHtml, parseTemplateConfig,
+    renderTemplate, sanitizeHtml, PLACEHOLDERS, FIELD_OPTIONS, DEFAULT_TEMPLATE_FIELDS, OPTIONAL_FIELDS, buildTemplateHtml, parseTemplateConfig,
 } from 'backend/quoteTemplates.js';
 
 const SA = { suppressAuth: true, suppressHooks: true };
@@ -149,7 +149,7 @@ export const listTemplates = webMethod(Permissions.Admin, async () => {
     try {
     const res = await wixData.query('QuoteTemplates').eq('active', true).ascending('name').limit(100).find(SA);
     const templates = res.items.map((t) => ({ ...t, config: parseTemplateConfig(t.bodyHtml) }));
-    return { templates, placeholders: PLACEHOLDERS, fieldOptions: FIELD_OPTIONS, defaultFields: DEFAULT_TEMPLATE_FIELDS };
+    return { templates, placeholders: PLACEHOLDERS, fieldOptions: FIELD_OPTIONS, defaultFields: DEFAULT_TEMPLATE_FIELDS, optionalFields: OPTIONAL_FIELDS };
     } catch (err) { return quoteError(err); }
 });
 

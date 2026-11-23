@@ -162,6 +162,9 @@ tr.row.alert td{background:#fff1f2}tr.row.alert:hover td{background:#ffe4e6}
 .rte.tall{min-height:340px}
 .rte:focus{outline:2px solid #bfdbfe;border-color:#2563eb}
 .ph{display:inline-block;background:#dbeafe;color:#1d4ed8;border:1px solid #93c5fd;border-radius:6px;padding:0 7px;margin:0 2px;font-weight:600;font-size:.9em;line-height:1.6;user-select:all;cursor:default}
+.ph.opt{background:#f3e8ff;color:#7e22ce;border-color:#d8b4fe}
+.optc{color:#7e22ce;font-weight:600}
+.phLegend{font-size:15px;color:#475569;background:#fff;border:1px dashed #cbd5e1;border-radius:8px;padding:8px 10px}
 .rteHead{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
 .rteHead select{width:auto;min-width:220px}
 .lockmsg{background:#fef3c7;color:#92400e;border-radius:8px;padding:8px 10px;margin-bottom:10px;font-size:13px}
@@ -375,7 +378,7 @@ class QuotesDashboard extends HTMLElement {
             return ok({ quote, log: [], payments: [], proofs });
         }
         if (type === 'staff') return ok({ actors: [{ id: 'a1', name: 'מנהל בדיקה', trainings: [{ id: 'x1', title: 'ברד' }] }], busyStaff: {} });
-        if (type === 'templates') return ok({ templates: [], placeholders: ['customerName', 'totalAmount'], fieldOptions: [{ key: 'customerName', label: 'שם הלקוח' }, { key: 'totalAmount', label: 'סה"כ לתשלום' }], defaultFields: ['customerName'] });
+        if (type === 'templates') return ok({ templates: [], placeholders: ['customerName', 'totalAmount', 'depositAmount'], fieldOptions: [{ key: 'customerName', label: 'שם הלקוח' }, { key: 'totalAmount', label: 'סה"כ לתשלום' }, { key: 'depositAmount', label: 'מקדמה' }], defaultFields: ['customerName'], optionalFields: ['depositAmount'] });
         if (type === 'preview') return ok({ html: '<h1>תצוגה לדוגמה</h1>' });
         if (type === 'update') return ok({ quote: { ...MOCK_ROWS[0], ...payload.patch } });
         return ok({ summary: { scanned: 0, created: 0, skipped: 0 } });
@@ -822,7 +825,7 @@ class QuotesDashboard extends HTMLElement {
     async openTemplates() {
         try {
             const r = await this.req('templates');
-            this.s.modal = { kind: 'templates', templates: r.templates || [], placeholders: r.placeholders || [], fieldOptions: r.fieldOptions || [], defaultFields: r.defaultFields || [], tpl: null };
+            this.s.modal = { kind: 'templates', templates: r.templates || [], placeholders: r.placeholders || [], fieldOptions: r.fieldOptions || [], defaultFields: r.defaultFields || [], optionalFields: r.optionalFields || [], tpl: null };
             this.render();
         } catch (err) { await this.fail(err); }
     }
@@ -863,11 +866,20 @@ class QuotesDashboard extends HTMLElement {
         return (this.s.modal?.fieldOptions || []).find((o) => o.key === key)?.label || key;
     }
 
-    /** Stored text keeps {{key}}; the editor shows each as a blue, non-editable tag with its Hebrew label. */
+    isOptionalPh(key) {
+        return (this.s.modal?.optionalFields || []).includes(key);
+    }
+
+    phTag(key) {
+        const opt = this.isOptionalPh(key);
+        return `<span class="ph${opt ? ' opt' : ''}" contenteditable="false" data-ph="${esc(key)}"${opt ? ' title="אופציונלי: אם אין ערך בהצעה, השורה כולה לא תוצג ללקוח"' : ''}>${esc(this.phLabel(key))}</span>`;
+    }
+
+    /** Stored text keeps {{key}}; the editor shows each as a non-editable tag (blue, or purple when optional). */
     rteHtml(field, title, text, cls) {
         const keys = this.s.modal?.placeholders || [];
-        const body = esc(text || '').replace(/\{\{\s*(\w+)\s*\}\}/g, (_, k) => `<span class="ph" contenteditable="false" data-ph="${k}">${esc(this.phLabel(k))}</span>`).replace(/\n/g, '<br>');
-        const opts = keys.map((k) => `<option value="${esc(k)}">${esc(this.phLabel(k))}</option>`).join('');
+        const body = esc(text || '').replace(/\{\{\s*(\w+)\s*\}\}/g, (_, k) => this.phTag(k)).replace(/\n/g, '<br>');
+        const opts = keys.map((k) => `<option value="${esc(k)}">${esc(this.phLabel(k))}${this.isOptionalPh(k) ? ' (אופציונלי)' : ''}</option>`).join('');
         return `<div class="full"><div class="rteHead"><b>${title}</b><select data-ins="${field}"><option value="">+ הוספת שדה דינאמי</option>${opts}</select></div>
             <div class="rte${cls}" contenteditable="true" data-rc="${field}">${body}</div></div>`;
     }
@@ -900,8 +912,9 @@ class QuotesDashboard extends HTMLElement {
         if (!ed || !key) return;
         let r = this.rteSel?.field === field && ed.contains(this.rteSel.range.startContainer) ? this.rteSel.range : null;
         if (!r) { r = document.createRange(); r.selectNodeContents(ed); r.collapse(false); }
-        const chip = document.createElement('span');
-        chip.className = 'ph'; chip.contentEditable = 'false'; chip.dataset.ph = key; chip.textContent = this.phLabel(key);
+        const tmp = document.createElement('span');
+        tmp.innerHTML = this.phTag(key);
+        const chip = tmp.firstChild;
         const space = document.createTextNode(' ');
         r.deleteContents();
         r.insertNode(space);
@@ -935,7 +948,8 @@ class QuotesDashboard extends HTMLElement {
               <label class="chk full"><input type="checkbox" data-t="isDefault"${t.isDefault ? ' checked' : ''}> ברירת מחדל לסוג האירוע</label>
               <label class="full">כותרת<input data-c="title" value="${esc(t.config.title)}"></label>
               ${this.rteHtml('intro', 'פתיחה', t.config.intro, '')}
-              <div class="full"><b>שדות דינאמיים להצגה</b><div class="fieldPick">${m.fieldOptions.map((o) => `<label class="chk"><input type="checkbox" data-cf="${o.key}"${t.config.fields.includes(o.key) ? ' checked' : ''}> ${esc(o.label)}</label>`).join('')}</div></div>
+              <div class="full"><b>שדות דינאמיים להצגה</b><div class="fieldPick">${m.fieldOptions.map((o) => `<label class="chk${this.isOptionalPh(o.key) ? ' optc' : ''}"><input type="checkbox" data-cf="${o.key}"${t.config.fields.includes(o.key) ? ' checked' : ''}> ${esc(o.label)}</label>`).join('')}</div></div>
+              <div class="full phLegend"><span class="ph">כחול</span> שדה שתמיד מוצג · <span class="ph opt">סגול</span> שדה אופציונלי: אם בהצעה אין לו ערך (למשל אין מקדמה), השורה או הפסקה שבה הוא מופיע לא תוצג ללקוח.</div>
               ${this.rteHtml('terms', 'תנאים', t.config.terms, ' tall')}
               <label class="full">שורת סיום<input data-c="footer" value="${esc(t.config.footer)}"></label>
               ${t.legacy ? '<div class="full lockmsg">תבנית ישנה (HTML חופשי): שמירה תחליף אותה במבנה האחיד.</div>' : ''}</div>

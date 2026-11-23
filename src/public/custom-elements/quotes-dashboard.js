@@ -387,10 +387,10 @@ class QuotesDashboard extends HTMLElement {
             const proofs = quote.paymentStatus === 'awaiting_transfer_approval'
                 ? [{ at: new Date().toISOString(), stage: 'deposit', amount: quote.depositAmount, status: 'pending', url: 'https://static.wixstatic.com/media/6b73e9_3d8054d68ecb422a82c328f8c4c163f3~mv2.png', isPdf: false }]
                 : [];
-            return ok({ quote, log: [], payments: [], proofs });
+            return ok({ quote, log: [], payments: [], proofs, signatureUrl: quote.status === 'signed' ? 'https://static.wixstatic.com/media/6b73e9_3d8054d68ecb422a82c328f8c4c163f3~mv2.png' : '' });
         }
         if (type === 'staff') return ok({ actors: [{ id: 'a1', name: 'מנהל בדיקה', trainings: [{ id: 'x1', title: 'ברד' }] }], busyStaff: {} });
-        if (type === 'templates') return ok({ templates: [], placeholders: ['customerName', 'totalAmount', 'depositAmount'], fieldOptions: [{ key: 'customerName', label: 'שם הלקוח' }, { key: 'totalAmount', label: 'סה"כ לתשלום' }, { key: 'depositAmount', label: 'מקדמה' }], defaultFields: ['customerName'], optionalFields: ['depositAmount'] });
+        if (type === 'templates') return ok({ templates: [{ _id: 't1', name: 'חוזה יום הולדת', eventType: 'birthday', isDefault: true }, { _id: 't2', name: 'חוזה אירוע חברה', eventType: 'event', isDefault: false }], placeholders: ['customerName', 'totalAmount', 'depositAmount'], fieldOptions: [{ key: 'customerName', label: 'שם הלקוח' }, { key: 'totalAmount', label: 'סה"כ לתשלום' }, { key: 'depositAmount', label: 'מקדמה' }], defaultFields: ['customerName'], optionalFields: ['depositAmount'] });
         if (type === 'preview') return ok({ html: '<h1>תצוגה לדוגמה</h1>' });
         if (type === 'update') return ok({ quote: { ...MOCK_ROWS[0], ...payload.patch } });
         return ok({ summary: { scanned: 0, created: 0, skipped: 0 } });
@@ -616,7 +616,10 @@ class QuotesDashboard extends HTMLElement {
         if (a === 'prepare') return this.prepare();
         if (a === 'preview') return this.preview();
         if (a === 'copyLink') return this.copyLink();
-        if (a === 'closeModal') { this.s.modal = null; return this.render(); }
+        if (a === 'closeModal') {
+            if (this.s.modal?.kind === 'templates') { this.s.tplOpts = null; if (this.s.detail?.quote) this.loadTplOpts(); }
+            this.s.modal = null; return this.render();
+        }
         if (a === 'tplOpen') return this.openTemplates();
         if (a === 'tplNew') { this.s.modal.tpl = { name: '', eventType: 'birthday', isDefault: false, config: this.blankConfig() }; return this.render(); }
         if (a === 'tplEdit') {
@@ -646,14 +649,25 @@ class QuotesDashboard extends HTMLElement {
             const d = await this.req('get', { id });
             const q = d.quote;
             this.s.detail = {
-                id, quote: q, log: d.log || [], payments: d.payments || [], proofs: d.proofs || [], busyStaff: {}, staff: [], staffLoading: true,
+                id, quote: q, log: d.log || [], payments: d.payments || [], proofs: d.proofs || [], signatureUrl: d.signatureUrl || '', busyStaff: {}, staff: [], staffLoading: true,
                 draft: { ...q, extras: (q.extras || []).map((x) => ({ ...x })), assignedStaffIds: [...(q.assignedStaffIds || [])], workshops: splitWs(q.requestedWorkshop), eventDate: ymd(q.eventDate), expiresAt: ymd(q.expiresAt), balanceDueDate: ymd(q.balanceDueDate), hasDeposit: Number(q.depositValue) > 0 },
             };
             this.render();
             this.loadStaff(id, q.eventDate);
+            this.loadTplOpts();
             return;
         } catch (err) { this.s.detail = null; await this.fail(err); }
         this.render();
+    }
+
+    /** Contract templates for the per-quote picker; cached until the template editor closes. */
+    async loadTplOpts() {
+        if (this.s.tplOpts) return;
+        try {
+            const r = await this.req('templates');
+            this.s.tplOpts = (r.templates || []).map((t) => ({ id: t._id, name: t.name, eventType: t.eventType, isDefault: !!t.isDefault }));
+            if (this.s.detail && !this.s.detail.loading) this.render();
+        } catch (_) { this.s.tplOpts = []; }
     }
 
     async loadStaff(id, eventDate) {
@@ -733,7 +747,7 @@ class QuotesDashboard extends HTMLElement {
                 priceOverride: num(d.priceOverride), depositType: d.depositType, depositValue: d.hasDeposit ? num(d.depositValue) ?? 0 : 0,
                 balanceDueDate: d.balanceDueDate || null, expiresAt: d.expiresAt || null,
                 allowOnlinePayment: !!d.allowOnlinePayment, allowBankTransfer: !!d.allowBankTransfer, notes: d.notes || '',
-                assignedStaffIds: d.assignedStaffIds || [],
+                assignedStaffIds: d.assignedStaffIds || [], templateId: d.templateId || '',
             };
         if (locked && this.s.detail.quote.status !== 'cancelled') patch.assignedStaffIds = d.assignedStaffIds || [];
         this.s.saving = true; this.render();
@@ -773,6 +787,8 @@ class QuotesDashboard extends HTMLElement {
     async sendQuote(channel) {
         const label = channel === 'email' ? 'במייל' : 'בוואטסאפ';
         if (!(await this.ask({ title: 'שליחת הצעה', body: `לשלוח את ההצעה ללקוח ${label}?`, ok: 'שלח', cancel: 'ביטול' }))) return;
+        const dt = this.s.detail;
+        if (!this.isLocked() && (dt.draft?.templateId || '') !== (dt.quote.templateId || '')) { if (!(await this.save())) return; } // chosen template must be saved before sending
         try {
             const r = await this.req('send', { id: this.s.detail.id, channels: [channel] });
             const res = r.results?.[channel];
@@ -815,7 +831,7 @@ class QuotesDashboard extends HTMLElement {
 
     async preview() {
         try {
-            const r = await this.req('preview', { id: this.s.detail.id, templateId: this.s.detail.quote.templateId });
+            const r = await this.req('preview', { id: this.s.detail.id, templateId: this.s.detail.draft?.templateId || this.s.detail.quote.templateId });
             this.s.modal = { kind: 'preview', html: r.html };
             this.render();
         } catch (err) { await this.fail(err); }
@@ -1224,7 +1240,16 @@ class QuotesDashboard extends HTMLElement {
         const chk = (key, label) => `<label class="chk"><input type="checkbox" data-f="${key}"${d[key] ? ' checked' : ''}${dis}> ${label}</label>`;
         const pane = (title, body) => `<div class="pane"><h3 class="pane-h">${title}</h3>${body}</div>`;
         if (tab === 'customer') {
-            return pane('👤 פרטי לקוח', `<div class="grid">${f('customerName', 'שם מלא')}${f('customerPhone', 'טלפון', 'tel')}${f('customerEmail', 'אימייל', 'email')}${f('companyName', 'חברה')}</div>`)
+            const tpls = this.s.tplOpts || [];
+            const cur = d.templateId || '';
+            const opts = tpls.map((t) => `<option value="${esc(t.id)}"${t.id === cur ? ' selected' : ''}>${esc(t.name)} · ${esc(L.type[t.eventType] || '')}${t.isDefault ? ' (ברירת מחדל)' : ''}</option>`).join('');
+            const stale = cur && this.s.tplOpts && !tpls.some((t) => t.id === cur) ? `<option value="${esc(cur)}" selected>תבנית שאינה פעילה</option>` : '';
+            const tplPane = pane('📄 תבנית החוזה ללקוח', `<label>איזו תבנית תישלח ללקוח<select data-f="templateId"${dis}><option value=""${cur ? '' : ' selected'}>ברירת המחדל לפי סוג האירוע</option>${opts}${stale}</select></label>
+                <div class="sub" style="margin-top:6px">${locked ? 'ההצעה נחתמה — נוסח החוזה נשמר כפי שנחתם.' : 'התבנית קובעת את נוסח החוזה שהלקוח רואה וחותם עליו. אפשר לבדוק בכפתור "תצוגה מקדימה". יש לשמור לפני שליחה.'}</div>`);
+            const sigPane = dt.signatureUrl ? pane('✍️ חתימת הלקוח', `<div class="sigbox"><img src="${esc(dt.signatureUrl)}" alt="חתימה" style="max-width:300px;max-height:130px;background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:6px">
+                <div class="sub" style="margin-top:6px">${esc(q.signerName || '')}${q.signerEmail ? ` · ${esc(q.signerEmail)}` : ''}${q.signerPhone ? ` · ${esc(q.signerPhone)}` : ''}${q.signedAt ? ` · נחתם ${dmyTime(q.signedAt)}` : ''}</div>
+                <a href="${esc(dt.signatureUrl)}" target="_blank" rel="noopener">פתיחה בגודל מלא</a></div>`) : '';
+            return tplPane + sigPane + pane('👤 פרטי לקוח', `<div class="grid">${f('customerName', 'שם מלא')}${f('customerPhone', 'טלפון', 'tel')}${f('customerEmail', 'אימייל', 'email')}${f('companyName', 'חברה')}</div>`)
                 + pane('🎨 סדנאות', this.workshopPicker(d, locked))
                 + (q.customerNotes ? pane('💬 הערות הלקוח', `<div class="lockmsg" style="background:#f8fafc;color:#334155;margin:0">${esc(q.customerNotes)}</div>`) : '');
         }

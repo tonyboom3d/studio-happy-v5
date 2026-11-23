@@ -2,6 +2,7 @@
 import wixLocation from 'wix-location';
 import wixPay from 'wix-pay';
 import { getQuoteByToken, recordView, signQuote, createQuotePayment, submitTransferProof } from 'backend/quotePublic.web.js';
+import { runQuotePayment } from 'public/quotePayFlow.js';
 
 const ce = () => $w('CustomElement')[0];
 const unwrap = (r) => { if (r?.__error) throw new Error(r.__error); return r; };
@@ -11,8 +12,6 @@ $w.onReady(async () => {
     if (!el) return;
     const token = wixLocation.query.id || '';
     const push = (data) => el.setAttribute('quote-data', JSON.stringify({ ...data, __ts: Date.now() }));
-    const thanks = () => wixLocation.to(`/thank-you-page-offers?id=${encodeURIComponent(token)}`);
-    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
     const load = async () => {
         if (!token) return push({ viewState: 'missing_id' });
@@ -26,37 +25,46 @@ $w.onReady(async () => {
         }
     };
 
+    const pay = async (_p, progress) => {
+        let result;
+        try {
+            result = await runQuotePayment({
+                token, progress, createPayment: createQuotePayment, getQuote: getQuoteByToken,
+                startPayment: (id, opts) => wixPay.startPayment(id, opts),
+            });
+        } catch (err) {
+            await load(); // payment could not start: re-sync the screen (the quote may already be signed)
+            throw err;
+        }
+        const { outcome, data } = result;
+        if (outcome === 'paid') return push({ ...data, thanks: true, inline: true });
+        if (outcome === 'processing') return push({ ...data, thanks: true, inline: true, timedOut: true });
+        if (data) push(data); else await load();
+        throw new Error(outcome === 'failed'
+            ? 'PAYMENT:התשלום לא אושר. ניתן לנסות שוב.'
+            : 'PAYMENT:התשלום בוטל ולא חויבתם. ניתן לנסות שוב.');
+    };
+
     const handlers = {
         refresh: () => load(),
-        pay: async () => {
-            const { paymentId } = unwrap(await createQuotePayment(token));
-            // The payment window stays on this page. Thank-you navigation happens only after the charge is confirmed.
-            const res = await wixPay.startPayment(paymentId, { showThankYouPage: false });
-            if (!['Successful', 'Pending', 'Offline'].includes(res?.status)) throw new Error('PAYMENT:התשלום לא הושלם. ניתן לנסות שוב.');
-            for (let i = 0; i < 8; i++) {
-                const data = unwrap(await getQuoteByToken(token));
-                push(data);
-                if (data.lastPayment?.status === 'paid') return thanks();
-                if (i < 7) await wait(1500);
-            }
-            throw new Error('PAYMENT:התשלום עדיין לא אושר. אם חויבתם, רעננו את הדף בעוד רגע.');
-        },
+        pay,
         proof: async (p) => {
             unwrap(await submitTransferProof(token, p));
             return load();
         },
         sign: async (p) => {
             unwrap(await signQuote(token, p));
-            return load();
+            if (p.selectedPaymentMethod !== 'online') return load(); // online: the CE starts payment next, inside the same dialog
         },
     };
 
     el.on('quote-action', async (event) => {
         const { type, payload, requestId } = event.detail || {};
         const reply = (body) => el.setAttribute('action-result', JSON.stringify({ requestId, ...body, __ts: Date.now() }));
+        const progress = (msg) => el.setAttribute('action-progress', JSON.stringify({ requestId, msg, __ts: Date.now() }));
         try {
             if (!handlers[type]) throw new Error(`UNKNOWN_ACTION:${type}`);
-            await handlers[type](payload || {});
+            await handlers[type](payload || {}, progress);
             reply({ ok: true });
         } catch (err) {
             reply({ ok: false, error: err?.message || String(err) });

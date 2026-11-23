@@ -62,6 +62,13 @@ const CSS = `
 .msg{text-align:center;padding:24px 8px}.msg h2{margin:0 0 8px;font-size:24px}.msg .ic{font-size:46px}
 .sk{height:16px;border-radius:8px;background:linear-gradient(90deg,#e5e7eb,#f3f4f6,#e5e7eb);background-size:200% 100%;animation:sh 1.2s infinite;margin:12px 0}
 @keyframes sh{to{background-position:-200% 0}}
+.spin{width:46px;height:46px;border:5px solid #e5e7eb;border-top-color:var(--brand);border-radius:50%;animation:spin .8s linear infinite;margin:0 auto}
+@keyframes spin{to{transform:rotate(360deg)}}
+.loading{text-align:center;padding:26px 8px 10px}.loading b{display:block;margin-top:14px;font-size:20px}
+.procmask{position:fixed;inset:0;background:rgba(17,24,39,.5);backdrop-filter:blur(3px);z-index:1002}
+.procbox{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:min(380px,90vw);background:#fff;border-radius:18px;z-index:1003;box-shadow:0 24px 60px rgba(0,0,0,.3);padding:28px 22px;text-align:center}
+.procbox b{display:block;margin-top:16px;font-size:19px}.procbox .sub{margin-top:6px}
+.sigimg{display:block;max-width:260px;max-height:110px;margin:8px 0 0;border:1px solid #e5e7eb;border-radius:10px;background:#fff;padding:6px}
 .err{background:#fee2e2;color:#b91c1c;border:1px solid #fecaca;padding:10px 12px;border-radius:10px;margin-top:12px;font-size:16px}
 .ok{background:#dcfce7;color:#15803d;border:1px solid #bbf7d0;padding:12px;border-radius:10px;margin-bottom:14px;font-weight:600}
 .bank{white-space:pre-wrap;background:#f9fafb;border:1px solid #e5e7eb;border-radius:12px;padding:12px;margin-bottom:10px}
@@ -128,7 +135,7 @@ const safeColor = (c) => (/^#[0-9a-f]{3,8}$/i.test(c || '') ? c : '');
 const safeUrl = (u) => (/^https?:\/\//i.test(u || '') ? u : '');
 
 class QuoteContract extends HTMLElement {
-    static get observedAttributes() { return ['quote-data', 'action-result']; }
+    static get observedAttributes() { return ['quote-data', 'action-result', 'action-progress']; }
 
     constructor() {
         super();
@@ -160,6 +167,14 @@ class QuoteContract extends HTMLElement {
         try {
             const msg = JSON.parse(val);
             if (name === 'quote-data') { this.data = msg; this.error = ''; if (msg.viewState !== 'ready_to_sign') this.signOpen = false; this.render(); return; }
+            if (name === 'action-progress') {
+                if (this.pending.has(msg.requestId) && msg.msg) {
+                    this.busyMsg = msg.msg;
+                    const n = this.root.querySelector('.procmsg');
+                    if (n) n.textContent = msg.msg;
+                }
+                return;
+            }
             const p = this.pending.get(msg.requestId);
             if (!p) return;
             this.pending.delete(msg.requestId);
@@ -169,10 +184,11 @@ class QuoteContract extends HTMLElement {
     }
 
     req(type, payload = {}) {
-        if (this.getAttribute('mock')) return new Promise((r) => setTimeout(r, 300));
+        if (this.getAttribute('mock')) return new Promise((r) => setTimeout(r, type === 'pay' ? 2500 : 900));
         const requestId = `${Date.now()}-${++this.seq}`;
+        const limit = type === 'pay' ? 15 * 60 * 1000 : 60000; // pay waits for the customer to finish in the card window
         return new Promise((resolve, reject) => {
-            const timer = setTimeout(() => { this.pending.delete(requestId); reject(new Error('הבקשה נכשלה (פג זמן). נסו שוב.')); }, 60000);
+            const timer = setTimeout(() => { this.pending.delete(requestId); reject(new Error('הבקשה נכשלה (פג זמן). נסו שוב.')); }, limit);
             this.pending.set(requestId, { resolve, reject, timer });
             this.dispatchEvent(new CustomEvent('quote-action', { detail: { type, payload, requestId }, bubbles: true, composed: true }));
         });
@@ -218,7 +234,8 @@ class QuoteContract extends HTMLElement {
         if (a === 'closeSign') { this.signOpen = false; this.error = ''; return this.render(); }
         if (a === 'clear') return this.clearSig();
         if (a === 'sign') return this.sign();
-        if (a === 'pay') return this.action('pay', { stage: el.dataset.stage });
+        if (a === 'pay') return this.action('pay', { stage: el.dataset.stage }, 'מכינים תשלום מאובטח...');
+        if (a === 'reload') return this.action('refresh', {}, 'טוענים את ההצעה...');
         if (a === 'upload') return this.upload();
     }
 
@@ -234,7 +251,7 @@ class QuoteContract extends HTMLElement {
     async upload() {
         const file = this.proofFile;
         if (!file) { this.error = 'יש לבחור צילום מסך או קובץ של האסמכתא.'; return this.render(); }
-        this.busy = true; this.error = ''; this.render();
+        this.busy = true; this.busyMsg = 'מעלים את האסמכתא...'; this.error = ''; this.render();
         try {
             const dataUrl = await this.prepareProof(file);
             await this.req('proof', { dataUrl, fileName: file.name });
@@ -267,8 +284,8 @@ class QuoteContract extends HTMLElement {
         }));
     }
 
-    async action(type, payload) {
-        this.busy = true; this.error = ''; this.render();
+    async action(type, payload, msg = 'מעבדים...') {
+        this.busy = true; this.busyMsg = msg; this.error = ''; this.render();
         try { await this.req(type, payload); } catch (err) { this.error = errText(err); }
         this.busy = false; this.render();
     }
@@ -290,14 +307,25 @@ class QuoteContract extends HTMLElement {
         this.error = this.validate();
         if (this.error) return this.render();
         const png = this.canvas.toDataURL('image/png');
-        this.busy = true; this.render();
+        this.busy = true; this.busyMsg = 'שומרים את החתימה...'; this.render();
+        let signed = false;
         try {
             await this.req('sign', {
                 signaturePngDataUrl: png, selectedPaymentPlan: f.plan, selectedPaymentMethod: f.method, approved: true,
                 signerName: f.name.trim(), signerEmail: f.email.trim(), signerPhone: f.phone.trim(), userAgent: navigator.userAgent,
             });
+            signed = true;
+            if (f.method === 'online') {
+                // Payment continues in the same flow: the secure card window opens right after signing.
+                this.busyMsg = 'החתימה נשמרה. מכינים תשלום מאובטח...'; this.render();
+                await this.req('pay', { stage: f.plan === 'deposit' ? 'deposit' : 'full' });
+                if (this.getAttribute('mock')) this.data = { ...this.data, viewState: 'balance_due', thanks: true, inline: true, paidAmount: 750, lastPayment: { stage: 'deposit', amount: 750, status: 'paid' } };
+            }
             this.signOpen = false;
-        } catch (err) { this.error = errText(err); }
+        } catch (err) {
+            this.error = errText(err);
+            if (signed) this.signOpen = false; // already signed: the page now shows the pay screen with this error
+        }
         this.busy = false; this.render();
     }
 
@@ -354,7 +382,9 @@ class QuoteContract extends HTMLElement {
         const brand = safeColor(d?.brandColor);
         if (brand) this.style.setProperty('--brand', brand);
         const keepSig = this.canvas && this.ink > 0 && this.signOpen ? { url: this.canvas.toDataURL(), ink: this.ink } : null;
-        app.innerHTML = this.screen(d);
+        const proc = this.busy && this.busyMsg
+            ? `<div class="procmask"></div><div class="procbox" role="status" aria-live="polite"><div class="spin"></div><b class="procmsg">${esc(this.busyMsg)}</b><div class="sub">נא לא לסגור את החלון</div></div>` : '';
+        app.innerHTML = this.screen(d) + proc;
         this.initCanvas(keepSig?.url, keepSig?.ink);
         if (this.signOpen && this.error) this.root.querySelector('.dlg .err')?.scrollIntoView({ block: 'nearest' });
     }
@@ -373,7 +403,7 @@ class QuoteContract extends HTMLElement {
     }
 
     screen(d) {
-        if (!d) return this.frame(null, 'חוזה התקשרות', `<div class="card"><div class="sk" style="width:40%"></div><div class="sk"></div><div class="sk"></div><div class="sk" style="width:70%"></div></div>`);
+        if (!d) return this.frame(null, 'חוזה התקשרות', `<div class="card"><div class="loading" role="status"><div class="spin"></div><b>טוענים את ההצעה שלך...</b><div class="sub">רק רגע</div></div><div class="sk" style="width:40%"></div><div class="sk"></div><div class="sk" style="width:70%"></div></div>`);
         const vs = d.viewState;
         if (d.thanks && !MSG[vs]) return this.thanksScreen(d);
         if (vs === 'paid_full') return this.paidLinkScreen(d);
@@ -484,14 +514,18 @@ class QuoteContract extends HTMLElement {
         return `<h3 class="t">🧾 אסמכתאות שנשלחו</h3>${cards}`;
     }
 
+    signedNote(d) {
+        const img = safeUrl(d.signatureUrl) ? `<img class="sigimg" src="${esc(d.signatureUrl)}" alt="חתימה">` : '';
+        return `<div class="note" style="margin-top:12px"><b>✅ החוזה נחתם${d.signerName ? ` ע"י ${esc(d.signerName)}` : ''}${d.signedAt ? ` בתאריך ${esc(dmy(d.signedAt))}` : ''}</b>${img}</div>`;
+    }
+
     paidLinkScreen(d) {
         const s = d.support || {};
         const rows = [
             s.address ? `<div class="fact"><div class="ic">📍</div><div><span>הסטודיו</span><b>${esc(s.address)}</b></div></div>` : '',
             safeUrl(s.site) ? `<div class="fact"><div class="ic">🌐</div><div><span>אתר</span><b><a href="${esc(s.site)}" target="_blank" rel="noopener">studiohappy.art</a></b></div></div>` : '',
         ].join('');
-        const signed = `<div class="note" style="margin-top:12px"><b>✅ החוזה נחתם${d.signerName ? ` ע"י ${esc(d.signerName)}` : ''}${d.signedAt ? ` בתאריך ${esc(dmy(d.signedAt))}` : ''}</b></div>`;
-        return this.frame(d, 'החוזה החתום', `<div class="card">${this.logo(d)}<div class="contract">${d.contractHtml || ''}</div>${signed}</div>
+        return this.frame(d, 'החוזה החתום', `<div class="card">${this.logo(d)}<div class="contract">${d.contractHtml || ''}</div>${this.signedNote(d)}</div>
             ${this.summary(d)}
             <div class="card"><h3 class="t">שירות לקוחות</h3>
             <div class="facts">${rows}</div>
@@ -500,7 +534,9 @@ class QuoteContract extends HTMLElement {
 
     thanksScreen(d) {
         const p = d.lastPayment;
-        const back = /^\/[^/]/.test(d.backUrl || '') ? `<p style="text-align:center"><a href="${esc(d.backUrl)}">חזרה להצעה</a></p>` : '';
+        const back = d.inline
+            ? '<div class="cta" style="margin-top:14px"><button class="btn" data-act="reload">לצפייה בהצעה</button></div>'
+            : /^\/[^/]/.test(d.backUrl || '') ? `<p style="text-align:center"><a href="${esc(d.backUrl)}">חזרה להצעה</a></p>` : '';
         const stage = { deposit: 'מקדמה', full: 'תשלום מלא', balance: 'יתרה' }[p?.stage] || '';
         const remaining = Math.max(0, (Number(d.totalAmount) || 0) - (Number(d.paidAmount) || 0));
         const email = d.signerEmail || d.customerEmail;
@@ -514,14 +550,14 @@ class QuoteContract extends HTMLElement {
             if (d.eventDate) steps.push(['📅', `נתראה ב<b>${esc(weekday(d.eventDate))}, ${esc(longDate(d.eventDate))}</b>${d.eventStartTime ? ` בשעה <b>${esc(d.eventStartTime)}</b>` : ''}!`]);
             body = `<div class="msg" style="padding-bottom:6px"><div class="ic">✅</div><h2>התשלום התקבל, תודה!</h2><p>${esc(stage)} על סך <b>${money(p.amount)}</b></p></div>
                 <div class="next"><h3>מה הלאה?</h3><ul>${steps.map(([ic, t]) => `<li><i>${ic}</i><span>${t}</span></li>`).join('')}</ul></div>
-                ${remaining > 0 && back ? `<div class="cta"><a class="btn" style="text-decoration:none;display:inline-block" href="${esc(d.backUrl)}">לתשלום היתרה</a></div>` : ''}`;
-            return this.frame(d, 'תודה!', `<div class="card">${this.logo(d)}${body}</div>${this.summary(d)}`);
+                ${remaining > 0 && !d.inline && back ? `<div class="cta"><a class="btn" style="text-decoration:none;display:inline-block" href="${esc(d.backUrl)}">לתשלום היתרה</a></div>` : ''}`;
+            return this.frame(d, 'תודה!', `<div class="card">${this.logo(d)}${body}</div>${this.summary(d)}${d.inline ? back : ''}`);
         } else if (p?.status === 'failed' || p?.status === 'refunded') {
             body = '<div class="msg"><div class="ic">⚠️</div><h2>התשלום לא הושלם</h2><p class="sub">ניתן לחזור להצעה ולנסות שוב.</p></div>';
         } else if (d.timedOut) {
-            body = '<div class="msg"><div class="ic">⏳</div><h2>התשלום בעיבוד</h2><p class="sub">נעדכן אותך בוואטסאפ ברגע שיאושר.</p></div>';
+            body = '<div class="msg"><div class="ic">⏳</div><h2>התשלום בעיבוד</h2><p class="sub">האישור מחברת האשראי מתעכב. אם חויבתם, התשלום יופיע בהצעה בתוך דקות ונעדכן אתכם. אין צורך לשלם שוב.</p></div>';
         } else {
-            body = '<div class="msg"><div class="ic">⏳</div><h2>מאמתים את התשלום...</h2><div class="sk" style="width:60%;margin:12px auto"></div></div>';
+            body = '<div class="loading" role="status"><div class="spin"></div><b>מאמתים את התשלום...</b></div>';
         }
         return this.frame(d, 'תודה!', `<div class="card">${this.logo(d)}${body}</div>${back}`);
     }
@@ -549,7 +585,7 @@ class QuoteContract extends HTMLElement {
         }
         body += this.proofsTable(d);
         return this.frame(d, 'חוזה התקשרות', `<div class="card">${this.logo(d)}${body}</div>${this.summary(d)}
-            <details class="card"><summary>צפייה בהסכם</summary><div class="contract" style="margin-top:12px">${d.contractHtml || ''}</div></details>`);
+            <details class="card"><summary>צפייה בהסכם</summary><div class="contract" style="margin-top:12px">${d.contractHtml || ''}</div>${d.signedAt ? this.signedNote(d) : ''}</details>`);
     }
 }
 

@@ -81,17 +81,40 @@ export async function sendQuotePaidEmail(quote, payment = {}) {
     }
 }
 
-/** Variables: customerFullName, customerPhone, customerEmail, offerUrl. */
+/** How the customer pays, as one sentence (no empty deposit parts). */
+function paymentTerms(quote) {
+    const total = fmtMoney(quote.totalAmount);
+    if (Number(quote.depositAmount) > 0 && Number(quote.balanceAmount) > 0) {
+        return `מקדמה של ${fmtMoney(quote.depositAmount)} ₪ בחתימה, והיתרה (${fmtMoney(quote.balanceAmount)} ₪)${quote.balanceDueDate ? ` עד ${fmtDateHe(quote.balanceDueDate)}` : ''}. סה"כ ${total} ₪.`;
+    }
+    return `תשלום מלא של ${total} ₪ בחתימה.`;
+}
+
+/**
+ * Variables: customerFullName, customerPhone, customerEmail, quoteNumber, workshopName, eventDate, eventTime,
+ * eventAddress, participants, totalAmount, paymentTerms, expiresAt, offerUrl. Missing values arrive as '—'.
+ */
 export async function sendQuoteEmail(quote) {
     try {
         if (!quote?.customerEmail) return { sent: false, reason: 'no-email' };
         const contactId = await quoteContactId(quote);
         if (!contactId) return { sent: false, reason: 'no-contact-id' };
+        const v = quoteVars(quote);
+        const dash = (s) => String(s ?? '').trim() || '—';
         await triggeredEmails.emailContact(QUOTE_EMAIL_TEMPLATE_ID, contactId, {
             variables: {
                 customerFullName: quote.customerName || 'לקוח/ה יקר/ה',
                 customerPhone: String(quote.customerPhone || '').replace(/^972/, '0'),
                 customerEmail: quote.customerEmail,
+                quoteNumber: dash(v.quoteNumber),
+                workshopName: dash(v.workshopName),
+                eventDate: dash(v.eventDate),
+                eventTime: dash(v.eventTime),
+                eventAddress: dash(v.eventAddress),
+                participants: dash(Number(quote.participants) > 0 ? quote.participants : ''),
+                totalAmount: v.totalAmount,
+                paymentTerms: paymentTerms(quote),
+                expiresAt: dash(fmtDateHe(quote.expiresAt)),
                 offerUrl: await buildQuoteUrl(quote.publicToken),
             },
         });

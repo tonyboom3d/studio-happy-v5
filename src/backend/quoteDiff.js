@@ -10,7 +10,7 @@ const LABELS = {
     basePrice: 'מחיר בסיס', priceOverride: 'מחיר מותאם', depositType: 'סוג מקדמה', depositValue: 'ערך מקדמה',
     balanceDueDate: 'מועד תשלום יתרה', expiresAt: 'תוקף ההצעה', allowOnlinePayment: 'תשלום מקוון',
     allowBankTransfer: 'העברה בנקאית', notes: 'הערות פנימיות', extras: 'תוספות', assignedStaffIds: 'צוות משובץ',
-    workshopId: 'סדנה', totalAmount: 'סה"כ',
+    workshopId: 'סדנה', totalAmount: 'סה"כ', templateId: 'תבנית חוזה',
 };
 const MONEY = ['basePrice', 'priceOverride', 'totalAmount'];
 const DATES = ['eventDate', 'balanceDueDate', 'expiresAt'];
@@ -50,10 +50,16 @@ export async function diffQuote(before, after, keys) {
     const all = [...new Set([...keys, 'totalAmount'])];
     const staffIds = [...new Set([...(before.assignedStaffIds || []), ...(after.assignedStaffIds || [])])];
     const names = keys.includes('assignedStaffIds') ? await staffNames(staffIds) : {};
+    const tplIds = [before.templateId, after.templateId].filter(Boolean);
+    const tplNames = keys.includes('templateId') && tplIds.length
+        ? Object.fromEntries((await wixData.query('QuoteTemplates').hasSome('_id', tplIds).fields('name').find(SA).catch(() => ({ items: [] }))).items.map((t) => [t._id, t.name]))
+        : {};
     for (const k of all) {
         if (norm(k, before[k]) === norm(k, after[k])) continue;
         const label = LABELS[k] || k;
-        if (k === 'extras' || k === 'assignedStaffIds') {
+        if (k === 'templateId') {
+            out.push({ label, from: tplNames[before.templateId] || 'ברירת מחדל', to: tplNames[after.templateId] || 'ברירת מחדל' });
+        } else if (k === 'extras' || k === 'assignedStaffIds') {
             const id = (x) => (k === 'extras' ? x.id : x);
             const name = (x) => (k === 'extras' ? x.title : names[x] || x);
             const prev = new Map((before[k] || []).map((x) => [id(x), name(x)]));

@@ -13,7 +13,7 @@ import wixPayBackend from 'wix-pay-backend';
 import { notifyManagers } from 'backend/quoteNotify.js';
 import { QUOTE_ITEM_PREFIX, STAGE_LABELS, nextPayment, syncPendingOnlinePayments } from 'backend/quotePayments.js';
 import { quoteError } from 'backend/quoteErrors.js';
-import { proofRows } from 'backend/quoteMedia.js';
+import { proofRows, mediaHttpsUrl } from 'backend/quoteMedia.js';
 
 const SA = { suppressAuth: true, suppressHooks: true };
 const VIEW_LOG_THROTTLE_MS = 10 * 60 * 1000;
@@ -61,6 +61,7 @@ function toDto(q, viewState, settings, contractHtml) {
         selectedPaymentMethod: q.selectedPaymentMethod || '',
         signedAt: q.signedAt,
         signerName: q.status === 'signed' ? (q.signerName || '') : '',
+        signatureUrl: q.status === 'signed' ? mediaHttpsUrl(q.signatureImage) : '',
         signedPdf: viewState === 'paid_full' || q.status === 'signed' ? (q.signedPdf || '') : '',
         contractHtml,
         bankDetailsText: showBank ? (settings?.bankDetailsText || '') : '',

@@ -90,20 +90,43 @@ export async function handleQuotePaymentUpdate(payment) {
     return true;
 }
 
-/** The payment event often never arrives. Pending rows are checked against the cashier transaction list (order.id = wixPaymentId). */
+const RECHECK_FAILED_MS = 3 * 60 * 60 * 1000;
+
+/**
+ * One order can hold several attempts (declined card, then a successful retry). Paid wins over everything;
+ * otherwise the newest attempt decides (the list is newest-first).
+ */
+function cashierStatusByOrder(transactions) {
+    const byOrder = new Map();
+    for (const t of transactions || []) {
+        const id = t.order?.id;
+        if (!id) continue;
+        const cur = byOrder.get(id);
+        if (!cur) byOrder.set(id, t.status);
+        else if (normalizePayStatus(cur) !== 'paid' && normalizePayStatus(t.status) === 'paid') byOrder.set(id, t.status);
+    }
+    return byOrder;
+}
+
+/**
+ * The payment event often never arrives. Open rows are checked against the cashier transaction list (order.id = wixPaymentId).
+ * Recently failed rows are re-checked too, so a successful retry corrects an earlier decline.
+ */
 export async function syncPendingOnlinePayments(quoteId) {
-    const pending = await wixData.query('QuotePayments').eq('quoteId', quoteId).eq('method', 'online').eq('status', 'pending').limit(20).find(SA);
+    const rows = await wixData.query('QuotePayments').eq('quoteId', quoteId).eq('method', 'online').hasSome('status', ['pending', 'failed']).limit(20).find(SA);
+    const pending = { items: rows.items.filter((r) => r.status === 'pending' || Date.now() - new Date(r._createdDate).getTime() < RECHECK_FAILED_MS) };
     if (!pending.items.length) return false;
     const from = new Date(Math.min(...pending.items.map((r) => new Date(r._createdDate).getTime())) - 60 * 60 * 1000).toISOString();
     const res = await httpClient.fetchWithAuth(`https://www.wixapis.com/payments/v2/transactions?from=${encodeURIComponent(from)}&limit=100&order=date:desc`);
     if (!res.ok) { console.error('[quotePayments] cashier list failed', res.status); return false; }
     const data = await res.json();
-    const byOrder = new Map((data.transactions || []).filter((t) => t.order?.id).map((t) => [t.order.id, t.status]));
+    const byOrder = cashierStatusByOrder(data.transactions);
     let changed = false;
     const paidRows = [];
     for (const row of pending.items) {
         const next = normalizePayStatus(byOrder.get(row.wixPaymentId));
         if (!next || next === 'pending' || next === row.status) continue;
+        if (row.status === 'failed' && next !== 'paid') continue; // failed rows only ever flip to paid
         await wixData.update('QuotePayments', { ...row, status: next, rawStatus: String(byOrder.get(row.wixPaymentId)), paidAt: next === 'paid' ? new Date() : row.paidAt }, SA);
         const action = next === 'paid' ? 'payment_succeeded' : next === 'refunded' ? 'payment_refunded' : 'payment_failed';
         await writeQuoteLog(quoteId, action, { stage: row.stage, amount: row.amount, method: 'online', via: 'cashier' }, { type: 'system', name: 'Wix Pay', userId: '' });

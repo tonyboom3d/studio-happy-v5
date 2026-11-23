@@ -25,7 +25,7 @@ const EDITABLE_FIELDS = [
     'customerName', 'customerEmail', 'customerPhone', 'companyName', 'companyRole', 'eventLocation', 'eventAddress',
     'participants', 'adults', 'eventDate', 'eventStartTime', 'eventEndTime', 'workshopId', 'requestedWorkshop', 'workshopClosed',
     'requiredInstructors', 'extras', 'basePrice', 'priceOverride', 'depositType', 'depositValue',
-    'balanceDueDate', 'expiresAt', 'allowOnlinePayment', 'allowBankTransfer', 'notes', 'assignedStaffIds',
+    'balanceDueDate', 'expiresAt', 'allowOnlinePayment', 'allowBankTransfer', 'notes', 'assignedStaffIds', 'templateId',
 ];
 
 const SETTINGS_FIELDS = [
@@ -81,6 +81,14 @@ export const updateQuote = webMethod(Permissions.Admin, async (quoteId, patch = 
     if ('requestedWorkshop' in changes) {
         const tags = [...new Set(String(changes.requestedWorkshop || '').split(',').map((s) => s.trim()).filter(Boolean))].slice(0, 20);
         changes.requestedWorkshop = tags.map((t) => t.slice(0, 80)).join(', ');
+    }
+
+    if ('templateId' in changes) {
+        changes.templateId = String(changes.templateId || '') || null;
+        if (changes.templateId) {
+            const t = await wixData.get('QuoteTemplates', changes.templateId, SA).catch(() => null);
+            if (!t || t.active === false) throw new Error('VALIDATION:תבנית החוזה שנבחרה אינה קיימת.');
+        }
     }
 
     const next = { ...quote, ...changes };

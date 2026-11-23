@@ -60,6 +60,7 @@ function toDto(q, viewState, settings, contractHtml) {
         selectedPaymentPlan: q.selectedPaymentPlan || '',
         selectedPaymentMethod: q.selectedPaymentMethod || '',
         signedAt: q.signedAt,
+        signerName: q.status === 'signed' ? (q.signerName || '') : '',
         signedPdf: viewState === 'paid_full' || q.status === 'signed' ? (q.signedPdf || '') : '',
         contractHtml,
         bankDetailsText: showBank ? (settings?.bankDetailsText || '') : '',

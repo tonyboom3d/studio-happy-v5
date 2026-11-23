@@ -490,12 +490,12 @@ class QuoteContract extends HTMLElement {
             s.address ? `<div class="fact"><div class="ic">📍</div><div><span>הסטודיו</span><b>${esc(s.address)}</b></div></div>` : '',
             safeUrl(s.site) ? `<div class="fact"><div class="ic">🌐</div><div><span>אתר</span><b><a href="${esc(s.site)}" target="_blank" rel="noopener">studiohappy.art</a></b></div></div>` : '',
         ].join('');
-        return this.frame(d, 'הקישור אינו פעיל', `<div class="card">${this.logo(d)}
-            <div class="msg"><div class="ic">🔒</div><h2>הקישור פג תוקף</h2><p>ההצעה ${d.quoteNumber ? `#${esc(d.quoteNumber)} ` : ''}כבר שולמה, ולכן הקישור אינו פעיל יותר.</p></div>
-            <h3 class="t">שירות לקוחות</h3>
+        const signed = `<div class="note" style="margin-top:12px"><b>✅ החוזה נחתם${d.signerName ? ` ע"י ${esc(d.signerName)}` : ''}${d.signedAt ? ` בתאריך ${esc(dmy(d.signedAt))}` : ''}</b></div>`;
+        return this.frame(d, 'החוזה החתום', `<div class="card">${this.logo(d)}<div class="contract">${d.contractHtml || ''}</div>${signed}</div>
+            ${this.summary(d)}
+            <div class="card"><h3 class="t">שירות לקוחות</h3>
             <div class="facts">${rows}</div>
-            <p class="sub" style="margin-top:10px">לכל שאלה אפשר לפנות אלינו גם דרך כפתור "שירות לקוחות" באתר.</p>
-            </div>`);
+            <p class="sub" style="margin-top:10px">לכל שאלה אפשר לפנות אלינו גם דרך כפתור "שירות לקוחות" באתר.</p></div>`);
     }
 
     thanksScreen(d) {

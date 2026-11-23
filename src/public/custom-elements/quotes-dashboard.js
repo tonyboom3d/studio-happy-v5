@@ -47,6 +47,9 @@ input:focus,select:focus,textarea:focus{outline:2px solid #bfdbfe;border-color:#
 input:disabled,select:disabled,textarea:disabled{background:#f1f5f9;color:#64748b}
 button{font:inherit;cursor:pointer;border:1px solid #cbd5e1;background:#fff;color:#0f172a;border-radius:7px;padding:7px 12px}
 button:hover{background:#f8fafc}button:disabled{opacity:.5;cursor:not-allowed}
+button.busy:disabled{opacity:1;cursor:wait}
+button .spin{display:inline-block;width:14px;height:14px;margin-inline-end:6px;border:2px solid currentColor;border-top-color:transparent;border-radius:50%;vertical-align:-2px;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
 .btn-p{background:#2563eb;border-color:#2563eb;color:#fff}.btn-p:hover{background:#1d4ed8}
 .btn-d{background:#dc2626;border-color:#dc2626;color:#fff}.btn-d:hover{background:#b91c1c}
 .tablewrap{overflow:auto;max-height:68vh}
@@ -774,17 +777,24 @@ class QuotesDashboard extends HTMLElement {
     }
 
     async sendQuote(channel) {
+        if (this.s.sending) return;
         const label = channel === 'email' ? 'במייל' : 'בוואטסאפ';
         if (!(await this.ask({ title: 'שליחת הצעה', body: `לשלוח את ההצעה ללקוח ${label}?`, ok: 'שלח', cancel: 'ביטול' }))) return;
         const dt = this.s.detail;
         if (!this.isLocked() && (dt.draft?.templateId || '') !== (dt.quote.templateId || '')) { if (!(await this.save())) return; } // chosen template must be saved before sending
+        this.s.sending = channel;
+        this.render();
         try {
             const r = await this.req('send', { id: this.s.detail.id, channels: [channel] });
             const res = r.results?.[channel];
+            this.s.sending = '';
             if (res?.sent) this.toast(`נשלח ${label}`); else await this.fail(res?.reason || 'השליחה נכשלה');
             await this.openDetail(this.s.detail.id);
             this.load();
-        } catch (err) { await this.fail(err); }
+        } catch (err) {
+            this.s.sending = '';
+            await this.fail(err);
+        }
     }
 
     proofsTable(rows = []) {
@@ -1300,7 +1310,7 @@ class QuotesDashboard extends HTMLElement {
             </div>
             <div class="foot">
               <div class="stepnav"><button type="button" data-act="stepPrev"${prev ? '' : ' disabled'}>→ ${prev ? esc(prev[1]) : 'הקודם'}</button><span class="sub">שלב ${idx + 1} מתוך ${STEPS.length} · ${STEPS[idx][1]}</span><button type="button" class="btn-p" data-act="stepNext"${next ? '' : ' disabled'}>${next ? esc(next[1]) : 'הבא'} ←</button></div>
-              <div class="acts"><button class="btn-d" data-act="cancel"${q.status === 'cancelled' ? ' disabled' : ''}>בטל הצעה</button><span><button data-act="preview">תצוגה מקדימה</button><button data-act="copyLink"${q.publicToken ? '' : ' disabled'}>העתק קישור</button>${q.publicToken && ['draft', 'sent', 'viewed'].includes(q.status) ? '<button data-act="sendEmail">שלח במייל</button><button data-act="sendWhatsapp">שלח בוואטסאפ</button>' : ''}${['lead', 'draft'].includes(q.status) ? '<button data-act="prepare">הכן לשליחה</button>' : ''}<button class="btn-p" data-act="save"${this.s.saving ? ' disabled' : ''}>${this.s.saving ? 'שומר...' : 'שמור'}</button></span></div>
+              <div class="acts"><button class="btn-d" data-act="cancel"${q.status === 'cancelled' || this.s.sending ? ' disabled' : ''}>בטל הצעה</button><span><button data-act="preview"${this.s.sending ? ' disabled' : ''}>תצוגה מקדימה</button><button data-act="copyLink"${q.publicToken && !this.s.sending ? '' : ' disabled'}>העתק קישור</button>${q.publicToken && ['draft', 'sent', 'viewed'].includes(q.status) ? `<button data-act="sendEmail" class="${this.s.sending === 'email' ? 'busy' : ''}"${this.s.sending ? ' disabled' : ''}>${this.s.sending === 'email' ? '<i class="spin"></i>שולח...' : 'שלח במייל'}</button><button data-act="sendWhatsapp" class="${this.s.sending === 'whatsapp' ? 'busy' : ''}"${this.s.sending ? ' disabled' : ''}>${this.s.sending === 'whatsapp' ? '<i class="spin"></i>שולח...' : 'שלח בוואטסאפ'}</button>` : ''}${['lead', 'draft'].includes(q.status) ? `<button data-act="prepare"${this.s.sending ? ' disabled' : ''}>הכן לשליחה</button>` : ''}<button class="btn-p" data-act="save"${this.s.saving || this.s.sending ? ' disabled' : ''}>${this.s.saving ? 'שומר...' : 'שמור'}</button></span></div>
             </div>
           </div>`;
     }

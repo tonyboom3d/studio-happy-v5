@@ -162,6 +162,20 @@ tr.row.alert td{background:#fff1f2}tr.row.alert:hover td{background:#ffe4e6}
 .rte:focus{outline:2px solid #bfdbfe;border-color:#2563eb}
 .ph{display:inline-block;background:#dbeafe;color:#1d4ed8;border:1px solid #93c5fd;border-radius:6px;padding:0 7px;margin:0 2px;font-weight:600;font-size:.9em;line-height:1.6;user-select:all;cursor:default}
 .ph.opt{background:#f3e8ff;color:#7e22ce;border-color:#d8b4fe}
+.optg{display:inline-flex;align-items:center;gap:5px;background:#faf5ff;border:1.5px dashed #a855f7;border-radius:8px;padding:0 6px;margin:0 2px;cursor:pointer;user-select:all;font-size:.95em}
+.optg:hover{background:#f3e8ff;border-style:solid}
+.optg .ph{margin:0}
+.optt{color:#6b21a8}
+.segpop{position:fixed;inset:0;z-index:60;background:rgba(15,23,42,.45);display:flex;align-items:center;justify-content:center}
+.segbox{background:#fff;border-radius:12px;padding:18px 20px;width:min(560px,94%);box-shadow:0 20px 50px rgba(0,0,0,.25);font-size:17px;display:grid;gap:10px}
+.segbox h3{margin:0;font-size:19px}
+.segbox label{display:grid;gap:4px;font-size:16px}
+.segbox i{color:#dc2626;font-style:normal}
+.segbox .sub{font-size:15px;margin:0}
+.segbox input{font-size:17px;padding:9px 11px;width:100%;box-sizing:border-box;border:1px solid #cbd5e1;border-radius:7px}
+.segprev{background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:8px 10px}
+.segerr{color:#dc2626;font-size:15px}
+.segerr:empty{display:none}
 .phLegend{font-size:15px;color:#475569;background:#fff;border:1px dashed #cbd5e1;border-radius:8px;padding:8px 10px}
 .rteHead{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
 .rteHead select{width:auto;min-width:220px}
@@ -544,6 +558,11 @@ class QuotesDashboard extends HTMLElement {
     }
 
     onClick(e) {
+        const segBtn = e.target.closest('[data-segact]');
+        if (segBtn) return this.segAction(segBtn.dataset.segact);
+        if (e.target.closest('.segpop')) return;
+        const segChip = e.target.closest('.rte .optg');
+        if (segChip) return this.openSeg(segChip, false);
         const el0 = e.target.closest('[data-act]');
         if (el0?.dataset.act === 'dlgOk') return this.closeDialog(true);
         if (el0?.dataset.act === 'dlgNo') return this.closeDialog(false);
@@ -869,10 +888,25 @@ class QuotesDashboard extends HTMLElement {
         return `<span class="ph${opt ? ' opt' : ''}" contenteditable="false" data-ph="${esc(key)}"${opt ? ' title="אופציונלי: אם אין ערך בהצעה, השורה כולה לא תוצג ללקוח"' : ''}>${esc(this.phLabel(key))}</span>`;
     }
 
-    /** Stored text keeps {{key}}; the editor shows each as a non-editable tag (blue, or purple when optional). */
+    /** Purple linked block: text + field shown together; stored as {{?key|pre|suf}} and hidden as one unit when empty. */
+    segTag(key, pre, suf) {
+        const part = (s) => (s ? `<span class="optt">${esc(s)}</span>` : '');
+        return `<span class="optg" contenteditable="false" data-seg="${esc(key)}" data-pre="${esc(pre)}" data-suf="${esc(suf)}" title="לחצו לעריכה · מוצג ללקוח רק כשיש ערך">🔗${part(pre)}<span class="ph opt">${esc(this.phLabel(key))}</span>${part(suf)}</span>`;
+    }
+
+    /** Stored text keeps {{key}} / {{?key|pre|suf}}; the editor shows them as non-editable tags. */
     rteHtml(field, title, text, cls) {
         const keys = this.s.modal?.placeholders || [];
-        const body = esc(text || '').replace(/\{\{\s*(\w+)\s*\}\}/g, (_, k) => this.phTag(k)).replace(/\n/g, '<br>');
+        const src = String(text || '');
+        const re = /\{\{\?(\w+)\|([^|{}]*)\|([^|{}]*)\}\}|\{\{\s*(\w+)\s*\}\}/g;
+        let body = '';
+        let last = 0;
+        const plain = (s) => esc(s).replace(/\n/g, '<br>');
+        for (const m of src.matchAll(re)) {
+            body += plain(src.slice(last, m.index)) + (m[1] ? this.segTag(m[1], m[2], m[3]) : this.phTag(m[4]));
+            last = m.index + m[0].length;
+        }
+        body += plain(src.slice(last));
         const opts = keys.map((k) => `<option value="${esc(k)}">${esc(this.phLabel(k))}${this.isOptionalPh(k) ? ' (אופציונלי)' : ''}</option>`).join('');
         return `<div class="full"><div class="rteHead"><b>${title}</b><select data-ins="${field}"><option value="">+ הוספת שדה דינאמי</option>${opts}</select></div>
             <div class="rte${cls}" contenteditable="true" data-rc="${field}">${body}</div></div>`;
@@ -883,6 +917,7 @@ class QuotesDashboard extends HTMLElement {
         const walk = (node) => {
             node.childNodes.forEach((n, i) => {
                 if (n.nodeType === 3) out += n.nodeValue.replace(/\u00A0/g, ' ');
+                else if (n.dataset?.seg) out += `{{?${n.dataset.seg}|${n.dataset.pre || ''}|${n.dataset.suf || ''}}}`;
                 else if (n.dataset?.ph) out += `{{${n.dataset.ph}}}`;
                 else if (n.nodeName === 'BR') { if (!(node !== ed && i === node.childNodes.length - 1)) out += '\n'; }
                 else if (/^(DIV|P)$/.test(n.nodeName)) { if (out && !out.endsWith('\n')) out += '\n'; walk(n); if (!out.endsWith('\n')) out += '\n'; }
@@ -906,8 +941,9 @@ class QuotesDashboard extends HTMLElement {
         if (!ed || !key) return;
         let r = this.rteSel?.field === field && ed.contains(this.rteSel.range.startContainer) ? this.rteSel.range : null;
         if (!r) { r = document.createRange(); r.selectNodeContents(ed); r.collapse(false); }
+        const opt = this.isOptionalPh(key);
         const tmp = document.createElement('span');
-        tmp.innerHTML = this.phTag(key);
+        tmp.innerHTML = opt ? this.segTag(key, '', '') : this.phTag(key);
         const chip = tmp.firstChild;
         const space = document.createTextNode(' ');
         r.deleteContents();
@@ -919,7 +955,61 @@ class QuotesDashboard extends HTMLElement {
         const sel = this.root.getSelection ? this.root.getSelection() : document.getSelection();
         sel?.removeAllRanges(); sel?.addRange(after);
         this.rteSel = { field, range: after.cloneRange() };
-        if (this.s.modal?.tpl) this.s.modal.tpl.config[field] = this.rteText(ed);
+        this.syncRte(ed);
+        if (opt) this.openSeg(chip, true);
+    }
+
+    syncRte(ed) {
+        if (ed && this.s.modal?.tpl) this.s.modal.tpl.config[ed.dataset.rc] = this.rteText(ed);
+    }
+
+    /** Popup for a linked block's text. Appended outside #app so the editor DOM survives. */
+    openSeg(chip, isNew) {
+        this.closeSeg();
+        const pop = document.createElement('div');
+        pop.className = 'segpop';
+        pop.innerHTML = `<div class="segbox" role="dialog">
+            <h3>טקסט מחובר לשדה <span class="ph opt">${esc(this.phLabel(chip.dataset.seg))}</span></h3>
+            <p class="sub">הטקסט והשדה יוצגו ללקוח יחד, ורק כשיש לשדה ערך בהצעה. אם אין ערך, שניהם לא יוצגו.</p>
+            <label><span>טקסט לפני השדה <i>*</i></span><input class="segpre" value="${esc(chip.dataset.pre || '')}" placeholder="למשל: מקדמה בסך"></label>
+            <label>טקסט אחרי השדה (לא חובה)<input class="segsuf" value="${esc(chip.dataset.suf || '')}" placeholder="למשל: ישולם עם החתימה."></label>
+            <div class="segprev"></div><div class="segerr"></div>
+            <div class="row"><button class="btn-p" data-segact="ok">אישור</button>${isNew ? '' : '<button class="btn-d" data-segact="del">הסרה</button>'}<button data-segact="cancel">ביטול</button></div></div>`;
+        this.root.appendChild(pop);
+        this.seg = { chip, isNew, pop };
+        const upd = () => {
+            const pre = pop.querySelector('.segpre').value.trim();
+            const suf = pop.querySelector('.segsuf').value.trim();
+            pop.querySelector('.segprev').innerHTML = `<span class="sub">ללקוח יוצג:</span> ${esc(pre)} <b>[${esc(this.phLabel(chip.dataset.seg))}]</b> ${esc(suf)}`;
+        };
+        pop.addEventListener('input', upd);
+        pop.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); this.segAction('ok'); } if (e.key === 'Escape') this.segAction('cancel'); });
+        upd();
+        pop.querySelector('.segpre').focus();
+    }
+
+    closeSeg() {
+        this.seg?.pop?.remove();
+        this.seg = null;
+    }
+
+    segAction(act) {
+        const s = this.seg;
+        if (!s) return;
+        const ed = s.chip.closest('.rte');
+        const clean = (v) => String(v || '').replace(/[|{}\r\n]/g, '').trim().slice(0, 300);
+        if (act === 'ok') {
+            const pre = clean(s.pop.querySelector('.segpre').value);
+            const suf = clean(s.pop.querySelector('.segsuf').value);
+            if (!pre) { s.pop.querySelector('.segerr').textContent = 'יש להזין טקסט לפני השדה.'; return; }
+            const tmp = document.createElement('span');
+            tmp.innerHTML = this.segTag(s.chip.dataset.seg, pre, suf);
+            s.chip.replaceWith(tmp.firstChild);
+        } else if (act === 'del' || (act === 'cancel' && s.isNew)) {
+            s.chip.remove();
+        }
+        this.closeSeg();
+        this.syncRte(ed);
     }
 
     blankConfig() {
@@ -943,7 +1033,7 @@ class QuotesDashboard extends HTMLElement {
               <label class="full">כותרת<input data-c="title" value="${esc(t.config.title)}"></label>
               ${this.rteHtml('intro', 'פתיחה', t.config.intro, '')}
               ${this.rteHtml('terms', 'תנאים', t.config.terms, ' tall')}
-              <div class="full phLegend"><span class="ph">כחול</span> שדה שתמיד מוצג · <span class="ph opt">סגול</span> שדה אופציונלי: אם בהצעה אין לו ערך (למשל אין מקדמה), השורה או הפסקה שבה הוא מופיע לא תוצג ללקוח.</div>
+              <div class="full phLegend"><span class="ph">כחול</span> שדה שתמיד מוצג · <span class="optg">🔗<span class="optt">טקסט</span><span class="ph opt">סגול</span></span> שדה אופציונלי עם טקסט מחובר: אם בהצעה אין לו ערך (למשל אין מקדמה), הטקסט המחובר והשדה לא יוצגו ללקוח, ושאר השורה נשארת. לחיצה על הבלוק לעריכה.</div>
               <label class="full">שורת סיום<input data-c="footer" value="${esc(t.config.footer)}"></label>
               ${t.legacy ? '<div class="full lockmsg">תבנית ישנה (HTML חופשי): שמירה תחליף אותה במבנה האחיד.</div>' : ''}</div>
               <div style="margin-top:10px"><button class="btn-p" data-act="tplSave">שמור תבנית</button></div></div>` : '';
@@ -955,6 +1045,7 @@ class QuotesDashboard extends HTMLElement {
     render() {
         const app = this.root.getElementById('app');
         if (!app) return;
+        this.closeSeg();
         if (this.lastRows !== `${this.s.items.length}|${this.s.loading}`) { this.lastRows = `${this.s.items.length}|${this.s.loading}`; dbg('render', { rows: this.s.items.length, loading: this.s.loading, error: this.s.error || undefined }); }
         const keep = this.root.activeElement?.id;
         app.innerHTML = `<div class="wrap">${this.topHtml()}${this.filtersHtml()}${this.s.error ? `<div class="err">${esc(this.s.error)}</div>` : ''}${this.tableHtml()}</div>${this.drawerHtml()}${this.modalHtml()}${this.dialogHtml()}${this.s.toast ? `<div class="toast">${esc(this.s.toast)}</div>` : ''}`;

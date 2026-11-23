@@ -87,7 +87,7 @@ export function sanitizeHtml(html) {
         .replace(/(href|src)\s*=\s*("|')\s*javascript:[^"']*\2/gi, '$1=$2#$2');
 }
 
-/** Fields the admin may leave empty per quote. A row/paragraph/list item holding an empty one is hidden from the customer. */
+/** Fields the admin may leave empty per quote (shown purple in the editor; inserted as linked segments). */
 export const OPTIONAL_FIELDS = [
     'companyName', 'customerEmail', 'eventLocation', 'eventAddress', 'workshop', 'participants', 'adults',
     'extrasList', 'pricePerParticipant', 'depositAmount', 'balanceAmount', 'balanceDueDate', 'expiresAt',
@@ -106,13 +106,15 @@ function emptyOptional(q) {
     return new Set(OPTIONAL_FIELDS.filter((k) => empty[k]));
 }
 
-/** Drops <tr>/<p>/<li>/<h3> blocks that reference an empty optional field, then empty lists. */
-function hideEmptyBlocks(body, q) {
-    const empty = emptyOptional(q);
-    if (!empty.size) return body;
+/** Linked segment: {{?key|text before|text after}} — the whole segment renders only when key has a value. */
+const SEG_RE = /\{\{\?(\w+)\|([^|{}]*)\|([^|{}]*)\}\}/g;
+
+/** Bare (unlinked) empty optional tags still drop their whole <tr>/<p>/<li>/<h3>; blocks left empty are removed. */
+function hideEmptyBlocks(body, empty) {
     const refsEmpty = (blk) => [...blk.matchAll(/\{\{\s*(\w+)\s*\}\}/g)].some((m) => empty.has(m[1]));
     return body
         .replace(/<(tr|p|li|h3)\b[^>]*>(?:(?!<\/\1>)[\s\S])*<\/\1>/gi, (blk) => (refsEmpty(blk) ? '' : blk))
+        .replace(/<(p|li|h3)\b[^>]*>\s*<\/\1>/gi, '')
         .replace(/<ul>\s*<\/ul>/gi, '')
         .replace(/<table[^>]*><tbody>\s*<\/tbody><\/table>/gi, '');
 }
@@ -152,10 +154,14 @@ function valuesFor(q) {
 /** @returns {{html: string, error: string|null}} */
 export function renderTemplate(bodyHtml, quote) {
     const body = sanitizeHtml(bodyHtml);
-    const unknown = [...new Set([...body.matchAll(/\{\{\s*(\w+)\s*\}\}/g)].map((m) => m[1]))]
+    const unknown = [...new Set([...body.matchAll(/\{\{\s*(\w+)\s*\}\}/g), ...body.matchAll(SEG_RE)].map((m) => m[1]))]
         .filter((k) => !PLACEHOLDERS.includes(k));
     if (unknown.length) return { html: '', error: `משתנים לא מוכרים בתבנית: ${unknown.join(', ')}` };
     const vals = valuesFor(quote);
-    const withoutFieldTable = body.replace(/<table style="width:100%;border-collapse:collapse;margin:14px 0"><tbody>[\s\S]*?<\/tbody><\/table>/g, '');
-    return { html: hideEmptyBlocks(withoutFieldTable, quote).replace(/\{\{\s*(\w+)\s*\}\}/g, (_, k) => vals[k] ?? ''), error: null };
+    const empty = emptyOptional(quote);
+    const html = body
+        .replace(/<table style="width:100%;border-collapse:collapse;margin:14px 0"><tbody>[\s\S]*?<\/tbody><\/table>/g, '')
+        .replace(SEG_RE, (_, k, pre, suf) => (empty.has(k) || !vals[k] ? ''
+            : `${pre ? `${pre} ` : ''}{{${k}}}${suf && !/^[.,:;!?)]/.test(suf) ? ' ' : ''}${suf}`));
+    return { html: hideEmptyBlocks(html, empty).replace(/\{\{\s*(\w+)\s*\}\}/g, (_, k) => vals[k] ?? ''), error: null };
 }

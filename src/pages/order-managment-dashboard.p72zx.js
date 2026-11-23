@@ -17,6 +17,7 @@ import {
     searchDashboardOrders,
     getPickupQueue,
     getOrderPromoCouponTags,
+    setSketchUploadOverride,
 } from 'backend/dashboardService.web.js';
 
 import {
@@ -464,6 +465,32 @@ async function handleDashboardAction(dashboardEl, detail) {
     case 'deleteSketchImage':
 
         await deleteSketchImage(payload.orderId, payload.sketchId);
+
+        break;
+
+    case 'setSketchUploadOverride':
+
+        try {
+
+            await setSketchUploadOverride(payload.orderId, payload.untilIso || null);
+
+        } catch (err) {
+
+            const message = String(err?.message || err);
+
+            dashboardEl.setAttribute('action-error', JSON.stringify({
+
+                type: 'setSketchUploadOverride',
+
+                orderId: payload.orderId,
+
+                message: `עדכון חלון העלאת הסקיצות נכשל: ${message.replace(/^INVALID_DATE:?/, '') || 'תאריך לא תקין'}`,
+
+                __ts: Date.now(),
+
+            }));
+
+        }
 
         break;
 

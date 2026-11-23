@@ -49,11 +49,32 @@ export function checkEditingWindow(order, now = new Date()) {
         order._createdDate
     );
 
+    // Staff override from the order dashboard ("פתיחת העלאת סקיצות").
+    const overrideUntil = order.sketchUploadOverrideUntil ? new Date(order.sketchUploadOverrideUntil) : null;
+    if (overrideUntil && !Number.isNaN(overrideUntil.getTime()) && now < overrideUntil && overrideUntil > deadline) {
+        return { allowed: true, reason: null, deadline: overrideUntil, policy, overridden: true };
+    }
+
     if (now >= deadline) {
         return { allowed: false, reason: 'EDITING_WINDOW_CLOSED', deadline, policy };
     }
 
     return { allowed: true, reason: null, deadline, policy };
+}
+
+/** Dashboard view of the sketch-upload window (null when the order has no window, e.g. non-tufting). */
+export function getSketchUploadWindowState(order, now = new Date()) {
+    if (!order?.workshopStart || !order?._createdDate) return null;
+    if (order.serviceId && !isTuftingServiceId(order.serviceId)) return null;
+    const win = checkEditingWindow(order, now);
+    const { deadline: originalDeadline } = computeSketchEditingDeadline(order.workshopStart, order._createdDate);
+    return {
+        open: win.allowed,
+        overridden: !!win.overridden,
+        deadline: win.deadline,
+        originalDeadline,
+        overrideUntil: order.sketchUploadOverrideUntil || null,
+    };
 }
 
 export function enrichOrderEditingFields(order) {

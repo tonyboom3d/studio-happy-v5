@@ -17,7 +17,7 @@ import { sendTuftingPromoCouponEmail } from 'backend/promoEmailService.js';
 import { SKETCH_STATUS, SKETCH_STATUSES, normalizeSketchStatus, isLockedStatus } from 'backend/sketchStatus.js';
 import { PERMISSION_KEYS, PERMISSION_DEFAULTS, refId } from 'backend/staffRoles.js';
 import { getItemWithRetry } from 'backend/wixDataRetry.js';
-import { TUFTING_SERVICE_IDS } from 'backend/sketchEditingPolicy.js';
+import { TUFTING_SERVICE_IDS, getSketchUploadWindowState } from 'backend/sketchEditingPolicy.js';
 import { toDateKey } from 'backend/availabilityRules.js';
 import { cancelRescheduleRequest as cancelRescheduleRequestCore } from 'backend/rescheduleService.web.js';
 import {
@@ -1434,6 +1434,7 @@ export const getInitialDashboardData = webMethod(Permissions.SiteMember, async (
                 customerRescheduleCount: order.customerRescheduleCount || 0,
                 customerNotes: order.customerNotes || '',
                 notes: order.internalNotes || '',
+                sketchUpload: mapSketchUploadWindow(order),
                 logs: mapOrderLog(order.actionLog),
                 sketches,
                 selectedProducts,
@@ -1994,6 +1995,45 @@ export const updateOrderInternalNotes = webMethod(Permissions.SiteMember, async 
     return { success: true };
 });
 
+function mapSketchUploadWindow(order) {
+    const state = getSketchUploadWindowState(order);
+    if (!state) return null;
+    const iso = (d) => (d ? new Date(d).toISOString() : null);
+    return {
+        open: state.open,
+        overridden: state.overridden,
+        deadline: iso(state.deadline),
+        originalDeadline: iso(state.originalDeadline),
+        overrideUntil: iso(state.overrideUntil),
+    };
+}
+
+/** Opens sketch upload for an order until `untilIso` (null/'' closes the override). */
+export const setSketchUploadOverride = webMethod(Permissions.SiteMember, async (orderId, untilIso, options) => {
+    await assertPermission('editSketchStatus');
+
+    const order = await getItemWithRetry('WorkshopOrders', orderId, { callerLabel: 'setSketchUploadOverride' });
+    if (!order) throw new Error('Order not found');
+
+    let until = null;
+    if (untilIso) {
+        until = new Date(untilIso);
+        if (Number.isNaN(until.getTime())) throw new Error('INVALID_DATE');
+        if (until.getTime() <= Date.now()) throw new Error('INVALID_DATE:התאריך שנבחר כבר עבר');
+    }
+
+    const updated = await wixData.update('WorkshopOrders', { ...order, sketchUploadOverrideUntil: until }, SA);
+    const fmt = (d) => d.toLocaleString('he-IL', {
+        timeZone: 'Asia/Jerusalem', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
+    });
+    await logOrderAction(
+        orderId,
+        until ? `העלאת סקיצות נפתחה עד ${fmt(until)}` : 'פתיחת העלאת הסקיצות בוטלה',
+        options?.user,
+    );
+    return { success: true, sketchUpload: mapSketchUploadWindow(updated) };
+});
+
 // The dashboard's "send WhatsApp" button only (re)sends this one
 // customer-facing approved template — Meta doesn't allow sending
 // admin-typed free text or a choice of template outside an approved
@@ -2347,6 +2387,7 @@ async function enrichOrdersIntoDashboardPayload(rawOrders, { typesMap, serviceId
                 customerRescheduleCount: order.customerRescheduleCount || 0,
                 customerNotes: order.customerNotes || '',
                 notes: order.internalNotes || '',
+                sketchUpload: mapSketchUploadWindow(order),
                 logs: mapOrderLog(order.actionLog),
                 sketches,
                 selectedProducts,

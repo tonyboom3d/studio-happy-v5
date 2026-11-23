@@ -3,6 +3,8 @@ import {
     getCurrentDashboardUser,
     updateSketchState,
     deleteSketchImage,
+    replaceSketchImage,
+    updateSketchFrameType,
     updateOrderInternalNotes,
     sendDashboardWhatsApp,
     saveTemplate,
@@ -17,6 +19,7 @@ import {
     searchDashboardOrders,
     getPickupQueue,
     getOrderPromoCouponTags,
+    reprintCheckinReceipts,
     setSketchUploadOverride,
 } from 'backend/dashboardService.web.js';
 
@@ -33,6 +36,8 @@ import {
 
 import { initiateAdminOtp } from 'backend/bookingService.web.js';
 
+import { authentication } from 'wix-members-frontend';
+
 const DASHBOARD_ELEMENT_ID = '#workshopsDashboard1';
 
 const VELO_DEBUG_BUILD = '2026-07-28-staff-tab-v2';
@@ -44,6 +49,8 @@ function veloStaffDebug(label, payload) {
 }
 
 let __wdLoadInFlight = null;
+
+let __wdDashboardCallsBlocked = false;
 
 let __wdLoadGeneration = 0;
 
@@ -76,6 +83,14 @@ $w.onReady(function () {
     if (!dashboardEl) {
 
         console.error(`[staff-admin][velo] ELEMENT_NOT_FOUND — ${DASHBOARD_ELEMENT_ID} missing on page`);
+
+        return;
+
+    }
+
+    if (!authentication.loggedIn()) {
+
+        denyDashboardAccess(dashboardEl);
 
         return;
 
@@ -137,7 +152,39 @@ $w.onReady(function () {
 
 });
 
+function denyDashboardAccess(dashboardEl) {
+
+    if (__wdDashboardCallsBlocked) return;
+
+    __wdDashboardCallsBlocked = true;
+
+    dashboardEl.setAttribute('dashboard-data', JSON.stringify({
+
+        error: 'ACCESS_DENIED',
+
+        __fetchedAt: Date.now(),
+
+    }));
+
+}
+
+function isDashboardPermissionError(message) {
+
+    return message.startsWith('ACCESS_DENIED')
+
+        || message.includes('No permission to access the web-method');
+
+}
+
 async function loadAndPushData(dashboardEl, filters) {
+
+    if (__wdDashboardCallsBlocked || !authentication.loggedIn()) {
+
+        denyDashboardAccess(dashboardEl);
+
+        return;
+
+    }
 
     const generation = ++__wdLoadGeneration;
 
@@ -189,15 +236,9 @@ async function loadAndPushData(dashboardEl, filters) {
 
             veloStaffDebug('getInitialDashboardData FAILED', { message });
 
-            if (message.startsWith('ACCESS_DENIED')) {
+            if (isDashboardPermissionError(message)) {
 
-                dashboardEl.setAttribute('dashboard-data', JSON.stringify({
-
-                    error: 'ACCESS_DENIED',
-
-                    __fetchedAt: Date.now(),
-
-                }));
+                denyDashboardAccess(dashboardEl);
 
             }
 
@@ -468,11 +509,79 @@ async function handleDashboardAction(dashboardEl, detail) {
 
         break;
 
+    case 'replaceSketchImage':
+
+        try {
+
+            await replaceSketchImage(payload.orderId, payload.sketchId, payload.imageBase64, payload.frameType, {
+
+                expectedUpdatedDate: payload.expectedUpdatedDate || null,
+
+            });
+
+        } catch (err) {
+
+            console.error('[order-managment-dashboard-velo] replaceSketchImage failed:', err?.message || err);
+
+            dashboardEl.setAttribute('action-error', JSON.stringify({
+
+                type: 'replaceSketchImage',
+
+                sketchId: payload.sketchId,
+
+                message: String(err?.message || err).startsWith('CONFLICT')
+                    ? 'הסקיצה השתנתה על ידי מישהו אחר — הנתונים רועננו, נסו שוב.'
+                    : `העלאת הסקיצה נכשלה: ${err?.message || err}`,
+
+                __ts: Date.now(),
+
+            }));
+
+        }
+
+        break;
+
+    case 'updateSketchFrameType':
+
+        try {
+
+            await updateSketchFrameType(payload.orderId, payload.sketchId, payload.frameType, {
+
+                expectedUpdatedDate: payload.expectedUpdatedDate || null,
+
+            });
+
+        } catch (err) {
+
+            console.error('[order-managment-dashboard-velo] updateSketchFrameType failed:', err?.message || err);
+
+            dashboardEl.setAttribute('action-error', JSON.stringify({
+
+                type: 'updateSketchFrameType',
+
+                sketchId: payload.sketchId,
+
+                message: String(err?.message || err).startsWith('CONFLICT')
+                    ? 'הסקיצה השתנתה על ידי מישהו אחר — הנתונים רועננו, נסו שוב.'
+                    : `עדכון הצורה נכשל: ${err?.message || err}`,
+
+                __ts: Date.now(),
+
+            }));
+
+        }
+
+        break;
+
     case 'setSketchUploadOverride':
 
         try {
 
-            await setSketchUploadOverride(payload.orderId, payload.untilIso || null);
+            await setSketchUploadOverride(payload.orderId, payload.untilIso || null, {
+
+                allowReadyEdit: typeof payload.allowReadyEdit === 'boolean' ? payload.allowReadyEdit : undefined,
+
+            });
 
         } catch (err) {
 
@@ -541,6 +650,32 @@ async function handleDashboardAction(dashboardEl, detail) {
     case 'rejectRescheduleRequest':
 
         await rejectRescheduleRequest(payload.orderId, payload.reason);
+
+        break;
+
+    case 'reprintCheckinReceipts':
+
+        try {
+
+            await reprintCheckinReceipts(payload.orderId);
+
+        } catch (err) {
+
+            console.error('[order-managment-dashboard-velo] reprintCheckinReceipts failed:', err?.message || err);
+
+            dashboardEl.setAttribute('action-error', JSON.stringify({
+
+                type: 'reprintCheckinReceipts',
+
+                orderId: payload.orderId,
+
+                message: err?.message || String(err),
+
+                __ts: Date.now(),
+
+            }));
+
+        }
 
         break;
 

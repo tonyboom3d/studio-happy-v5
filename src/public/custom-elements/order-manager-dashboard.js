@@ -424,7 +424,13 @@ var __wdTemplateHtml = `
                 <p id="sketchUploadModalStatus" class="text-xs text-gray-500"></p>
                 <label class="text-sm font-medium text-gray-700" for="sketchUploadUntil">לאפשר העלאה עד:</label>
                 <input id="sketchUploadUntil" type="datetime-local" class="compact-input w-full bg-gray-50" dir="ltr">
-                <button onclick="saveSketchUploadOverride()" class="bg-primary hover:bg-primary-hover text-white font-medium py-2 rounded-lg">פתח העלאה</button>
+                <div id="sketchUploadReadyChoice" class="hidden space-y-2 bg-amber-50 border border-amber-100 rounded-lg p-3 text-sm text-amber-900">
+                    <strong class="text-xs">יש סקיצות מוכנות בהזמנה. לאפשר עריכה שלהן?</strong>
+                    <label class="flex items-start gap-2"><input type="radio" name="sketchReadyMode" value="allow" onchange="refreshSketchUploadChoice()"><span>כן — הסקיצות המוכנות יוחזרו ל"פתוח לשינויים"</span></label>
+                    <label class="flex items-start gap-2"><input type="radio" name="sketchReadyMode" value="keep" onchange="refreshSketchUploadChoice()"><span>לא — ניתן לערוך רק סקיצות בסטטוס "פתוח לשינויים"</span></label>
+                    <p id="sketchUploadChoiceWarn" class="hidden text-xs text-red-600">אין סקיצה בסטטוס "פתוח לשינויים". יש לשנות לפחות סקיצה אחת לסטטוס זה כדי להמשיך.</p>
+                </div>
+                <button id="saveSketchUploadBtn" onclick="saveSketchUploadOverride()" class="bg-primary hover:bg-primary-hover text-white font-medium py-2 rounded-lg disabled:opacity-40 disabled:cursor-not-allowed">פתח העלאה</button>
                 <button id="clearSketchUploadBtn" onclick="clearSketchUploadOverride()" class="hidden bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 font-medium py-2 rounded-lg">בטל פתיחה (חזרה למועד המקורי)</button>
             </div>
         </div>
@@ -447,6 +453,71 @@ var __wdTemplateHtml = `
             <div class="flex gap-3 mt-6">
                 <button onclick="closeUnapprovedModal()" class="flex-1 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-lg transition-colors">ביטול</button>
                 <button onclick="confirmUnapprovedDeleteWarning()" class="flex-1 py-2 bg-red-500 hover:bg-red-600 text-white font-medium rounded-lg transition-colors">המשך</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Sketch image upload / replace -->
+    <div id="sketchUploadModal" class="modal fixed inset-0 z-[70] items-center justify-center p-4 bg-gray-900/60 backdrop-blur-sm">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg modal-content overflow-hidden max-h-[92vh] flex flex-col">
+            <div class="px-6 py-4 bg-gradient-to-l from-purple-600 to-purple-800 text-white flex items-center justify-between shrink-0">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center"><i class="ph-bold ph-upload-simple text-xl"></i></div>
+                    <div>
+                        <h3 id="sketchUploadTitle" class="text-lg font-bold leading-tight">העלאת תמונת סקיצה</h3>
+                        <p id="sketchUploadContext" class="text-xs text-purple-100"></p>
+                    </div>
+                </div>
+                <button onclick="closeSketchUploadModal()" class="text-white/70 hover:text-white text-xl"><i class="ph ph-x"></i></button>
+            </div>
+
+            <div id="sketchUploadFormStep" class="p-6 overflow-y-auto flex flex-col gap-5">
+                <div>
+                    <label class="flex items-center gap-2 text-sm font-bold text-gray-800 mb-2"><span class="w-5 h-5 rounded-full bg-purple-100 text-purple-700 text-xs flex items-center justify-center">1</span>צורת השטיח</label>
+                    <select id="sketchUploadShape" class="compact-input w-full bg-gray-50 py-2.5" onchange="refreshSketchUploadConfirm()">
+                        <option value="">בחרו צורה...</option>
+                        <option value="square">ריבוע</option>
+                        <option value="rectangle">מלבן</option>
+                        <option value="circle">עיגול</option>
+                        <option value="custom">צורני</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="flex items-center gap-2 text-sm font-bold text-gray-800 mb-2"><span class="w-5 h-5 rounded-full bg-purple-100 text-purple-700 text-xs flex items-center justify-center">2</span>תמונת הסקיצה <span class="text-xs font-normal text-gray-400">(JPG / PNG / WEBP)</span></label>
+                    <label for="sketchUploadFile" class="block cursor-pointer rounded-xl border-2 border-dashed border-purple-200 bg-purple-50/40 hover:bg-purple-50 hover:border-purple-400 transition-colors p-4 text-center">
+                        <div id="sketchUploadDropHint" class="py-6 flex flex-col items-center gap-2 text-purple-700">
+                            <i class="ph ph-image-square text-4xl"></i>
+                            <span class="text-sm font-bold">לחצו לבחירת תמונה</span>
+                            <span class="text-xs text-gray-500">התמונה תועלה ל-Media Manager</span>
+                        </div>
+                        <img id="sketchUploadPreview" style="display:none" class="mx-auto max-h-60 object-contain rounded-lg bg-white border border-gray-200" alt="">
+                        <span id="sketchUploadChangeHint" style="display:none" class="block mt-3 text-xs font-bold text-purple-700"><i class="ph ph-arrows-clockwise"></i> לחצו להחלפת התמונה</span>
+                    </label>
+                    <input id="sketchUploadFile" type="file" accept="image/jpeg,image/png,image/webp" style="display:none" onchange="onSketchUploadFileChange(this)">
+                </div>
+                <div class="flex gap-3">
+                    <button onclick="closeSketchUploadModal()" class="flex-1 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-xl transition-colors">ביטול</button>
+                    <button id="sketchUploadConfirmBtn" onclick="confirmSketchUpload()" disabled class="flex-[2] py-2.5 bg-primary hover:bg-primary-hover text-white font-bold rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed">העלאה</button>
+                </div>
+            </div>
+
+            <div id="sketchUploadWarnStep" style="display:none" class="p-6 overflow-y-auto flex flex-col gap-4">
+                <div class="bg-red-50 border border-red-200 rounded-xl p-4 text-sm text-red-800 flex gap-3 items-start">
+                    <i class="ph-fill ph-warning text-red-500 text-2xl mt-0.5"></i>
+                    <div>
+                        <p class="font-bold mb-1">הסקיצה הנוכחית תימחק</p>
+                        <p>התמונה החדשה תחליף את הסקיצה הקיימת, והסטטוס יאופס ל"פתוח לשינויים". לא ניתן לבטל פעולה זו.</p>
+                    </div>
+                </div>
+                <div class="flex items-center justify-center gap-3">
+                    <div class="text-center"><img id="sketchUploadOldImg" class="w-28 h-28 object-cover rounded-lg border border-gray-200 bg-white" alt=""><p class="text-[11px] text-gray-500 mt-1">נוכחית</p></div>
+                    <i class="ph-bold ph-arrow-left text-2xl text-gray-400"></i>
+                    <div class="text-center"><img id="sketchUploadNewImg" class="w-28 h-28 object-cover rounded-lg border-2 border-purple-300 bg-white" alt=""><p class="text-[11px] text-purple-700 font-bold mt-1">חדשה</p></div>
+                </div>
+                <div class="flex gap-3">
+                    <button onclick="backToSketchUploadForm()" class="flex-1 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-xl transition-colors">חזרה</button>
+                    <button onclick="executeSketchUpload()" class="flex-[2] py-2.5 bg-red-500 hover:bg-red-600 text-white font-bold rounded-xl transition-colors">מחיקה והחלפה</button>
+                </div>
             </div>
         </div>
     </div>
@@ -1553,7 +1624,6 @@ function __wdInjectGlobalAssets() {
             applyFilters();
             renderTemplatesManager();
             renderLastDataRefreshLabel();
-            startAutoDataRefresh();
             startWorkshopTimeStatusTick();
             initInstructorsTooltipCloseOnOutsideClick();
         }
@@ -1588,6 +1658,8 @@ function __wdInjectGlobalAssets() {
         // Host element reference, set in connectedCallback, used to dispatch
         // dashboard-action CustomEvents up to the Velo page code.
         let __wdHostElement = null;
+
+        const SKETCH_FRAME_LABELS = { square: 'ריבוע', rectangle: 'מלבן', circle: 'עיגול', custom: 'צורני' };
 
         function dispatchDashboardAction(type, payload) {
             if (!__wdHostElement) return;
@@ -1900,6 +1972,7 @@ function __wdInjectGlobalAssets() {
         }
 
         function refreshDashboard(options) {
+            if (__wdAccessDenied) return;
             const silent = options && options.silent === true;
             if (__wdIsDataRefreshing) return;
 
@@ -1969,6 +2042,7 @@ function __wdInjectGlobalAssets() {
             if (data.error === 'ACCESS_DENIED') {
                 console.warn('[workshops-dashboard] ACCESS_DENIED — showing access denied screen.');
                 __wdAccessDenied = true;
+                stopAutoDataRefresh();
                 __wdShowAccessDenied();
                 clearRefreshSafetyTimer();
                 setDataRefreshLoading(false);
@@ -2022,6 +2096,7 @@ function __wdInjectGlobalAssets() {
                 }
             }
             __wdDataLoaded = true;
+            if (__wdAutoRefreshTimerId == null) startAutoDataRefresh();
             const preserveUi = __wdPreserveUiOnNextApply;
             __wdPreserveUiOnNextApply = false;
             if (!preserveUi) {
@@ -3062,6 +3137,14 @@ function __wdInjectGlobalAssets() {
             dispatchDashboardAction('cancelPromoCouponNoShow', { orderId });
         }
 
+        /** Manual reprint of the self check-in customer+staff receipts (backend/checkin/checkinReceipts.js) — printer failures never block check-in, so this is the recovery path. */
+        function reprintCheckinReceipts(orderId, event) {
+            event?.stopPropagation();
+            if (!hasDashboardPermission('manageOrdersSystem')) return;
+            if (!confirm('להדפיס מחדש את קבלות הצ\'ק-אין (לקוח + צוות) להזמנה זו?')) return;
+            dispatchDashboardAction('reprintCheckinReceipts', { orderId });
+        }
+
         /** In-person QR add-on purchases linked to this order (backend/studioUpsellService.web.js). */
         function buildAddOnsHtml(order) {
             const addOns = Array.isArray(order.addOns) ? order.addOns : [];
@@ -3521,6 +3604,13 @@ function __wdInjectGlobalAssets() {
                 const groupsLabel = groupsCount === 1 ? 'קבוצה' : 'קבוצות';
                 const groupsHtml = `<div class="text-xs text-gray-500 font-medium flex items-center gap-1 mt-0.5"><i class="ph ph-users-three text-gray-400"></i> ${groupsCount} ${groupsLabel}</div>`;
 
+                // Self check-in — "X/Y הגיעו" per workshop (backend/checkinService.web.js).
+                const totalActiveOrders = getVisibleOrders().filter(o => o.workshopId === w.id && o.orderStatus !== 'cancelled').length;
+                const checkedInCount = w.checkedInCount || 0;
+                const checkinWorkshopHtml = totalActiveOrders > 0
+                    ? `<div class="text-xs font-semibold flex items-center gap-1 mt-1 ${checkedInCount >= totalActiveOrders ? 'text-emerald-600' : 'text-gray-500'}"><i class="ph-fill ph-check-circle"></i> ${checkedInCount}/${totalActiveOrders} הגיעו</div>`
+                    : '';
+
                 const isCupsWs = isCandlesWorkshop(w.id);
                 let progressHtml = '<span class="text-xs text-gray-400 font-medium">לא נדרש</span>';
                 if (isCupsWs) {
@@ -3577,6 +3667,7 @@ function __wdInjectGlobalAssets() {
                                 <span>${displayCapacity} / ${w.maxCapacity}</span>
                             </div>
                             ${groupsHtml}
+                            ${checkinWorkshopHtml}
                         </div>
                     </td>
                     <td class="px-6 py-4 whitespace-nowrap text-center" data-label="התקדמות סקיצות">
@@ -3731,6 +3822,10 @@ function __wdInjectGlobalAssets() {
                 const groupEmail = o.organizerEmail || '—';
                 const legacyBadge = isLegacy
                     ? `<span class="bg-gray-200 text-gray-600 px-1.5 py-0.5 rounded text-[10px] font-bold border border-gray-300 whitespace-nowrap" title="הזמנה שנעשתה מחוץ למערכת החדשה - ללא מעקב סקיצות/הערות">הזמנה ישנה</span>`
+                    : '';
+                // Self check-in (backend/checkinService.web.js) — null until the customer completes the QR/OTP flow at the studio.
+                const checkinBadge = o.checkedInAt
+                    ? `<span class="bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded text-[10px] font-bold border border-emerald-200 whitespace-nowrap flex items-center gap-1" title="נרשם צ'ק-אין"><i class="ph-fill ph-check-circle"></i> הגיע/ה ${new Date(o.checkedInAt).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })}</span>`
                     : '';
                 const isCandles = isCandlesOrder(o);
                 const isCeramics = o?.workshopType === 'ceramics';
@@ -3895,6 +3990,7 @@ function __wdInjectGlobalAssets() {
                                     ${groupName}
                                     ${buildCustomerOrderLinkHtml(o)}
                                     ${legacyBadge}
+                                    ${checkinBadge}
                                     ${isCancelled ? '<span class="bg-red-100 text-red-600 px-2 py-0.5 rounded-md text-[10px] font-bold">בוטל</span>' : ''}
                                 </div>
                                 ${buildPromoCouponSlotHtml(o)}
@@ -3916,6 +4012,10 @@ function __wdInjectGlobalAssets() {
                             <button onclick="openWaModal('${o.id}')" class="w-9 h-9 flex items-center justify-center rounded-full bg-green-50 text-green-600 hover:bg-green-500 hover:text-white transition-all shadow-sm border border-green-200 shrink-0 ${!canSendWhatsApp?'pointer-events-none opacity-40':''}" title="שלח הודעה ללקוח">
                                 <i class="ph-fill ph-whatsapp-logo text-xl"></i>
                             </button>
+                            ${o.checkedInAt && hasDashboardPermission('manageOrdersSystem') ? `
+                            <button onclick="reprintCheckinReceipts('${o.id}', event)" class="w-9 h-9 flex items-center justify-center rounded-full bg-amber-50 text-amber-600 hover:bg-amber-500 hover:text-white transition-all shadow-sm border border-amber-200 shrink-0" title="הדפסה מחדש של קבלות הצ'ק-אין">
+                                <i class="ph-fill ph-printer text-xl"></i>
+                            </button>` : ''}
                             ${pickupBtnHtml}
                             ${stackedSketchesHtml}
                         </div>
@@ -3936,14 +4036,19 @@ function __wdInjectGlobalAssets() {
                     const existingSketches = sortSketchesByRugIndex(o.sketches || []);
                     sketchesHtml = `
                         <div class="px-8 pt-5 pb-2 w-full">
-                            <div class="flex justify-between items-center mb-4">
+                            <div class="flex justify-between items-center mb-4 gap-3">
                                 <h4 class="text-sm font-bold text-gray-800">סקיצות להכנה: <span class="text-gray-500 font-medium">${orderSketchTotals.selected}/${orderSketchTotals.total} נבחרו · ${orderSketchTotals.ready}/${orderSketchTotals.total} ${getReadyProgressLabel(orderSketchTotals.total)}</span></h4>
-                                <div class="flex items-center gap-2" dir="ltr">
+                                <div class="flex items-center gap-2">
+                                    ${(!isCancelled && hasDashboardPermission('editSketchStatus'))
+                                        ? `<button type="button" onclick="openOrderSketchUpload('${o.id}', event)" class="px-3 py-1.5 text-xs font-bold rounded-lg border border-purple-300 bg-purple-600 text-white hover:bg-purple-700 transition-colors flex items-center gap-1.5"><i class="ph ph-upload-simple"></i>העלאת סקיצה</button>`
+                                        : ''}
+                                    <div class="flex items-center gap-2" dir="ltr">
                                     <button onclick="scrollCarousel('${o.id}', -256, event)" class="bg-white shadow-sm border border-gray-200 rounded-full w-8 h-8 flex items-center justify-center text-gray-600 hover:text-primary hover:bg-gray-50 transition-all"><i class="ph-bold ph-caret-left text-sm"></i></button>
                                     <button onclick="scrollCarousel('${o.id}', 256, event)" class="bg-white shadow-sm border border-gray-200 rounded-full w-8 h-8 flex items-center justify-center text-gray-600 hover:text-primary hover:bg-gray-50 transition-all"><i class="ph-bold ph-caret-right text-sm"></i></button>
+                                    </div>
                                 </div>
                             </div>
-                            <div id="carousel-${o.id}" class="flex gap-4 overflow-x-auto overflow-y-hidden hide-scrollbar snap-x snap-mandatory pb-4 w-full" style="scroll-behavior: smooth;">`;
+                            <div id="carousel-${o.id}" class="flex gap-4 overflow-x-auto items-start hide-scrollbar snap-x snap-mandatory pb-4 w-full" style="scroll-behavior: smooth;">`;
                     
                     existingSketches.forEach((s, idx) => {
                         const statusColors = {
@@ -3963,8 +4068,17 @@ function __wdInjectGlobalAssets() {
                         const childBadge = buildChildSketchBadge(s);
                         const sketchNumberBadge = `<span class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-200">סקיצה ${sketchNum}</span>`;
 
-                        const frameTypeLabels = { square: 'ריבוע', circle: 'עיגול', custom: 'צורה חופשית' };
-                        const frameBadge = s.frameType && frameTypeLabels[s.frameType]
+                        const frameTypeLabels = SKETCH_FRAME_LABELS;
+                        const canReplaceSketch = !isCancelled && !sketchCollected
+                            && hasDashboardPermission('editSketchStatus');
+                        const replaceBtnHtml = canReplaceSketch
+                            ? `<button type="button" onclick="openSketchUploadModal('${o.id}', '${s.id}', event)" class="w-full py-1.5 text-xs font-bold rounded-lg border border-purple-200 bg-purple-50 text-purple-700 hover:bg-purple-100 transition-colors flex items-center justify-center gap-1.5 z-10"><i class="ph ph-upload-simple"></i>${s.img ? 'החלפת תמונת סקיצה' : 'העלאת תמונת סקיצה'}</button>`
+                            : '';
+                        const canEditFrame = !isCancelled && !sketchCollected && hasDashboardPermission('editSketchStatus');
+                        const frameSelectHtml = canEditFrame
+                            ? `<div class="z-10 flex items-center gap-2"><span class="text-[11px] font-bold text-gray-500 shrink-0">צורה:</span><select onchange="updateSketchFrame('${o.id}', '${s.id}', this.value, this)" class="compact-input flex-1 py-1.5 text-xs bg-gray-50 font-medium" title="צורת השטיח"><option value="" disabled ${s.frameType ? '' : 'selected'}>בחרו צורה...</option>${Object.keys(frameTypeLabels).map((k) => `<option value="${k}" ${s.frameType === k ? 'selected' : ''}>${frameTypeLabels[k]}</option>`).join('')}</select></div>`
+                            : '';
+                        const frameBadge = !canEditFrame && s.frameType && frameTypeLabels[s.frameType]
                             ? `<span class="text-[10px] font-bold px-2 py-0.5 bg-purple-50 text-purple-700 rounded-md border border-purple-100 shadow-sm" title="מסגרת">${frameTypeLabels[s.frameType]}</span>`
                             : '';
 
@@ -3988,7 +4102,7 @@ function __wdInjectGlobalAssets() {
                              </div>`;
 
                         sketchesHtml += `
-                            <div class="bg-white border border-gray-200 rounded-xl p-3 shadow-sm flex flex-col gap-3 w-[240px] shrink-0 snap-start relative overflow-hidden transition-shadow hover:shadow-md">
+                            <div class="bg-white border border-gray-200 rounded-xl p-3 shadow-sm flex flex-col gap-3 w-[240px] shrink-0 snap-start relative transition-shadow hover:shadow-md">
                                 <div class="flex justify-between items-center z-10 gap-1 flex-wrap">
                                     ${sketchNumberBadge}
                                     <span class="text-xs font-bold text-gray-700 bg-gray-100 px-2 py-0.5 rounded">${sketchLabel}</span>
@@ -4013,6 +4127,8 @@ function __wdInjectGlobalAssets() {
                                         <option value="לא מאושרת לביצוע" ${s.status==='לא מאושרת לביצוע'?'selected':''} ${!canRejectSketchStatus?'disabled':''}>לא מאושרת לביצוע</option>
                                     </select>`}
                                 </div>
+                                ${frameSelectHtml}
+                                ${replaceBtnHtml}
                             </div>
                         `;
                     });
@@ -4032,6 +4148,9 @@ function __wdInjectGlobalAssets() {
                                     <i class="ph ph-image-broken text-3xl mb-2 text-gray-300"></i>
                                     <span class="text-[11px] font-bold text-gray-500">טרם נבחרה סקיצה</span>
                                 </div>
+                                ${(!isCancelled && hasDashboardPermission('editSketchStatus'))
+                                    ? `<button type="button" onclick="openSketchUploadModal('${o.id}', '', event)" class="w-full py-1.5 text-xs font-bold rounded-lg border border-purple-200 bg-purple-50 text-purple-700 hover:bg-purple-100 transition-colors flex items-center justify-center gap-1.5 z-10"><i class="ph ph-upload-simple"></i>העלאת תמונת סקיצה</button>`
+                                    : ''}
                             </div>
                         `;
                     }
@@ -4629,6 +4748,200 @@ function __wdInjectGlobalAssets() {
             applyFilters();
         }
 
+        // ---- Sketch image upload / replace (staff) ----
+        const SKETCH_UPLOAD_MAX_DATAURL = 440 * 1024; // webMethod payload cap is ~512KB
+        let __wdSketchUpload = { orderId: null, sketchId: null, dataUrl: null, hadImage: false };
+
+        function showSketchUploadStep(step) {
+            document.getElementById('sketchUploadFormStep').style.display = step === 'form' ? 'flex' : 'none';
+            document.getElementById('sketchUploadWarnStep').style.display = step === 'warn' ? 'flex' : 'none';
+        }
+
+        /** Header action: fill an empty sketch, open a free slot, or replace the first open one. */
+        function openOrderSketchUpload(orderId, event) {
+            if (event) event.stopPropagation();
+            const order = mockOrders.find(o => o.id === orderId);
+            if (!order) return;
+            const sketches = sortSketchesByRugIndex(order.sketches || []);
+            const isCollected = (s) => (order.pickupItems || []).some(pi => pi.key === `sketch:${s.id}` && pi.state === 'collected');
+            const empty = sketches.find(s => !s.img && !isCollected(s));
+            if (empty) {
+                openSketchUploadModal(orderId, empty.id, event);
+                return;
+            }
+            const totals = getOrderSketchTotals(order);
+            if (sketches.length < totals.total) {
+                openSketchUploadModal(orderId, '', event);
+                return;
+            }
+            const target = sketches.find(s => !isCollected(s));
+            if (target) openSketchUploadModal(orderId, target.id, event);
+        }
+
+        /** sketchId '' = empty slot (a new sketch row is created on the server). */
+        function openSketchUploadModal(orderId, sketchId, event) {
+            if (event) event.stopPropagation();
+            const order = mockOrders.find(o => o.id === orderId);
+            const sketch = sketchId ? order?.sketches?.find(s => s.id === sketchId) : null;
+            if (!order || (sketchId && !sketch)) return;
+            __wdSketchUpload = { orderId, sketchId: sketchId || '', dataUrl: null, hadImage: !!sketch?.img };
+            document.getElementById('sketchUploadTitle').textContent = sketch?.img ? 'החלפת תמונת סקיצה' : 'העלאת תמונת סקיצה';
+            document.getElementById('sketchUploadContext').textContent = sketch
+                ? formatSketchLogContext(order, sketch)
+                : (order.organizerName || order.groupName || 'סקיצה חדשה');
+            document.getElementById('sketchUploadShape').value = sketch?.frameType || '';
+            document.getElementById('sketchUploadFile').value = '';
+            const preview = document.getElementById('sketchUploadPreview');
+            preview.removeAttribute('src');
+            preview.style.display = 'none';
+            document.getElementById('sketchUploadDropHint').style.display = 'flex';
+            document.getElementById('sketchUploadChangeHint').style.display = 'none';
+            document.getElementById('sketchUploadOldImg').src = sketch?.img || '';
+            document.getElementById('sketchUploadConfirmBtn').textContent = sketch?.img ? 'המשך' : 'העלאה';
+            showSketchUploadStep('form');
+            refreshSketchUploadConfirm();
+            openModal('sketchUploadModal');
+        }
+
+        function closeSketchUploadModal() {
+            closeModal('sketchUploadModal');
+            __wdSketchUpload = { orderId: null, sketchId: null, dataUrl: null, hadImage: false };
+        }
+
+        function refreshSketchUploadConfirm() {
+            const btn = document.getElementById('sketchUploadConfirmBtn');
+            if (!btn) return;
+            const shape = document.getElementById('sketchUploadShape').value;
+            btn.disabled = !(shape && __wdSketchUpload.dataUrl);
+        }
+
+        function compressImageToDataUrl(file) {
+            return new Promise((resolve, reject) => {
+                const url = URL.createObjectURL(file);
+                const img = new Image();
+                img.onload = () => {
+                    URL.revokeObjectURL(url);
+                    let maxDim = 1600;
+                    for (let attempt = 0; attempt < 5; attempt++) {
+                        const scale = Math.min(1, maxDim / Math.max(img.naturalWidth, img.naturalHeight));
+                        const canvas = document.createElement('canvas');
+                        canvas.width = Math.max(1, Math.round(img.naturalWidth * scale));
+                        canvas.height = Math.max(1, Math.round(img.naturalHeight * scale));
+                        const ctx = canvas.getContext('2d');
+                        ctx.fillStyle = '#ffffff';
+                        ctx.fillRect(0, 0, canvas.width, canvas.height);
+                        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                        for (const q of [0.85, 0.7, 0.55]) {
+                            const dataUrl = canvas.toDataURL('image/jpeg', q);
+                            if (dataUrl.length <= SKETCH_UPLOAD_MAX_DATAURL) { resolve(dataUrl); return; }
+                        }
+                        maxDim = Math.round(maxDim * 0.75);
+                    }
+                    reject(new Error('התמונה גדולה מדי.'));
+                };
+                img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('לא ניתן לקרוא את התמונה.')); };
+                img.src = url;
+            });
+        }
+
+        async function onSketchUploadFileChange(input) {
+            const file = input?.files?.[0];
+            if (!file) return;
+            if (!/^image\/(jpeg|png|webp)$/.test(file.type)) {
+                alert('פורמט לא נתמך. יש להעלות JPG, PNG או WEBP.');
+                input.value = '';
+                return;
+            }
+            try {
+                __wdSketchUpload.dataUrl = await compressImageToDataUrl(file);
+                const preview = document.getElementById('sketchUploadPreview');
+                preview.src = __wdSketchUpload.dataUrl;
+                preview.style.display = 'block';
+                document.getElementById('sketchUploadDropHint').style.display = 'none';
+                document.getElementById('sketchUploadChangeHint').style.display = 'block';
+            } catch (err) {
+                __wdSketchUpload.dataUrl = null;
+                alert(err?.message || 'שגיאה בעיבוד התמונה.');
+                input.value = '';
+            }
+            refreshSketchUploadConfirm();
+        }
+
+        function backToSketchUploadForm() {
+            showSketchUploadStep('form');
+        }
+
+        /** Step 1 → (replace only) show the deletion warning; new uploads save immediately. */
+        function confirmSketchUpload() {
+            const { dataUrl } = __wdSketchUpload;
+            const frameType = document.getElementById('sketchUploadShape').value;
+            if (!dataUrl || !frameType) return;
+            if (__wdSketchUpload.hadImage) {
+                document.getElementById('sketchUploadNewImg').src = dataUrl;
+                showSketchUploadStep('warn');
+                return;
+            }
+            executeSketchUpload();
+        }
+
+        function executeSketchUpload() {
+            const { orderId, sketchId, dataUrl, hadImage } = __wdSketchUpload;
+            const frameType = document.getElementById('sketchUploadShape').value;
+            const order = mockOrders.find(o => o.id === orderId);
+            const existing = sketchId ? order?.sketches?.find(s => s.id === sketchId) : null;
+            if (!order || !dataUrl || !frameType || (sketchId && !existing)) return;
+            if (!hasDashboardPermission('editSketchStatus') || (hadImage && !hasDashboardPermission('deleteSketchImage'))) {
+                alert('אין לך הרשאה להחליף סקיצה.');
+                return;
+            }
+            const expectedUpdatedDate = existing?.updatedDate || null;
+
+            if (existing) {
+                existing.img = dataUrl;
+                existing.frameType = frameType;
+                existing.status = 'פתוח לשינויים';
+                addLog(orderId, `${formatSketchLogContext(order, existing)} — ${hadImage ? 'הסקיצה הוחלפה בתמונה שהועלתה על ידי העובד' : 'הועלתה תמונת סקיצה על ידי העובד'}`);
+            } else {
+                order.sketches = order.sketches || [];
+                order.sketches.push({
+                    id: `tmp_${Date.now()}`, img: dataUrl, wixFileUrl: null, size: '60x60', status: 'פתוח לשינויים',
+                    source: 'upload', frameType, rugIndex: order.sketches.length, participantName: null,
+                    participantId: null, includesChild: false, childrenCount: 0, updatedDate: null,
+                });
+                addLog(orderId, 'הועלתה תמונת סקיצה על ידי העובד');
+            }
+            dispatchDashboardAction('replaceSketchImage', { orderId, sketchId: sketchId || null, imageBase64: dataUrl, frameType, expectedUpdatedDate });
+            closeSketchUploadModal();
+            rerenderOrderDetails(orderId);
+        }
+
+        function updateSketchFrame(orderId, sketchId, frameType, selectElement) {
+            const order = mockOrders.find(o => o.id === orderId);
+            const sketch = order?.sketches?.find(s => s.id === sketchId);
+            if (!order || !sketch || !SKETCH_FRAME_LABELS[frameType]) return;
+            if (!hasDashboardPermission('editSketchStatus')) {
+                alert('אין לך הרשאה לעדכן צורת סקיצה.');
+                if (selectElement) selectElement.value = sketch.frameType || '';
+                return;
+            }
+            sketch.frameType = frameType;
+            addLog(orderId, `${formatSketchLogContext(order, sketch)} — צורת השטיח שונתה ל"${SKETCH_FRAME_LABELS[frameType]}" על ידי העובד`);
+            dispatchDashboardAction('updateSketchFrameType', { orderId, sketchId, frameType, expectedUpdatedDate: sketch.updatedDate || null });
+            rerenderOrderDetails(orderId);
+        }
+
+        function rerenderOrderDetails(orderId) {
+            const w = mockWorkshops.find(x => x.id === currentWorkshopId);
+            renderOrdersTable(currentWorkshopId, workshopTypeOf(w).requiresSketch);
+            const row = document.getElementById(`detail-${orderId}`);
+            const icon = document.getElementById(`icon-${orderId}`);
+            if (row) {
+                row.classList.remove('hidden');
+                if (icon) icon.classList.add('-rotate-90');
+            }
+            applyFilters();
+        }
+
         function executeDeleteSketch() {
             if (!hasDashboardPermission('deleteSketchImage')) {
                 alert('אין לך הרשאה למחוק תמונת סקיצה.');
@@ -4875,7 +5188,10 @@ function __wdInjectGlobalAssets() {
             const btn = hasDashboardPermission('editSketchStatus')
                 ? `<button type="button" onclick="openSketchUploadModal('${o.id}', event)" class="underline text-primary hover:text-primary-hover">${su.open && !su.overridden ? 'הארכה' : su.overridden ? 'שינוי' : 'פתח העלאה'}</button>`
                 : '';
-            return `<div class="px-8 pb-2 pt-0 w-full"><p class="text-[11px] ${cls} flex items-center gap-1.5"><i class="ph ${icon}"></i>${text}${btn ? ' · ' + btn : ''}</p></div>`;
+            const closeBtn = (su.overridden && hasDashboardPermission('editSketchStatus'))
+                ? `<button type="button" onclick="event.stopPropagation(); clearSketchUploadOverride('${o.id}')" class="underline text-red-600 hover:text-red-700">סגור פתיחה</button>`
+                : '';
+            return `<div class="px-8 pb-2 pt-0 w-full"><p class="text-[11px] ${cls} flex items-center gap-1.5 flex-wrap"><i class="ph ${icon}"></i>${text}${btn ? ' · ' + btn : ''}${closeBtn ? ' · ' + closeBtn : ''}</p></div>`;
         }
 
         function toDateTimeLocalValue(date) {
@@ -4897,7 +5213,30 @@ function __wdInjectGlobalAssets() {
             input.min = toDateTimeLocalValue(new Date());
             input.value = toDateTimeLocalValue(base);
             document.getElementById('clearSketchUploadBtn').classList.toggle('hidden', !su.overridden);
+            document.querySelectorAll('input[name="sketchReadyMode"]').forEach(r => { r.checked = false; });
+            const hasReady = (o.sketches || []).some(s => s.status === 'מוכנה');
+            document.getElementById('sketchUploadReadyChoice').classList.toggle('hidden', !hasReady);
+            refreshSketchUploadChoice();
             openModal('sketchUploadModal');
+        }
+
+        function refreshSketchUploadChoice() {
+            const o = mockOrders.find(x => x.id === currentOrderId);
+            const btn = document.getElementById('saveSketchUploadBtn');
+            const warn = document.getElementById('sketchUploadChoiceWarn');
+            if (!o || !btn) return;
+            const sketches = o.sketches || [];
+            if (!sketches.some(s => s.status === 'מוכנה')) {
+                btn.disabled = false;
+                warn.classList.add('hidden');
+                return;
+            }
+            const picked = document.querySelector('input[name="sketchReadyMode"]:checked');
+            const openCount = sketches.filter(s => !s.status || s.status === 'פתוח לשינויים').length
+                + Math.max(0, (o.rugCount || 0) - sketches.length);
+            const blocked = picked && picked.value === 'keep' && openCount === 0;
+            warn.classList.toggle('hidden', !blocked);
+            btn.disabled = !picked || blocked;
         }
 
         function saveSketchUploadOverride() {
@@ -4907,11 +5246,18 @@ function __wdInjectGlobalAssets() {
                 alert('יש לבחור תאריך ושעה עתידיים.');
                 return;
             }
-            dispatchDashboardAction('setSketchUploadOverride', { orderId: currentOrderId, untilIso: until.toISOString() });
+            const payload = { orderId: currentOrderId, untilIso: until.toISOString() };
+            const picked = document.querySelector('input[name="sketchReadyMode"]:checked');
+            if (!document.getElementById('sketchUploadReadyChoice').classList.contains('hidden')) {
+                if (!picked) return;
+                payload.allowReadyEdit = picked.value === 'allow';
+            }
+            dispatchDashboardAction('setSketchUploadOverride', payload);
             closeModal('sketchUploadModal');
         }
 
-        function clearSketchUploadOverride() {
+        function clearSketchUploadOverride(orderId) {
+            if (typeof orderId === 'string') currentOrderId = orderId;
             dispatchDashboardAction('setSketchUploadOverride', { orderId: currentOrderId, untilIso: null });
             closeModal('sketchUploadModal');
         }
@@ -5323,6 +5669,15 @@ window.closeModal = closeModal;
 window.closeSidePanel = closeSidePanel;
 window.closeTemplateEditor = closeTemplateEditor;
 window.closeUnapprovedModal = closeUnapprovedModal;
+window.openOrderSketchUpload = openOrderSketchUpload;
+window.openSketchUploadModal = openSketchUploadModal;
+window.closeSketchUploadModal = closeSketchUploadModal;
+window.refreshSketchUploadConfirm = refreshSketchUploadConfirm;
+window.onSketchUploadFileChange = onSketchUploadFileChange;
+window.confirmSketchUpload = confirmSketchUpload;
+window.executeSketchUpload = executeSketchUpload;
+window.backToSketchUploadForm = backToSketchUploadForm;
+window.updateSketchFrame = updateSketchFrame;
 window.confirmUnapprovedDeleteWarning = confirmUnapprovedDeleteWarning;
 window.deleteTemplate = deleteTemplate;
 window.downloadSketchImage = downloadSketchImage;
@@ -5331,10 +5686,12 @@ window.openNoteModal = openNoteModal;
 window.openTemplateEditor = openTemplateEditor;
 window.openTemplatesManager = openTemplatesManager;
 window.openWaModal = openWaModal;
+window.reprintCheckinReceipts = reprintCheckinReceipts;
 window.refreshDashboard = refreshDashboard;
 window.saveNote = saveNote;
 window.openSketchUploadModal = openSketchUploadModal;
 window.saveSketchUploadOverride = saveSketchUploadOverride;
+window.refreshSketchUploadChoice = refreshSketchUploadChoice;
 window.clearSketchUploadOverride = clearSketchUploadOverride;
 window.saveTemplate = saveTemplate;
 window.scrollCarousel = scrollCarousel;

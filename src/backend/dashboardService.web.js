@@ -31,6 +31,8 @@ import {
     mapTemplateRow,
     resolveTemplateUse,
 } from 'backend/whatsappTemplates.js';
+import { reprintCheckinReceipts as reprintCheckinReceiptsCore } from 'backend/checkin/checkinReceipts.js';
+import { uploadBase64ImageToWixMedia } from 'backend/studioUpsell/mediaUpload.js';
 
 const SA = { suppressAuth: true };
 const ORDER_DEBUG_USER_ID = 'e5af95ac-27b1-45e9-9de4-bd89adffc953';
@@ -1461,8 +1463,13 @@ export const getInitialDashboardData = webMethod(Permissions.SiteMember, async (
                 promoCouponCode: issuedPromoCouponCode(promoCouponsByOrderId[order._id]),
                 addOns: (addOnsByWorkshopOrderId[order._id] || []).map(mapAddOnOrderForDashboard),
                 addOnsTotal: (addOnsByWorkshopOrderId[order._id] || []).reduce((sum, r) => sum + (Number(r.total) || 0), 0),
+                // Self check-in (see backend/checkinService.web.js) — null until the
+                // customer completes the QR/OTP flow at the studio.
+                checkedInAt: order.checkedInAt || null,
             });
         }
+
+        const checkedInCount = sessionOrders.filter((o) => !o.cancelledAt && !!o.checkedInAt).length;
 
         // Hour-based (not day-rounded) so a session 47h away isn't pushed to
         // "2 days" and accidentally excluded/included at the wrong boundary.
@@ -1503,6 +1510,8 @@ export const getInitialDashboardData = webMethod(Permissions.SiteMember, async (
             totalSketchesNeeded,
             sketchesSelected,
             sketchesReady,
+            // Self check-in — "X/Y הגיעו" count for today's workshops (see checkedInAt above).
+            checkedInCount,
             hasAlert,
             hasNotReadyAlert,
             isUrgent,
@@ -1985,6 +1994,141 @@ export const deleteSketchImage = webMethod(Permissions.SiteMember, async (orderI
     return { sketch: mapSketch(updated, participantsByOrderId[orderId], orderRecord) };
 });
 
+const SA_CONSISTENT = { suppressAuth: true, consistentRead: true };
+const SKETCH_UPLOAD_FRAME_TYPES = ['square', 'rectangle', 'circle', 'custom'];
+const SKETCH_UPLOAD_MAX_DATAURL_LENGTH = 480 * 1024;
+
+/**
+ * Staff upload/replace of a sketch image. Uploads to Media Manager, then
+ * re-reads the CURRENT CMS record (consistent read) and updates only the
+ * image/frame/status fields on top of it — every other field is preserved.
+ */
+export const replaceSketchImage = webMethod(Permissions.SiteMember, async (orderId, sketchId, imageBase64, frameType, options) => {
+    const role = await assertPermission('editSketchStatus');
+
+    if (!SKETCH_UPLOAD_FRAME_TYPES.includes(frameType)) throw new Error('INVALID_FRAME_TYPE');
+    if (typeof imageBase64 !== 'string' || !/^data:image\/(png|jpe?g|webp);base64,/.test(imageBase64)) {
+        throw new Error('INVALID_IMAGE');
+    }
+    if (imageBase64.length > SKETCH_UPLOAD_MAX_DATAURL_LENGTH) throw new Error('IMAGE_TOO_LARGE');
+
+    // Empty slot (no SketchSelections row yet): sketchId is falsy and a new row is created.
+    const isNew = !sketchId;
+    let before = null;
+    let hadImage = false;
+    const orderForPickup = await getItemWithRetry('WorkshopOrders', orderId, { callerLabel: 'replaceSketchImage' });
+    if (!orderForPickup) throw new Error('Order not found');
+
+    if (!isNew) {
+        before = await wixData.get('SketchSelections', sketchId, SA_CONSISTENT);
+        if (!before) throw new Error('Sketch not found');
+        if (before.orderId && orderId && before.orderId !== orderId) throw new Error('Sketch does not belong to order');
+
+        hadImage = !!(before.sketchImage || before.sketchWixFileUrl || parseProductSnapshot(before.productSnapshot)?.image);
+        if (hadImage && !hasPermission(role, 'deleteSketchImage')) throw new Error('PERMISSION_DENIED:deleteSketchImage');
+
+        const collected = (orderForPickup.pickupItems || []).some((item) => item.key === `sketch:${sketchId}` && item.state === 'collected');
+        if (collected) throw new Error('COLLECTED:הפריט נאסף ולא ניתן להחליף את הסקיצה.');
+
+        if (options?.expectedUpdatedDate && before._updatedDate) {
+            if (new Date(options.expectedUpdatedDate).getTime() !== new Date(before._updatedDate).getTime()) {
+                throw new Error('CONFLICT:Sketch was modified by someone else — please refresh.');
+            }
+        }
+    }
+
+    const uploaded = await uploadBase64ImageToWixMedia(
+        imageBase64,
+        `sketch-${sketchId || orderId}-${Date.now()}.jpg`,
+        { folder: '/studio-happy/sketch-uploads', source: 'dashboard-sketch-upload' },
+    );
+
+    let updated;
+    let logSel;
+    if (isNew) {
+        // Pick the first free order-level rug slot (re-read right before insert).
+        const existingRows = await wixData.query('SketchSelections').eq('orderId', orderId).limit(200).find(SA_CONSISTENT);
+        const used = new Set((existingRows.items || []).filter((r) => !r.participantId).map((r) => Number(r.rugIndex)));
+        let rugIndex = 0;
+        while (used.has(rugIndex)) rugIndex += 1;
+        if (rugIndex >= (orderForPickup.rugCount || 0)) throw new Error('NO_FREE_SLOT:אין מקום פנוי לסקיצה בהזמנה זו.');
+
+        updated = await wixData.insert('SketchSelections', {
+            orderId,
+            workshopOrder: orderId,
+            rugIndex,
+            participantId: null,
+            productId: null,
+            productSnapshot: { image: uploaded.publicUrl, wixFileUrl: uploaded.fileUrl },
+            sketchImage: uploaded.publicUrl,
+            sketchWixFileUrl: uploaded.fileUrl,
+            canvasSize: '60x60',
+            requestedCanvasSize: null,
+            previousCanvasSize: '60x60',
+            upgradePaymentId: null,
+            upgradePaymentStatus: null,
+            upgradePaymentRequestedAt: null,
+            selectionStatus: 'selected',
+            sketchStatus: SKETCH_STATUS.OPEN,
+            participantName: null,
+            phoneNumber: null,
+            confirmedAt: new Date(),
+            source: 'upload',
+            frameType,
+        }, SA);
+        logSel = updated;
+    } else {
+        // Pull the latest record again right before writing (upload can take a while).
+        const sel = await wixData.get('SketchSelections', sketchId, SA_CONSISTENT);
+        if (!sel) throw new Error('Sketch not found');
+        const snapshot = parseProductSnapshot(sel.productSnapshot) || {};
+        updated = await wixData.update('SketchSelections', {
+            ...sel,
+            sketchImage: uploaded.publicUrl,
+            sketchWixFileUrl: uploaded.fileUrl,
+            productSnapshot: { ...snapshot, image: uploaded.publicUrl, wixFileUrl: uploaded.fileUrl },
+            productId: null,
+            frameType,
+            sketchStatus: SKETCH_STATUS.OPEN,
+            isLocked: false,
+        }, SA);
+        logSel = sel;
+    }
+
+    await logSketchOrderAction(orderId, logSel, hadImage ? 'הסקיצה הוחלפה בתמונה שהועלתה על ידי העובד' : 'הועלתה תמונת סקיצה על ידי העובד', options?.user);
+
+    const [participantsByOrderId, orderRecord] = await Promise.all([
+        loadParticipantsForOrders([orderId]),
+        getItemWithRetry('WorkshopOrders', orderId, { callerLabel: 'replaceSketchImage(result)' }),
+    ]);
+    return { sketch: mapSketch(updated, participantsByOrderId[orderId], orderRecord) };
+});
+
+/** Staff edit of a sketch's rug shape only — re-reads the current record and changes frameType alone. */
+export const updateSketchFrameType = webMethod(Permissions.SiteMember, async (orderId, sketchId, frameType, options) => {
+    await assertPermission('editSketchStatus');
+    if (!SKETCH_UPLOAD_FRAME_TYPES.includes(frameType)) throw new Error('INVALID_FRAME_TYPE');
+
+    const sel = await wixData.get('SketchSelections', sketchId, SA_CONSISTENT);
+    if (!sel) throw new Error('Sketch not found');
+    if (sel.orderId && orderId && sel.orderId !== orderId) throw new Error('Sketch does not belong to order');
+
+    if (options?.expectedUpdatedDate && sel._updatedDate) {
+        if (new Date(options.expectedUpdatedDate).getTime() !== new Date(sel._updatedDate).getTime()) {
+            throw new Error('CONFLICT:Sketch was modified by someone else — please refresh.');
+        }
+    }
+
+    const updated = await wixData.update('SketchSelections', { ...sel, frameType }, SA);
+    await logSketchOrderAction(orderId, sel, `צורת השטיח שונתה ל"${{ square: 'ריבוע', rectangle: 'מלבן', circle: 'עיגול', custom: 'צורני' }[frameType]}" על ידי העובד`, options?.user);
+
+    const [participantsByOrderId, orderRecord] = await Promise.all([
+        loadParticipantsForOrders([orderId]),
+        getItemWithRetry('WorkshopOrders', orderId, { callerLabel: 'updateSketchFrameType' }),
+    ]);
+    return { sketch: mapSketch(updated, participantsByOrderId[orderId], orderRecord) };
+});
+
 export const updateOrderInternalNotes = webMethod(Permissions.SiteMember, async (orderId, text, options) => {
     await assertPermission('editOrderNotes');
 
@@ -2015,22 +2159,57 @@ export const setSketchUploadOverride = webMethod(Permissions.SiteMember, async (
     const order = await getItemWithRetry('WorkshopOrders', orderId, { callerLabel: 'setSketchUploadOverride' });
     if (!order) throw new Error('Order not found');
 
-    let until = null;
-    if (untilIso) {
-        until = new Date(untilIso);
-        if (Number.isNaN(until.getTime())) throw new Error('INVALID_DATE');
-        if (until.getTime() <= Date.now()) throw new Error('INVALID_DATE:התאריך שנבחר כבר עבר');
+    const fmt = (d) => new Date(d).toLocaleString('he-IL', {
+        timeZone: 'Asia/Jerusalem', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
+    });
+
+    // Close the manual opening.
+    if (!untilIso) {
+        const prev = order.sketchUploadOverrideUntil;
+        const updatedClosed = await wixData.update('WorkshopOrders', { ...order, sketchUploadOverrideUntil: null }, SA);
+        await logOrderAction(
+            orderId,
+            prev
+                ? `פתיחת העלאת הסקיצות נסגרה ידנית (הייתה פתוחה עד ${fmt(prev)})`
+                : 'פתיחת העלאת הסקיצות נסגרה ידנית',
+            options?.user,
+        );
+        return { success: true, sketchUpload: mapSketchUploadWindow(updatedClosed) };
+    }
+
+    const until = new Date(untilIso);
+    if (Number.isNaN(until.getTime())) throw new Error('INVALID_DATE');
+    if (until.getTime() <= Date.now()) throw new Error('INVALID_DATE:התאריך שנבחר כבר עבר');
+
+    // Ready sketches: staff must choose whether they become editable.
+    const sels = (await wixData.query('SketchSelections').eq('orderId', orderId).limit(1000).find(SA_CONSISTENT)).items;
+    const readySels = sels.filter((s) => normalizeSketchStatus(s.sketchStatus) === SKETCH_STATUS.READY);
+    const allowReadyEdit = options?.allowReadyEdit;
+    let reopened = 0;
+    if (readySels.length) {
+        if (allowReadyEdit === true) {
+            for (const s of readySels) {
+                await wixData.update('SketchSelections', { ...s, sketchStatus: SKETCH_STATUS.OPEN, isLocked: false }, SA);
+                reopened++;
+            }
+        } else if (allowReadyEdit === false) {
+            const openCount = sels.filter((s) => normalizeSketchStatus(s.sketchStatus) === SKETCH_STATUS.OPEN).length
+                + Math.max(0, (Number(order.rugCount) || 0) - sels.length);
+            if (!openCount) {
+                throw new Error('INVALID_DATE:אין סקיצה בסטטוס "פתוח לשינויים". יש לשנות לפחות סקיצה אחת לסטטוס זה לפני פתיחת ההעלאה.');
+            }
+        } else {
+            throw new Error('INVALID_DATE:יש לבחור האם לאפשר עריכה של סקיצות מוכנות.');
+        }
     }
 
     const updated = await wixData.update('WorkshopOrders', { ...order, sketchUploadOverrideUntil: until }, SA);
-    const fmt = (d) => d.toLocaleString('he-IL', {
-        timeZone: 'Asia/Jerusalem', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
-    });
-    await logOrderAction(
-        orderId,
-        until ? `העלאת סקיצות נפתחה עד ${fmt(until)}` : 'פתיחת העלאת הסקיצות בוטלה',
-        options?.user,
-    );
+    const readyNote = !readySels.length
+        ? ''
+        : allowReadyEdit
+            ? ` · עריכת סקיצות מוכנות מותרת (${reopened} הוחזרו ל"פתוח לשינויים")`
+            : ' · רק סקיצות "פתוח לשינויים" ניתנות לעריכה';
+    await logOrderAction(orderId, `העלאת סקיצות נפתחה עד ${fmt(until)}${readyNote}`, options?.user);
     return { success: true, sketchUpload: mapSketchUploadWindow(updated) };
 });
 
@@ -2678,4 +2857,18 @@ export const getOrderPromoCouponTags = webMethod(Permissions.SiteMember, async (
         coupons[orderId] = { code: String(row.code) };
     }
     return { coupons };
+});
+
+/**
+ * Manual re-print of the self check-in customer+staff receipts (see
+ * checkin/checkinReceipts.js) — printer failures must never block check-in
+ * itself, so this is how staff recover a failed/unconfirmed print from the
+ * order dashboard without the customer having to check in again.
+ */
+export const reprintCheckinReceipts = webMethod(Permissions.SiteMember, async (orderId) => {
+    await assertPermission('manageOrdersSystem');
+    const cleanOrderId = String(orderId || '').trim();
+    if (!cleanOrderId) return { success: false, reprinted: 0 };
+    const result = await reprintCheckinReceiptsCore(cleanOrderId);
+    return { success: true, ...result };
 });

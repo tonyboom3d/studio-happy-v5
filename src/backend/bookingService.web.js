@@ -3558,6 +3558,9 @@ export const createCanvasUpgradePayment = webMethod(Permissions.Anyone, async (u
     let newReservationsNeeded = 0;
     for (const sel of upgradeSelections) {
         const prevForCheck = findExistingSelection(sel);
+        if (prevForCheck && isLockedStatus(prevForCheck.sketchStatus)) {
+            throw new Error(`SKETCH_STATUS_LOCKED:${normalizeSketchStatus(prevForCheck.sketchStatus)}`);
+        }
         if (prevForCheck?.upgradePaymentStatus === 'paid') continue;
         const alreadyReserved90 = prevForCheck && prevForCheck.upgradePaymentStatus !== 'failed' &&
             (prevForCheck.canvasSize === '90x90' || prevForCheck.requestedCanvasSize === '90x90');

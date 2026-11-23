@@ -1420,7 +1420,6 @@ export async function sendBirthdayLeadNoticeManyChat(subscriberId) {
 // --- Quote link (client-callable .jsw: accepts ONLY a quoteId, everything else is read from the DB) ---
 
 const QUOTE_SENT_NOTIFICATION_TYPE = 'quote_sent';
-const QUOTE_SEND_COOLDOWN_MS = 2 * 60 * 1000;
 
 /**
  * Sends the quote link to the customer via the shared order-confirmation flow
@@ -1429,20 +1428,16 @@ const QUOTE_SEND_COOLDOWN_MS = 2 * 60 * 1000;
  */
 export async function sendQuoteLinkManyChat(quoteId) {
     try {
-        if (typeof quoteId !== 'string' || !quoteId) return { sent: false, reason: 'bad-id' };
+        if (typeof quoteId !== 'string' || !quoteId) return { sent: false, reason: 'מזהה ההצעה אינו תקין.' };
         const SA = { suppressAuth: true, suppressHooks: true };
         const quote = await wixData.get('Quotes', quoteId, SA);
-        if (!quote || !quote.publicToken || !['draft', 'sent', 'viewed'].includes(quote.status)) return { sent: false, reason: 'not-sendable' };
-        const lastSend = (await wixData.query('QuoteActivityLog').eq('quoteId', quoteId).eq('action', 'sent_whatsapp').descending('_createdDate').limit(1).find(SA)).items[0];
-        if (lastSend && Date.now() - new Date(lastSend._createdDate).getTime() < QUOTE_SEND_COOLDOWN_MS) {
-            return { sent: false, reason: 'cooldown' };
-        }
+        if (!quote || !quote.publicToken || !['draft', 'sent', 'viewed'].includes(quote.status)) return { sent: false, reason: 'ההצעה אינה ניתנת לשליחה. יש להכין אותה קודם.' };
         const phone = normalizeIsraeliPhone(quote.customerPhone);
-        if (!phone) return { sent: false, reason: 'no-phone' };
+        if (!phone) return { sent: false, reason: 'אין מספר טלפון ללקוח.' };
 
         const settings = (await wixData.query('QuoteSettings').eq('settingKey', 'default').limit(1).find(SA)).items[0];
         const base = String(settings?.quotePageUrl || '').replace(/\/+$/, '');
-        if (!base) return { sent: false, reason: 'no-quote-page-url' };
+        if (!base) return { sent: false, reason: 'לא הוגדר קישור לדף ההצעה.' };
 
         const parts = String(quote.customerName || '').trim().split(/\s+/);
         const subscriber = await findOrCreateSubscriber({ phone, email: quote.customerEmail || undefined, firstName: parts[0] || undefined, lastName: parts.slice(1).join(' ') || undefined });
@@ -1460,7 +1455,7 @@ export async function sendQuoteLinkManyChat(quoteId) {
         return { sent: true, subscriberId: subscriber.id };
     } catch (err) {
         console.error('[ManyChat] ❌ sendQuoteLinkManyChat failed:', err?.message || err);
-        return { sent: false, reason: 'error', error: err?.message || String(err) };
+        return { sent: false, reason: 'השליחה ל-WhatsApp נכשלה. נסו שוב בעוד רגע.' };
     }
 }
 

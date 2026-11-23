@@ -9,7 +9,7 @@
  * the phone→today's-orders matching (organizer + participant phones).
  */
 import wixData from 'wix-data';
-import { findTodayWorkshopsByPhone } from '../studioUpsell/identify.js';
+import { findTodayWorkshopsByPhone } from 'backend/studioUpsell/identify.js';
 
 const SA = { suppressAuth: true };
 const ISRAEL_TZ = 'Asia/Jerusalem';

@@ -7,8 +7,8 @@
  * back to the generic "approach any staff member" message.
  */
 import wixData from 'wix-data';
-import { toDateKey } from '../availabilityRules.js';
-import { loadWorkshopTypes } from '../studioUpsell/sessions.js';
+import { toDateKey } from 'backend/availabilityRules.js';
+import { loadWorkshopTypes } from 'backend/studioUpsell/sessions.js';
 
 const SA = { suppressAuth: true };
 

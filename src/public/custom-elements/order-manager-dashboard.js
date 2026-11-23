@@ -414,24 +414,24 @@ var __wdTemplateHtml = `
     </div>
 
     <!-- Sketch upload window override modal -->
-    <div id="sketchUploadModal" class="modal fixed inset-0 z-[60] items-center justify-center p-4">
+    <div id="sketchUnlockModal" class="modal fixed inset-0 z-[60] items-center justify-center p-4">
         <div class="bg-white rounded-xl shadow-2xl w-full max-w-sm modal-content">
             <div class="px-5 py-3 border-b flex justify-between items-center">
                 <h3 class="font-bold text-gray-800">פתיחת העלאת סקיצות</h3>
-                <button onclick="closeModal('sketchUploadModal')" class="text-gray-400"><i class="ph ph-x"></i></button>
+                <button onclick="closeModal('sketchUnlockModal')" class="text-gray-400"><i class="ph ph-x"></i></button>
             </div>
             <div class="p-5 flex flex-col gap-3">
-                <p id="sketchUploadModalStatus" class="text-xs text-gray-500"></p>
-                <label class="text-sm font-medium text-gray-700" for="sketchUploadUntil">לאפשר העלאה עד:</label>
-                <input id="sketchUploadUntil" type="datetime-local" class="compact-input w-full bg-gray-50" dir="ltr">
-                <div id="sketchUploadReadyChoice" class="hidden space-y-2 bg-amber-50 border border-amber-100 rounded-lg p-3 text-sm text-amber-900">
+                <p id="sketchUnlockModalStatus" class="text-xs text-gray-500"></p>
+                <label class="text-sm font-medium text-gray-700" for="sketchUnlockUntil">לאפשר העלאה עד:</label>
+                <input id="sketchUnlockUntil" type="datetime-local" class="compact-input w-full bg-gray-50" dir="ltr">
+                <div id="sketchUnlockReadyChoice" class="hidden space-y-2 bg-amber-50 border border-amber-100 rounded-lg p-3 text-sm text-amber-900">
                     <strong class="text-xs">יש סקיצות מוכנות בהזמנה. לאפשר עריכה שלהן?</strong>
-                    <label class="flex items-start gap-2"><input type="radio" name="sketchReadyMode" value="allow" onchange="refreshSketchUploadChoice()"><span>כן — הסקיצות המוכנות יוחזרו ל"פתוח לשינויים"</span></label>
-                    <label class="flex items-start gap-2"><input type="radio" name="sketchReadyMode" value="keep" onchange="refreshSketchUploadChoice()"><span>לא — ניתן לערוך רק סקיצות בסטטוס "פתוח לשינויים"</span></label>
-                    <p id="sketchUploadChoiceWarn" class="hidden text-xs text-red-600">אין סקיצה בסטטוס "פתוח לשינויים". יש לשנות לפחות סקיצה אחת לסטטוס זה כדי להמשיך.</p>
+                    <label class="flex items-start gap-2"><input type="radio" name="sketchReadyMode" value="allow" onchange="refreshSketchUnlockChoice()"><span>כן — הסקיצות המוכנות יוחזרו ל"פתוח לשינויים"</span></label>
+                    <label class="flex items-start gap-2"><input type="radio" name="sketchReadyMode" value="keep" onchange="refreshSketchUnlockChoice()"><span>לא — ניתן לערוך רק סקיצות בסטטוס "פתוח לשינויים"</span></label>
+                    <p id="sketchUnlockChoiceWarn" class="hidden text-xs text-red-600">אין סקיצה בסטטוס "פתוח לשינויים". יש לשנות לפחות סקיצה אחת לסטטוס זה כדי להמשיך.</p>
                 </div>
-                <button id="saveSketchUploadBtn" onclick="saveSketchUploadOverride()" class="bg-primary hover:bg-primary-hover text-white font-medium py-2 rounded-lg disabled:opacity-40 disabled:cursor-not-allowed">פתח העלאה</button>
-                <button id="clearSketchUploadBtn" onclick="clearSketchUploadOverride()" class="hidden bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 font-medium py-2 rounded-lg">בטל פתיחה (חזרה למועד המקורי)</button>
+                <button id="saveSketchUnlockBtn" onclick="saveSketchUnlock()" class="bg-primary hover:bg-primary-hover text-white font-medium py-2 rounded-lg disabled:opacity-40 disabled:cursor-not-allowed">פתח העלאה</button>
+                <button id="clearSketchUnlockBtn" onclick="clearSketchUnlock()" class="hidden bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 font-medium py-2 rounded-lg">בטל פתיחה (חזרה למועד המקורי)</button>
             </div>
         </div>
     </div>
@@ -5186,10 +5186,10 @@ function __wdInjectGlobalAssets() {
             const cls = su.open ? 'text-emerald-700' : 'text-red-600';
             const icon = su.open ? 'ph-lock-simple-open' : 'ph-lock-simple';
             const btn = hasDashboardPermission('editSketchStatus')
-                ? `<button type="button" onclick="openSketchUploadModal('${o.id}', event)" class="underline text-primary hover:text-primary-hover">${su.open && !su.overridden ? 'הארכה' : su.overridden ? 'שינוי' : 'פתח העלאה'}</button>`
+                ? `<button type="button" onclick="openSketchUnlockModal('${o.id}', event)" class="underline text-primary hover:text-primary-hover">${su.open && !su.overridden ? 'הארכה' : su.overridden ? 'שינוי' : 'פתח העלאה'}</button>`
                 : '';
             const closeBtn = (su.overridden && hasDashboardPermission('editSketchStatus'))
-                ? `<button type="button" onclick="event.stopPropagation(); clearSketchUploadOverride('${o.id}')" class="underline text-red-600 hover:text-red-700">סגור פתיחה</button>`
+                ? `<button type="button" onclick="event.stopPropagation(); clearSketchUnlock('${o.id}')" class="underline text-red-600 hover:text-red-700">סגור פתיחה</button>`
                 : '';
             return `<div class="px-8 pb-2 pt-0 w-full"><p class="text-[11px] ${cls} flex items-center gap-1.5 flex-wrap"><i class="ph ${icon}"></i>${text}${btn ? ' · ' + btn : ''}${closeBtn ? ' · ' + closeBtn : ''}</p></div>`;
         }
@@ -5199,31 +5199,31 @@ function __wdInjectGlobalAssets() {
             return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
         }
 
-        function openSketchUploadModal(orderId, event) {
+        function openSketchUnlockModal(orderId, event) {
             if (event) event.stopPropagation();
             const o = mockOrders.find(x => x.id === orderId);
             if (!o || !o.sketchUpload) return;
             currentOrderId = orderId;
             const su = o.sketchUpload;
-            document.getElementById('sketchUploadModalStatus').innerText = su.open
+            document.getElementById('sketchUnlockModalStatus').innerText = su.open
                 ? `כרגע פתוח עד ${formatIsraelDateTime(su.deadline)}`
                 : `כרגע חסום · המועד המקורי: ${formatIsraelDateTime(su.originalDeadline)}`;
             const base = su.overridden && su.deadline ? new Date(su.deadline) : new Date(Date.now() + 24 * 60 * 60 * 1000);
-            const input = document.getElementById('sketchUploadUntil');
+            const input = document.getElementById('sketchUnlockUntil');
             input.min = toDateTimeLocalValue(new Date());
             input.value = toDateTimeLocalValue(base);
-            document.getElementById('clearSketchUploadBtn').classList.toggle('hidden', !su.overridden);
+            document.getElementById('clearSketchUnlockBtn').classList.toggle('hidden', !su.overridden);
             document.querySelectorAll('input[name="sketchReadyMode"]').forEach(r => { r.checked = false; });
             const hasReady = (o.sketches || []).some(s => s.status === 'מוכנה');
-            document.getElementById('sketchUploadReadyChoice').classList.toggle('hidden', !hasReady);
-            refreshSketchUploadChoice();
-            openModal('sketchUploadModal');
+            document.getElementById('sketchUnlockReadyChoice').classList.toggle('hidden', !hasReady);
+            refreshSketchUnlockChoice();
+            openModal('sketchUnlockModal');
         }
 
-        function refreshSketchUploadChoice() {
+        function refreshSketchUnlockChoice() {
             const o = mockOrders.find(x => x.id === currentOrderId);
-            const btn = document.getElementById('saveSketchUploadBtn');
-            const warn = document.getElementById('sketchUploadChoiceWarn');
+            const btn = document.getElementById('saveSketchUnlockBtn');
+            const warn = document.getElementById('sketchUnlockChoiceWarn');
             if (!o || !btn) return;
             const sketches = o.sketches || [];
             if (!sketches.some(s => s.status === 'מוכנה')) {
@@ -5239,8 +5239,8 @@ function __wdInjectGlobalAssets() {
             btn.disabled = !picked || blocked;
         }
 
-        function saveSketchUploadOverride() {
-            const value = document.getElementById('sketchUploadUntil').value;
+        function saveSketchUnlock() {
+            const value = document.getElementById('sketchUnlockUntil').value;
             const until = value ? new Date(value) : null;
             if (!until || Number.isNaN(until.getTime()) || until.getTime() <= Date.now()) {
                 alert('יש לבחור תאריך ושעה עתידיים.');
@@ -5248,18 +5248,18 @@ function __wdInjectGlobalAssets() {
             }
             const payload = { orderId: currentOrderId, untilIso: until.toISOString() };
             const picked = document.querySelector('input[name="sketchReadyMode"]:checked');
-            if (!document.getElementById('sketchUploadReadyChoice').classList.contains('hidden')) {
+            if (!document.getElementById('sketchUnlockReadyChoice').classList.contains('hidden')) {
                 if (!picked) return;
                 payload.allowReadyEdit = picked.value === 'allow';
             }
             dispatchDashboardAction('setSketchUploadOverride', payload);
-            closeModal('sketchUploadModal');
+            closeModal('sketchUnlockModal');
         }
 
-        function clearSketchUploadOverride(orderId) {
+        function clearSketchUnlock(orderId) {
             if (typeof orderId === 'string') currentOrderId = orderId;
             dispatchDashboardAction('setSketchUploadOverride', { orderId: currentOrderId, untilIso: null });
-            closeModal('sketchUploadModal');
+            closeModal('sketchUnlockModal');
         }
 
         function openNoteModal(orderId) {
@@ -5689,10 +5689,10 @@ window.openWaModal = openWaModal;
 window.reprintCheckinReceipts = reprintCheckinReceipts;
 window.refreshDashboard = refreshDashboard;
 window.saveNote = saveNote;
-window.openSketchUploadModal = openSketchUploadModal;
-window.saveSketchUploadOverride = saveSketchUploadOverride;
-window.refreshSketchUploadChoice = refreshSketchUploadChoice;
-window.clearSketchUploadOverride = clearSketchUploadOverride;
+window.openSketchUnlockModal = openSketchUnlockModal;
+window.saveSketchUnlock = saveSketchUnlock;
+window.refreshSketchUnlockChoice = refreshSketchUnlockChoice;
+window.clearSketchUnlock = clearSketchUnlock;
 window.saveTemplate = saveTemplate;
 window.scrollCarousel = scrollCarousel;
 window.sendWhatsApp = sendWhatsApp;

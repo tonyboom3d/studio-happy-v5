@@ -14,7 +14,7 @@
  * wix/src/backend/checkin/README.md for the required CMS fields.
  */
 import wixData from 'wix-data';
-import { dispatchPrintJob } from '../studioUpsell/printDispatch.js';
+import { dispatchPrintJob } from 'backend/studioUpsell/printDispatch.js';
 
 const SA = { suppressAuth: true };
 

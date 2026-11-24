@@ -282,11 +282,13 @@ const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
 const previewAmounts = (d) => {
     const extras = round2((d.extras || []).reduce((s, x) => s + (Number(x.price) || 0), 0));
     const base = Number(d.basePrice) || 0;
+    const kids = Math.max(0, parseInt(d.participants, 10) || 0);
+    const unit = round2(base + extras);
     const ov = d.priceOverride === '' || d.priceOverride === null || d.priceOverride === undefined ? null : Number(d.priceOverride);
-    const total = round2(ov ?? base + extras);
+    const total = round2(ov ?? unit * kids);
     const v = d.hasDeposit ? Number(d.depositValue) || 0 : 0;
     const dep = round2(d.depositType === 'fixed' ? Math.min(v, total) : (total * v) / 100);
-    return { base, extras, ov, total, dep, bal: round2(total - dep) };
+    return { base, extras, kids, unit, ov, total, dep, bal: round2(total - dep) };
 };
 
 const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -552,7 +554,7 @@ class QuotesDashboard extends HTMLElement {
             if (q.hasDeposit && !(Number(q.depositValue) > 0)) { q.depositType = 'percent'; q.depositValue = 30; }
             return this.render();
         }
-        if (['basePrice', 'priceOverride', 'depositValue'].includes(t.dataset.f)) this.refreshSum();
+        if (['basePrice', 'priceOverride', 'depositValue', 'participants'].includes(t.dataset.f)) this.refreshSum();
     }
 
     refreshSum() {
@@ -1160,9 +1162,11 @@ class QuotesDashboard extends HTMLElement {
         const n = (d.extras || []).length;
         const depLabel = d.depositType === 'fixed' ? 'סכום קבוע' : `${Number(d.depositValue) || 0}%`;
         const balDate = d.balanceDueDate ? dmy(d.balanceDueDate) : 'יוגדר אוטומטית';
-        const lines = `<div class="ln"><span>מחיר בסיס</span><span>${a.ov !== null ? `<s>${money(a.base)}</s>` : money(a.base)}</span></div>
-            <div class="ln"><span>תוספות${n ? ` (${n})` : ''}</span><span>${a.ov !== null ? `<s>${money(a.extras)}</s>` : money(a.extras)}</span></div>
-            ${a.ov !== null ? `<div class="ln"><span>מחיר מותאם (עוקף את החישוב)</span><b>${money(a.ov)}</b></div>` : ''}`;
+        const lines = `<div class="ln"><span>מחיר סדנה לילד</span><span>${a.ov !== null ? `<s>${money(a.base)}</s>` : money(a.base)}</span></div>
+            <div class="ln"><span>תוספות לילד${n ? ` (${n})` : ''}</span><span>${a.ov !== null ? `<s>${money(a.extras)}</s>` : money(a.extras)}</span></div>
+            <div class="ln"><span>לכל ילד</span><span>${a.ov !== null ? `<s>${money(a.unit)}</s>` : money(a.unit)}</span></div>
+            <div class="ln"><span>× ${a.kids} ילדים</span><span>${a.kids > 0 ? '' : 'חסר מספר ילדים'}</span></div>
+            ${a.ov !== null ? `<div class="ln"><span>מחיר מותאם (הסכום המלא ללקוח)</span><b>${money(a.ov)}</b></div>` : ''}`;
         const split = d.hasDeposit && a.dep > 0 && a.bal > 0
             ? `<div class="split"><div><span>💳 מקדמה — בחתימה</span><b>${money(a.dep)}</b><small>${esc(depLabel)}</small></div>
                 <div class="bal"><span>⏳ יתרה לתשלום</span><b>${money(a.bal)}</b><small>עד ${esc(balDate)}</small></div></div>`
@@ -1253,8 +1257,9 @@ class QuotesDashboard extends HTMLElement {
                 + (q.customerNotes ? pane('💬 הערות הלקוח', `<div class="lockmsg" style="background:#f8fafc;color:#334155;margin:0">${esc(q.customerNotes)}</div>`) : '');
         }
         if (tab === 'event') {
-            return pane('🎨 פרטי האירוע', `<div class="grid">${f('eventStartTime', 'שעת התחלה', 'time')}${f('eventEndTime', 'שעת סיום', 'time')}${f('participants', 'משתתפים', 'number', 'min="0"')}${f('adults', 'מלווים', 'number', 'min="0"')}${f('requiredInstructors', 'מדריכים נדרשים', 'number', 'min="0"')}
+            return pane('🎨 פרטי האירוע', `<div class="grid">${f('eventStartTime', 'שעת התחלה', 'time')}${f('eventEndTime', 'שעת סיום', 'time')}${f('participants', 'ילדים', 'number', 'min="0"')}${f('adults', 'מלווים', 'number', 'min="0"')}${f('requiredInstructors', 'מדריכים נדרשים', 'number', 'min="0"')}
                 <div style="display:flex;align-items:end">${chk('workshopClosed', 'סדנה סגורה (פרטית)')}</div></div>
+                <div class="sub" style="margin-top:10px">המחיר מחושב לפי הילדים בלבד. מלווים לא נכללים.</div>
                 <div class="sub" style="margin-top:10px">📅 תאריך האירוע נקבע בלשונית "תאריכים"${d.eventDate ? `: <b>${dmy(d.eventDate)}</b>` : ''}.</div>`)
                 + pane('👥 צוות משובץ', this.staffPicker(dt, d, q.status === 'cancelled'));
         }
@@ -1267,8 +1272,8 @@ class QuotesDashboard extends HTMLElement {
             const dep = `<div class="dep"><div><b>יש מקדמה בעסקה</b><div class="sub">${d.hasDeposit ? 'הלקוח משלם מקדמה בחתימה ואת היתרה עד מועד שנקבע' : 'הלקוח ישלם את כל הסכום בחתימה'}</div></div>
                 <label class="switch"><input type="checkbox" data-f="hasDeposit"${d.hasDeposit ? ' checked' : ''}${dis}><span class="knob"></span></label></div>
                 ${d.hasDeposit ? `<div class="depv"><span class="fl" style="flex-direction:row;align-items:center">גובה המקדמה</span><input type="number" min="0" data-f="depositValue" value="${esc(d.depositValue ?? '')}"${dis}><span class="seg">${depSeg('percent', '%', 'אחוז מהסכום')}${depSeg('fixed', '₪', 'סכום קבוע')}</span></div>` : ''}`;
-            return pane('💰 מחיר', `<div class="pgrid">${f('basePrice', 'מחיר בסיס (₪)', 'number', 'min="0"')}${f('priceOverride', 'מחיר מותאם (₪, אופציונלי)', 'number', 'min="0" placeholder="ללא"')}</div>
-                    <div class="sub" style="margin-top:6px">מחיר מותאם מחליף את החישוב של בסיס + תוספות.</div>${dep}`)
+            return pane('💰 מחיר', `<div class="pgrid">${f('basePrice', 'מחיר סדנה לילד (₪)', 'number', 'min="0"')}${f('priceOverride', 'סכום מלא מותאם (₪, אופציונלי)', 'number', 'min="0" placeholder="ללא"')}</div>
+                    <div class="sub" style="margin-top:6px">הסכום ללקוח הוא (מחיר סדנה + תוספות) × מספר הילדים. מחיר מותאם מחליף את הסכום המלא, בלי הכפלה נוספת.</div>${dep}`)
                 + pane('✨ תוספות', this.extrasEditor(d, locked))
                 + pane('🧾 סיכום', `<div class="psum" id="sumBox">${this.priceSummary(d, q)}</div><div class="sub" style="margin-top:6px">תצוגה מקדימה — הסכומים הסופיים נשמרים בלחיצה על "שמור".</div>`);
         }

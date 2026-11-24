@@ -1,3 +1,5 @@
+import { childCount, unitPrice } from 'backend/quotePricing.js';
+
 // Placeholder rendering + sanitizing for quote contract templates.
 export const PLACEHOLDERS = [
     'customerName', 'customerEmail', 'customerPhone', 'companyName', 'eventType', 'eventDate', 'eventStartTime',
@@ -93,13 +95,20 @@ export const OPTIONAL_FIELDS = [
     'extrasList', 'pricePerParticipant', 'depositAmount', 'balanceAmount', 'balanceDueDate', 'expiresAt',
 ];
 
+function perChildPrice(q) {
+    const hasOverride = q.priceOverride !== null && q.priceOverride !== undefined && q.priceOverride !== '';
+    const kids = childCount(q.participants);
+    if (hasOverride) return kids > 0 ? Math.round((Number(q.priceOverride) / kids) * 100) / 100 : 0;
+    return unitPrice(q.basePrice, q.extras);
+}
+
 function emptyOptional(q) {
     const noDeposit = !(Number(q.depositAmount) > 0);
     const empty = {
         companyName: !q.companyName, customerEmail: !q.customerEmail, eventLocation: !q.eventLocation, eventAddress: !q.eventAddress,
         workshop: !q.requestedWorkshop, participants: !(Number(q.participants) > 0), adults: !(Number(q.adults) > 0),
         extrasList: !(q.extras || []).length,
-        pricePerParticipant: !(Number(q.participants) > 0 && Number(q.basePrice) > 0),
+        pricePerParticipant: !(perChildPrice(q) > 0),
         depositAmount: noDeposit, balanceAmount: noDeposit || !(Number(q.balanceAmount) > 0), balanceDueDate: noDeposit || !q.balanceDueDate,
         expiresAt: !q.expiresAt,
     };
@@ -121,8 +130,8 @@ function hideEmptyBlocks(body, empty) {
 
 // Every filled-in value renders bold so the customer sees what was set for them.
 function valuesFor(q) {
-    const extras = (q.extras || []).map((e) => `${esc(e.title || e.name)}${e.price ? ` (${money(e.price)})` : ''}`).join(', ');
-    const people = Number(q.participants) || 0;
+    const extras = (q.extras || []).map((e) => `${esc(e.title || e.name)}${e.price ? ` (${money(e.price)} לילד)` : ''}`).join(', ');
+    const perChild = perChildPrice(q);
     const time = [q.eventStartTime, q.eventEndTime].filter(Boolean).join(' עד ');
     const raw = {
         customerName: esc(q.customerName),
@@ -141,7 +150,7 @@ function valuesFor(q) {
         adults: esc(q.adults),
         extrasList: extras || '—',
         totalAmount: money(q.totalAmount),
-        pricePerParticipant: people > 0 && Number(q.basePrice) > 0 ? money(Math.round(Number(q.basePrice) / people)) : '',
+        pricePerParticipant: perChild > 0 ? money(perChild) : '',
         depositAmount: money(q.depositAmount),
         balanceAmount: money(q.balanceAmount),
         balanceDueDate: esc(fmtDate(q.balanceDueDate)),

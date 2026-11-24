@@ -7,7 +7,7 @@ const LABELS = {
     customerName: 'שם לקוח', customerEmail: 'אימייל', customerPhone: 'טלפון', companyName: 'חברה', companyRole: 'תפקיד',
     eventLocation: 'מיקום', eventAddress: 'כתובת', participants: 'משתתפים', adults: 'מלווים', eventDate: 'תאריך אירוע',
     eventStartTime: 'שעת התחלה', eventEndTime: 'שעת סיום', requestedWorkshop: 'סדנאות', workshopClosed: 'סדנה סגורה', requiredInstructors: 'מדריכים נדרשים',
-    basePrice: 'מחיר בסיס', priceOverride: 'מחיר מותאם', depositType: 'סוג מקדמה', depositValue: 'ערך מקדמה',
+    basePrice: 'מחיר סדנה לילד', priceOverride: 'סכום מלא מותאם', depositType: 'סוג מקדמה', depositValue: 'ערך מקדמה',
     balanceDueDate: 'מועד תשלום יתרה', expiresAt: 'תוקף ההצעה', allowOnlinePayment: 'תשלום מקוון',
     allowBankTransfer: 'העברה בנקאית', notes: 'הערות פנימיות', extras: 'תוספות', assignedStaffIds: 'צוות משובץ',
     workshopId: 'סדנה', totalAmount: 'סה"כ', templateId: 'תבנית חוזה',

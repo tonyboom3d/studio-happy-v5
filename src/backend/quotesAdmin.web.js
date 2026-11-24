@@ -8,7 +8,7 @@ import { writeQuoteLog } from 'backend/quoteLog.js';
 import { quoteError } from 'backend/quoteErrors.js';
 import { diffQuote } from 'backend/quoteDiff.js';
 import { backfillQuoteLeads } from 'backend/quoteLeadsSync.js';
-import { buildPreparedFields, buildQuoteUrl, resolveTemplate } from 'backend/quoteBuilder.js';
+import { buildPreparedFields, buildQuoteUrl, refreshOpenAmounts, resolveTemplate } from 'backend/quoteBuilder.js';
 import { recomputePaymentState } from 'backend/quotePayments.js';
 import { sendQuoteEmail } from 'backend/quoteNotify.js';
 import { onQuotePaid } from 'backend/quotePostPayment.js';
@@ -249,7 +249,7 @@ export const getQuoteLink = webMethod(Permissions.Admin, async (quoteId, actorNa
 /** channels: ['email','whatsapp']. Marks draft as sent when at least one channel succeeds. */
 export const sendQuote = webMethod(Permissions.Admin, async (quoteId, channels = [], actorName) => {
     try {
-    let quote = await wixData.get('Quotes', quoteId, SA);
+    let quote = await refreshOpenAmounts(await wixData.get('Quotes', quoteId, SA));
     if (!quote?.publicToken || !['draft', 'sent', 'viewed'].includes(quote.status)) throw new Error('VALIDATION:ההצעה אינה ניתנת לשליחה (יש להכין אותה קודם).');
     const actor = await getActor(actorName);
     const results = {};

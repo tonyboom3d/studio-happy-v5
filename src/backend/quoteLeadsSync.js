@@ -124,6 +124,7 @@ async function upsertLead(submission, ctx) {
     const amounts = computeAmounts({
         basePrice: 0,
         extras: mapped.extras,
+        participants: mapped.participants,
         depositType: s.defaultDepositType || 'percent',
         depositValue: s.defaultDepositValue ?? 30,
     });

@@ -415,7 +415,10 @@ class QuoteContract extends HTMLElement {
     summary(d) {
         const time = [d.eventStartTime, d.eventEndTime].filter(Boolean).join(' עד ');
         const place = [d.eventLocation, d.eventAddress].filter(Boolean).join(', ');
-        const extras = (d.extras || []).map((x) => `${x.title}${x.price ? ` (${money(x.price)})` : ''}`).join(', ');
+        const kids = Math.max(0, parseInt(d.participants, 10) || 0);
+        const full = Number(d.totalAmount) || 0;
+        const perChild = kids > 0 ? Math.round((full / kids) * 100) / 100 : 0;
+        const extras = (d.extras || []).map((x) => `${x.title}${x.price ? ` (${money(x.price)} לילד)` : ''}`).join(', ');
         const fact = (ic, label, val) => (val ? `<div class="fact"><div class="ic">${ic}</div><div><span>${label}</span><b>${esc(val)}</b></div></div>` : '');
         const paid = Number(d.paidAmount) || 0;
         const third = paid > 0
@@ -427,7 +430,7 @@ class QuoteContract extends HTMLElement {
               ${fact('🎨', 'סדנה', d.requestedWorkshop)}
               ${fact('📅', 'תאריך', d.eventDate ? `${weekday(d.eventDate)}, ${longDate(d.eventDate)}` : '')}
               ${fact('🕐', 'שעות', time)}
-              ${fact('👥', 'משתתפים', Number(d.participants) > 0 ? `${d.participants} משתתפים` : '')}
+              ${fact('👥', 'ילדים', kids > 0 ? `${kids} ילדים` : '')}
               ${fact('🧑‍🤝‍🧑', 'מלווים', Number(d.adults) > 0 ? `${d.adults}` : '')}
               ${fact('📍', 'מיקום', place)}
               ${fact('✨', 'תוספות', extras)}
@@ -435,7 +438,7 @@ class QuoteContract extends HTMLElement {
               ${fact('⏳', 'ההצעה בתוקף עד', d.viewState === 'ready_to_sign' ? longDate(d.expiresAt) : '')}
             </div>
             <div class="money">
-              <div class="total"><span>סה"כ לתשלום</span><b>${money(d.totalAmount)}</b></div>
+              <div class="total"><span>סה"כ לתשלום</span><b>${money(full)}</b>${kids > 0 ? `<span>${kids} ילדים × ${money(perChild)}</span>` : ''}</div>
               <div><span>מקדמה</span><b>${money(d.depositAmount)}</b></div>
               ${third}
             </div></div>`;

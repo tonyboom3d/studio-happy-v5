@@ -18,6 +18,20 @@ async function allocateQuoteNumber() {
     return next;
 }
 
+/** Rewrites the stored total of an unpaid open quote to (workshop + add-ons) × children. */
+export async function refreshOpenAmounts(quote) {
+    if (!quote || !['draft', 'sent', 'viewed'].includes(quote.status)) return quote;
+    if (Number(quote.paidAmount) > 0) return quote;
+    const amounts = computeAmounts(quote);
+    if (amounts.error) return quote;
+    const { error, ...fields } = amounts;
+    const same = Number(fields.totalAmount) === Number(quote.totalAmount)
+        && Number(fields.depositAmount) === Number(quote.depositAmount)
+        && Number(fields.balanceAmount) === Number(quote.balanceAmount);
+    if (same) return quote;
+    return wixData.update('Quotes', { ...quote, ...fields }, SA);
+}
+
 /** Fills defaults, validates and returns the fields to persist. Throws VALIDATION:*. */
 export async function buildPreparedFields(quote, templateId) {
     const s = await getQuoteSettings();

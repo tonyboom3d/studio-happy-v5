@@ -6,7 +6,7 @@ import { mediaManager } from 'wix-media-backend';
 import { getQuoteSettings } from 'backend/quoteCore.js';
 import { computeAmounts } from 'backend/quotePricing.js';
 import { renderTemplate } from 'backend/quoteTemplates.js';
-import { resolveTemplate } from 'backend/quoteBuilder.js';
+import { refreshOpenAmounts, resolveTemplate } from 'backend/quoteBuilder.js';
 import { writeQuoteLog } from 'backend/quoteLog.js';
 import { computeViewState, TOKEN_RE } from 'backend/quoteState.js';
 import wixPayBackend from 'wix-pay-backend';
@@ -85,6 +85,7 @@ export const getQuoteByToken = webMethod(Permissions.Anyone, async (token) => {
     if (q?.status === 'signed' && await syncPendingOnlinePayments(q._id).catch((err) => { console.error('[quotePublic] payment sync failed', err?.message || err); return false; })) {
         q = await findByToken(token);
     }
+    if (q && ['draft', 'sent', 'viewed'].includes(q.status)) q = await refreshOpenAmounts(q);
     const viewState = computeViewState(q);
     if (viewState === 'not_found') return { viewState: 'not_found' };
     if (viewState === 'cancelled') return { viewState, quoteNumber: q.quoteNumber };

@@ -80,6 +80,9 @@ var __wdTemplateHtml = `
         <!-- Reschedule requests (customer submitted "שינוי מועד" via WhatsApp) -->
         <div id="rescheduleRequestsBanner" class="mb-4 hidden shrink-0"></div>
 
+        <!-- Today's customer pickups -->
+        <div id="todayPickupsBanner" class="mb-4 hidden shrink-0"></div>
+
         <!-- Filters Bar -->
         <section class="wd-filters-panel" aria-label="סינון הזמנות">
             <div class="wd-filters-header">
@@ -239,6 +242,7 @@ var __wdTemplateHtml = `
                 </button>
             </div>
         </div>
+        <div class="flex items-center gap-2 flex-wrap shrink-0" id="pickupQueueFilters"></div>
         <div class="flex-1 overflow-auto flex flex-col gap-2.5" id="pickupQueueList"></div>
     </section>
 
@@ -413,6 +417,16 @@ var __wdTemplateHtml = `
         </div>
     </div>
 
+    <!-- Today's pickups modal -->
+    <div id="todayPickupsModal" class="modal fixed inset-0 z-[70] items-center justify-center p-4 bg-gray-900/60 backdrop-blur-sm">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-2xl modal-content border border-gray-200 max-h-[90vh] flex flex-col">
+            <div class="px-5 py-3 border-b flex justify-between items-center bg-red-50 rounded-t-xl shrink-0">
+                <h3 class="font-bold text-red-800 flex items-center gap-2"><i class="ph-fill ph-package text-red-500"></i> איסופים להיום</h3>
+                <button onclick="closeModal('todayPickupsModal')" class="text-gray-400 hover:text-gray-700"><i class="ph ph-x"></i></button>
+            </div>
+            <div id="todayPickupsBody" class="p-5 flex flex-col gap-3 overflow-y-auto custom-scrollbar"></div>
+        </div>
+    </div>
     <!-- Sketch upload window override modal -->
     <div id="sketchUnlockModal" class="modal fixed inset-0 z-[60] items-center justify-center p-4">
         <div class="bg-white rounded-xl shadow-2xl w-full max-w-sm modal-content">
@@ -2096,6 +2110,7 @@ function __wdInjectGlobalAssets() {
                 }
             }
             __wdDataLoaded = true;
+            requestTodayPickups();
             if (__wdAutoRefreshTimerId == null) startAutoDataRefresh();
             const preserveUi = __wdPreserveUiOnNextApply;
             __wdPreserveUiOnNextApply = false;
@@ -2719,7 +2734,7 @@ function __wdInjectGlobalAssets() {
             const statusLabel = active.status === 'sent'
                 ? '<span class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 border border-emerald-200">נשלחה התראה לצוות</span>'
                 : '<span class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 border border-amber-200">ממתין להתראת צוות</span>';
-            const usedCount = appointments.length;
+            const usedCount = appointments.filter(a => a.status !== 'reset').length;
             return `
                 <div class="mt-1.5 text-xs bg-blue-50 border border-blue-100 rounded-lg px-2.5 py-1.5 flex items-center justify-between gap-2">
                     <span class="text-blue-800">
@@ -2767,9 +2782,11 @@ function __wdInjectGlobalAssets() {
                             <span class="text-sm font-medium text-gray-800 truncate">${item.label}</span>
                         </label>
                         ${badge}
-                        <button onclick="collectPickupItem('${order.id}', '${item.key}', '${safeLabel}', ${isReady})" class="text-xs font-bold text-primary hover:text-primary-hover px-2 py-1 rounded-lg border border-primary/20 bg-primary/5 shrink-0 ${isCollected ? 'pointer-events-none opacity-30' : ''}">
+                        ${isCollected && hasDashboardPermission('manageOrdersSystem')
+                            ? `<button onclick="resetCollectedPickupItem('${order.id}', '${item.key}', '${safeLabel}')" class="text-xs font-bold text-red-600 hover:text-red-700 px-2 py-1 rounded-lg border border-red-200 bg-red-50 shrink-0" title="אפס סטטוס נאסף — הלקוח יוכל לתאם איסוף מחדש"><i class="ph ph-arrow-counter-clockwise"></i> אפס</button>`
+                            : `<button onclick="collectPickupItem('${order.id}', '${item.key}', '${safeLabel}', ${isReady})" class="text-xs font-bold text-primary hover:text-primary-hover px-2 py-1 rounded-lg border border-primary/20 bg-primary/5 shrink-0 ${isCollected ? 'pointer-events-none opacity-30' : ''}">
                             <i class="ph ph-check-circle"></i> נאסף
-                        </button>
+                        </button>`}
                     </div>`;
             }).join('');
         }
@@ -2837,6 +2854,20 @@ function __wdInjectGlobalAssets() {
             closeModal('pickupModal');
             if (order) reopenOrderDetailRow(orderId, order.workshopId);
         }
+
+        function resetCollectedPickupItem(orderId, key, label) {
+            if (!hasDashboardPermission('manageOrdersSystem')) {
+                alert('רק מנהל מערכת יכול לאפס סטטוס "נאסף".');
+                return;
+            }
+            if (!confirm(`לאפס את הסטטוס "נאסף" של ${label}?\nהפריט יחזור ל"מוכן לאיסוף" והלקוח יוכל לתאם איסוף מחדש.`)) return;
+            addLog(orderId, `סטטוס "נאסף" אופס: ${label}`);
+            dispatchDashboardAction('resetCollectedItems', { orderId, items: [{ key, label }] });
+            const order = mockOrders.find(o => o.id === orderId);
+            closeModal('pickupModal');
+            if (order) reopenOrderDetailRow(orderId, order.workshopId);
+        }
+        window.resetCollectedPickupItem = resetCollectedPickupItem;
 
         function confirmPickupNotReady() {
             if (!pendingPickupCollect) {
@@ -2923,6 +2954,149 @@ function __wdInjectGlobalAssets() {
             return !!order.ecomOrderNumber && String(order.ecomOrderNumber).includes(digits);
         }
 
+        // --- Today's customer pickups banner (orders tab) ---------------------
+        let __wdTodayPickups = [];
+        let __wdTodayPickupsRequestedAt = 0;
+
+        function requestTodayPickups() {
+            if (Date.now() - __wdTodayPickupsRequestedAt < 60 * 1000) return;
+            __wdTodayPickupsRequestedAt = Date.now();
+            dispatchDashboardAction('loadTodayPickups', {});
+        }
+
+        function formatPickupTimeRange(p) {
+            const t = (iso) => new Date(iso).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit', timeZone: __wdIsraelTz });
+            return `${t(p.start)}–${t(p.end)}`;
+        }
+
+        window.__wdHandleTodayPickups = function (data) {
+            if (!data || data.error) {
+                console.error('[workshops-dashboard] getTodayPickups failed:', data && data.error);
+                return;
+            }
+            __wdTodayPickups = data.pickups || [];
+            const banner = document.getElementById('todayPickupsBanner');
+            if (!banner) return;
+            const open = __wdTodayPickups.filter(p => p.status !== 'collected');
+            if (!__wdTodayPickups.length) {
+                banner.classList.add('hidden');
+                banner.innerHTML = '';
+                return;
+            }
+            const next = open[0];
+            banner.classList.remove('hidden');
+            banner.innerHTML = `
+                <div onclick="openTodayPickups()" class="bg-red-50 border border-red-200 rounded-lg p-3 flex items-center justify-between shadow-sm cursor-pointer hover:bg-red-100 transition-colors">
+                    <div class="flex items-center gap-3 text-red-700">
+                        <span class="relative flex h-3 w-3 shrink-0">
+                            <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-500 opacity-75"></span>
+                            <span class="relative inline-flex rounded-full h-3 w-3 bg-red-600"></span>
+                        </span>
+                        <p class="text-sm font-medium">איסופים להיום: ${open.length}${open.length !== __wdTodayPickups.length ? ` (מתוך ${__wdTodayPickups.length}, ${__wdTodayPickups.length - open.length} כבר נאספו)` : ''}${next ? ` · הקרוב: ${escapeHtml(next.organizerName || 'ללא שם')} ב-${formatPickupTimeRange(next).split('–')[0]}` : ''}</p>
+                    </div>
+                    <span class="text-xs bg-red-100 text-red-700 px-3 py-1 rounded-md font-medium">הצג פרטים</span>
+                </div>`;
+        };
+
+        function openTodayPickups() {
+            const body = document.getElementById('todayPickupsBody');
+            if (!body) return;
+            body.innerHTML = __wdTodayPickups.map(p => {
+                const done = p.status === 'collected';
+                const items = (p.items || []).length
+                    ? p.items.map(i => `<span class="text-[11px] font-bold px-2 py-0.5 rounded border ${i.state === 'collected' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-amber-50 text-amber-800 border-amber-200'}">${escapeHtml(i.label)}</span>`).join('')
+                    : '<span class="text-xs text-gray-400">אין פריטים מסומנים כמוכנים</span>';
+                const staff = p.staffRecipient
+                    ? `<span><i class="ph ph-user-circle"></i> הצוות שהודע: ${escapeHtml(p.staffRecipient)}</span>`
+                    : '<span class="text-amber-700"><i class="ph ph-bell-slash"></i> טרם הודע לצוות</span>';
+                return `
+                    <div class="border border-gray-200 rounded-xl p-3 ${done ? 'opacity-60' : ''}">
+                        <div class="flex items-center justify-between gap-2 flex-wrap">
+                            <span class="font-bold text-gray-900 text-sm">${escapeHtml(p.organizerName || 'ללא שם')}${p.ecomOrderNumber ? ` <span class="text-[11px] text-gray-400 font-normal">#${escapeHtml(String(p.ecomOrderNumber))}</span>` : ''}</span>
+                            <span class="text-sm font-bold ${done ? 'text-emerald-700' : 'text-red-600'}"><i class="ph ph-clock"></i> ${formatPickupTimeRange(p)}${done ? ' · נאסף' : ''}</span>
+                        </div>
+                        <div class="text-xs text-gray-500 flex items-center gap-3 flex-wrap mt-1">
+                            <span dir="ltr"><i class="ph ph-phone"></i> ${escapeHtml(p.organizerPhone || '—')}</span>
+                            ${p.workshopName ? `<span>${escapeHtml(p.workshopName)}</span>` : ''}
+                            ${staff}
+                        </div>
+                        <div class="flex items-center gap-1.5 flex-wrap mt-2">${items}</div>
+                    </div>`;
+            }).join('');
+            openModal('todayPickupsModal');
+        }
+        window.openTodayPickups = openTodayPickups;
+
+        let __wdPickupQueueFilter = 'all'; // all | today | tomorrow | overdue
+        const PICKUP_NO_APPT_GRACE_MS = 3 * 24 * 60 * 60 * 1000;
+
+        /**
+         * Pickup-day bucket for an order (Israel dates):
+         *  today/tomorrow — open customer appointment on that day;
+         *  overdue — items still waiting (ready) and either the appointment day
+         *  passed, or no appointment was set 3+ days after the ready notice.
+         */
+        function getPickupQueueSchedule(order, status) {
+            const appts = Array.isArray(order.pickupAppointments) ? order.pickupAppointments : [];
+            const open = [...appts].reverse().find(a => a.status === 'active' || a.status === 'pending' || a.status === 'sent');
+            const todayKey = getIsraelDateKey(new Date());
+            const tomorrowKey = getIsraelDateKey(new Date(Date.now() + 24 * 60 * 60 * 1000));
+            const apptStart = open ? new Date(open.start).getTime() : null;
+            const apptKey = apptStart ? getIsraelDateKey(new Date(apptStart)) : null;
+            const waiting = status.ready > 0;
+
+            let category = 'other';
+            let overdueReason = null;
+            if (apptKey && apptKey === todayKey) category = 'today';
+            else if (apptKey && apptKey === tomorrowKey) category = 'tomorrow';
+            else if (waiting && apptKey && apptKey < todayKey) {
+                category = 'overdue';
+                overdueReason = 'missed';
+            } else if (waiting && !apptKey && order.pickupReadyNotifiedAt
+                && Date.now() - new Date(order.pickupReadyNotifiedAt).getTime() > PICKUP_NO_APPT_GRACE_MS) {
+                category = 'overdue';
+                overdueReason = 'noAppointment';
+            }
+            return { category, overdueReason, apptStart, apptEnd: open ? new Date(open.end).getTime() : null };
+        }
+
+        function buildPickupScheduleHtml(schedule) {
+            if (!schedule.apptStart && !schedule.overdueReason) return '';
+            const fmt = (ts) => new Date(ts).toLocaleString('he-IL', { timeZone: __wdIsraelTz, day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+            if (schedule.overdueReason === 'noAppointment') {
+                return '<div class="text-[11px] text-red-600 flex items-center gap-1"><i class="ph ph-warning"></i>לא נקבע מועד איסוף</div>';
+            }
+            const cls = schedule.overdueReason ? 'text-red-600' : 'text-blue-700';
+            const icon = schedule.overdueReason ? 'ph-warning' : 'ph-calendar-check';
+            const label = schedule.overdueReason ? 'האיסוף שנקבע חלף ללא איסוף' : 'איסוף נקבע';
+            return `<div class="text-[11px] ${cls} flex items-center gap-1"><i class="ph ${icon}"></i>${label}: ${fmt(schedule.apptStart)}</div>`;
+        }
+
+        function renderPickupQueueFilters(baseRows) {
+            const el = document.getElementById('pickupQueueFilters');
+            if (!el) return;
+            const count = (cat) => baseRows.filter(r => r.schedule.category === cat).length;
+            const defs = [
+                { id: 'all', label: 'הכל', n: baseRows.length, cls: 'gray' },
+                { id: 'today', label: 'איסוף היום', n: count('today'), cls: 'blue' },
+                { id: 'tomorrow', label: 'איסוף מחר', n: count('tomorrow'), cls: 'blue' },
+                { id: 'overdue', label: 'באיחור / לא נקבע', n: count('overdue'), cls: 'red' },
+            ];
+            el.innerHTML = defs.map(d => {
+                const active = __wdPickupQueueFilter === d.id;
+                const base = 'px-3 py-1.5 rounded-full text-xs font-bold border transition-colors flex items-center gap-1.5';
+                const color = active
+                    ? (d.cls === 'red' ? 'bg-red-600 text-white border-red-600' : d.cls === 'blue' ? 'bg-blue-600 text-white border-blue-600' : 'bg-gray-800 text-white border-gray-800')
+                    : (d.cls === 'red' && d.n ? 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50');
+                return `<button type="button" onclick="setPickupQueueFilter('${d.id}')" class="${base} ${color}">${d.label}<span class="${active ? 'bg-white/25' : 'bg-gray-100 text-gray-700'} rounded-full px-1.5 text-[11px]">${d.n}</span></button>`;
+            }).join('');
+        }
+
+        window.setPickupQueueFilter = function (id) {
+            __wdPickupQueueFilter = id;
+            renderPickupQueueList();
+        };
+
         function renderPickupQueueList() {
             const container = document.getElementById('pickupQueueList');
             const countEl = document.getElementById('pickupQueueCount');
@@ -2934,28 +3108,40 @@ function __wdInjectGlobalAssets() {
                 return;
             }
 
-            const rows = (__wdPickupQueueData.orders || [])
+            const baseRows = (__wdPickupQueueData.orders || [])
                 .filter(o => o.orderStatus !== 'cancelled')
-                .map(order => ({ order, status: getPickupQueueOrderStatus(order) }))
+                .map(order => {
+                    const status = getPickupQueueOrderStatus(order);
+                    return { order, status, schedule: getPickupQueueSchedule(order, status) };
+                })
                 .filter(({ status }) => __wdPickupQueueIncludeCollected || !status.fullyCollected)
                 .filter(({ order }) => pickupQueueMatchesSearch(order, __wdPickupQueueSearchQuery));
 
-            rows.sort((a, b) => {
-                const wa = mockWorkshops.find(w => w.id === a.order.workshopId);
-                const wb = mockWorkshops.find(w => w.id === b.order.workshopId);
-                return (wb?.startTimestamp || 0) - (wa?.startTimestamp || 0);
-            });
+            renderPickupQueueFilters(baseRows);
+
+            const filter = __wdPickupQueueFilter;
+            const rows = baseRows.filter(({ schedule }) => filter === 'all' || schedule.category === filter);
+
+            if (filter === 'today' || filter === 'tomorrow') {
+                rows.sort((a, b) => (a.schedule.apptStart || 0) - (b.schedule.apptStart || 0));
+            } else {
+                rows.sort((a, b) => {
+                    const wa = mockWorkshops.find(w => w.id === a.order.workshopId);
+                    const wb = mockWorkshops.find(w => w.id === b.order.workshopId);
+                    return (wb?.startTimestamp || 0) - (wa?.startTimestamp || 0);
+                });
+            }
 
             if (countEl) {
-                countEl.innerText = `מציג ${rows.length} הזמנות${__wdPickupQueueSearchQuery ? ' (מסונן)' : ''} · 60 הימים האחרונים`;
+                countEl.innerText = `מציג ${rows.length} הזמנות${(__wdPickupQueueSearchQuery || filter !== 'all') ? ' (מסונן)' : ''} · 60 הימים האחרונים`;
             }
 
             if (!rows.length) {
-                container.innerHTML = `<div class="text-sm text-gray-400 py-10 text-center">לא נמצאו הזמנות ${__wdPickupQueueSearchQuery ? 'התואמות לחיפוש' : 'הממתינות לאיסוף'}.</div>`;
+                container.innerHTML = `<div class="text-sm text-gray-400 py-10 text-center">לא נמצאו הזמנות ${(__wdPickupQueueSearchQuery || filter !== 'all') ? 'התואמות לסינון' : 'הממתינות לאיסוף'}.</div>`;
                 return;
             }
 
-            container.innerHTML = rows.map(({ order, status }) => {
+            container.innerHTML = rows.map(({ order, status, schedule }) => {
                 const workshop = mockWorkshops.find(w => w.id === order.workshopId);
                 const typeInfo = workshop ? workshopTypes[workshop.type] : null;
                 const badgeStyle = typeInfo ? colorHexToBadgeStyle(typeInfo.colorHex) : '';
@@ -2988,6 +3174,7 @@ function __wdInjectGlobalAssets() {
                                 <span class="px-1.5 py-0.5 rounded text-[10px] font-bold" style="${badgeStyle}">${escapeHtml(title)}</span>
                                 <span>${escapeHtml(dateLabel)}</span>
                             </div>
+                            ${buildPickupScheduleHtml(schedule)}
                         </div>
                         <div class="flex items-center gap-3 shrink-0">
                             ${statusBadge}
@@ -5729,7 +5916,7 @@ window.handlePickupNotReadyError = handlePickupNotReadyError;
 // ============================================================
 class WorkshopsDashboardElement extends HTMLElement {
     static get observedAttributes() {
-        return ['dashboard-data', 'sketch-download', 'action-error', 'staff-admin-data', 'staff-admin-action-result', 'order-debug', 'order-search-results', 'pickup-queue-data', 'order-promo-coupons'];
+        return ['dashboard-data', 'sketch-download', 'action-error', 'staff-admin-data', 'staff-admin-action-result', 'order-debug', 'order-search-results', 'pickup-queue-data', 'order-promo-coupons', 'today-pickups'];
     }
 
     connectedCallback() {
@@ -5847,6 +6034,16 @@ class WorkshopsDashboardElement extends HTMLElement {
                 if (typeof window.__wdHandlePickupQueueData === 'function') window.__wdHandlePickupQueueData(JSON.parse(newValue));
             } catch (err) {
                 console.error('[workshops-dashboard] Failed to parse pickup-queue-data attribute:', err);
+            }
+            return;
+        }
+
+        if (name === 'today-pickups') {
+            if (!newValue || newValue === oldValue) return;
+            try {
+                if (typeof window.__wdHandleTodayPickups === 'function') window.__wdHandleTodayPickups(JSON.parse(newValue));
+            } catch (err) {
+                console.error('[workshops-dashboard] Failed to parse today-pickups attribute:', err);
             }
             return;
         }

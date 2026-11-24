@@ -292,7 +292,8 @@ export function getPickupEligibility(order) {
         return { status: 'expired', deadline };
     }
 
-    const usedAppointments = (order.pickupAppointments || []).length;
+    // Appointments voided by an admin "reset collected" don't count toward the quota.
+    const usedAppointments = (order.pickupAppointments || []).filter((a) => a.status !== 'reset').length;
     const remaining = Math.max(0, PICKUP_MAX_APPOINTMENTS - usedAppointments);
     if (usedAppointments >= PICKUP_MAX_APPOINTMENTS) {
         return { status: 'quota_exceeded', deadline, used: usedAppointments, remaining: 0 };
@@ -464,7 +465,7 @@ export async function createPickupAppointment(orderId, slotKey) {
     };
 
     let pickupAppointments = [...previousAppointments, newAppointment];
-    const usedCount = pickupAppointments.length;
+    const usedCount = pickupAppointments.filter((a) => a.status !== 'reset').length;
 
     await mergePatchWorkshopOrder(orderId, {
         pickupAppointments,
@@ -553,6 +554,26 @@ export async function markCollectedSketchStatuses(items) {
     const toUpdate = (found.items || [])
         .filter((sel) => sel.sketchStatus !== SKETCH_STATUS.COLLECTED)
         .map((sel) => ({ ...sel, sketchStatus: SKETCH_STATUS.COLLECTED, isLocked: true }));
+    if (!toUpdate.length) return;
+    await wixData.bulkUpdate('SketchSelections', toUpdate, SA);
+}
+
+/** Reverts "נאסף" sketches back to "מוכנה לאיסוף" (admin reset of a collected item). */
+export async function resetCollectedSketchStatuses(items) {
+    const ids = [...new Set((items || [])
+        .map((item) => String(item?.key || ''))
+        .filter((key) => key.startsWith('sketch:'))
+        .map((key) => key.slice('sketch:'.length))
+        .filter(Boolean))];
+    if (!ids.length) return;
+
+    const found = await wixData.query('SketchSelections')
+        .hasSome('_id', ids)
+        .limit(ids.length)
+        .find(SA);
+    const toUpdate = (found.items || [])
+        .filter((sel) => sel.sketchStatus === SKETCH_STATUS.COLLECTED)
+        .map((sel) => ({ ...sel, sketchStatus: SKETCH_STATUS.READY_FOR_PICKUP, isLocked: true }));
     if (!toUpdate.length) return;
     await wixData.bulkUpdate('SketchSelections', toUpdate, SA);
 }

@@ -2842,6 +2842,55 @@ export const getPickupQueue = webMethod(Permissions.SiteMember, async () => {
 });
 
 /**
+ * Pickups scheduled by customers for today (Israel date): who, which items,
+ * when. Lightweight — only orders whose ready-notice is within the booking
+ * window are scanned (appointments are an array, not queryable by date).
+ */
+export const getTodayPickups = webMethod(Permissions.SiteMember, async () => {
+    await assertDashboardAccess();
+
+    const todayKey = toDateKey(new Date());
+    const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const orders = [];
+    let result = await wixData.query('WorkshopOrders')
+        .ge('pickupReadyNotifiedAt', since)
+        .limit(200)
+        .find(SA);
+    orders.push(...(result.items || []));
+    while (typeof result.hasNext === 'function' && result.hasNext()) {
+        result = await result.next();
+        orders.push(...(result.items || []));
+    }
+
+    const pickups = [];
+    for (const order of orders) {
+        if (order.cancelledAt) continue;
+        const appts = Array.isArray(order.pickupAppointments) ? order.pickupAppointments : [];
+        for (const a of appts) {
+            if (!['pending', 'sent', 'active', 'collected'].includes(a.status)) continue;
+            if (toDateKey(a.start) !== todayKey) continue;
+            const items = (order.pickupItems || [])
+                .filter((i) => i.state === 'ready' || (a.status === 'collected' && i.state === 'collected'))
+                .map((i) => ({ label: i.label || i.key, state: i.state }));
+            pickups.push({
+                orderId: order._id,
+                organizerName: order.organizerName || '',
+                organizerPhone: order.organizerPhone || '',
+                ecomOrderNumber: order.ecomOrderNumber || '',
+                start: a.start,
+                end: a.end,
+                status: a.status,
+                workshopName: a.workshopName || '',
+                staffRecipient: a.staffRecipient || '',
+                items,
+            });
+        }
+    }
+    pickups.sort((x, y) => new Date(x.start).getTime() - new Date(y.start).getTime());
+    return { pickups, dateKey: todayKey };
+});
+
+/**
  * Issued PromoCoupons for the orders currently open in the side panel.
  * Called after the panel is already rendered — never part of the panel-open path.
  * Only status "issued" counts as available (redeemed/cancelled are omitted).

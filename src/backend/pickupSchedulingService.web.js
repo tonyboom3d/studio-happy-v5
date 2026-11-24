@@ -106,7 +106,7 @@ export const getPickupContext = webMethod(Permissions.Anyone, async (orderId, to
         orderId: order._id,
         organizerName: order.organizerName || '',
         deadline: eligibility.deadline ? eligibility.deadline.toISOString() : null,
-        used: eligibility.used ?? (order.pickupAppointments || []).length,
+        used: eligibility.used ?? (order.pickupAppointments || []).filter((a) => a.status !== 'reset').length,
         remaining: eligibility.remaining ?? 0,
         readyCount: eligibility.readyCount ?? 0,
         canBook,

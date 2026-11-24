@@ -21,11 +21,13 @@ import {
     getOrderPromoCouponTags,
     reprintCheckinReceipts,
     setSketchUploadOverride,
+    getTodayPickups,
 } from 'backend/dashboardService.web.js';
 
 import {
     markReadyForPickup,
     markItemsCollected,
+    resetCollectedItems,
 } from 'backend/pickupService.web.js';
 
 import {
@@ -307,6 +309,16 @@ async function loadAndPushPromoCouponTags(dashboardEl, orderIds, requestId) {
     }
 }
 
+async function loadAndPushTodayPickups(dashboardEl) {
+    try {
+        const data = await getTodayPickups();
+        dashboardEl.setAttribute('today-pickups', JSON.stringify({ ...data, __fetchedAt: Date.now() }));
+    } catch (err) {
+        console.error('[order-managment-dashboard-velo] getTodayPickups failed:', err?.message || err);
+        dashboardEl.setAttribute('today-pickups', JSON.stringify({ error: err?.message || String(err), __fetchedAt: Date.now() }));
+    }
+}
+
 async function loadAndPushPickupQueue(dashboardEl) {
     const generation = ++__wdPickupQueueGeneration;
     try {
@@ -446,6 +458,12 @@ async function handleDashboardAction(dashboardEl, detail) {
     case 'searchOrders':
 
         await runOrderSearch(dashboardEl, payload?.query || '');
+
+        return;
+
+    case 'loadTodayPickups':
+
+        await loadAndPushTodayPickups(dashboardEl);
 
         return;
 
@@ -716,6 +734,24 @@ async function handleDashboardAction(dashboardEl, detail) {
         } catch (err) {
 
             reportPickupActionError(dashboardEl, 'markItemsCollected', payload, err);
+
+            return;
+
+        }
+
+        if (__wdPickupQueueLoaded) loadAndPushPickupQueue(dashboardEl).catch(() => {});
+
+        break;
+
+    case 'resetCollectedItems':
+
+        try {
+
+            await resetCollectedItems(payload.orderId, payload.items);
+
+        } catch (err) {
+
+            reportPickupActionError(dashboardEl, 'resetCollectedItems', payload, err);
 
             return;
 

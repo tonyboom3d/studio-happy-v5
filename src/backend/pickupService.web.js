@@ -13,7 +13,7 @@ import { Permissions, webMethod } from 'wix-web-module';
 import { getItemWithRetry } from 'backend/wixDataRetry.js';
 import { sendPickupReadyManyChat } from 'backend/manychatService.jsw';
 import { assertPermission, logOrderAction } from 'backend/dashboardService.web.js';
-import { markCollectedSketchStatuses } from 'backend/pickupScheduling.js';
+import { markCollectedSketchStatuses, resetCollectedSketchStatuses } from 'backend/pickupScheduling.js';
 import { mergePatchWorkshopOrder } from 'backend/workshopOrderPatch.js';
 
 function normalizeItemsInput(items) {
@@ -140,6 +140,54 @@ export const markItemsCollected = webMethod(Permissions.SiteMember, async (order
     if (cancelNotify) {
         await logOrderAction(orderId, 'התראת צוות לאיסוף בוטלה — כל הפריטים נאספו', options?.user);
     }
+
+    return { success: true, pickupItems };
+});
+
+/**
+ * Admin-only ("manageOrdersSystem"): reverts items from "נאסף" back to
+ * "מוכן לאיסוף" so the customer can book a new pickup date. Sketch statuses
+ * return to "מוכנה לאיסוף", collected appointments are voided (status
+ * 'reset', excluded from the 3-appointment quota) and the 25-day booking
+ * window restarts. No WhatsApp is sent.
+ */
+export const resetCollectedItems = webMethod(Permissions.SiteMember, async (orderId, items, options) => {
+    await assertPermission('manageOrdersSystem');
+
+    const requestedItems = normalizeItemsInput(items);
+    if (!requestedItems.length) throw new Error('NO_ITEMS_SELECTED');
+
+    const order = await getItemWithRetry('WorkshopOrders', orderId, { callerLabel: 'resetCollectedItems' });
+    if (!order) throw new Error('Order not found');
+
+    const existingByKey = new Map((order.pickupItems || []).map((it) => [it.key, it]));
+    const toReset = requestedItems.filter((it) => existingByKey.get(it.key)?.state === 'collected');
+    if (!toReset.length) throw new Error('NOT_COLLECTED:הפריטים שנבחרו אינם בסטטוס "נאסף".');
+
+    const now = new Date().toISOString();
+    const resetKeys = new Set(toReset.map((it) => it.key));
+    const pickupItems = (order.pickupItems || []).map((it) => {
+        if (!resetKeys.has(it.key)) return it;
+        const { collectedAt, collectedBy, skippedReadyStatus, ...rest } = it;
+        return { ...rest, state: 'ready', readyAt: now, resetAt: now };
+    });
+    const pickupAppointments = (order.pickupAppointments || []).map((a) => (
+        a.status === 'collected' ? { ...a, status: 'reset' } : a
+    ));
+
+    await resetCollectedSketchStatuses(toReset);
+    await mergePatchWorkshopOrder(orderId, {
+        pickupItems,
+        pickupAppointments,
+        pickupReadyNotifiedAt: now,
+        pickupStaffNotifyStatus: 'none',
+    }, 'pickupService.resetCollectedItems');
+
+    await logOrderAction(
+        orderId,
+        `סטטוס "נאסף" אופס על ידי מנהל: ${toReset.map((it) => it.label).join(', ')} — הלקוח יכול לתאם איסוף מחדש`,
+        options?.user,
+    );
 
     return { success: true, pickupItems };
 });

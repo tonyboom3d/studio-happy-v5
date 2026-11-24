@@ -1372,20 +1372,48 @@ var __wdCustomCss = `
             flex-wrap: wrap;
         }
 
-        /* Side panel orders: keep table layout + horizontal scroll; detail rows stay collapsed until click */
+        /* Side panel orders: one card per order. The 3-column table overflows a
+           phone, so the progress bars paint over the name and the sketch
+           thumbnails get pushed off-screen. */
         ${__wdTagName} .wd-sp-body {
-            overflow-x: auto !important;
-            -webkit-overflow-scrolling: touch;
+            overflow-x: hidden !important;
         }
         ${__wdTagName} .wd-orders-table {
-            min-width: 560px;
+            min-width: 0 !important;
+            width: 100% !important;
+            display: block;
         }
-        ${__wdTagName} .wd-orders-table th,
-        ${__wdTagName} .wd-orders-table td {
-            padding: 8px 10px !important;
+        ${__wdTagName} .wd-orders-table thead { display: none; }
+        ${__wdTagName} .wd-orders-table tbody { display: block; }
+        ${__wdTagName} .wd-orders-table tr.hidden { display: none !important; }
+        ${__wdTagName} .wd-orders-table tr.wd-order-row {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            padding: 10px 12px;
         }
-        ${__wdTagName} .wd-orders-table tr.hidden {
-            display: none !important;
+        ${__wdTagName} .wd-orders-table tr.wd-order-row > td {
+            display: block;
+            width: 100% !important;
+            max-width: 100% !important;
+            padding: 0 !important;
+        }
+        ${__wdTagName} .wd-orders-table tr.wd-order-row > td:nth-child(2) > div {
+            width: 148px !important;
+            max-width: 148px !important;
+            margin-inline-start: 22px !important;
+            margin-inline-end: 0 !important;
+        }
+        ${__wdTagName} .wd-orders-table tr.wd-order-row > td:nth-child(3) > div {
+            justify-content: flex-start !important;
+            flex-wrap: wrap;
+        }
+        ${__wdTagName} .wd-orders-table tr[id^="detail-"]:not(.hidden) { display: block; }
+        ${__wdTagName} .wd-orders-table tr[id^="detail-"] > td {
+            display: block;
+            width: 100% !important;
+            max-width: none !important;
+            padding: 0 !important;
         }
 
         /* Expanded order detail content reuses px-8/px-6 etc. Tailwind utilities

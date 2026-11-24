@@ -1393,7 +1393,24 @@ var __wdCustomCss = `
            screen's padding untouched. */
         ${__wdTagName} .wd-side-panel .px-8 { padding-left: 12px !important; padding-right: 12px !important; }
         ${__wdTagName} .wd-side-panel .px-6 { padding-left: 10px !important; padding-right: 10px !important; }
-        ${__wdTagName} .wd-side-panel .w-\[240px\] { width: 168px !important; }
+        ${__wdTagName} .wd-side-panel .w-\[240px\]:not(.wd-sketch-card) { width: 168px !important; }
+        /* Sketch cards: two squares per row, full drawing inside the square. */
+        ${__wdTagName} .wd-side-panel [id^="carousel-"]:has(.wd-sketch-card) {
+            display: grid !important;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 8px !important;
+            overflow: visible !important;
+        }
+        ${__wdTagName} .wd-side-panel .wd-sketch-card {
+            width: auto !important;
+            max-width: none !important;
+            padding: 8px !important;
+            gap: 6px !important;
+        }
+        ${__wdTagName} .wd-side-panel .wd-sketch-card img {
+            object-fit: contain !important;
+            background-color: #fff;
+        }
 
         /* --- Modals --- */
         ${__wdTagName} .modal { padding: 8px !important; }
@@ -4305,7 +4322,7 @@ function __wdInjectGlobalAssets() {
                              </div>`;
 
                         sketchesHtml += `
-                            <div class="bg-white border border-gray-200 rounded-xl p-3 shadow-sm flex flex-col gap-3 w-[240px] shrink-0 snap-start relative transition-shadow hover:shadow-md">
+                            <div class="wd-sketch-card bg-white border border-gray-200 rounded-xl p-3 shadow-sm flex flex-col gap-3 w-[240px] shrink-0 snap-start relative transition-shadow hover:shadow-md">
                                 <div class="flex justify-between items-center z-10 gap-1 flex-wrap">
                                     ${sketchNumberBadge}
                                     <span class="text-xs font-bold text-gray-700 bg-gray-100 px-2 py-0.5 rounded">${sketchLabel}</span>
@@ -4341,7 +4358,7 @@ function __wdInjectGlobalAssets() {
                         const slotIndex = existingSketches.length + slot;
                         const slotSketchNum = slotIndex + 1;
                         sketchesHtml += `
-                            <div class="bg-white border-2 border-dashed border-gray-300 rounded-xl p-3 shadow-sm flex flex-col gap-3 w-[240px] shrink-0 snap-start relative overflow-hidden">
+                            <div class="wd-sketch-card bg-white border-2 border-dashed border-gray-300 rounded-xl p-3 shadow-sm flex flex-col gap-3 w-[240px] shrink-0 snap-start relative overflow-hidden">
                                 <div class="flex justify-between items-center z-10 gap-1 flex-wrap">
                                     <span class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-200">סקיצה ${slotSketchNum}</span>
                                     <span class="text-xs font-bold text-gray-500 bg-gray-100 px-2 py-0.5 rounded">שטיח ${slotSketchNum}</span>

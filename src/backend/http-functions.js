@@ -948,7 +948,7 @@ async function runStartPickup(request, label) {
         const slotEnd = new Date(upcoming.end);
         const { token, expiresAt } = await extendPickupTokenUntil(orderId, slotEnd);
         const link = `${PICKUP_PAGE_URL}?orderId=${encodeURIComponent(orderId)}&token=${encodeURIComponent(token)}&sid=${encodeURIComponent(subscriberId)}`;
-        const slotLabel = `${formatPickupSlotLabel(upcoming)} (${upcoming.workshopName || 'סדנה'})`;
+        const slotLabel = formatPickupSlotLabel(upcoming);
         // Fire-and-forget: the response body below already carries pickup_status/
         // pickup_link directly, so the ManyChat flow doesn't need to wait for this
         // field sync. Awaiting it here would block our reply on a second ManyChat

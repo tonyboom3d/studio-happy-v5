@@ -3,9 +3,10 @@
  * pickupSchedulingService.web.js for the customer-facing page API and
  * http-functions.js get_startPickup for the ManyChat entry point).
  *
- * Every Bookings session in the pickup window is offered, including sessions
- * that have no paid orders yet. Paid orders whose session is missing from
- * availability (for example a full workshop) are added as well.
+ * A session is offered only when it has at least PICKUP_MIN_ORDERS distinct
+ * paid, not-cancelled WorkshopOrders (different orders on that one workshop).
+ * Bookings availability supplies the real end time; paid orders still fill in
+ * sessions availability omits (for example a full workshop).
  *
  * Staff notification timing: scheduled for (slot start − 30min); if that
  * moment is already in the past when the appointment is created (customer
@@ -214,8 +215,9 @@ async function loadOrderSessionGroups(now, toDate) {
 }
 
 /**
- * Every workshop session starting in (now, toDate]. Bookings availability is
- * the source of the calendar; paid orders fill in sessions availability omits.
+ * Workshop sessions starting in (now, toDate] that have at least
+ * PICKUP_MIN_ORDERS distinct paid orders. A calendar day is bookable only
+ * when one of its sessions meets that bar.
  */
 export async function loadPickupSlots(toDate) {
     const now = new Date();
@@ -270,6 +272,7 @@ export async function loadPickupSlots(toDate) {
                 ordersCount: g.ordersCount || 0,
             };
         })
+        .filter((slot) => slot.ordersCount >= PICKUP_MIN_ORDERS)
         .sort((a, b) => a.start.getTime() - b.start.getTime());
 }
 
@@ -492,7 +495,7 @@ export async function createPickupAppointment(orderId, slotKey) {
     const slotLabel = formatPickupSlotLabel(newAppointment);
     const readyItems = (order.pickupItems || []).filter((i) => i.state === 'ready');
     const customerMsg = await sendPickupScheduledManyChat(order, {
-        slotLabel: `${slotLabel} (${slot.workshopName})`,
+        slotLabel,
         itemsLine: readyItems.map((i) => i.label).join(', '),
         viewLink,
     }).catch((err) => ({ sent: false, reason: 'error', error: err?.message || String(err) }));

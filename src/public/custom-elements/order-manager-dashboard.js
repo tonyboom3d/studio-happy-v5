@@ -3072,7 +3072,7 @@ function __wdInjectGlobalAssets() {
             return `<div class="text-[11px] ${cls} flex items-center gap-1"><i class="ph ${icon}"></i>${label}: ${fmt(schedule.apptStart)}</div>`;
         }
 
-        function renderPickupQueueFilters(baseRows) {
+        function renderPickupQueueFilters(baseRows, collectedCount) {
             const el = document.getElementById('pickupQueueFilters');
             if (!el) return;
             const count = (cat) => baseRows.filter(r => r.schedule.category === cat).length;
@@ -3081,13 +3081,18 @@ function __wdInjectGlobalAssets() {
                 { id: 'today', label: 'איסוף היום', n: count('today'), cls: 'blue' },
                 { id: 'tomorrow', label: 'איסוף מחר', n: count('tomorrow'), cls: 'blue' },
                 { id: 'overdue', label: 'באיחור / לא נקבע', n: count('overdue'), cls: 'red' },
+                { id: 'collected', label: 'נאספו', n: collectedCount, cls: 'green' },
             ];
             el.innerHTML = defs.map(d => {
                 const active = __wdPickupQueueFilter === d.id;
                 const base = 'px-3 py-1.5 rounded-full text-xs font-bold border transition-colors flex items-center gap-1.5';
-                const color = active
-                    ? (d.cls === 'red' ? 'bg-red-600 text-white border-red-600' : d.cls === 'blue' ? 'bg-blue-600 text-white border-blue-600' : 'bg-gray-800 text-white border-gray-800')
-                    : (d.cls === 'red' && d.n ? 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50');
+                const activeColor = { red: 'bg-red-600 text-white border-red-600', blue: 'bg-blue-600 text-white border-blue-600', green: 'bg-emerald-600 text-white border-emerald-600', gray: 'bg-gray-800 text-white border-gray-800' };
+                const idleColor = d.cls === 'red' && d.n
+                    ? 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100'
+                    : d.cls === 'green' && d.n
+                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                        : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50';
+                const color = active ? activeColor[d.cls] : idleColor;
                 return `<button type="button" onclick="setPickupQueueFilter('${d.id}')" class="${base} ${color}">${d.label}<span class="${active ? 'bg-white/25' : 'bg-gray-100 text-gray-700'} rounded-full px-1.5 text-[11px]">${d.n}</span></button>`;
             }).join('');
         }
@@ -3108,19 +3113,23 @@ function __wdInjectGlobalAssets() {
                 return;
             }
 
-            const baseRows = (__wdPickupQueueData.orders || [])
+            const matchedRows = (__wdPickupQueueData.orders || [])
                 .filter(o => o.orderStatus !== 'cancelled')
                 .map(order => {
                     const status = getPickupQueueOrderStatus(order);
                     return { order, status, schedule: getPickupQueueSchedule(order, status) };
                 })
-                .filter(({ status }) => __wdPickupQueueIncludeCollected || !status.fullyCollected)
                 .filter(({ order }) => pickupQueueMatchesSearch(order, __wdPickupQueueSearchQuery));
+            const collectedRows = matchedRows.filter(({ status }) => status.fullyCollected);
+            const baseRows = matchedRows
+                .filter(({ status }) => __wdPickupQueueIncludeCollected || !status.fullyCollected);
 
-            renderPickupQueueFilters(baseRows);
+            renderPickupQueueFilters(baseRows, collectedRows.length);
 
             const filter = __wdPickupQueueFilter;
-            const rows = baseRows.filter(({ schedule }) => filter === 'all' || schedule.category === filter);
+            const rows = filter === 'collected'
+                ? collectedRows
+                : baseRows.filter(({ schedule }) => filter === 'all' || schedule.category === filter);
 
             if (filter === 'today' || filter === 'tomorrow') {
                 rows.sort((a, b) => (a.schedule.apptStart || 0) - (b.schedule.apptStart || 0));
@@ -3898,11 +3907,16 @@ function __wdInjectGlobalAssets() {
 
         // --- SIDE PANEL & ORDERS ACCORDION ---
 
-        function openSidePanel(id) {
+        // Set when the panel is opened from the pickup tab, so it shows that one
+        // order instead of every order booked into the same workshop.
+        let __wdSidePanelOnlyOrderId = null;
+
+        function openSidePanel(id, onlyOrderId) {
             currentWorkshopId = id;
+            __wdSidePanelOnlyOrderId = onlyOrderId || null;
             const w = mockWorkshops.find(x => x.id === id);
             const typeInfo = workshopTypeOf(w);
-            const wOrders = getVisibleOrders().filter(o => o.workshopId === id);
+            const wOrders = getVisibleOrders().filter(o => o.workshopId === id && (!onlyOrderId || o.id === onlyOrderId));
             console.warn('🏫 [workshops-dashboard] Opened workshop:', w);
             console.warn(`📋 [workshops-dashboard] Orders for workshop ${id} (${wOrders.length}):`, wOrders);
 
@@ -3936,6 +3950,7 @@ function __wdInjectGlobalAssets() {
         }
 
         function closeSidePanel() {
+            __wdSidePanelOnlyOrderId = null;
             const overlay = document.getElementById('sidePanelOverlay');
             const panel = document.getElementById('sidePanel');
             panel.classList.add('-translate-x-full');
@@ -3985,6 +4000,7 @@ function __wdInjectGlobalAssets() {
             tbody.innerHTML = '';
             const orders = getVisibleOrders()
                 .filter(o => o.workshopId === workshopId && (showCancelledOrders || o.orderStatus !== 'cancelled'))
+                .filter(o => !__wdSidePanelOnlyOrderId || o.id === __wdSidePanelOnlyOrderId)
                 .slice()
                 .sort((a, b) => (b.quantity || 0) - (a.quantity || 0));
 
@@ -5247,7 +5263,7 @@ function __wdInjectGlobalAssets() {
             if (!order) return;
             const workshop = mockWorkshops.find((w) => w.id === order.workshopId);
             if (!workshop) return;
-            openSidePanel(workshop.id);
+            openSidePanel(workshop.id, orderId);
             const row = document.getElementById(`detail-${orderId}`);
             const icon = document.getElementById(`icon-${orderId}`);
             if (row) row.classList.remove('hidden');

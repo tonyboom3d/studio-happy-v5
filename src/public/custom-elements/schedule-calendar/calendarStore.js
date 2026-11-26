@@ -13,12 +13,13 @@ export function calState(ce) {
             view: 'week',
             anchor: today,
             miniMonth: today.slice(0, 7),
-            filters: { workshopIds: [], employeeIds: [], state: '' },
+            filters: { workshopIds: [], employeeIds: [], staff: '', people: '' },
             openGroups: {},
             msOpen: null,
             cache: { days: {}, subsByDate: {}, loaded: {}, employees: [], workshopTypes: [], vacations: [], settings: EMPTY_SETTINGS(), permissions: {}, ready: false },
             loadingKey: null,
-            drawer: null,            // { kind: 'session', dateKey, typeId, start } | { kind: 'day', dateKey }
+            drawer: null,            // { kind: 'session', dateKey, typeId, start, from? } | { kind: 'day', dateKey, from? }
+            drawerX: 0,              // horizontal drag offset (px)
             drawerTab: 'participants',
             picker: null,            // { mode: 'add' } | { mode: 'swap', fromId }
             editHours: null,         // employeeId
@@ -114,7 +115,7 @@ function slotRange(slot) {
 
 /** Flat list of workshop sessions for the given dates, honoring filters. */
 export function buildEvents(cal, keys, { applyFilters = true } = {}) {
-    const { workshopIds, employeeIds, state } = cal.filters;
+    const { workshopIds, employeeIds, staff, people } = cal.filters;
     const out = [];
     for (const k of keys) {
         const day = cal.cache.days[k];
@@ -123,13 +124,15 @@ export function buildEvents(cal, keys, { applyFilters = true } = {}) {
             const assignedIds = t.assignedEmployeeIds || [];
             if (applyFilters && workshopIds.length && !workshopIds.includes(t.typeId)) continue;
             if (applyFilters && employeeIds.length && !assignedIds.some(id => employeeIds.includes(id))) continue;
+            if (applyFilters && staff === 'noStaff' && assignedIds.length) continue;
+            if (applyFilters && staff === 'withStaff' && !assignedIds.length) continue;
             const slots = t.slots?.length ? t.slots : [{ start: null, end: null, required: t.required, adults: t.adults, children: t.children, capacity: null }];
             for (const slot of slots) {
                 const r = slotRange(slot);
-                if (applyFilters && state) {
-                    if (state === 'noStaff' && assignedIds.length) continue;
-                    if (state === 'withStaff' && !assignedIds.length) continue;
-                    if (state === 'noParticipants' && eventCapacity({ capacity: slot.capacity || null, people: (slot.adults || 0) + (slot.children || 0) }).booked > 0) continue;
+                if (applyFilters && people) {
+                    const booked = (slot.adults || 0) + (slot.children || 0) > 0;
+                    if (people === 'noParticipants' && booked) continue;
+                    if (people === 'withParticipants' && !booked) continue;
                 }
                 out.push({
                     id: `${k}|${t.typeId}|${slot.start || ''}`,

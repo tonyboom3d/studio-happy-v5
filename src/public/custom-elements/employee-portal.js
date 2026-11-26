@@ -22,6 +22,7 @@
  */
 import { ADMIN_STYLE, renderAdminTab, handleAdminClick, handleAdminChange, handleAdminDragStart, handleAdminDragEnd, handleAdminDragOver, handleAdminDrop, captureEmployeeFormDraft, captureRuleFormDraft } from './employee-portal-admin.js';
 import { RR_STYLE, renderRescheduleRequestsPanel, handleRescheduleClick, handleRescheduleChange } from './reschedule-requests-panel.js';
+import { handleNewEmployeeResult } from './employee-admin/employeeCreate.js';
 import { CALENDAR_STYLE, handleCalendarClick, handleCalendarChange, handleCalendarData, handleCalendarResult, captureCalendarState, restoreCalendarState, calendarOutsideClick, updateCalendarDrawer } from './schedule-calendar/calendarActions.js';
 
 const EMPLOYEE_SAVE_HOLD_MS = 2000;
@@ -43,10 +44,12 @@ const SILENT_ADMIN_REFRESH_TYPES = new Set([
     'adminApproveSubmission',
     'adminRejectSubmission',
     'adminUpdateWorkType',
+    'adminAssignBatch',
 ]);
 
 const ADMIN_REFRESH_TOAST = {
     adminManualAssign: 'העובד/ת שובץ/ה בהצלחה.',
+    adminAssignBatch: 'העובד/ת צורף/ה לסדנאות שנבחרו.',
     adminCancelAssignment: 'השיבוץ עודכן.',
     adminSwapAssignment: 'ההחלפה בוצעה בהצלחה.',
     adminApproveSubmission: 'המשמרת אושרה.',
@@ -1026,6 +1029,8 @@ class EmployeePortal extends HTMLElement {
 //                 days: Object.keys(this._adminData.days || {}).length,
 //             });
             if (this._empSaveFinishing) return;
+            // The board calendar keeps its own cache; a background month refresh must not rebuild it.
+            if (this._tab === 'admin' && this._adminPage === 'board' && !this._adminModal && this.querySelector('#scRoot')) return;
             this._scheduleRender();
         }
         if (name === 'hours-data') {
@@ -1184,6 +1189,7 @@ class EmployeePortal extends HTMLElement {
     _handleActionResult(result) {
         this._submitting = false;
         if (handleCalendarResult(this, result)) return;
+        if (handleNewEmployeeResult(this, result)) return;
 
         if (result.type === 'adminSaveEmployee' && result.ok) {
             if (this._lastEmployeeSave && this._adminData) {

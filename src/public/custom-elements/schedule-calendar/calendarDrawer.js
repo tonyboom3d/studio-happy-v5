@@ -11,6 +11,19 @@ export function groupsKey(dateKey, typeId, start) {
     return start ? `${dateKey}::${typeId}::${start}` : `${dateKey}::${typeId}`;
 }
 
+function drawerOpen(cal, label) {
+    const x = cal.drawerX ? ` style="transform:translateX(${cal.drawerX}px)"` : '';
+    return `<aside class="sc-drawer" role="dialog" aria-label="${esc(label)}"${x}>
+        <div class="sc-dr-grip" data-sc-grip="1" title="גררו לצד כדי לראות את הלוח"><span></span></div>`;
+}
+
+function backBtn(cal) {
+    const from = cal.drawer?.from;
+    if (!from) return '';
+    const label = from.kind === 'day' ? 'חזרה ליום' : 'חזרה לסדנה';
+    return `<button type="button" class="sc-btn ghost sm sc-dr-back" data-action="cal-drawer-back">› ${label}</button>`;
+}
+
 function avatar(emp, fallback) {
     const name = emp?.displayName || fallback || '';
     return `<span class="sc-av" style="background:${esc(emp?.color || '#94a3b8')}">${esc(initials(name))}</span>`;
@@ -232,7 +245,7 @@ function renderSessionDrawer(ce, cal) {
     const d = cal.drawer;
     const ev = findEvent(cal, d.dateKey, d.typeId, d.start);
     if (!ev) {
-        return `<aside class="sc-drawer"><div class="sc-dr-head"><h3>המפגש לא נמצא</h3><button type="button" class="sc-icon-btn" data-action="cal-close-drawer" aria-label="סגירה">✕</button></div>
+        return `${drawerOpen(cal, 'המפגש לא נמצא')}<div class="sc-dr-head">${backBtn(cal)}<h3>המפגש לא נמצא</h3><button type="button" class="sc-icon-btn" data-action="cal-close-drawer" aria-label="סגירה">✕</button></div>
             <div class="sc-dr-body"><div class="sc-empty">ייתכן שהמפגש בוטל או הוסר.</div></div></aside>`;
     }
     const col = colorForType(ev.typeId, cal.cache.workshopTypes);
@@ -240,8 +253,9 @@ function renderSessionDrawer(ce, cal) {
     const st = eventStaffState(cal, ev);
     const tab = cal.drawerTab === 'staff' ? 'staff' : 'participants';
     const groups = ce._workshopOrderGroups?.[groupsKey(ev.dateKey, ev.typeId, ev.start)];
-    return `<aside class="sc-drawer" role="dialog" aria-label="${esc(ev.name)}">
+    return `${drawerOpen(cal, ev.name)}
         <div class="sc-dr-head">
+            ${backBtn(cal)}
             <span class="sc-dr-color" style="background:${col.border}"></span>
             <h3>${esc(ev.name)}</h3>
             <button type="button" class="sc-icon-btn" data-action="cal-close-drawer" aria-label="סגירה">✕</button>
@@ -359,8 +373,9 @@ function renderDayDrawer(cal) {
     const empOptions = cal.cache.employees.filter(e => e.active && !onVacation(cal, e.id, dateKey))
         .map(e => `<option value="${esc(e.id)}">${esc(e.displayName)}</option>`).join('');
 
-    return `<aside class="sc-drawer" role="dialog" aria-label="${esc(fmtDayLong(dateKey))}">
+    return `${drawerOpen(cal, fmtDayLong(dateKey))}
         <div class="sc-dr-head">
+            ${backBtn(cal)}
             <h3>${esc(fmtDayLong(dateKey))}</h3>
             <button type="button" class="sc-icon-btn" data-action="cal-close-drawer" aria-label="סגירה">✕</button>
         </div>

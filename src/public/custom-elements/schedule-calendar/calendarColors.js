@@ -27,3 +27,15 @@ export function colorForType(typeId, workshopTypes) {
     for (const ch of String(typeId || '')) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
     return PALETTE[h % PALETTE.length];
 }
+
+const EMPTY_COLOR = { bg: '#f3f4f6', border: '#b6bec9', text: '#6b7280' };
+
+/** Type color, or gray when the session has no paid participants yet. */
+export function colorForEvent(ev, workshopTypes) {
+    return ev.people > 0 ? colorForType(ev.typeId, workshopTypes) : EMPTY_COLOR;
+}
+
+/** Card style: neutral body with a colored top stripe. */
+export function eventStripeStyle(col, empty) {
+    return `background:${empty ? col.bg : '#fff'};border-top:4px solid ${col.border};color:${empty ? col.text : '#20303c'}`;
+}

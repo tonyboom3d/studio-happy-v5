@@ -10,6 +10,7 @@
 import wixData from 'wix-data';
 import { Permissions, webMethod } from 'wix-web-module';
 import { staffMembers } from '@wix/bookings';
+import { auth } from '@wix/essentials';
 import {
     assertEmployeeAccess,
     buildPermissionsFromPreset,
@@ -836,6 +837,133 @@ export const linkEmployeeStaff = webMethod(Permissions.SiteMember, async (staffI
     await publishSchedulingUpdate('employee-linked', { roleId: saved._id, staffId });
     // console.log(`[staffAdminService] linkEmployeeStaff: staff=${staffId} role=${saved._id} by ${caller._id}`);
     return { ok: true, roleId: saved._id };
+});
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/** Bookings requires an international-format phone; local IL numbers (05x…) become +9725x…. */
+function bookingsPhone(phone) {
+    const raw = String(phone || '').trim();
+    if (!raw) return '';
+    const digits = raw.replace(/\D/g, '');
+    if (raw.startsWith('+')) return `+${digits}`;
+    if (digits.startsWith('972')) return `+${digits}`;
+    if (digits.startsWith('0')) return `+972${digits.slice(1)}`;
+    return digits;
+}
+
+/** Creates a Wix Bookings staff member; retries without phone when Bookings rejects its format. */
+async function createBookingsStaff({ name, email, phone }) {
+    const create = auth.elevate(staffMembers.createStaffMember);
+    const base = { name: name.slice(0, 40), ...(email ? { email } : {}) };
+    const intlPhone = bookingsPhone(phone);
+    try {
+        return await create({ ...base, ...(intlPhone ? { phone: intlPhone } : {}) }, { serviceProvider: true });
+    } catch (err) {
+        if (!intlPhone) throw err;
+        console.warn('[staffAdminService] createStaffMember with phone failed, retrying without:', err?.message || err);
+        return create(base, { serviceProvider: true });
+    }
+}
+
+async function deleteBookingsStaff(staffId) {
+    if (!staffId || typeof staffMembers.deleteStaffMember !== 'function') return;
+    await auth.elevate(staffMembers.deleteStaffMember)(staffId).catch((err) => {
+        console.error('[staffAdminService] rollback deleteStaffMember failed:', staffId, err?.message || err);
+    });
+}
+
+function numOrNull(v) {
+    const n = Number(v);
+    return v === '' || v === null || v === undefined || !Number.isFinite(n) ? null : n;
+}
+
+/**
+ * Creates a new employee end-to-end: Wix Bookings staff member (createStaffMember)
+ * + Dashboard_Roles row linked via connectedStaff, with profile, quota, skills,
+ * rates (manageRates) and role-preset permissions (overrides need manageRoles).
+ * With `input.roleId`, creates the Bookings staff for an existing unlinked profile instead.
+ */
+export const createEmployee = webMethod(Permissions.SiteMember, async (input) => {
+    const { role: caller } = await assertEmployeeAccess('manageEmployees');
+    if (!input || typeof input !== 'object') throw new Error('BAD_REQUEST: חסרים פרטים.');
+
+    if (input.roleId) {
+        const row = await wixData.get('Dashboard_Roles', input.roleId, SA).catch(() => null);
+        if (!row) throw new Error('NOT_FOUND: העובד/ת לא נמצא/ה.');
+        if (refId(row.connectedStaff)) throw new Error('CONFLICT: הפרופיל כבר מחובר ל-Bookings.');
+        const staff = await createBookingsStaff({
+            name: String(row.displayName || 'עובד/ת').trim(),
+            email: EMAIL_RE.test(row.userEmail || '') ? row.userEmail : '',
+            phone: row.phone,
+        }).catch((err) => { throw new Error(`BOOKINGS_FAILED: יצירת העובד/ת ב-Wix Bookings נכשלה (${err?.message || err}).`); });
+        await wixData.update('Dashboard_Roles', mergeRoleRowForUpdate(row, { connectedStaff: staff._id }), SA);
+        await publishSchedulingUpdate('employee-linked', { roleId: row._id, staffId: staff._id });
+        return { ok: true, roleId: row._id, staffId: staff._id };
+    }
+
+    const displayName = String(input.displayName || '').trim();
+    if (!displayName) throw new Error('BAD_REQUEST: יש להזין שם עובד/ת.');
+    if (displayName.length > 40) throw new Error('BAD_REQUEST: השם ארוך מדי (עד 40 תווים).');
+    const userEmail = String(input.userEmail || '').trim().toLowerCase() || null;
+    if (userEmail && !EMAIL_RE.test(userEmail)) throw new Error('BAD_REQUEST: כתובת האימייל אינה תקינה.');
+    const phone = String(input.phone || '').trim();
+    const roleType = ROLE_TYPES.includes(input.roleType) ? input.roleType : 'Employee';
+
+    if (userEmail) {
+        const dup = await wixData.query('Dashboard_Roles').eq('userEmail', userEmail).ne('active', false)
+            .limit(1).find(SA).catch(() => ({ items: [] }));
+        if (dup.items?.length) throw new Error('CONFLICT: כתובת האימייל הזו כבר משויכת לעובד/ת פעיל/ה.');
+    }
+
+    const canManageRoles = getRolePermissionValue(caller, 'manageRoles');
+    const overrides = canManageRoles && input.permissions && typeof input.permissions === 'object' ? input.permissions : {};
+    const permissions = buildPermissionsFromPreset(roleType, overrides);
+
+    let staff;
+    try {
+        staff = await createBookingsStaff({ name: displayName, email: userEmail, phone });
+    } catch (err) {
+        console.error('[staffAdminService] createEmployee: createStaffMember failed:', err?.message || err);
+        throw new Error(`BOOKINGS_FAILED: יצירת העובד/ת ב-Wix Bookings נכשלה (${err?.message || err}).`);
+    }
+    if (!staff?._id) throw new Error('BOOKINGS_FAILED: Wix Bookings לא החזיר מזהה עובד/ת.');
+
+    const row = {
+        connectedStaff: staff._id,
+        displayName,
+        phone,
+        userEmail,
+        roleType,
+        active: true,
+        isTrainee: roleType === 'Trainee' || !!input.isTrainee,
+        color: input.color || null,
+        seniority: String(input.seniority || ''),
+        priorityRank: numOrNull(input.priorityRank),
+        minShiftsPerWeek: numOrNull(input.minShiftsPerWeek),
+        minShiftHours: numOrNull(input.minShiftHours),
+        requiredFridaysPerMonth: numOrNull(input.requiredFridaysPerMonth),
+        requiredSaturdaysPerMonth: numOrNull(input.requiredSaturdaysPerMonth),
+        ...permissions,
+    };
+    if (getRolePermissionValue(caller, 'manageRates')) {
+        for (const f of RATE_FIELDS) row[f] = numOrNull(input[f]);
+    }
+
+    let saved;
+    try {
+        saved = await wixData.insert('Dashboard_Roles', row, SA);
+    } catch (err) {
+        await deleteBookingsStaff(staff._id);
+        throw new Error(`SAVE_FAILED: שמירת העובד/ת ב-CMS נכשלה (${err?.message || err}).`);
+    }
+    if (Array.isArray(input.skillIds) && input.skillIds.length) {
+        await applyEmployeeSkills(saved._id, input.skillIds).catch((err) => {
+            console.error('[staffAdminService] createEmployee: skills write failed:', err?.message || err);
+        });
+    }
+    await publishSchedulingUpdate('employee-created', { roleId: saved._id, staffId: staff._id });
+    return { ok: true, roleId: saved._id, staffId: staff._id };
 });
 
 // ---------------------------------------------------------------------------

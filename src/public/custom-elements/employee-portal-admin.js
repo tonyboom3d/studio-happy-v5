@@ -5,6 +5,10 @@
  * All mutations dispatch portal-action events handled by the Velo page.
  */
 import { renderScheduleCalendar } from './schedule-calendar/calendarActions.js';
+import { TRACKER_STYLE } from './employee-admin/tracker/trackerStyle.js';
+import { renderTracker } from './employee-admin/tracker/trackerView.js';
+import { handleTrackerClick, handleTrackerChange } from './employee-admin/tracker/trackerActions.js';
+import { NEW_EMP_STYLE, renderNewEmployeeForm, captureNewEmployeeDraft, handleNewEmployeeClick } from './employee-admin/employeeCreate.js';
 
 export const ADMIN_STYLE = `
 .epa-toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
@@ -322,12 +326,11 @@ export const ADMIN_STYLE = `
     .epa-day-events { gap: 2px; }
     .epa-day-more { font-size: 8.5px; }
 }
+${TRACKER_STYLE}
+${NEW_EMP_STYLE}
 `;
 
 const HEBREW_DOW = ['א׳', 'ב׳', 'ג׳', 'ד׳', 'ה׳', 'ו׳', 'ש׳'];
-
-// Wix dashboard URL for creating a new Bookings staff member.
-const WIX_NEW_STAFF_URL = 'https://manage.wix.com/dashboard/f0548b42-7f52-447c-9076-45112f85765b/bookings/staff?referralInfo=search';
 
 const TEMPLATE_USE = {
     ORDERS: 'orders',
@@ -395,6 +398,7 @@ function readEmployeeFormValues(ce, d) {
 
 /** Persists in-progress employee form edits across accordion toggles / re-renders. */
 export function captureEmployeeFormDraft(ce, d) {
+    captureNewEmployeeDraft(ce);
     if (ce._adminModal?.type !== 'employee') return;
     if (!ce.querySelector('#epaF_displayName')) return;
     const roleId = ce._adminModal.id;
@@ -1285,24 +1289,14 @@ function renderMonthControls(d) {
 }
 
 function renderTrackerPage(ce, d) {
-    const trackerRows = (d.tracker || []).map(t => {
-        const employee = (d.employees || []).find(e => e.id === t.employeeId);
-        const unmetWeeks = (t.weeks || []).filter(w => !w.met);
-        const weeksNote = unmetWeeks.length
-            ? `<div style="font-size:10.5px;color:#991b1b;margin-top:2px">שבועות חסרים: ${unmetWeeks.map(w => `${fmtDate(w.weekStart)}–${fmtDate(w.weekEnd)}`).join(', ')}</div>`
-            : '';
-        const weekend = t.weekend || {};
-        const weekendBadge = weekend.met
-            ? `<span class="epa-badge ok">שישי ${weekend.fridays?.submitted ?? 0}/${weekend.fridays?.required ?? 0} · שבת ${weekend.saturdays?.submitted ?? 0}/${weekend.saturdays?.required ?? 0}</span>`
-            : `<span class="epa-badge miss">שישי ${weekend.fridays?.submitted ?? 0}/${weekend.fridays?.required ?? 0} · שבת ${weekend.saturdays?.submitted ?? 0}/${weekend.saturdays?.required ?? 0}</span>`;
-        return `<tr>
-            <td><span class="epa-dot-lg" style="background:${esc(employee?.color || '#2563eb')}"></span>${esc(t.name)}</td>
-            <td>${t.submitted}/${t.required}${weeksNote}</td>
-            <td><span class="epa-badge ${t.met ? 'ok' : 'miss'}">${t.met ? 'הושלם' : 'חסר'}</span></td>
-            <td>${weekendBadge}</td>
-            <td>${(!t.met || !weekend.met) && d.permissions.manageScheduling ? `<button class="epa-btn" data-action="admin-nudge" data-emp="${t.employeeId}">שליחת תזכורת</button>` : ''}</td>
-        </tr>`;
-    }).join('');
+    return renderTracker(ce, d, {
+        monthControls: renderMonthControls(d),
+        submissionsTable: () => renderSubmissionsTable(ce, d),
+    });
+}
+
+/** Full month submissions table with status filter + approve/reject (collapsed section of the tracker). */
+function renderSubmissionsTable(ce, d) {
     const statusLabel = { SUBMITTED: 'הוגש', STANDBY: 'בהמתנה', SCHEDULED: 'משובץ', REJECTED: 'נדחה' };
     const statusBadge = { SUBMITTED: 'kind', STANDBY: 'kind', SCHEDULED: 'ok', REJECTED: 'miss' };
     const allSubs = (d.submissions || []).slice().sort((a, b) => a.date.localeCompare(b.date));
@@ -1344,26 +1338,14 @@ function renderTrackerPage(ce, d) {
     const monthSelect = `<select id="epaTrackerMonth">${monthKeys.map(mk =>
         `<option value="${mk}" ${mk === d.monthKey ? 'selected' : ''}>${monthTitle(mk)}</option>`).join('')}</select>`;
 
-    const complete = (d.tracker || []).filter(t => t.met).length;
-    return `<div class="epa-page-head"><div><h2>מעקב הגשות</h2><p>כל ההגשות והמכסות לפי חודש</p></div>${renderMonthControls(d)}</div>
-        <div class="epa-stat-grid">
-            <div class="epa-stat"><b>${allSubs.length}</b><span>הגשות בחודש</span></div>
-            <div class="epa-stat"><b>${complete}/${(d.tracker || []).length}</b><span>עובדים שהשלימו מכסה</span></div>
-        </div>
-        <section class="epa-panel">
-            <div class="epa-panel-title"><h3>מצב מכסות שבועיות ושישי/שבת</h3></div>
-            <div class="epa-table-wrap"><table class="epa-table"><thead><tr><th>עובד/ת</th><th>הוגשו (שבועי)</th><th>סטטוס</th><th>שישי/שבת בחודש</th><th></th></tr></thead><tbody>${trackerRows}</tbody></table></div>
-        </section>
-        <section class="epa-panel">
-            <div class="epa-panel-title">
+    return `<div class="epa-panel-title">
                 <h3>כל ההגשות — ${monthTitle(d.monthKey)}</h3>
                 <div class="epa-inline" style="margin:0">${monthSelect}</div>
             </div>
             <div class="epa-inline" style="margin-bottom:8px">${filterChips}</div>
             <div class="epa-table-wrap"><table class="epa-table"><thead><tr><th>עובד/ת</th><th>תאריך</th><th>שעות</th><th>סדנה</th><th>סוג עבודה</th><th>סטטוס</th>${canSchedule ? '<th>פעולות</th>' : ''}</tr></thead>
                 <tbody>${submissionRows || `<tr><td colspan="${colCount}" class="ep-empty">אין הגשות תואמות בחודש זה</td></tr>`}</tbody>
-            </table></div>
-        </section>`;
+            </table></div>`;
 }
 
 function isBookingsLinked(employee, staffIds) {
@@ -1394,10 +1376,10 @@ function renderSetupStaffForm(ce, d, roleId) {
         </button>`).join('');
     return `<p style="margin:0 0 10px">בחרו עובד/ת מ-Wix Bookings לחיבור לפרופיל <b>${esc(employee.displayName)}</b>:</p>
         <div style="max-height:42vh;overflow:auto;border:1px solid #e5e7eb;border-radius:10px;padding:2px 10px;margin-bottom:10px">
-            ${rows || '<div class="ep-empty">אין עובדי Bookings פנויים לחיבור. צרו עובד/ת חדש/ה ב-Bookings.</div>'}
+            ${rows || '<div class="ep-empty">אין עובדי Bookings פנויים לחיבור.</div>'}
         </div>
         <div class="epa-inline">
-            <button type="button" class="epa-btn primary" data-action="admin-new-staff">צור עובד חדש ב-Bookings +</button>
+            <button type="button" class="epa-btn primary" data-action="admin-newemp-for-profile" data-emp="${esc(roleId)}">יצירה אוטומטית ב-Bookings מהפרופיל +</button>
             <button type="button" class="epa-btn" data-action="admin-close-modal">ביטול</button>
         </div>`;
 }
@@ -2103,6 +2085,9 @@ function renderModal(ce, d) {
         const template = modal.id ? (ce._templatesData || []).find(t => t.id === modal.id) : null;
         title = `תצוגה מקדימה — ${template?.title || ''}`;
         body = renderTemplatePreview(template);
+    } else if (modal.type === 'newEmployee') {
+        title = 'עובד/ת חדש/ה';
+        body = renderNewEmployeeForm(ce, d);
     } else if (modal.type === 'setupStaff') {
         const employee = findEmployee(ce, d, modal.id);
         if (!employee) return '';
@@ -2263,6 +2248,7 @@ function renderConfirmDeactivateForm(ce, roleId) {
 // ---------------------------------------------------------------------------
 
 export function handleAdminChange(ce, input) {
+    if (handleTrackerChange(ce, input)) return true;
     if (input?.dataset?.action === 'admin-assign-emp-change') {
         ce._dayAssignPrefillEmp = input.value || null;
         ce._dayAssignShowMorning = false;
@@ -2418,6 +2404,7 @@ export function handleAdminChange(ce, input) {
 }
 
 export function handleAdminClick(ce, action, target) {
+    if (handleTrackerClick(ce, action, target) || handleNewEmployeeClick(ce, action, target)) return true;
     const d = ce._adminData;
     if (!['admin-board-ms-toggle', 'admin-board-ms-opt', 'admin-day-ms-toggle', 'admin-day-ms-opt'].includes(action)) {
         ce._boardMsOpen = null;
@@ -3029,9 +3016,6 @@ export function handleAdminClick(ce, action, target) {
             ce._allEmployees = null;
             ce.render();
             ce._dispatch('adminStaffLoad');
-            return true;
-        case 'admin-new-staff':
-            window.open(WIX_NEW_STAFF_URL, '_blank', 'noopener');
             return true;
         case 'admin-setup-staff':
             if (!d?.permissions?.manageEmployees) return true;

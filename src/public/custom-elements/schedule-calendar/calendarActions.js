@@ -26,11 +26,12 @@ function renderToast(cal) {
 
 function renderInner(ce) {
     const cal = calState(ce);
-    return `${renderCalendarBody(ce)}${renderDrawer(ce)}${renderToast(cal)}`;
+    cal.drawerHtml = renderDrawer(ce);
+    return `${renderCalendarBody(ce)}${cal.drawerHtml}${renderToast(cal)}`;
 }
 
 export function renderScheduleCalendar(ce) {
-    queueMicrotask(() => { ensureLoaded(ce); bindTips(ce); });
+    queueMicrotask(() => { ensureLoaded(ce); bindTips(ce); bindDrawerDrag(ce); });
     return `<div id="scRoot" class="sc-root">${renderInner(ce)}</div>`;
 }
 
@@ -45,6 +46,7 @@ export function captureCalendarState(ce) {
         if (el.type !== 'checkbox') inputs[el.id] = el.value;
     });
     return {
+        hadDrawer: !!root.querySelector('.sc-drawer'),
         scrollTop: scroll?.scrollTop ?? null,
         scrollLeft: scroll?.scrollLeft ?? null,
         drawerTop: drawerBody?.scrollTop ?? null,
@@ -56,6 +58,7 @@ export function captureCalendarState(ce) {
 export function restoreCalendarState(ce, snap) {
     const root = ce.querySelector('#scRoot');
     if (!root) return;
+    if (snap?.hadDrawer) root.querySelector('.sc-drawer')?.classList.add('sc-no-anim');
     const cal = calState(ce);
     const scroll = root.querySelector('[data-sc-scroll]');
     if (scroll) {
@@ -80,30 +83,37 @@ export function restoreCalendarState(ce, snap) {
     if (snap.focusId) root.querySelector(`#${CSS.escape(snap.focusId)}`)?.focus();
 }
 
+/** Rebuilds toolbar + grid in place; drawer, toast and lightbox nodes are kept (drawer is diffed). */
 function rerender(ce) {
     const root = ce.querySelector('#scRoot');
     if (!root) { ce._scheduleRender(); return; }
-    const hadDrawer = !!root.querySelector('.sc-drawer');
     const snap = captureCalendarState(ce);
-    root.innerHTML = renderInner(ce);
-    if (hadDrawer) root.querySelector('.sc-drawer')?.classList.add('sc-no-anim');
+    for (const el of [...root.children]) {
+        if (!el.matches('.sc-drawer, .sc-toast, .sc-lightbox')) el.remove();
+    }
+    const tpl = document.createElement('template');
+    tpl.innerHTML = renderCalendarBody(ce);
+    root.prepend(tpl.content);
+    paintDrawer(ce);
     restoreCalendarState(ce, snap);
     ensureLoaded(ce);
 }
 
-/** Replaces only the open drawer. The calendar grid stays as it is, and an already-open drawer does not slide in again. */
+/** Replaces only the open drawer, and only when its markup changed. An already-open drawer does not slide in again. */
 function paintDrawer(ce, { animate = false } = {}) {
     const root = ce.querySelector('#scRoot');
     if (!root) { rerender(ce); return; }
     const html = renderDrawer(ce);
     const prev = root.querySelector('.sc-drawer');
     const cal = calState(ce);
-    if (!html) { prev?.remove(); return; }
+    if (!html) { prev?.remove(); cal.drawerHtml = ''; return; }
+    if (prev && cal.drawerHtml === html && !cal.resetDrawerScroll) return;
+    cal.drawerHtml = html;
     const top = prev?.querySelector('.sc-dr-body')?.scrollTop ?? 0;
     const tpl = document.createElement('template');
     tpl.innerHTML = html.trim();
     const next = tpl.content.firstElementChild;
-    if (!animate) next.classList.add('sc-no-anim');
+    if (!animate || prev) next.classList.add('sc-no-anim');
     if (prev) prev.replaceWith(next);
     else root.appendChild(next);
     const body = next.querySelector('.sc-dr-body');
@@ -170,6 +180,38 @@ function bindTips(ce) {
         const tip = ce.querySelector(':scope > .sc-floattip');
         if (tip) tip.hidden = true;
     });
+}
+
+/** Horizontal drag of the drawer by its grip/header, so it can be moved off the days it covers (mobile). */
+function bindDrawerDrag(ce) {
+    if (ce._scDragBound) return;
+    ce._scDragBound = true;
+    let drag = null;
+    const clamp = (x, w) => Math.max(-(w - 60), Math.min(window.innerWidth - 60, x));
+    ce.addEventListener('pointerdown', (e) => {
+        const handle = e.target?.closest?.('[data-sc-grip], .sc-dr-head');
+        if (!handle || e.target.closest('button, a, input, select, textarea')) return;
+        const el = handle.closest('.sc-drawer');
+        if (!el || !ce.contains(el)) return;
+        drag = { el, id: e.pointerId, x0: e.clientX, base: calState(ce).drawerX || 0, w: el.offsetWidth };
+        el.classList.add('sc-dragging');
+        handle.setPointerCapture?.(e.pointerId);
+    });
+    ce.addEventListener('pointermove', (e) => {
+        if (!drag || e.pointerId !== drag.id) return;
+        const x = clamp(drag.base + e.clientX - drag.x0, drag.w);
+        drag.el.style.transform = `translateX(${x}px)`;
+        drag.x = x;
+        e.preventDefault();
+    });
+    const end = (e) => {
+        if (!drag || e.pointerId !== drag.id) return;
+        if (drag.x != null) calState(ce).drawerX = drag.x;
+        drag.el.classList.remove('sc-dragging');
+        drag = null;
+    };
+    ce.addEventListener('pointerup', end);
+    ce.addEventListener('pointercancel', end);
 }
 
 function toast(ce, message, kind = 'success') {
@@ -318,6 +360,13 @@ export function calendarOutsideClick(ce, e, target) {
     return true;
 }
 
+/** Previous drawer (one level) when navigating from inside an open drawer; null when opened from the grid. */
+function drawerOrigin(cal, target) {
+    if (!cal.drawer || !target.closest('.sc-drawer')) return null;
+    const { from, ...prev } = cal.drawer;
+    return prev;
+}
+
 function navigate(ce, mutate) {
     const cal = calState(ce);
     mutate(cal);
@@ -365,7 +414,7 @@ export function handleCalendarClick(ce, action, target) {
             return true;
         }
         case 'cal-open-event':
-            cal.drawer = { kind: 'session', dateKey: ds.date, typeId: ds.type, start: ds.start || null };
+            cal.drawer = { kind: 'session', dateKey: ds.date, typeId: ds.type, start: ds.start || null, from: drawerOrigin(cal, target) };
             cal.picker = null; cal.editHours = null; cal.removeConfirm = null;
             cal.resetDrawerScroll = true;
             cal.resetInputs = true;
@@ -374,7 +423,7 @@ export function handleCalendarClick(ce, action, target) {
             markSelected(ce);
             return true;
         case 'cal-open-day':
-            cal.drawer = { kind: 'day', dateKey: ds.date };
+            cal.drawer = { kind: 'day', dateKey: ds.date, from: drawerOrigin(cal, target) };
             cal.picker = null; cal.editHours = null; cal.removeConfirm = null;
             cal.resetDrawerScroll = true;
             cal.resetInputs = true;
@@ -392,8 +441,21 @@ export function handleCalendarClick(ce, action, target) {
             rerender(ce);
             ce.querySelector('#scRoot')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
             return true;
+        case 'cal-drawer-back': {
+            const from = cal.drawer?.from;
+            if (!from) return true;
+            cal.drawer = { ...from };
+            cal.picker = null; cal.editHours = null; cal.removeConfirm = null;
+            cal.resetDrawerScroll = true;
+            cal.resetInputs = true;
+            if (from.kind === 'session') ensureGroups(ce, from.dateKey, from.typeId, from.start);
+            paintDrawer(ce);
+            markSelected(ce);
+            return true;
+        }
         case 'cal-close-drawer':
             cal.drawer = null;
+            cal.drawerX = 0;
             ce.querySelector('#scRoot .sc-drawer')?.remove();
             markSelected(ce);
             return true;
@@ -574,7 +636,7 @@ export function handleCalendarChange(ce, input) {
         return true;
     }
     if (action === 'cal-filter-state') {
-        cal.filters.state = input.value || '';
+        cal.filters[input.dataset.key] = input.value || '';
         rerender(ce);
         return true;
     }

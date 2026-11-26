@@ -4,7 +4,18 @@ import {
     rangeTitle, hourBounds, layoutOverlaps, ilParts, todayKeyIL, dowOf,
 } from './calendarLayout.js';
 import { calState, buildEvents, empById, eventCapacity, coverageIssue, pendingCount, isRangeLoaded } from './calendarStore.js';
-import { colorForType } from './calendarColors.js';
+import { colorForType, colorForEvent, eventStripeStyle } from './calendarColors.js';
+
+function evStyle(cal, ev) {
+    return eventStripeStyle(colorForEvent(ev, cal.cache.workshopTypes), !(ev.people > 0));
+}
+
+function renderStateSelect(cal, key, label, opts) {
+    const v = cal.filters[key] || '';
+    return `<select class="sc-select ${v ? 'has' : ''}" data-action="cal-filter-state" data-key="${key}" aria-label="${esc(label)}">
+        ${opts.map(([val, l]) => `<option value="${val}" ${v === val ? 'selected' : ''}>${l}</option>`).join('')}
+    </select>`;
+}
 
 export function esc(str) {
     return String(str ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -80,10 +91,8 @@ function renderToolbar(ce, cal) {
         <span class="sc-spacer"></span>
         ${renderMultiSelect(cal, 'workshopIds', 'סדנאות', wsOpts)}
         ${renderMultiSelect(cal, 'employeeIds', 'עובדים', empOpts)}
-        <select class="sc-select ${cal.filters.state ? 'has' : ''}" data-action="cal-filter-state" aria-label="סינון לפי איוש ומשתתפים">
-            ${[['', 'כל הסדנאות'], ['noStaff', 'ללא אנשי צוות'], ['withStaff', 'עם אנשי צוות'], ['noParticipants', 'ללא משתתפים']]
-                .map(([v, l]) => `<option value="${v}" ${cal.filters.state === v ? 'selected' : ''}>${l}</option>`).join('')}
-        </select>
+        ${renderStateSelect(cal, 'people', 'סינון לפי הרשמה', [['', 'הרשמה: הכל'], ['withParticipants', 'עם נרשמים'], ['noParticipants', 'ללא נרשמים']])}
+        ${renderStateSelect(cal, 'staff', 'סינון לפי איוש', [['', 'צוות: הכל'], ['withStaff', 'עם עובדים'], ['noStaff', 'ללא עובדים']])}
         <div class="sc-seg" role="tablist">${views.map(([v, l]) => `<button type="button" class="${cal.view === v ? 'active' : ''}" data-action="cal-view" data-view="${v}">${l}</button>`).join('')}</div>
         <button type="button" class="sc-icon-btn" data-action="cal-refresh" title="רענון" aria-label="רענון" style="font-size:16px">⟳</button>
         ${perms.manageEmployees ? `<button type="button" class="sc-btn" data-action="admin-page" data-page="messages">✉ הודעות לעובדים</button>` : ''}
@@ -175,7 +184,6 @@ function noteBadge(cal, dateKey) {
 }
 
 function renderEventBlock(cal, ev, startHour, byId) {
-    const col = colorForType(ev.typeId, cal.cache.workshopTypes);
     const top = ((ev.startMin - startHour * 60) / 60) * HOUR_PX;
     const height = Math.max(22, ((ev.endMin - ev.startMin) / 60) * HOUR_PX - 2);
     const cols = ev.cols || 1;
@@ -187,7 +195,7 @@ function renderEventBlock(cal, ev, startHour, byId) {
     const warnTip = [st.missing ? `חסר צוות (${st.assigned}/${ev.required})` : '', st.hoursIssue ? 'שעות משמרת לא מכסות את הסדנה' : ''].filter(Boolean).join(' · ');
     const time = `${ilParts(ev.start).hm}${ev.end ? `–${ilParts(ev.end).hm}` : ''}`;
     return `<button type="button" class="sc-ev ${sel ? 'sel' : ''}" data-action="cal-open-event" data-date="${ev.dateKey}" data-type="${esc(ev.typeId)}" data-start="${esc(ev.start || '')}"
-        style="top:${top}px;height:${height}px;inset-inline-start:calc(${(ev.col || 0) * 100 / cols}% + 2px);width:calc(${100 / cols}% - 4px);background:${col.bg};border-inline-start:3px solid ${col.border};color:${col.text}"
+        style="top:${top}px;height:${height}px;inset-inline-start:calc(${(ev.col || 0) * 100 / cols}% + 2px);width:calc(${100 / cols}% - 4px);${evStyle(cal, ev)}"
         title="${esc(`${ev.name} · ${time}`)}">
         <span class="sc-ev-title">${noteBadge(cal, ev.dateKey)}${warnTip ? `<span class="sc-ev-warn" title="${esc(warnTip)}">!</span>` : ''}<span style="overflow:hidden;text-overflow:ellipsis">${esc(ev.name)}</span></span>
         <span class="sc-ev-line">${cap.total != null ? `${cap.booked}/${cap.total} משתתפים` : `${cap.booked} משתתפים`}</span>
@@ -219,8 +227,7 @@ function renderTimeGrid(cal, view) {
 
     const allDayCells = keys.map(k => [
         ...events.filter(e => e.allDay && e.dateKey === k).map(ev => {
-            const col = colorForType(ev.typeId, cal.cache.workshopTypes);
-            return `<button type="button" class="sc-chip" style="background:${col.bg};color:${col.text};border-inline-start:3px solid ${col.border}" data-action="cal-open-event" data-date="${k}" data-type="${esc(ev.typeId)}" data-start="">${esc(ev.name)}</button>`;
+            return `<button type="button" class="sc-chip sc-chip-ev" style="${evStyle(cal, ev)}" data-action="cal-open-event" data-date="${k}" data-type="${esc(ev.typeId)}" data-start="">${esc(ev.name)}</button>`;
         }),
         ...manualShiftChips(cal, k, byId),
     ]);
@@ -274,9 +281,8 @@ function renderMonth(cal) {
         const f = dayFlags(cal, k);
         const dayEvents = events.filter(e => e.dateKey === k).sort((a, b) => (a.startMin ?? -1) - (b.startMin ?? -1));
         const chips = dayEvents.slice(0, MONTH_CHIPS).map(ev => {
-            const col = colorForType(ev.typeId, cal.cache.workshopTypes);
             const st = eventStaffState(cal, ev);
-            return `<button type="button" class="sc-mchip" style="background:${col.bg};color:${col.text};border-inline-start:3px solid ${col.border}" data-action="cal-open-event" data-date="${k}" data-type="${esc(ev.typeId)}" data-start="${esc(ev.start || '')}" title="${esc(ev.name)}">
+            return `<button type="button" class="sc-mchip" style="${evStyle(cal, ev)}" data-action="cal-open-event" data-date="${k}" data-type="${esc(ev.typeId)}" data-start="${esc(ev.start || '')}" title="${esc(ev.name)}">
                 ${noteBadge(cal, k)}${st.missing || st.hoursIssue ? '<span class="sc-ev-warn">!</span>' : ''}${ev.start ? `<span class="t">${ilParts(ev.start).hm}</span>` : ''}<span class="n">${esc(ev.name)}</span>
             </button>`;
         }).join('');

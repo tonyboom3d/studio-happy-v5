@@ -63,6 +63,7 @@ import {
     updateSubmissionWorkType,
     listBookingStaff,
     linkEmployeeStaff,
+    createEmployee,
     reorderEmployees,
     listVacations,
     saveEmployeeVacation,
@@ -778,6 +779,33 @@ async function handlePortalAction(portalEl, detail) {
             refreshPortal = false;
             refreshAdmin = true;
             await loadAndPushStaffList(portalEl);
+            break;
+        }
+
+        case 'adminCreateEmployee': {
+            const result = await createEmployee(payload?.input);
+            pushActionResult(portalEl, { type, ...result });
+            refreshPortal = false;
+            refreshAdmin = true;
+            await loadAndPushStaffList(portalEl);
+            break;
+        }
+
+        case 'adminAssignBatch': {
+            const failed = [];
+            for (const item of (payload?.items || [])) {
+                try {
+                    const r = await manualAssign(item.dateKey, item.workshopTypeIds || [], payload?.employeeId, 'WORKSHOP', { notify: payload?.notify !== false });
+                    if (r?.ok === false || r?.blocked) failed.push(`${item.dateKey}: ${r.reason || r.message || 'נכשל'}`);
+                } catch (err) {
+                    failed.push(`${item.dateKey}: ${friendlyError(err)}`);
+                }
+            }
+            pushActionResult(portalEl, failed.length
+                ? { type, error: true, message: `חלק מהצירופים נכשלו — ${failed.join(' · ')}` }
+                : { type, ok: true });
+            refreshPortal = false;
+            refreshAdmin = true;
             break;
         }
 

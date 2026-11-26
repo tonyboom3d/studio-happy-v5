@@ -303,7 +303,31 @@ async function ensureWaPhoneLookupField(subscriberId, phone) {
  * reports the contact already exists but it still can't be located (a
  * known ManyChat API limitation — see WA_PHONE_LOOKUP_FIELD comment above).
  */
-async function findOrCreateSubscriber({ email, phone, firstName, lastName }) {
+const inflightSubscribers = new Map(); // phone digits -> Promise (per warm instance)
+const EXISTS_RETRY_DELAYS_MS = [800, 2000];
+
+/** Concurrent calls for the same phone share one find/create so they can't race into "already exists". */
+async function findOrCreateSubscriber(params) {
+    const key = formatPhoneForManyChat(params?.phone) || params?.email || '';
+    if (!key) return findOrCreateSubscriberOnce(params);
+    if (inflightSubscribers.has(key)) return inflightSubscribers.get(key);
+
+    const promise = findOrCreateSubscriberOnce(params).finally(() => inflightSubscribers.delete(key));
+    inflightSubscribers.set(key, promise);
+    return promise;
+}
+
+/** "Already exists" can be a lag/race: retry the lookup with backoff before giving up. */
+async function findAfterAlreadyExists({ email, phone }) {
+    for (const delay of EXISTS_RETRY_DELAYS_MS) {
+        await new Promise((resolve) => setTimeout(resolve, delay));
+        const found = await findSubscriber({ email, phone }).catch(() => null);
+        if (found?.id) return found;
+    }
+    return null;
+}
+
+async function findOrCreateSubscriberOnce({ email, phone, firstName, lastName }) {
     let subscriber = await findSubscriber({ email, phone });
     if (subscriber?.id) {
         await ensureWaPhoneLookupField(subscriber.id, phone);
@@ -316,8 +340,8 @@ async function findOrCreateSubscriber({ email, phone, firstName, lastName }) {
         const message = err?.message || String(err);
         if (!/already exists/i.test(message)) throw err;
 
-        console.warn('[ManyChat] createSubscriber said contact already exists but findSubscriber missed it — retrying via wa_phone_lookup:', message);
-        subscriber = await findSubscriber({ email, phone });
+        console.warn('[ManyChat] createSubscriber said contact already exists but findSubscriber missed it — retrying lookup:', message);
+        subscriber = await findAfterAlreadyExists({ email, phone });
         if (!subscriber?.id) {
             throw new Error(
                 `[ManyChat] Contact with phone ${phone} already exists in ManyChat but cannot be located via the API ` +

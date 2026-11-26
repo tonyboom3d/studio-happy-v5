@@ -9,7 +9,8 @@ import { auth } from '@wix/essentials';
 import { availabilityCalendar, serviceOptionsAndVariants, services, bookings } from 'wix-bookings.v2';
 import { paymentLinks } from '@wix/get-paid';
 import { contacts } from 'wix-crm-backend';
-import { loadWorkshopTypeMap, publishSchedulingUpdate, toDateKey, toIsraelHHMM } from 'backend/schedulingEngine.js';
+import { loadWorkshopTypeMap, publishSchedulingUpdate } from 'backend/schedulingEngine.js';
+import { toDateKey } from 'backend/availabilityRules.js';
 import {
     WORKSHOP_SERVICE_IDS,
     ALL_CANDLES_SERVICE_IDS,
@@ -28,6 +29,13 @@ const ORDERS_COL = 'WorkshopOrders';
 const SA = { suppressAuth: true };
 const SA_NO_HOOKS = { suppressAuth: true, suppressHooks: true };
 const TZ = 'Asia/Jerusalem';
+
+/** ISO/Date -> "HH:MM" in Israel time ('' if invalid). */
+function toIsraelHHMM(dateInput) {
+    const d = dateInput ? new Date(dateInput) : null;
+    if (!d || Number.isNaN(d.getTime())) return '';
+    return new Intl.DateTimeFormat('en-GB', { timeZone: TZ, hour: '2-digit', minute: '2-digit', hour12: false }).format(d);
+}
 
 const MANUAL_UNPAID_TAG = 'נפתח ידנית — טרם שולם';
 const MANUAL_PAID_TAG = 'נפתח ידנית — שולם';

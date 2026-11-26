@@ -4,7 +4,7 @@
  */
 
 import { Permissions, webMethod } from 'wix-web-module';
-import { assertEmployeeAccess } from 'backend/employeeAuth.js';
+import { assertEmployeeAccess } from 'backend/staffRoles.js';
 import {
     resolveSessionPricing,
     createManualOrder,
@@ -22,15 +22,15 @@ export const getManualSessionPricing = webMethod(
 export const createManualWorkshopOrder = webMethod(
     Permissions.SiteMember,
     async (input) => {
-        const { employee } = await assertEmployeeAccess('manageScheduling');
-        return createManualOrder(input, employee?.displayName || 'מנהל');
+        const { role } = await assertEmployeeAccess('manageScheduling');
+        return createManualOrder(input, role?.displayName || 'מנהל');
     }
 );
 
 export const cancelManualWorkshopOrder = webMethod(
     Permissions.SiteMember,
     async (orderId) => {
-        const { employee } = await assertEmployeeAccess('manageScheduling');
-        return cancelManualOrder(orderId, employee?.displayName || 'מנהל');
+        const { role } = await assertEmployeeAccess('manageScheduling');
+        return cancelManualOrder(orderId, role?.displayName || 'מנהל');
     }
 );

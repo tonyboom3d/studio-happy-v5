@@ -6,10 +6,12 @@ import { reconcileAddOnEcomOrder, getAddOnOrderByCheckoutId, getAddOnOrderByEcom
 import { cancelPromoCouponsForOrder, reschedulePromoCouponsForOrder } from 'backend/promoCouponService.js';
 import { submissions } from '@wix/forms';
 import { questionEntry } from '@wix/faq';
+import { paymentLinks, paymentLinkPayments } from '@wix/get-paid';
 import { handleCompanyEventSubmission } from 'backend/companyEventLeads.js';
 import { handleQuoteLeadSubmission } from 'backend/quoteLeadsSync.js';
 import { isQuotePayment, isQuoteOrder, handleQuotePaymentUpdate } from 'backend/quotePayments.js';
 import { syncFaqQuestionSaved, syncFaqQuestionDeleted } from 'backend/faqKnowledge.js';
+import { handlePaymentLinkPaid } from 'backend/manualOrders.js';
 
 const SA = { suppressAuth: true, suppressHooks: true };
 
@@ -495,3 +497,26 @@ export async function wixEcom_onOrderPaymentStatusUpdated(event) {
 
     return Promise.all([workshopOrderReconcile, addOnOrderReconcile]);
 }
+
+paymentLinkPayments.onPaymentLinkPaymentCreated((event) => {
+    const entity = event?.entity || event?.data?.entity || {};
+    const paymentLinkId = entity.paymentLinkId;
+    if (!paymentLinkId) return;
+    const ecomOrderId = entity.regularPaymentLinkPayment?.order?.ecomOrder?.ecomOrderId
+        || entity.giftCardPaymentLinkPayment?.ecomOrderId
+        || null;
+    const amount = entity.amount || null;
+    handlePaymentLinkPaid(paymentLinkId, { ecomOrderId, amount }).catch((err) => {
+        console.error('[events] onPaymentLinkPaymentCreated error:', paymentLinkId, err?.message || err);
+    });
+});
+
+paymentLinks.onPaymentLinkUpdated((event) => {
+    const entity = event?.entity || event?.data?.entity || {};
+    if (entity.status !== 'PAID' || !entity._id) return;
+    handlePaymentLinkPaid(entity._id, {
+        amount: entity.totalReceived?.amount || null,
+    }).catch((err) => {
+        console.error('[events] onPaymentLinkUpdated error:', entity._id, err?.message || err);
+    });
+});

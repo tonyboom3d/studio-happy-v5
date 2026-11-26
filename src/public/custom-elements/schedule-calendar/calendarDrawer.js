@@ -1,8 +1,9 @@
 /** Side drawers: workshop session (participants + staff) and day panel (staff + day settings). */
 import { fmtDayLong, ilParts, hmToMin } from './calendarLayout.js';
-import { calState, findEvent, empById, subFor, onVacation, eventCapacity, coverageIssue, buildEvents } from './calendarStore.js';
+import { calState, findEvent, empById, subFor, onVacation, vacationsOnDate, eventCapacity, coverageIssue, buildEvents } from './calendarStore.js';
 import { colorForType } from './calendarColors.js';
 import { esc, initials, dayFlags, eventStaffState } from './calendarViews.js';
+import { renderAddCustomerPanel } from './calendarAddCustomer.js';
 
 const WORK_TYPE_LABELS = { WORKSHOP: 'סדנה', OPENING: 'פתיחה', CLOSING: 'קיפול' };
 const STATUS_LABELS = { SUBMITTED: 'הגיש/ה זמינות', STANDBY: 'ברשימת המתנה', SCHEDULED: 'משובץ/ת' };
@@ -84,7 +85,7 @@ function cupsText(g) {
     return (g.cups || []).map(c => `${esc(c.label || 'כוס')} × ${c.quantity || 1}`).join(' · ');
 }
 
-function groupDetails(g) {
+function groupDetails(cal, g) {
     const line = (k, v) => (v ? `<div class="sc-gd-line"><span class="k">${k}</span><span class="v">${v}</span></div>` : '');
     const isCandles = g.workshopType === 'candles';
     const isCeramics = g.workshopType === 'ceramics';
@@ -103,11 +104,25 @@ function groupDetails(g) {
     const sketches = (g.sketches || []).map((s, i) => ({ img: s.img, caption: `${s.participantName || `שטיח ${i + 1}`} · ${fmtSize(s.size)}`, badge: fmtSize(s.size) }));
     const cups = (g.cups || []).map(c => ({ img: c.image, caption: `${c.label || 'כוס'} × ${c.quantity}`, badge: c.label || (c.quantity > 1 ? `×${c.quantity}` : '') }));
     const people = (g.participants || []).map(p => `${esc(p.name)}${p.phone ? ` (<span dir="ltr">${esc(p.phone)}</span>)` : ''}${p.childrenCount ? ` +${p.childrenCount} ילדים` : ''}`).join('<br>');
+    const payLinkRow = g.paymentLinkUrl ? `<div class="sc-gd-line"><span class="k">קישור תשלום</span><span class="v" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+        <a href="${esc(g.paymentLinkUrl)}" target="_blank" rel="noopener">פתיחת קישור</a>
+        <button type="button" class="sc-btn sm" data-action="cal-copy-paylink" data-url="${esc(g.paymentLinkUrl)}">העתקת קישור</button>
+    </span></div>` : '';
+    const canCancel = !!(g.manualOrder || g.paymentLinkId);
+    const confirmingCancel = cal.cancelOrderConfirm === g.id;
+    const cancelBlock = canCancel ? (confirmingCancel ? `<div class="sc-inline" style="margin-top:6px">
+        <span style="font-size:12px">לבטל את ההזמנה?${g.paymentLinkId ? ' קישור התשלום יבוטל מיד.' : ''}</span>
+        <button type="button" class="sc-btn danger sm" data-action="cal-cancel-order-confirm" data-id="${esc(g.orderId || g.id)}">אישור ביטול</button>
+        <button type="button" class="sc-btn sm" data-action="cal-cancel-order-cancel">חזרה</button>
+    </div>` : `<div style="margin-top:6px;display:flex;justify-content:flex-end">
+        <button type="button" class="sc-btn danger sm" data-action="cal-cancel-order-ask" data-id="${esc(g.id)}">ביטול הזמנה${g.paymentLinkId ? ' וקישור' : ''}</button>
+    </div>`) : '';
     return `<div class="sc-gd">
-        ${g.unpaid ? `<div class="sc-banner hol">⚠ ${esc(g.statusLabel || 'לא שולם')}</div>` : ''}
+        ${g.unpaid ? `<div class="sc-banner hol">⚠ ${esc(g.statusLabel || 'לא פעילה · טרם שולם')}</div>` : ''}
         ${line('טלפון', phone)}${line('מייל', email)}
         ${line('כמות', units)}${line('מידת שטיחים', rugs)}${line('כוסות', isCandles || isCeramics ? cupsText(g) : '')}
-        ${g.unpaid ? '' : line('שולם', `<b>${shekel(g.paidTotal)}</b>`)}
+        ${g.unpaid ? line('לתשלום', `<b>${shekel(g.paidTotal)}</b>`) : line('שולם', `<b>${shekel(g.paidTotal)}</b>`)}
+        ${payLinkRow}
         ${g.unpaid ? '' : line('קופון', coupon)}${line('קופון מתנה', promo)}
         ${line('הזמנה', g.orderNumber ? `#${esc(g.orderNumber)}` : '')}
         ${line('צ׳ק-אין', g.checkedInAt ? '✓ הגיעו' : '')}
@@ -116,6 +131,7 @@ function groupDetails(g) {
         ${thumbs(cups, 'כוסות')}
         ${g.customerNotes ? `<div class="sc-gd-note"><b>הערת לקוח</b>${esc(g.customerNotes)}</div>` : ''}
         ${g.internalNotes ? `<div class="sc-gd-note int"><b>הערה פנימית</b>${esc(g.internalNotes)}</div>` : ''}
+        ${cancelBlock}
     </div>`;
 }
 
@@ -132,39 +148,50 @@ function noteEditor(g) {
 }
 
 function renderParticipants(ce, ev) {
+    const cal = calState(ce);
+    const addOpen = cal.addCustomer
+        && cal.addCustomer.dateKey === ev.dateKey
+        && cal.addCustomer.typeId === ev.typeId
+        && (cal.addCustomer.start || '') === (ev.start || '');
+    const addBar = addOpen
+        ? renderAddCustomerPanel(cal)
+        : `<div style="display:flex;justify-content:flex-end"><button type="button" class="sc-btn primary sm" data-action="cal-ac-open">+ הוספת לקוח</button></div>`;
+
     const groups = ce._workshopOrderGroups?.[groupsKey(ev.dateKey, ev.typeId, ev.start)];
     if (!Array.isArray(groups)) {
-        return '<div class="sc-empty"><span class="sc-mini-spin" style="display:inline-block;vertical-align:middle"></span> טוען משתתפים…</div>';
+        return `${addBar}<div class="sc-empty"><span class="sc-mini-spin" style="display:inline-block;vertical-align:middle"></span> טוען משתתפים…</div>`;
     }
     if (!groups.length) {
-        return `<div class="sc-empty">לא נמצאו הזמנות משולמות למפגש זה${ev.people ? ` (${ev.people} משתתפים רשומים ב-Wix Bookings)` : ''}</div>`;
+        return `${addBar}<div class="sc-empty">לא נמצאו הזמנות למפגש זה${ev.people ? ` (${ev.people} משתתפים רשומים ב-Wix Bookings)` : ''}</div>`;
     }
-    const adults = groups.reduce((s, g) => s + (g.adults || 0), 0);
-    const children = groups.reduce((s, g) => s + (g.children || 0), 0);
-    const cal = calState(ce);
+    const activeGroups = groups.filter(g => !g.unpaid);
+    const pendingGroups = groups.filter(g => g.unpaid);
+    const adults = activeGroups.reduce((s, g) => s + (g.adults || 0), 0);
+    const children = activeGroups.reduce((s, g) => s + (g.children || 0), 0);
+    const pendingPeople = pendingGroups.reduce((s, g) => s + (g.adults || 0) + (g.children || 0), 0);
     const rows = groups.map(g => {
         const total = (g.adults || 0) + (g.children || 0);
         const parts = [g.adults ? `${g.adults} מבוגרים` : '', g.children ? `${g.children} ילדים` : ''].filter(Boolean).join(' + ');
         const open = !!cal.openGroups[g.id];
         const noteText = [g.customerNotes ? `הערת לקוח: ${g.customerNotes}` : '', g.internalNotes ? `הערה פנימית: ${g.internalNotes}` : ''].filter(Boolean).join('\n') || g.notes || '';
-        return `<div class="sc-grp ${open ? 'open' : ''}">
+        return `<div class="sc-grp ${open ? 'open' : ''} ${g.unpaid ? 'unpaid' : ''}">
             <div class="sc-row sc-grp-head" data-action="cal-toggle-group" data-id="${esc(g.id)}" role="button" tabindex="0">
-                <span class="sc-av" style="background:#8b9bb0">${esc(initials(g.organizerName))}</span>
+                <span class="sc-av" style="background:${g.unpaid ? '#d97706' : '#8b9bb0'}">${esc(initials(g.organizerName))}</span>
                 <div class="sc-row-main"><b>${esc(g.organizerName)}</b>
                     <div class="sc-row-sub">${esc(parts || '—')}${g.organizerPhone ? ` · <span dir="ltr">${esc(g.organizerPhone)}</span>` : ''}</div>
-                    ${g.unpaid ? `<span class="sc-warn-note">⚠ ${esc(g.statusLabel || 'לא שולם')}</span>` : ''}
+                    ${g.unpaid ? `<span class="sc-warn-note">⚠ ${esc(g.statusLabel || 'לא פעילה · טרם שולם')}</span>` : ''}
                 </div>
                 ${g.orderId ? `<button type="button" class="sc-note-btn ${g.internalNotes ? 'has' : ''}" data-action="cal-note-edit" data-id="${esc(g.id)}" data-tip="${esc(noteText ? `${noteText}\n\n(לחיצה לעריכת הערה)` : 'הוספת הערה להזמנה')}" aria-label="הערות להזמנה">📝</button>`
                     : (noteText ? `<span class="sc-tip sc-note-ico" data-tip="${esc(noteText)}">📝</span>` : '')}
-                <span class="sc-badge">👥 ${total}</span>
+                <span class="sc-badge ${g.unpaid ? 'warn' : ''}">👥 ${total}</span>
                 <span class="sc-chev">${open ? '▴' : '▾'}</span>
             </div>
             ${cal.noteEdit === g.id ? noteEditor(g) : ''}
-            ${open ? groupDetails(g) : ''}
+            ${open ? groupDetails(cal, g) : ''}
         </div>`;
     }).join('');
-    return `${rows}
-        <div class="sc-note"><b>סה״כ ${adults + children} משתתפים</b> ב-${groups.length} קבוצות · ${adults} מבוגרים · ${children} ילדים</div>`;
+    return `${addBar}${rows}
+        <div class="sc-note"><b>סה״כ ${adults + children} משתתפים פעילים</b> ב-${activeGroups.length} קבוצות · ${adults} מבוגרים · ${children} ילדים${pendingGroups.length ? `<br><span style="color:#9a5b00">+ ${pendingPeople} ממתינים לתשלום (${pendingGroups.length} הזמנות לא פעילות)</span>` : ''}</div>`;
 }
 
 function candidateInfo(cal, ev, emp) {
@@ -373,6 +400,17 @@ function renderDayDrawer(cal) {
     const empOptions = cal.cache.employees.filter(e => e.active && !onVacation(cal, e.id, dateKey))
         .map(e => `<option value="${esc(e.id)}">${esc(e.displayName)}</option>`).join('');
 
+    const dayVacs = vacationsOnDate(cal, dateKey);
+    const vacRows = dayVacs.map(v => {
+        const emp = byId[v.employeeId] || { id: v.employeeId, displayName: 'עובד/ת' };
+        return `<div class="sc-row">
+            ${avatar(emp)}
+            <div class="sc-row-main"><b>${esc(emp.displayName)}</b>
+                <div class="sc-row-sub">🌴 בחופשה (${esc(v.startDate)}${v.endDate && v.endDate !== v.startDate ? ` – ${esc(v.endDate)}` : ''})${v.notes ? ` · ${esc(v.notes)}` : ''}</div>
+            </div>
+        </div>`;
+    }).join('');
+
     return `${drawerOpen(cal, fmtDayLong(dateKey))}
         <div class="sc-dr-head">
             ${backBtn(cal)}
@@ -381,6 +419,7 @@ function renderDayDrawer(cal) {
         </div>
         <div class="sc-dr-body">
             ${banners}
+            ${dayVacs.length ? `<div class="sc-section"><h4>🌴 חופשות ביום זה (${dayVacs.length})</h4>${vacRows}</div>` : ''}
             <div class="sc-section"><h4>סדנאות ביום זה (${events.length})</h4>${evRows || '<div class="sc-empty">אין סדנאות ביום זה</div>'}</div>
             <div class="sc-section"><h4>עובדים ביום זה (${subs.length})</h4>${staffRows || '<div class="sc-empty">אין הגשות או שיבוצים ליום זה</div>'}</div>
             <div class="sc-section"><h4>שיבוץ ללא סדנה (פתיחה / קיפול)</h4>

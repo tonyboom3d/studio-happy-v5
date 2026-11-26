@@ -83,7 +83,7 @@ export const getScheduleRange = webMethod(Permissions.SiteMember, async (fromKey
 
     const vacations = (vacationsRaw || [])
         .filter(v => v.status === VACATION_STATUS.APPROVED)
-        .map(v => ({ employeeId: v.employeeId, startDate: v.startDate, endDate: v.endDate || v.startDate }));
+        .map(v => ({ employeeId: v.employeeId, startDate: v.startDate, endDate: v.endDate || v.startDate, notes: v.notes || '' }));
 
     return {
         fromKey,

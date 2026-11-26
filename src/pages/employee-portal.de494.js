@@ -103,6 +103,11 @@ import {
     rejectRescheduleRequest,
 } from 'backend/rescheduleService.web.js';
 import { getScheduleRange, adminUpdateShiftHours } from 'backend/scheduleCalendarService.web.js';
+import {
+    getManualSessionPricing,
+    createManualWorkshopOrder,
+    cancelManualWorkshopOrder,
+} from 'backend/manualOrderService.web.js';
 
 const PORTAL_ELEMENT_ID = '#employeePortal1';
 const REALTIME_DEBOUNCE_MS = 1500;
@@ -436,6 +441,18 @@ async function handleCalendarAction(portalEl, type, payload) {
                 pushActionResult(portalEl, { type, opId: p.opId, orderId: p.orderId, error: true, message: friendlyError(err) });
             }
             return;
+        case 'calendarManualPricing':
+            try {
+                const data = await getManualSessionPricing(p.dateKey, p.workshopTypeId, p.sessionStart);
+                pushActionResult(portalEl, { type, opId: p.opId, ok: true, data });
+            } catch (err) {
+                pushActionResult(portalEl, { type, opId: p.opId, error: true, message: friendlyError(err) });
+            }
+            return;
+        case 'calendarAddManualCustomer':
+            return runCalendarMutation(portalEl, type, p, () => createManualWorkshopOrder(p.order));
+        case 'calendarCancelManualOrder':
+            return runCalendarMutation(portalEl, type, p, () => cancelManualWorkshopOrder(p.orderId));
         default:
             console.warn('[employee-portal] Unknown calendar action:', type);
     }
@@ -459,6 +476,7 @@ const READ_ONLY_ACTION_TYPES = new Set([
     'adminTemplatesLoad',
     'adminLoadWorkshopOrders',
     'calendarLoadRange',
+    'calendarManualPricing',
 ]);
 
 async function handlePortalAction(portalEl, detail) {

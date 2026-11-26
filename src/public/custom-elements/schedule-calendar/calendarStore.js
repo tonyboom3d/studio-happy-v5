@@ -13,7 +13,7 @@ export function calState(ce) {
             view: 'week',
             anchor: today,
             miniMonth: today.slice(0, 7),
-            filters: { workshopIds: [], employeeIds: [], staff: '', people: '' },
+            filters: { workshopIds: [], employeeIds: [], staff: '', people: '', showUnattached: false, showVacations: false },
             openGroups: {},
             msOpen: null,
             cache: { days: {}, subsByDate: {}, loaded: {}, employees: [], workshopTypes: [], vacations: [], settings: EMPTY_SETTINGS(), permissions: {}, ready: false },
@@ -24,6 +24,8 @@ export function calState(ce) {
             picker: null,            // { mode: 'add' } | { mode: 'swap', fromId }
             editHours: null,         // employeeId
             removeConfirm: null,     // employeeId
+            addCustomer: null,       // manual add-customer modal state inside session drawer
+            cancelOrderConfirm: null, // orderId awaiting cancel confirmation
             notify: true,
             ops: {},
             toast: null,
@@ -102,6 +104,10 @@ export function subFor(cal, dateKey, employeeId) {
 
 export function onVacation(cal, employeeId, dateKey) {
     return cal.cache.vacations.some(v => v.employeeId === employeeId && v.startDate <= dateKey && dateKey <= v.endDate);
+}
+
+export function vacationsOnDate(cal, dateKey) {
+    return (cal.cache.vacations || []).filter(v => v.startDate <= dateKey && dateKey <= v.endDate);
 }
 
 function slotRange(slot) {

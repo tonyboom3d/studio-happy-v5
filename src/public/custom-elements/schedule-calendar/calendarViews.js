@@ -3,7 +3,7 @@ import {
     HOUR_PX, DOW_LONG, DOW_SHORT, MONTHS, pad2, parseKey, rangeKeys, visibleRange, monthGrid,
     rangeTitle, hourBounds, layoutOverlaps, ilParts, todayKeyIL, dowOf,
 } from './calendarLayout.js';
-import { calState, buildEvents, empById, eventCapacity, coverageIssue, pendingCount, isRangeLoaded } from './calendarStore.js';
+import { calState, buildEvents, empById, eventCapacity, coverageIssue, pendingCount, isRangeLoaded, vacationsOnDate } from './calendarStore.js';
 import { colorForType, colorForEvent, eventStripeStyle } from './calendarColors.js';
 
 function evStyle(cal, ev) {
@@ -93,6 +93,8 @@ function renderToolbar(ce, cal) {
         ${renderMultiSelect(cal, 'employeeIds', 'עובדים', empOpts)}
         ${renderStateSelect(cal, 'people', 'סינון לפי הרשמה', [['', 'הרשמה: הכל'], ['withParticipants', 'עם נרשמים'], ['noParticipants', 'ללא נרשמים']])}
         ${renderStateSelect(cal, 'staff', 'סינון לפי איוש', [['', 'צוות: הכל'], ['withStaff', 'עם עובדים'], ['noStaff', 'ללא עובדים']])}
+        <button type="button" class="sc-btn sc-ms-btn ${cal.filters.showUnattached ? 'has' : ''}" data-action="cal-toggle-flag" data-flag="showUnattached" title="הצגת שיבוצים שלא משויכים לסדנה">${cal.filters.showUnattached ? '✓ ' : ''}ללא סדנה</button>
+        <button type="button" class="sc-btn sc-ms-btn ${cal.filters.showVacations ? 'has' : ''}" data-action="cal-toggle-flag" data-flag="showVacations" title="הצגת חופשות מאושרות של עובדים">${cal.filters.showVacations ? '✓ ' : ''}🌴 חופשות</button>
         <div class="sc-seg" role="tablist">${views.map(([v, l]) => `<button type="button" class="${cal.view === v ? 'active' : ''}" data-action="cal-view" data-view="${v}">${l}</button>`).join('')}</div>
         <button type="button" class="sc-icon-btn" data-action="cal-refresh" title="רענון" aria-label="רענון" style="font-size:16px">⟳</button>
         ${perms.manageEmployees ? `<button type="button" class="sc-btn" data-action="admin-page" data-page="messages">✉ הודעות לעובדים</button>` : ''}
@@ -205,12 +207,28 @@ function renderEventBlock(cal, ev, startHour, byId) {
 }
 
 function manualShiftChips(cal, k, byId) {
+    if (!cal.filters.showUnattached) return [];
     return (cal.cache.subsByDate[k] || [])
         .filter(s => s.status === 'SCHEDULED' && !(s.assignedTypeIds || []).length)
         .filter(s => !cal.filters.employeeIds.length || cal.filters.employeeIds.includes(s.employeeId))
         .map(s => {
             const label = { OPENING: 'פתיחה', CLOSING: 'קיפול' }[s.workType] || 'משמרת';
-            return `<button type="button" class="sc-chip" data-action="cal-open-day" data-date="${k}" title="${esc(`${label} · ${s.startTime}–${s.endTime}`)}">${esc(label)} · ${esc(byId[s.employeeId]?.displayName || '')}</button>`;
+            const hours = s.startTime && s.endTime ? `${s.startTime}–${s.endTime}` : '';
+            const name = byId[s.employeeId]?.displayName || '';
+            return `<button type="button" class="sc-chip shift" data-action="cal-open-day" data-date="${k}" title="${esc(`${label} · ${name}${hours ? ` · ${hours}` : ''}`)}">${esc(label)} · ${esc(name)}${hours ? ` <span dir="ltr" style="opacity:.75">${esc(hours)}</span>` : ''}</button>`;
+        });
+}
+
+function vacationChips(cal, k, byId) {
+    if (!cal.filters.showVacations) return [];
+    const seen = new Set();
+    return vacationsOnDate(cal, k)
+        .filter(v => !cal.filters.employeeIds.length || cal.filters.employeeIds.includes(v.employeeId))
+        .filter(v => { if (seen.has(v.employeeId)) return false; seen.add(v.employeeId); return true; })
+        .map(v => {
+            const name = byId[v.employeeId]?.displayName || 'עובד/ת';
+            const tip = `חופשה · ${name}${v.notes ? ` — ${v.notes}` : ''}`;
+            return `<button type="button" class="sc-chip vac" data-action="cal-open-day" data-date="${k}" title="${esc(tip)}">🌴 ${esc(name)}</button>`;
         });
 }
 
@@ -230,8 +248,10 @@ function renderTimeGrid(cal, view) {
             return `<button type="button" class="sc-chip sc-chip-ev" style="${evStyle(cal, ev)}" data-action="cal-open-event" data-date="${k}" data-type="${esc(ev.typeId)}" data-start="">${esc(ev.name)}</button>`;
         }),
         ...manualShiftChips(cal, k, byId),
+        ...vacationChips(cal, k, byId),
     ]);
     const hasAllDay = allDayCells.some(c => c.length);
+    const allDayLabel = cal.filters.showVacations && !cal.filters.showUnattached ? 'חופשות / כל היום' : 'ללא שעה';
 
     const hours = [];
     for (let h = start + 1; h < end; h++) {
@@ -254,7 +274,7 @@ function renderTimeGrid(cal, view) {
         html: `<div class="sc-scroll" data-sc-scroll="1">
             <div class="sc-wk ${view === 'day' ? 'day' : ''}" style="--sc-cols:${keys.length};--sc-hours:${height}px">
                 <div class="sc-wk-head"><span></span>${keys.map(k => renderDayHeader(cal, k, view)).join('')}</div>
-                ${hasAllDay ? `<div class="sc-allday"><span class="sc-allday-label">ללא שעה</span>${allDayCells.map(c => `<div class="sc-allday-cell">${c.join('')}</div>`).join('')}</div>` : ''}
+                ${hasAllDay ? `<div class="sc-allday"><span class="sc-allday-label">${esc(allDayLabel)}</span>${allDayCells.map(c => `<div class="sc-allday-cell">${c.join('')}</div>`).join('')}</div>` : ''}
                 <div class="sc-wk-body">
                     <div class="sc-gutter" style="height:${height}px;min-height:100%">${hours.join('')}${showNow ? `<span class="sc-now-pill" style="top:${nowTop}px">${now.hm}</span>` : ''}</div>
                     ${cols}
@@ -274,20 +294,24 @@ function renderMonth(cal) {
     const { from, to } = monthGrid(cal.anchor);
     const keys = rangeKeys(from, to);
     const events = buildEvents(cal, keys);
+    const byId = empById(cal);
     const month = parseKey(cal.anchor).m;
     const today = todayKeyIL();
     const cells = keys.map(k => {
         const p = parseKey(k);
         const f = dayFlags(cal, k);
         const dayEvents = events.filter(e => e.dateKey === k).sort((a, b) => (a.startMin ?? -1) - (b.startMin ?? -1));
-        const chips = dayEvents.slice(0, MONTH_CHIPS).map(ev => {
+        const extraChips = [...manualShiftChips(cal, k, byId), ...vacationChips(cal, k, byId)];
+        const evChips = dayEvents.map(ev => {
             const st = eventStaffState(cal, ev);
             return `<button type="button" class="sc-mchip" style="${evStyle(cal, ev)}" data-action="cal-open-event" data-date="${k}" data-type="${esc(ev.typeId)}" data-start="${esc(ev.start || '')}" title="${esc(ev.name)}">
                 ${noteBadge(cal, k)}${st.missing || st.hoursIssue ? '<span class="sc-ev-warn">!</span>' : ''}${ev.start ? `<span class="t">${ilParts(ev.start).hm}</span>` : ''}<span class="n">${esc(ev.name)}</span>
             </button>`;
-        }).join('');
-        const more = dayEvents.length > MONTH_CHIPS
-            ? `<button type="button" class="sc-more" data-action="cal-goto-day" data-date="${k}">+${dayEvents.length - MONTH_CHIPS} נוספים</button>` : '';
+        });
+        const allChips = [...evChips, ...extraChips];
+        const chips = allChips.slice(0, MONTH_CHIPS).join('');
+        const more = allChips.length > MONTH_CHIPS
+            ? `<button type="button" class="sc-more" data-action="cal-goto-day" data-date="${k}">+${allChips.length - MONTH_CHIPS} נוספים</button>` : '';
         const tag = f.holiday?.name ? `<span class="sc-tag hol" title="${esc(f.holiday.name)}">${esc(f.holiday.name)}</span>`
             : (f.blocked ? '<span class="sc-tag blk">חסום</span>' : (f.note ? `<span class="sc-tag note sc-tip" data-tip="${esc(f.note.message || '')}">✉</span>` : ''));
         return `<div class="sc-mc ${p.m !== month ? 'out' : ''} ${k === today ? 'today' : ''} ${f.closed ? 'closed' : ''}">

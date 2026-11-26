@@ -501,14 +501,29 @@ export const getWorkshopOrderGroups = webMethod(Permissions.SiteMember, async (d
     const end = new Date(`${dateKey}T23:59:59Z`);
     end.setUTCDate(end.getUTCDate() + 1);
 
-    const result = await wixData.query('WorkshopOrders')
-        .eq('status', 'paid')
-        .hasSome('serviceId', serviceIds)
-        .ge('workshopStart', start).le('workshopStart', end)
-        .limit(200).find(SA).catch(() => ({ items: [] }));
+    const [paidRes, manualPendingRes] = await Promise.all([
+        wixData.query('WorkshopOrders')
+            .eq('status', 'paid')
+            .hasSome('serviceId', serviceIds)
+            .ge('workshopStart', start).le('workshopStart', end)
+            .limit(200).find(SA).catch(() => ({ items: [] })),
+        wixData.query('WorkshopOrders')
+            .eq('manualOrder', true)
+            .eq('status', 'pending_payment')
+            .hasSome('serviceId', serviceIds)
+            .ge('workshopStart', start).le('workshopStart', end)
+            .limit(100).find(SA).catch(() => ({ items: [] })),
+    ]);
+
+    const seenIds = new Set();
+    const combinedItems = [...(paidRes.items || []), ...(manualPendingRes.items || [])].filter(o => {
+        if (!o?._id || seenIds.has(o._id)) return false;
+        seenIds.add(o._id);
+        return true;
+    });
 
     const sessionKey = sessionStart ? canonicalSessionKey(sessionStart) : null;
-    const orders = (result.items || [])
+    const orders = combinedItems
         .filter(o => !o.cancelledAt && toDateKey(o.workshopStart) === dateKey)
         .filter(o => !sessionKey || canonicalSessionKey(o.workshopStart) === sessionKey);
     const [details, cupLabels] = await Promise.all([
@@ -517,6 +532,7 @@ export const getWorkshopOrderGroups = webMethod(Permissions.SiteMember, async (d
     ]);
     const paidGroups = orders.map(o => {
         const x = details[o._id] || {};
+        const unpaid = o.status !== 'paid';
         return {
             id: o._id,
             orderId: o._id,
@@ -528,7 +544,7 @@ export const getWorkshopOrderGroups = webMethod(Permissions.SiteMember, async (d
             organizerEmail: x.email || o.organizerEmail || '',
             adults: o.adults || 0,
             children: o.children || 0,
-            paidTotal: x.paidTotal ?? (o.paidTotal || o.basePrice || 0),
+            paidTotal: unpaid ? (o.basePrice || 0) : (x.paidTotal ?? (o.paidTotal || o.basePrice || 0)),
             paidDiscount: x.paidDiscount || 0,
             couponCode: x.couponCode || '',
             couponName: x.couponName || '',
@@ -541,6 +557,12 @@ export const getWorkshopOrderGroups = webMethod(Permissions.SiteMember, async (d
             orderNumber: x.orderNumber || '',
             checkedInAt: x.checkedInAt || null,
             participants: x.participants || [],
+            unpaid,
+            statusLabel: unpaid ? 'לא פעילה · טרם שולם' : '',
+            manualOrder: !!o.manualOrder,
+            paymentLinkId: o.paymentLinkId || '',
+            paymentLinkUrl: o.paymentLinkUrl || '',
+            paymentLinkStatus: o.paymentLinkStatus || '',
         };
     });
     return paidGroups;

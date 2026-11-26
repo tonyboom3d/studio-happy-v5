@@ -59,6 +59,9 @@ export const MC_FIELDS = {
     pickupLink: 'pickup_link',
     pickupSlotLabel: 'pickup_slot_label',
     pickupStatus: 'pickup_status',
+    // Manual workshop order payment link (see manualOrders.js)
+    paymentLinkUrl: 'payment_link_url',
+    paymentLinkNote: 'payment_link_note',
 };
 
 // Custom field created manually in ManyChat (Settings > Custom Fields, type "Text")
@@ -1456,6 +1459,63 @@ export async function sendQuoteLinkManyChat(quoteId) {
     } catch (err) {
         console.error('[ManyChat] ❌ sendQuoteLinkManyChat failed:', err?.message || err);
         return { sent: false, reason: 'השליחה ל-WhatsApp נכשלה. נסו שוב בעוד רגע.' };
+    }
+}
+
+const MANUAL_PAYMENT_LINK_NOTIFICATION_TYPE = 'manual_payment_link';
+
+/**
+ * Sends a Wix Payment Link to a manually added workshop customer via ManyChat.
+ * Uses findOrCreateSubscriber + shared customer flow (branch: notification_type == 'manual_payment_link').
+ */
+export async function sendManualOrderPaymentLinkManyChat(order, { paymentLinkUrl, workshopName, customerNote } = {}) {
+    try {
+        const phone = normalizeIsraeliPhone(order?.organizerPhone);
+        if (!phone) return { sent: false, reason: 'אין מספר טלפון תקין ללקוח.' };
+        if (!paymentLinkUrl) return { sent: false, reason: 'חסר קישור לתשלום.' };
+
+        const name = String(order?.organizerName || '').trim();
+        const parts = name ? name.split(/\s+/) : [];
+        const subscriber = await findOrCreateSubscriber({
+            phone,
+            email: order?.organizerEmail || undefined,
+            firstName: parts[0] || undefined,
+            lastName: parts.slice(1).join(' ') || undefined,
+        });
+        if (!subscriber?.id) throw new Error('No subscriber id after find/create');
+
+        const wType = order?.workshopType || 'tufting';
+        const resolvedWorkshopName = workshopName || workshopTypeLabel(wType);
+        const amount = Number(order?.basePrice || 0);
+        const noteText = String(customerNote || order?.customerNotes || '').trim();
+        const fields = [
+            { name: NOTIFICATION_TYPE_FIELD, value: MANUAL_PAYMENT_LINK_NOTIFICATION_TYPE },
+            { name: MC_FIELDS.organizerName, value: name || 'לקוח יקר' },
+            { name: MC_FIELDS.workshopName, value: resolvedWorkshopName },
+            { name: MC_FIELDS.workshopDate, value: formatWorkshopDate(order?.workshopStart) },
+            { name: MC_FIELDS.workshopTime, value: formatWorkshopTimeRange(order?.workshopStart, order?.workshopEnd) },
+            { name: MC_FIELDS.participantsLine, value: buildParticipantsLine(order, wType) },
+            { name: MC_FIELDS.amount, value: amount ? `₪${amount}` : '' },
+            { name: MC_FIELDS.paymentLinkUrl, value: paymentLinkUrl },
+            { name: MC_FIELDS.paymentLinkNote, value: noteText || '—' },
+        ];
+
+        await setCustomFieldsByName(subscriber.id, fields);
+        await sendFlow(subscriber.id, ORDER_CONFIRMATION_FLOW_NS);
+
+        logManyChatSendSuccess('sendManualOrderPaymentLinkManyChat', {
+            phone,
+            subscriberId: subscriber.id,
+            notificationType: MANUAL_PAYMENT_LINK_NOTIFICATION_TYPE,
+            fields,
+        });
+        return { sent: true, subscriberId: subscriber.id };
+    } catch (err) {
+        logManyChatSendError('sendManualOrderPaymentLinkManyChat', {
+            phone: order?.organizerPhone,
+            error: err?.message || String(err),
+        });
+        return { sent: false, reason: err?.message || 'השליחה ל-WhatsApp נכשלה.' };
     }
 }
 

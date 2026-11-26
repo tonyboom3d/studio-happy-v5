@@ -3,12 +3,13 @@
  * re-renders in place, talks to page code only through ce._dispatch('calendar*').
  */
 import { CALENDAR_STYLE } from './calendarStyle.js';
-import { fetchRange, shiftAnchor, todayKeyIL, addMonths, hmToMin } from './calendarLayout.js';
+import { fetchRange, shiftAnchor, todayKeyIL, addMonths, hmToMin, ilParts } from './calendarLayout.js';
 import {
     calState, mergeRange, isRangeLoaded, invalidateRange, beginOp, settleOp, rollbackOp, findEvent, subFor,
 } from './calendarStore.js';
 import { renderCalendarBody, esc } from './calendarViews.js';
 import { renderDrawer, groupsKey } from './calendarDrawer.js';
+import { createInitialAddCustomerState, syncAddCustomerInputs } from './calendarAddCustomer.js';
 
 export { CALENDAR_STYLE };
 
@@ -305,6 +306,58 @@ export function handleCalendarResult(ce, result) {
         updateCalendarDrawer(ce);
         return true;
     }
+    if (result.type === 'calendarManualPricing') {
+        if (cal.addCustomer) {
+            cal.addCustomer.loading = false;
+            if (failed) cal.addCustomer.error = result.message || 'טעינת התמחור נכשלה.';
+            else cal.addCustomer.pricingData = result.data || null;
+            paintDrawer(ce);
+        }
+        return true;
+    }
+    if (result.type === 'calendarAddManualCustomer') {
+        if (failed) {
+            if (cal.addCustomer) {
+                cal.addCustomer.submitting = false;
+                cal.addCustomer.error = result.message || 'הוספת הלקוח נכשלה.';
+            }
+            toast(ce, result.message || 'הוספת הלקוח נכשלה.', 'error');
+            paintDrawer(ce);
+            return true;
+        }
+        cal.addCustomer = null;
+        const d = cal.drawer;
+        if (d?.kind === 'session') {
+            const key = groupsKey(d.dateKey, d.typeId, d.start);
+            if (ce._workshopOrderGroups) delete ce._workshopOrderGroups[key];
+            ensureGroups(ce, d.dateKey, d.typeId, d.start);
+        }
+        const parts = [result.status === 'paid' ? 'הלקוח נוסף כהזמנה משולמת' : 'ההזמנה נפתחה וקישור תשלום נוצר'];
+        if (result.whatsappSent) parts.push('נשלח בוואטסאפ');
+        if (result.emailSent) parts.push('נשלח במייל');
+        if (result.warnings?.length) parts.push(result.warnings.join(' · '));
+        toast(ce, parts.join(' · '), result.warnings?.length ? 'error' : 'success');
+        rerender(ce);
+        return true;
+    }
+    if (result.type === 'calendarCancelManualOrder') {
+        cal.cancelOrderConfirm = null;
+        if (failed) {
+            toast(ce, result.message || 'ביטול ההזמנה נכשל.', 'error');
+            paintDrawer(ce);
+            return true;
+        }
+        const d = cal.drawer;
+        if (d?.kind === 'session') {
+            const key = groupsKey(d.dateKey, d.typeId, d.start);
+            if (ce._workshopOrderGroups) delete ce._workshopOrderGroups[key];
+            ensureGroups(ce, d.dateKey, d.typeId, d.start);
+        }
+        const msg = result.linkDeactivated ? 'ההזמנה וקישור התשלום בוטלו' : 'ההזמנה בוטלה';
+        toast(ce, result.linkWarning ? `${msg} (${result.linkWarning})` : msg, 'success');
+        rerender(ce);
+        return true;
+    }
     if (result.type === 'calendarSketchDuty' && result.needsConfirm) {
         rollbackOp(cal, result.opId);
         cal.sketchConfirm = { dateKey: result.dateKey, startTime: result.startTime, endTime: result.endTime };
@@ -413,9 +466,18 @@ export function handleCalendarClick(ce, action, target) {
             rerender(ce);
             return true;
         }
+        case 'cal-toggle-flag': {
+            const flag = ds.flag;
+            if (flag === 'showUnattached' || flag === 'showVacations') {
+                cal.filters[flag] = !cal.filters[flag];
+                rerender(ce);
+            }
+            return true;
+        }
         case 'cal-open-event':
             cal.drawer = { kind: 'session', dateKey: ds.date, typeId: ds.type, start: ds.start || null, from: drawerOrigin(cal, target) };
             cal.picker = null; cal.editHours = null; cal.removeConfirm = null;
+            cal.addCustomer = null; cal.cancelOrderConfirm = null;
             cal.resetDrawerScroll = true;
             cal.resetInputs = true;
             ensureGroups(ce, ds.date, ds.type, ds.start || null);
@@ -425,6 +487,7 @@ export function handleCalendarClick(ce, action, target) {
         case 'cal-open-day':
             cal.drawer = { kind: 'day', dateKey: ds.date, from: drawerOrigin(cal, target) };
             cal.picker = null; cal.editHours = null; cal.removeConfirm = null;
+            cal.addCustomer = null; cal.cancelOrderConfirm = null;
             cal.resetDrawerScroll = true;
             cal.resetInputs = true;
             paintDrawer(ce, { animate: !ce.querySelector('#scRoot .sc-drawer') });
@@ -435,6 +498,7 @@ export function handleCalendarClick(ce, action, target) {
             cal.miniMonth = ds.date.slice(0, 7);
             cal.drawer = { kind: 'day', dateKey: ds.date };
             cal.picker = null; cal.editHours = null; cal.removeConfirm = null;
+            cal.addCustomer = null; cal.cancelOrderConfirm = null;
             cal.resetScroll = true;
             cal.resetDrawerScroll = true;
             cal.resetInputs = true;
@@ -446,6 +510,7 @@ export function handleCalendarClick(ce, action, target) {
             if (!from) return true;
             cal.drawer = { ...from };
             cal.picker = null; cal.editHours = null; cal.removeConfirm = null;
+            cal.addCustomer = null; cal.cancelOrderConfirm = null;
             cal.resetDrawerScroll = true;
             cal.resetInputs = true;
             if (from.kind === 'session') ensureGroups(ce, from.dateKey, from.typeId, from.start);
@@ -456,6 +521,8 @@ export function handleCalendarClick(ce, action, target) {
         case 'cal-close-drawer':
             cal.drawer = null;
             cal.drawerX = 0;
+            cal.addCustomer = null;
+            cal.cancelOrderConfirm = null;
             ce.querySelector('#scRoot .sc-drawer')?.remove();
             markSelected(ce);
             return true;
@@ -614,6 +681,144 @@ export function handleCalendarClick(ce, action, target) {
         case 'cal-lightbox-hold':
         case 'cal-tip':
             return true;
+        case 'cal-ac-open': {
+            const ev = currentEvent(cal);
+            if (!ev) return true;
+            cal.addCustomer = createInitialAddCustomerState(ev);
+            cal.cancelOrderConfirm = null;
+            cal.resetInputs = true;
+            paintDrawer(ce);
+            ce._dispatch('calendarManualPricing', {
+                dateKey: ev.dateKey,
+                workshopTypeId: ev.typeId,
+                sessionStart: ev.start ? ilParts(ev.start).hm : '',
+                opId: `pricing-${Date.now()}`,
+            });
+            return true;
+        }
+        case 'cal-ac-close':
+            cal.addCustomer = null;
+            paintDrawer(ce);
+            return true;
+        case 'cal-ac-qty': {
+            const st = cal.addCustomer;
+            if (!st) return true;
+            syncAddCustomerInputs(ce, st);
+            const field = ds.field === 'children' ? 'children' : 'adults';
+            const delta = Number(ds.delta) || 0;
+            const next = Math.max(0, (st.form[field] || 0) + delta);
+            const other = field === 'adults' ? st.form.children : st.form.adults;
+            if (next + other < 1) return true;
+            st.form[field] = next;
+            paintDrawer(ce);
+            return true;
+        }
+        case 'cal-ac-next': {
+            const st = cal.addCustomer;
+            if (!st) return true;
+            syncAddCustomerInputs(ce, st);
+            if (!String(st.form.organizerName || '').trim()) {
+                st.error = 'יש להזין שם לקוח.';
+                paintDrawer(ce);
+                return true;
+            }
+            if ((st.form.adults || 0) + (st.form.children || 0) < 1) {
+                st.error = 'יש לבחור לפחות משתתף אחד.';
+                paintDrawer(ce);
+                return true;
+            }
+            st.error = '';
+            const hasPhone = !!String(st.form.organizerPhone || '').trim();
+            const hasEmail = !!String(st.form.organizerEmail || '').trim();
+            st.form.sendWhatsApp = hasPhone;
+            st.form.sendEmail = hasEmail && !hasPhone;
+            st.step = 2;
+            paintDrawer(ce);
+            return true;
+        }
+        case 'cal-ac-back': {
+            const st = cal.addCustomer;
+            if (!st) return true;
+            syncAddCustomerInputs(ce, st);
+            st.step = 1;
+            st.error = '';
+            paintDrawer(ce);
+            return true;
+        }
+        case 'cal-ac-mode': {
+            const st = cal.addCustomer;
+            if (!st) return true;
+            syncAddCustomerInputs(ce, st);
+            st.form.paymentMode = ds.mode === 'paid' ? 'paid' : 'link';
+            st.error = '';
+            paintDrawer(ce);
+            return true;
+        }
+        case 'cal-ac-submit': {
+            const st = cal.addCustomer;
+            if (!st || st.submitting) return true;
+            syncAddCustomerInputs(ce, st);
+            const f = st.form;
+            if (f.paymentMode === 'link') {
+                if (f.sendEmail && !String(f.organizerEmail || '').trim()) {
+                    st.error = 'לשליחה במייל יש להזין כתובת אימייל.';
+                    paintDrawer(ce);
+                    return true;
+                }
+                if (f.sendWhatsApp && !String(f.organizerPhone || '').trim()) {
+                    st.error = 'לשליחה בוואטסאפ יש להזין מספר טלפון.';
+                    paintDrawer(ce);
+                    return true;
+                }
+            }
+            st.submitting = true;
+            st.error = '';
+            paintDrawer(ce);
+            ce._dispatch('calendarAddManualCustomer', {
+                dateKey: st.dateKey,
+                opId: `addcust-${Date.now()}`,
+                order: {
+                    dateKey: st.dateKey,
+                    workshopTypeId: st.typeId,
+                    sessionStart: st.start ? ilParts(st.start).hm : '',
+                    organizerName: f.organizerName,
+                    organizerPhone: f.organizerPhone,
+                    organizerEmail: f.organizerEmail,
+                    adults: f.adults,
+                    children: f.children,
+                    internalNotes: f.internalNotes,
+                    customerNotes: f.customerNotes,
+                    paymentMode: f.paymentMode,
+                    sendEmail: f.paymentMode === 'link' && !!f.sendEmail,
+                    sendWhatsApp: f.paymentMode === 'link' && !!f.sendWhatsApp,
+                },
+            });
+            return true;
+        }
+        case 'cal-cancel-order-ask':
+            cal.cancelOrderConfirm = ds.id;
+            paintDrawer(ce);
+            return true;
+        case 'cal-cancel-order-cancel':
+            cal.cancelOrderConfirm = null;
+            paintDrawer(ce);
+            return true;
+        case 'cal-cancel-order-confirm':
+            ce._dispatch('calendarCancelManualOrder', {
+                dateKey: cal.drawer?.dateKey || '',
+                orderId: ds.id,
+                opId: `cancelord-${Date.now()}`,
+            });
+            return true;
+        case 'cal-copy-paylink':
+            if (ds.url && navigator.clipboard?.writeText) {
+                navigator.clipboard.writeText(ds.url).then(
+                    () => toast(ce, 'קישור התשלום הועתק', 'success'),
+                    () => toast(ce, 'לא ניתן להעתיק — פתחו את הקישור ישירות.', 'error'),
+                );
+            }
+            return true;
+        case 'cal-ac-chk':
         case 'cal-filter-opt':
         case 'cal-filter-state':
         case 'cal-notify':
@@ -647,6 +852,10 @@ export function handleCalendarChange(ce, input) {
     if (action === 'cal-hol-mode') {
         const short = input.value === 'SHORT';
         ce.querySelectorAll('#scHolStart, #scHolEnd').forEach(el => { el.disabled = !short; });
+        return true;
+    }
+    if (action === 'cal-ac-chk') {
+        syncAddCustomerInputs(ce, cal.addCustomer);
         return true;
     }
     return false;

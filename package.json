@@ -13,6 +13,7 @@
     "@wix/essentials": "1.0.6",
     "@wix/faq": "1.0.50",
     "@wix/forms": "1.0.439",
+    "@wix/get-paid": "^1.0.659",
     "@wix/marketing": "1.0.157",
     "@wix/sdk": "1.21.5",
     "@wix/site": "1.66.0",

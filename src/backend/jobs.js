@@ -11,6 +11,7 @@ import { retryUnsentPromoCoupons } from 'backend/promoSendDispatch.js';
 import { deleteConversation } from 'backend/openaiService.jsw';
 import { processPickupStaffNotifications } from 'backend/pickupScheduling.js';
 import { processCheckinReminders } from 'backend/checkin/checkinReminders.js';
+import { reconcileManualPaymentLinkOrder } from 'backend/manualOrders.js';
 
 const SA = { suppressAuth: true, suppressHooks: true };
 
@@ -211,6 +212,13 @@ export async function reconcileStuckWorkshopOrders() {
 
     for (const order of stuck.items || []) {
         if (!order.checkoutId) {
+            if (order.paymentLinkId) {
+                const activated = await reconcileManualPaymentLinkOrder(order);
+                if (activated) {
+                    reconciled++;
+                    continue;
+                }
+            }
             stillPending++;
             continue;
         }

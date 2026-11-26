@@ -17,6 +17,7 @@ import {
     CANDLES_HALLOWEEN_SERVICE_ID,
     applyTuftingDatePricing,
     candlesPriceServiceIdForDate,
+    expandCandlesServiceIds,
     serviceIdToWorkshopType,
 } from 'backend/workshopServiceIds.js';
 import { normalizeIsraeliPhone } from 'backend/orderUtils.js';
@@ -289,11 +290,17 @@ export async function resolveSessionPricing(dateKey, workshopTypeId, sessionStar
     if (!/^\d{4}-\d{2}-\d{2}$/.test(String(dateKey || ''))) {
         throw new Error('תאריך לא תקין.');
     }
-    const { byId } = await loadWorkshopTypeMap();
-    const workshop = byId[workshopTypeId];
+    const { typesById, serviceIdToTypeId } = await loadWorkshopTypeMap();
+    const workshop = typesById?.[workshopTypeId];
     if (!workshop) throw new Error('הסדנה שנבחרה לא נמצאה.');
 
-    const serviceIds = workshop.serviceIds || [];
+    let serviceIds = Object.entries(serviceIdToTypeId || {})
+        .filter(([, typeId]) => typeId === workshopTypeId)
+        .map(([serviceId]) => serviceId);
+    if (serviceIds.some((id) => ALL_CANDLES_SERVICE_IDS.includes(id))) {
+        serviceIds = expandCandlesServiceIds(serviceIds, `${dateKey}T12:00:00Z`);
+    }
+    if (!serviceIds.length) throw new Error('לסדנה הזו לא משויכים שירותי הזמנה.');
     const slot = await findAvailabilitySlot(serviceIds, dateKey, sessionStart);
     const fallback = fallbackSessionTimes(dateKey, sessionStart);
 

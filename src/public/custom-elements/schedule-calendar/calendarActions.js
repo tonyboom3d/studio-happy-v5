@@ -380,6 +380,23 @@ export function handleCalendarResult(ce, result) {
         rerender(ce);
         return true;
     }
+    if (result.type === 'calendarMarkManualPaid') {
+        cal.markPaidConfirm = null;
+        if (failed) {
+            toast(ce, result.message || 'סימון התשלום נכשל.', 'error');
+            paintDrawer(ce);
+            return true;
+        }
+        const d = cal.drawer;
+        if (d?.kind === 'session') {
+            const key = groupsKey(d.dateKey, d.typeId, d.start);
+            if (ce._workshopOrderGroups) delete ce._workshopOrderGroups[key];
+            ensureGroups(ce, d.dateKey, d.typeId, d.start);
+        }
+        toast(ce, 'ההזמנה סומנה כשולמה והופעלה', 'success');
+        rerender(ce);
+        return true;
+    }
     if (result.type === 'calendarCancelManualOrder') {
         cal.cancelOrderConfirm = null;
         if (failed) {
@@ -874,6 +891,7 @@ export function handleCalendarClick(ce, action, target) {
                     organizerPhone: f.organizerPhone,
                     organizerEmail: f.organizerEmail,
                     contactId: f.locked?.email ? f.contactId : '',
+                    customTotal: String(f.customPrice ?? '').trim() === '' ? null : Number(f.customPrice),
                     adults: f.adults,
                     children: f.children,
                     internalNotes: f.internalNotes,
@@ -885,6 +903,21 @@ export function handleCalendarClick(ce, action, target) {
             });
             return true;
         }
+        case 'cal-markpaid-ask':
+            cal.markPaidConfirm = ds.id;
+            paintDrawer(ce);
+            return true;
+        case 'cal-markpaid-cancel':
+            cal.markPaidConfirm = null;
+            paintDrawer(ce);
+            return true;
+        case 'cal-markpaid-confirm':
+            ce._dispatch('calendarMarkManualPaid', {
+                dateKey: cal.drawer?.dateKey || '',
+                orderId: ds.id,
+                opId: `markpaid-${Date.now()}`,
+            });
+            return true;
         case 'cal-cancel-order-ask':
             cal.cancelOrderConfirm = ds.id;
             paintDrawer(ce);

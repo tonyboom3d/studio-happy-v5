@@ -25,7 +25,7 @@ export function calState(ce) {
             editHours: null,         // employeeId
             removeConfirm: null,     // employeeId
             addCustomer: null,       // manual add-customer modal state inside session drawer
-            cancelOrderConfirm: null, // orderId awaiting cancel confirmation
+            markPaidConfirm: null, cancelOrderConfirm: null, // orderId awaiting cancel confirmation
             notify: true,
             ops: {},
             toast: null,

@@ -42,6 +42,7 @@ export function createInitialAddCustomerState(ev) {
             sendWhatsApp: true,
             sendEmail: false,
             contactId: '',
+            customPrice: '',
             locked: { phone: false, email: false },
         },
         contacts: { list: [], loading: false, open: false, query: '', seq: 0 },
@@ -80,6 +81,7 @@ export function syncAddCustomerInputs(ce, st) {
         const email = val('scAcEmail'); if (email !== null) f.organizerEmail = email;
         const intN = val('scAcInternalNote'); if (intN !== null) f.internalNotes = intN;
         const custN = val('scAcCustomerNote'); if (custN !== null) f.customerNotes = custN;
+        const price = val('scAcPrice'); if (price !== null) f.customPrice = price;
     } else {
         const wa = chk('scAcSendWa'); if (wa !== null) f.sendWhatsApp = wa;
         const em = chk('scAcSendEmail'); if (em !== null) f.sendEmail = em;
@@ -92,12 +94,15 @@ export function renderAddCustomerPanel(cal) {
     const f = st.form;
     const pricing = st.pricingData?.pricing || null;
     const calc = computePricePreview(pricing, f.adults, f.children);
+    const customN = String(f.customPrice ?? '').trim() === '' ? null : Number(f.customPrice);
+    const hasCustom = customN !== null && Number.isFinite(customN) && customN >= 0;
+    const effTotal = hasCustom ? customN : calc.total;
 
     const priceBox = st.loading
         ? `<div class="sc-ac-price"><span class="sc-mini-spin" style="display:inline-block;vertical-align:middle"></span> טוען תמחור ליום זה…</div>`
         : (pricing ? `<div class="sc-ac-price">
             <div class="sc-ac-price-row"><span>מחיר יחיד: ${shekel(calc.solo)}</span>${calc.parentChild !== calc.solo ? `<span>הורה+ילד: ${shekel(calc.parentChild)}</span>` : ''}${calc.extraChild !== calc.solo ? `<span>תוספת ילד: ${shekel(calc.extraChild)}</span>` : ''}</div>
-            <div class="sc-ac-total"><span>סה״כ לתשלום</span><b>${shekel(calc.total)}</b></div>
+            <div class="sc-ac-total"><span>סה״כ לתשלום${hasCustom ? ' (מחיר מותאם)' : ''}</span><b>${shekel(effTotal)}</b></div>
             ${calc.pairs || calc.soloAdults || calc.extraChildren ? `<div class="sc-ac-break">${[
                 calc.soloAdults ? `${calc.soloAdults} × יחיד (${shekel(calc.solo)})` : '',
                 calc.pairs ? `${calc.pairs} × הורה וילד (${shekel(calc.parentChild)})` : '',
@@ -145,6 +150,9 @@ export function renderAddCustomerPanel(cal) {
                 </div>
             </div>
             ${priceBox}
+            <div class="sc-field"><label>מחיר מותאם בש״ח (אופציונלי — ריק = לפי התמחור האוטומטי)</label>
+                <input type="number" id="scAcPrice" min="0" step="0.01" dir="ltr" value="${esc(f.customPrice)}" placeholder="${calc.total || ''}" autocomplete="off">
+            </div>
             <div class="sc-field"><label>הערה ללקוח (תוצג בקישור לתשלום · עד 300 תווים)</label>
                 <textarea id="scAcCustomerNote" rows="2" maxlength="300" placeholder="לדוגמה: כולל חומרים, נא להגיע 10 דקות לפני…">${esc(f.customerNotes)}</textarea>
             </div>
@@ -170,7 +178,7 @@ export function renderAddCustomerPanel(cal) {
         </div>
         ${errBanner}
         <div class="sc-note" style="margin-bottom:8px">
-            <b>${esc(f.organizerName)}</b> · ${esc(participantsSummary)} · <b>${shekel(calc.total)}</b>
+            <b>${esc(f.organizerName)}</b> · ${esc(participantsSummary)} · <b>${shekel(effTotal)}</b>
             ${f.customerNotes ? `<div style="margin-top:3px">הערת לקוח: ${esc(f.customerNotes)}</div>` : ''}
         </div>
         <div class="sc-ac-modes">

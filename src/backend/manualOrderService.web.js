@@ -9,6 +9,7 @@ import {
     resolveSessionPricing,
     createManualOrder,
     cancelManualOrder,
+    markManualOrderPaid,
 } from 'backend/manualOrders.js';
 import { searchContacts } from 'backend/manualCustomers.js';
 
@@ -33,6 +34,14 @@ export const createManualWorkshopOrder = webMethod(
     async (input) => {
         const { role } = await assertEmployeeAccess('manageScheduling');
         return createManualOrder(input, role?.displayName || 'מנהל');
+    }
+);
+
+export const markManualWorkshopOrderPaid = webMethod(
+    Permissions.SiteMember,
+    async (orderId) => {
+        const { role } = await assertEmployeeAccess('manageScheduling');
+        return markManualOrderPaid(orderId, role?.displayName || 'מנהל');
     }
 );
 

@@ -108,6 +108,15 @@ function groupDetails(cal, g) {
         <a href="${esc(g.paymentLinkUrl)}" target="_blank" rel="noopener">פתיחת קישור</a>
         <button type="button" class="sc-btn sm" data-action="cal-copy-paylink" data-url="${esc(g.paymentLinkUrl)}">העתקת קישור</button>
     </span></div>` : '';
+    const canMarkPaid = !!(g.unpaid && g.manualOrder && g.paymentLinkId);
+    const confirmingPaid = cal.markPaidConfirm === g.id;
+    const markPaidBlock = canMarkPaid ? (confirmingPaid ? `<div class="sc-inline" style="margin-top:6px">
+        <span style="font-size:12px">לסמן כשולמה? קישור התשלום יבוטל וההזמנה תופעל.</span>
+        <button type="button" class="sc-btn primary sm" data-action="cal-markpaid-confirm" data-id="${esc(g.orderId || g.id)}">אישור תשלום</button>
+        <button type="button" class="sc-btn sm" data-action="cal-markpaid-cancel">חזרה</button>
+    </div>` : `<div style="margin-top:6px;display:flex;justify-content:flex-end">
+        <button type="button" class="sc-btn primary sm" data-action="cal-markpaid-ask" data-id="${esc(g.id)}">✓ סימון כשולמה</button>
+    </div>`) : '';
     const canCancel = !!(g.manualOrder || g.paymentLinkId);
     const confirmingCancel = cal.cancelOrderConfirm === g.id;
     const cancelBlock = canCancel ? (confirmingCancel ? `<div class="sc-inline" style="margin-top:6px">
@@ -131,7 +140,7 @@ function groupDetails(cal, g) {
         ${thumbs(cups, 'כוסות')}
         ${g.customerNotes ? `<div class="sc-gd-note"><b>הערת לקוח</b>${esc(g.customerNotes)}</div>` : ''}
         ${g.internalNotes ? `<div class="sc-gd-note int"><b>הערה פנימית</b>${esc(g.internalNotes)}</div>` : ''}
-        ${cancelBlock}
+        ${markPaidBlock}${cancelBlock}
     </div>`;
 }
 

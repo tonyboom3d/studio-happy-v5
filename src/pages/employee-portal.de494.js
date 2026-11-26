@@ -107,6 +107,7 @@ import {
     getManualSessionPricing,
     createManualWorkshopOrder,
     cancelManualWorkshopOrder,
+    markManualWorkshopOrderPaid,
     searchManualCustomers,
 } from 'backend/manualOrderService.web.js';
 
@@ -460,6 +461,8 @@ async function handleCalendarAction(portalEl, type, payload) {
             return;
         case 'calendarAddManualCustomer':
             return runCalendarMutation(portalEl, type, p, () => createManualWorkshopOrder(p.order));
+        case 'calendarMarkManualPaid':
+            return runCalendarMutation(portalEl, type, p, () => markManualWorkshopOrderPaid(p.orderId));
         case 'calendarCancelManualOrder':
             return runCalendarMutation(portalEl, type, p, () => cancelManualWorkshopOrder(p.orderId));
         default:

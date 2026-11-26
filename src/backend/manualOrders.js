@@ -417,7 +417,9 @@ export async function createManualOrder(input, actorName = 'מנהל') {
 
     const resolved = await resolveSessionPricing(dateKey, workshopTypeId, sessionStart);
     const calc = computeManualOrderPrice(resolved.pricing, adults, children);
-    const totalPrice = calc.total;
+    const customRaw = input?.customTotal;
+    const hasCustomPrice = customRaw !== undefined && customRaw !== null && customRaw !== '' && Number.isFinite(Number(customRaw)) && Number(customRaw) >= 0;
+    const totalPrice = hasCustomPrice ? Math.round(Number(customRaw) * 100) / 100 : calc.total;
 
     if (paymentMode === 'link' && totalPrice <= 0) {
         throw new Error('לא נמצא תמחור תקף לסדנה ביום זה — לא ניתן ליצור קישור לתשלום בסכום 0.');
@@ -645,7 +647,7 @@ export async function cancelManualOrder(orderId, actorName = 'מנהל') {
  * Activates a pending manual order once its Wix Payment Link is paid.
  * Idempotent: safe to invoke from both paymentLinkPayments and paymentLinks events and cron.
  */
-export async function handlePaymentLinkPaid(paymentLinkId, { ecomOrderId = null, amount = null } = {}) {
+export async function handlePaymentLinkPaid(paymentLinkId, { ecomOrderId = null, amount = null, actor = '', linkStatus = 'PAID' } = {}) {
     if (!paymentLinkId) return { activated: false, reason: 'missing-id' };
 
     const res = await wixData.query(ORDERS_COL)
@@ -666,7 +668,7 @@ export async function handlePaymentLinkPaid(paymentLinkId, { ecomOrderId = null,
         : (prevNotes ? `${MANUAL_PAID_LINK_TAG}\n${prevNotes}` : MANUAL_PAID_LINK_TAG);
 
     const actionLog = [
-        { timestamp: new Date().toISOString(), user: 'מערכת (Payment Link)', action: `התשלום התקבל (₪${paidTotal}) — ההזמנה הופעלה` },
+        { timestamp: new Date().toISOString(), user: actor || 'מערכת (Payment Link)', action: actor ? `סומנה כשולמה ידנית (₪${paidTotal}) — ההזמנה הופעלה` : `התשלום התקבל (₪${paidTotal}) — ההזמנה הופעלה` },
         ...(order.actionLog || []),
     ].slice(0, 200);
 
@@ -675,7 +677,7 @@ export async function handlePaymentLinkPaid(paymentLinkId, { ecomOrderId = null,
         ...order,
         status: 'paid',
         paidTotal,
-        paymentLinkStatus: 'PAID',
+        paymentLinkStatus: linkStatus,
         ecomOrderId: ecomOrderId || order.ecomOrderId || null,
         internalNotes: updatedNotes,
         actionLog,
@@ -692,6 +694,30 @@ export async function handlePaymentLinkPaid(paymentLinkId, { ecomOrderId = null,
     const dateKey = order.workshopStart ? toDateKey(order.workshopStart) : '';
     await publishSchedulingUpdate('manual-order-paid', { dateKey, orderId: order._id }).catch(() => {});
     return { activated: true, orderId: order._id };
+}
+
+/**
+ * Manager marks a pending manual order as paid (e.g. paid by cash/transfer after the link was issued).
+ * Deactivates the link so it can't be paid twice, then activates the order.
+ */
+export async function markManualOrderPaid(orderId, actorName = 'מנהל') {
+    if (!orderId) throw new Error('מזהה הזמנה חסר.');
+    const order = await wixData.get(ORDERS_COL, orderId, SA);
+    if (!order) throw new Error('ההזמנה לא נמצאה.');
+    if (order.cancelledAt || order.status === 'cancelled') throw new Error('ההזמנה בוטלה.');
+    if (order.status === 'paid') return { ok: true, alreadyPaid: true };
+    if (!order.manualOrder || !order.paymentLinkId) throw new Error('ניתן לסמן כשולם רק הזמנה ידנית עם קישור תשלום.');
+
+    let linkWarning = '';
+    try {
+        await plSdk.deactivate(order.paymentLinkId);
+    } catch (err) {
+        linkWarning = err?.message || String(err);
+        console.warn('[manualOrders] deactivate on mark-paid warning:', linkWarning);
+    }
+    const out = await handlePaymentLinkPaid(order.paymentLinkId, { actor: actorName, linkStatus: 'INACTIVE' });
+    if (!out.activated) throw new Error('לא ניתן היה להפעיל את ההזמנה.');
+    return { ok: true, orderId, linkWarning };
 }
 
 /**

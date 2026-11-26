@@ -1,21 +1,16 @@
 /**
- * manualCustomers.js — CRM contact search for the manual add-customer picker.
+ * manualCustomers.js — CRM contact search (contacts V5) for the manual add-customer picker.
  */
-import { contacts } from 'wix-crm-backend';
+import { contactsV5 } from '@wix/crm';
+import { auth } from '@wix/essentials';
 
 const LIMIT = 5;
 
-function firstOf(list, key) {
-    const arr = Array.isArray(list) ? list : (Array.isArray(list?.items) ? list.items : []);
-    const primary = arr.find((x) => x?.primary) || arr[0];
-    return primary?.[key] || '';
-}
-
 function shapeContact(c) {
-    const first = c?.info?.name?.first || '';
-    const last = c?.info?.name?.last || '';
-    const email = c?.primaryInfo?.email || firstOf(c?.info?.emails, 'email');
-    const phone = c?.primaryInfo?.phone || firstOf(c?.info?.phones, 'phone');
+    const first = c?.name?.first || '';
+    const last = c?.name?.last || '';
+    const email = c?.email?.email || '';
+    const phone = c?.phone?.phone || '';
     return {
         id: c?._id || '',
         name: `${first} ${last}`.trim() || email || phone || 'ללא שם',
@@ -26,37 +21,18 @@ function shapeContact(c) {
 
 export async function searchContacts(query) {
     const q = String(query || '').trim().slice(0, 60);
-    const tokens = q.toLowerCase().split(/\s+/).filter(Boolean);
-    const seen = new Map();
-    const add = (res) => {
-        for (const c of (res?.items || [])) {
-            if (c?._id && !seen.has(c._id)) seen.set(c._id, shapeContact(c));
-        }
+    const request = {
+        cursorPaging: { limit: LIMIT },
+        sort: [{ fieldName: '_createdDate', order: contactsV5.SortOrder.DESC }],
     };
-
-    if (!tokens.length) {
-        let res = await contacts.queryContacts().descending('_createdDate').limit(LIMIT).find().catch(() => null);
-        if (!res) res = await contacts.queryContacts().limit(LIMIT).find().catch(() => ({ items: [] }));
-        add(res);
-        return [...seen.values()].slice(0, LIMIT);
+    if (q) {
+        request.search = {
+            expression: q,
+            fields: ['name.full', 'email.email', 'phone.phone'],
+            mode: contactsV5.Mode.OR,
+            fuzzy: true,
+        };
     }
-
-    const tok = tokens[0];
-    const digits = tok.replace(/\D/g, '');
-    const runs = [
-        contacts.queryContacts().startsWith('info.name.first', tok).limit(15).find(),
-        contacts.queryContacts().startsWith('info.name.last', tok).limit(15).find(),
-        contacts.queryContacts().startsWith('primaryInfo.email', tok).limit(15).find(),
-    ];
-    if (digits.length >= 3) {
-        const local = digits.replace(/^0/, '');
-        runs.push(contacts.queryContacts().startsWith('primaryInfo.phone', `+972${local}`).limit(15).find());
-        runs.push(contacts.queryContacts().startsWith('primaryInfo.phone', digits).limit(15).find());
-    }
-    (await Promise.all(runs.map((r) => r.catch(() => null)))).forEach(add);
-
-    const hay = (c) => `${c.name} ${c.email} ${c.phone}`.toLowerCase();
-    return [...seen.values()]
-        .filter((c) => tokens.every((t) => hay(c).includes(t)))
-        .slice(0, LIMIT);
+    const res = await auth.elevate(contactsV5.searchContacts)(request, { nameFormat: 'BY_FIRST_NAME' });
+    return (res?.contacts || []).filter((c) => c?._id).map(shapeContact).slice(0, LIMIT);
 }

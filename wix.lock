@@ -222,6 +222,50 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
         "npm:1.0.175"\
       ],\
       [\
+        "@wix/auto_sdk_crm_attachments",\
+        "npm:1.0.62"\
+      ],\
+      [\
+        "@wix/auto_sdk_crm_cards",\
+        "npm:1.0.22"\
+      ],\
+      [\
+        "@wix/auto_sdk_crm_contact-relationships",\
+        "npm:1.0.4"\
+      ],\
+      [\
+        "@wix/auto_sdk_crm_contacts",\
+        "npm:1.0.1438"\
+      ],\
+      [\
+        "@wix/auto_sdk_crm_contacts-v-5",\
+        "npm:1.0.31"\
+      ],\
+      [\
+        "@wix/auto_sdk_crm_extended-fields",\
+        "npm:1.0.74"\
+      ],\
+      [\
+        "@wix/auto_sdk_crm_labels",\
+        "npm:1.0.74"\
+      ],\
+      [\
+        "@wix/auto_sdk_crm_notes",\
+        "npm:1.0.42"\
+      ],\
+      [\
+        "@wix/auto_sdk_crm_pipelines",\
+        "npm:1.0.19"\
+      ],\
+      [\
+        "@wix/auto_sdk_crm_submitted-contact",\
+        "npm:1.0.51"\
+      ],\
+      [\
+        "@wix/auto_sdk_crm_tasks",\
+        "npm:1.0.90"\
+      ],\
+      [\
         "@wix/auto_sdk_ecom_abandoned-checkouts",\
         "npm:1.0.74"\
       ],\
@@ -582,6 +626,14 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
         "npm:1.15.0"\
       ],\
       [\
+        "@wix/crm",\
+        "npm:1.0.1720"\
+      ],\
+      [\
+        "@wix/crm_app-extensions",\
+        "npm:1.0.34"\
+      ],\
+      [\
         "@wix/ecom",\
         "npm:1.0.2072"\
       ],\
@@ -877,6 +929,7 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageDependencies": [\
             ["@wix/bookings", "npm:1.0.1393"],\
             ["@wix/calendar", "npm:1.0.304"],\
+            ["@wix/crm", "npm:1.0.1720"],\
             ["@wix/ecom", "npm:1.0.2072"],\
             ["@wix/email-subscriptions", "npm:1.0.44"],\
             ["@wix/embeds", "npm:1.0.15"],\
@@ -1236,10 +1289,10 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           ],\
           "linkType": "HARD"\
         }],\
-        ["npm:1.0.277", {\
-          "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_bookings_bookings-npm-1.0.277-77c7c23687-8c0.zip/node_modules/@wix/auto_sdk_bookings_bookings/",\
+        ["npm:1.0.279", {\
+          "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_bookings_bookings-npm-1.0.279-f9178e7215-8c0.zip/node_modules/@wix/auto_sdk_bookings_bookings/",\
           "packageDependencies": [\
-            ["@wix/auto_sdk_bookings_bookings", "npm:1.0.277"],\
+            ["@wix/auto_sdk_bookings_bookings", "npm:1.0.279"],\
             ["@wix/sdk-runtime", "npm:1.0.32"],\
             ["@wix/sdk-types", "npm:1.17.12"]\
           ],\
@@ -1547,6 +1600,127 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_calendar_schedules-npm-1.0.175-549a2b9a6b-8c0.zip/node_modules/@wix/auto_sdk_calendar_schedules/",\
           "packageDependencies": [\
             ["@wix/auto_sdk_calendar_schedules", "npm:1.0.175"],\
+            ["@wix/sdk-runtime", "npm:1.0.32"],\
+            ["@wix/sdk-types", "npm:1.17.12"]\
+          ],\
+          "linkType": "HARD"\
+        }]\
+      ]],\
+      ["@wix/auto_sdk_crm_attachments", [\
+        ["npm:1.0.62", {\
+          "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_crm_attachments-npm-1.0.62-f86d019b0e-8c0.zip/node_modules/@wix/auto_sdk_crm_attachments/",\
+          "packageDependencies": [\
+            ["@wix/auto_sdk_crm_attachments", "npm:1.0.62"],\
+            ["@wix/sdk-runtime", "npm:1.0.32"],\
+            ["@wix/sdk-types", "npm:1.17.12"]\
+          ],\
+          "linkType": "HARD"\
+        }]\
+      ]],\
+      ["@wix/auto_sdk_crm_cards", [\
+        ["npm:1.0.22", {\
+          "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_crm_cards-npm-1.0.22-6baddec489-8c0.zip/node_modules/@wix/auto_sdk_crm_cards/",\
+          "packageDependencies": [\
+            ["@wix/auto_sdk_crm_cards", "npm:1.0.22"],\
+            ["@wix/sdk-runtime", "npm:1.0.32"],\
+            ["@wix/sdk-types", "npm:1.17.12"]\
+          ],\
+          "linkType": "HARD"\
+        }]\
+      ]],\
+      ["@wix/auto_sdk_crm_contact-relationships", [\
+        ["npm:1.0.4", {\
+          "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_crm_contact-relationships-npm-1.0.4-39a34ca35a-8c0.zip/node_modules/@wix/auto_sdk_crm_contact-relationships/",\
+          "packageDependencies": [\
+            ["@wix/auto_sdk_crm_contact-relationships", "npm:1.0.4"],\
+            ["@wix/sdk-runtime", "npm:1.0.32"],\
+            ["@wix/sdk-types", "npm:1.17.12"]\
+          ],\
+          "linkType": "HARD"\
+        }]\
+      ]],\
+      ["@wix/auto_sdk_crm_contacts", [\
+        ["npm:1.0.1438", {\
+          "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_crm_contacts-npm-1.0.1438-e4b764092a-8c0.zip/node_modules/@wix/auto_sdk_crm_contacts/",\
+          "packageDependencies": [\
+            ["@wix/auto_sdk_crm_contacts", "npm:1.0.1438"],\
+            ["@wix/sdk-runtime", "npm:1.0.32"],\
+            ["@wix/sdk-types", "npm:1.17.12"]\
+          ],\
+          "linkType": "HARD"\
+        }]\
+      ]],\
+      ["@wix/auto_sdk_crm_contacts-v-5", [\
+        ["npm:1.0.31", {\
+          "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_crm_contacts-v-5-npm-1.0.31-588ee7b2c4-8c0.zip/node_modules/@wix/auto_sdk_crm_contacts-v-5/",\
+          "packageDependencies": [\
+            ["@wix/auto_sdk_crm_contacts-v-5", "npm:1.0.31"],\
+            ["@wix/sdk-runtime", "npm:1.0.32"],\
+            ["@wix/sdk-types", "npm:1.17.12"]\
+          ],\
+          "linkType": "HARD"\
+        }]\
+      ]],\
+      ["@wix/auto_sdk_crm_extended-fields", [\
+        ["npm:1.0.74", {\
+          "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_crm_extended-fields-npm-1.0.74-0e1527866b-8c0.zip/node_modules/@wix/auto_sdk_crm_extended-fields/",\
+          "packageDependencies": [\
+            ["@wix/auto_sdk_crm_extended-fields", "npm:1.0.74"],\
+            ["@wix/sdk-runtime", "npm:1.0.32"],\
+            ["@wix/sdk-types", "npm:1.17.12"]\
+          ],\
+          "linkType": "HARD"\
+        }]\
+      ]],\
+      ["@wix/auto_sdk_crm_labels", [\
+        ["npm:1.0.74", {\
+          "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_crm_labels-npm-1.0.74-4cd03e5f66-8c0.zip/node_modules/@wix/auto_sdk_crm_labels/",\
+          "packageDependencies": [\
+            ["@wix/auto_sdk_crm_labels", "npm:1.0.74"],\
+            ["@wix/sdk-runtime", "npm:1.0.32"],\
+            ["@wix/sdk-types", "npm:1.17.12"]\
+          ],\
+          "linkType": "HARD"\
+        }]\
+      ]],\
+      ["@wix/auto_sdk_crm_notes", [\
+        ["npm:1.0.42", {\
+          "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_crm_notes-npm-1.0.42-eae3e91b9b-8c0.zip/node_modules/@wix/auto_sdk_crm_notes/",\
+          "packageDependencies": [\
+            ["@wix/auto_sdk_crm_notes", "npm:1.0.42"],\
+            ["@wix/sdk-runtime", "npm:1.0.32"],\
+            ["@wix/sdk-types", "npm:1.17.12"]\
+          ],\
+          "linkType": "HARD"\
+        }]\
+      ]],\
+      ["@wix/auto_sdk_crm_pipelines", [\
+        ["npm:1.0.19", {\
+          "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_crm_pipelines-npm-1.0.19-4da21e4381-8c0.zip/node_modules/@wix/auto_sdk_crm_pipelines/",\
+          "packageDependencies": [\
+            ["@wix/auto_sdk_crm_pipelines", "npm:1.0.19"],\
+            ["@wix/sdk-runtime", "npm:1.0.32"],\
+            ["@wix/sdk-types", "npm:1.17.12"]\
+          ],\
+          "linkType": "HARD"\
+        }]\
+      ]],\
+      ["@wix/auto_sdk_crm_submitted-contact", [\
+        ["npm:1.0.51", {\
+          "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_crm_submitted-contact-npm-1.0.51-a79ad4f79f-8c0.zip/node_modules/@wix/auto_sdk_crm_submitted-contact/",\
+          "packageDependencies": [\
+            ["@wix/auto_sdk_crm_submitted-contact", "npm:1.0.51"],\
+            ["@wix/sdk-runtime", "npm:1.0.32"],\
+            ["@wix/sdk-types", "npm:1.17.12"]\
+          ],\
+          "linkType": "HARD"\
+        }]\
+      ]],\
+      ["@wix/auto_sdk_crm_tasks", [\
+        ["npm:1.0.90", {\
+          "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-auto_sdk_crm_tasks-npm-1.0.90-379357a247-8c0.zip/node_modules/@wix/auto_sdk_crm_tasks/",\
+          "packageDependencies": [\
+            ["@wix/auto_sdk_crm_tasks", "npm:1.0.90"],\
             ["@wix/sdk-runtime", "npm:1.0.32"],\
             ["@wix/sdk-types", "npm:1.17.12"]\
           ],\
@@ -2729,6 +2903,38 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "linkType": "HARD"\
         }]\
       ]],\
+      ["@wix/crm", [\
+        ["npm:1.0.1720", {\
+          "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-crm-npm-1.0.1720-4321c30ae6-8c0.zip/node_modules/@wix/crm/",\
+          "packageDependencies": [\
+            ["@wix/crm", "npm:1.0.1720"],\
+            ["@wix/auto_sdk_crm_attachments", "npm:1.0.62"],\
+            ["@wix/auto_sdk_crm_cards", "npm:1.0.22"],\
+            ["@wix/auto_sdk_crm_contact-relationships", "npm:1.0.4"],\
+            ["@wix/auto_sdk_crm_contacts", "npm:1.0.1438"],\
+            ["@wix/auto_sdk_crm_contacts-v-5", "npm:1.0.31"],\
+            ["@wix/auto_sdk_crm_extended-fields", "npm:1.0.74"],\
+            ["@wix/auto_sdk_crm_labels", "npm:1.0.74"],\
+            ["@wix/auto_sdk_crm_notes", "npm:1.0.42"],\
+            ["@wix/auto_sdk_crm_pipelines", "npm:1.0.19"],\
+            ["@wix/auto_sdk_crm_submitted-contact", "npm:1.0.51"],\
+            ["@wix/auto_sdk_crm_tasks", "npm:1.0.90"],\
+            ["@wix/crm_app-extensions", "npm:1.0.34"]\
+          ],\
+          "linkType": "HARD"\
+        }]\
+      ]],\
+      ["@wix/crm_app-extensions", [\
+        ["npm:1.0.34", {\
+          "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-crm_app-extensions-npm-1.0.34-1889705718-8c0.zip/node_modules/@wix/crm_app-extensions/",\
+          "packageDependencies": [\
+            ["@wix/crm_app-extensions", "npm:1.0.34"],\
+            ["@wix/sdk-runtime", "npm:1.0.32"],\
+            ["@wix/sdk-types", "npm:1.17.12"]\
+          ],\
+          "linkType": "HARD"\
+        }]\
+      ]],\
       ["@wix/ecom", [\
         ["npm:1.0.2072", {\
           "packageLocation": "../dynamic-modules/yarn-cache/cache/@wix-ecom-npm-1.0.2072-4f7f3f8a47-8c0.zip/node_modules/@wix/ecom/",\
@@ -3046,7 +3252,7 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
             ["@types/react", null],\
             ["@types/wix__headless-components", null],\
             ["@wix/auto_sdk_bookings_availability-time-slots", "npm:1.0.292"],\
-            ["@wix/auto_sdk_bookings_bookings", "npm:1.0.277"],\
+            ["@wix/auto_sdk_bookings_bookings", "npm:1.0.279"],\
             ["@wix/auto_sdk_bookings_catalog-search", "npm:1.0.55"],\
             ["@wix/auto_sdk_bookings_event-time-slots", "npm:1.0.159"],\
             ["@wix/auto_sdk_bookings_pricing", "npm:1.0.125"],\
@@ -4083,6 +4289,7 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
             ["user-code", "workspace:."],\
             ["@wix/bookings", "npm:1.0.1393"],\
             ["@wix/calendar", "npm:1.0.304"],\
+            ["@wix/crm", "npm:1.0.1720"],\
             ["@wix/ecom", "npm:1.0.2072"],\
             ["@wix/email-subscriptions", "npm:1.0.44"],\
             ["@wix/embeds", "npm:1.0.15"],\

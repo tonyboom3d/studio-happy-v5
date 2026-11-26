@@ -38,6 +38,7 @@ import {
 import { TASK_TYPES, TASK_LABELS } from 'backend/timeClockService.web.js';
 import { getOrdersGroupDetails, logOrderAction } from 'backend/dashboardService.web.js';
 import { loadCupLabels } from 'backend/sessionGroups.js';
+import { reconcileManualPaymentLinkOrder } from 'backend/manualOrders.js';
 import { syncHebcalHolidays } from 'backend/holidayService.js';
 import { TUFTING_SERVICE_IDS } from 'backend/sketchEditingPolicy.js';
 import {
@@ -526,6 +527,15 @@ export const getWorkshopOrderGroups = webMethod(Permissions.SiteMember, async (d
     const orders = combinedItems
         .filter(o => !o.cancelledAt && toDateKey(o.workshopStart) === dateKey)
         .filter(o => !sessionKey || canonicalSessionKey(o.workshopStart) === sessionKey);
+    for (const o of orders) {
+        if (o.status !== 'pending_payment' || !o.paymentLinkId) continue;
+        const activated = await reconcileManualPaymentLinkOrder(o).catch(() => false);
+        if (activated) {
+            o.status = 'paid';
+            o.paymentLinkStatus = 'PAID';
+            o.paidTotal = o.paidTotal || o.basePrice || 0;
+        }
+    }
     const [details, cupLabels] = await Promise.all([
         getOrdersGroupDetails(orders).catch(() => ({})),
         loadCupLabels(orders).catch(() => ({})),

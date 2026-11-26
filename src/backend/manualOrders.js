@@ -6,7 +6,8 @@
 
 import wixData from 'wix-data';
 import { auth, httpClient } from '@wix/essentials';
-import { availabilityCalendar, serviceOptionsAndVariants, services, bookings } from 'wix-bookings.v2';
+import { bookings, services, serviceOptionsAndVariants } from '@wix/bookings';
+import { availabilityCalendar } from 'wix-bookings.v2';
 import { contacts } from 'wix-crm-backend';
 import { loadWorkshopTypeMap, publishSchedulingUpdate } from 'backend/schedulingEngine.js';
 import { toDateKey } from 'backend/availabilityRules.js';
@@ -132,18 +133,21 @@ async function findAvailabilitySlot(serviceIds, dateKey, sessionStart) {
     if (!serviceIds.length) return null;
     const fromIso = new Date(`${dateKey}T00:00:00Z`).getTime() - 86400000;
     const toIso = new Date(`${dateKey}T23:59:59Z`).getTime() + 86400000;
-    const queryAvailability = auth.elevate(availabilityCalendar.queryAvailability);
     const all = [];
-    for (let i = 0; i < serviceIds.length; i += 20) {
-        const res = await queryAvailability({
-            filter: {
-                serviceId: { $in: serviceIds.slice(i, i + 20) },
-                startDate: new Date(fromIso).toISOString(),
-                endDate: new Date(toIso).toISOString(),
-            },
-        }, { timezone: TZ });
-        all.push(...(res.availabilityEntries || []));
-    }
+    await Promise.all(serviceIds.map(async (serviceId) => {
+        try {
+            const res = await availabilityCalendar.queryAvailability({
+                filter: {
+                    serviceId,
+                    startDate: new Date(fromIso).toISOString(),
+                    endDate: new Date(toIso).toISOString(),
+                },
+            }, { slotsPerDay: 100 });
+            all.push(...(res.availabilityEntries || []));
+        } catch (err) {
+            console.warn('[manualOrders] queryAvailability failed for', serviceId, err?.message || err);
+        }
+    }));
 
     const dayEntries = all.filter((e) => {
         const s = e.slot?.startDate;

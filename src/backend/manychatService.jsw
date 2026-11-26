@@ -271,15 +271,15 @@ async function findSubscriber({ email, phone }) {
                 return byPhone;
             }
         }
-        const digits = variants.find(v => /^\d+$/.test(v)) || variants[0];
-        try {
-            const byCustomField = await findSubscriberByCustomField(WA_PHONE_LOOKUP_FIELD, digits);
-            if (byCustomField) {
-                // console.log('[ManyChat] Subscriber found via wa_phone_lookup custom field:', digits);
-                return byCustomField;
+        // The mirror field may hold any format (set by us = digits, by a ManyChat rule = +/local), so try all.
+        for (const variant of variants) {
+            try {
+                const byCustomField = await findSubscriberByCustomField(WA_PHONE_LOOKUP_FIELD, variant);
+                if (byCustomField) return byCustomField;
+            } catch (err) {
+                console.warn('[ManyChat] findByCustomField(wa_phone_lookup) failed:', err?.message || err);
+                break;
             }
-        } catch (err) {
-            console.warn('[ManyChat] findByCustomField(wa_phone_lookup) failed:', err?.message || err);
         }
     }
     return null;
@@ -327,11 +327,24 @@ async function findAfterAlreadyExists({ email, phone }) {
     return null;
 }
 
+// Phones ManyChat says exist but the API can't locate (WhatsApp-only contacts without wa_phone_lookup).
+// Skipping repeat create+retry for a while avoids hammering the API and slowing every send.
+const UNRESOLVED_TTL_MS = 10 * 60 * 1000;
+const unresolvedPhones = new Map(); // phone digits -> { until, message }
+
 async function findOrCreateSubscriberOnce({ email, phone, firstName, lastName }) {
+    const unresolvedKey = formatPhoneForManyChat(phone);
+    const cached = unresolvedKey ? unresolvedPhones.get(unresolvedKey) : null;
+
     let subscriber = await findSubscriber({ email, phone });
     if (subscriber?.id) {
+        if (unresolvedKey) unresolvedPhones.delete(unresolvedKey);
         await ensureWaPhoneLookupField(subscriber.id, phone);
         return subscriber;
+    }
+
+    if (cached && cached.until > Date.now()) {
+        throw new Error(`[ManyChat] Contact ${phone} exists but is unlocatable via API (cached). ${cached.message}`);
     }
 
     try {
@@ -343,6 +356,7 @@ async function findOrCreateSubscriberOnce({ email, phone, firstName, lastName })
         console.warn('[ManyChat] createSubscriber said contact already exists but findSubscriber missed it — retrying lookup:', message);
         subscriber = await findAfterAlreadyExists({ email, phone });
         if (!subscriber?.id) {
+            if (unresolvedKey) unresolvedPhones.set(unresolvedKey, { until: Date.now() + UNRESOLVED_TTL_MS, message: 'Set wa_phone_lookup for this contact in ManyChat.' });
             throw new Error(
                 `[ManyChat] Contact with phone ${phone} already exists in ManyChat but cannot be located via the API ` +
                 `(known ManyChat limitation for WhatsApp-only contacts with no wa_phone_lookup field set yet). ` +

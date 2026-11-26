@@ -29,7 +29,7 @@ const SAC = { suppressAuth: true, consistentRead: true };
 const ISRAEL_TZ = 'Asia/Jerusalem';
 
 export const PRIORITY = { URGENT: 'URGENT', NORMAL: 'NORMAL', LOW: 'LOW' };
-export const OUTBOX_STATUS = { PENDING: 'PENDING', SENT: 'SENT', MERGED: 'MERGED', SKIPPED: 'SKIPPED' };
+export const OUTBOX_STATUS = { PENDING: 'PENDING', SENT: 'SENT', MERGED: 'MERGED', SKIPPED: 'SKIPPED', FAILED: 'FAILED' };
 export const AUDIENCE = { EMPLOYEE: 'EMPLOYEE', MANAGERS: 'MANAGERS' };
 
 const AGGREGATION_WINDOW_MS = 30 * 60 * 1000;
@@ -280,12 +280,15 @@ function staffAudienceOf(audience) {
     return audience === AUDIENCE.MANAGERS ? 'manager' : 'employee';
 }
 
+/** Returns true only if the message was actually sent. */
 async function sendRow(row) {
     const vars = JSON.parse(row.vars || '{}');
     // Manager rows are already resolved to one specific manager by enqueueManagerNotification,
     // so we send directly rather than re-resolving the whole manager list.
-    await sendEmployeeTemplateMessage(row.actionKey, row.recipientPhone, vars, staffAudienceOf(row.audience)).catch(err =>
-        console.error(`[notificationOutbox] send failed (${row.audience}):`, err?.message || err));
+    return !!(await sendEmployeeTemplateMessage(row.actionKey, row.recipientPhone, vars, staffAudienceOf(row.audience)).catch(err => {
+        console.error(`[notificationOutbox] send failed (${row.audience}):`, err?.message || err);
+        return false;
+    }));
 }
 
 async function flushGroup(rows, now) {
@@ -310,15 +313,15 @@ async function flushGroup(rows, now) {
     let sent = 0, merged = 0;
 
     for (const r of singleRows) {
-        await sendRow(r);
-        await markRows([r._id], OUTBOX_STATUS.SENT, now);
-        sent++;
+        const ok = await sendRow(r);
+        await markRows([r._id], ok ? OUTBOX_STATUS.SENT : OUTBOX_STATUS.FAILED, ok ? now : null);
+        if (ok) sent++;
     }
 
     if (digestRows.length === 1) {
-        await sendRow(digestRows[0]);
-        await markRows([digestRows[0]._id], OUTBOX_STATUS.SENT, now);
-        sent++;
+        const ok = await sendRow(digestRows[0]);
+        await markRows([digestRows[0]._id], ok ? OUTBOX_STATUS.SENT : OUTBOX_STATUS.FAILED, ok ? now : null);
+        if (ok) sent++;
     } else if (digestRows.length > 1) {
         const { text, count, consumedIds } = collapseDigestRows(digestRows);
         if (count > 0 && text) {
@@ -328,12 +331,13 @@ async function flushGroup(rows, now) {
             const rendered = audience === AUDIENCE.MANAGERS
                 ? { count, itemList: text }
                 : { displayName: vars.displayName || '', count, shiftList: text, portalLink: vars.portalLink || '' };
-            if (audience === AUDIENCE.MANAGERS) {
-                await sendEmployeeTemplateMessage(actionKey, recipientPhone, rendered, 'manager').catch(err =>
-                    console.error('[notificationOutbox] manager digest send failed:', err?.message || err));
-            } else {
-                await sendEmployeeTemplateMessage(actionKey, recipientPhone, rendered, 'employee').catch(err =>
-                    console.error('[notificationOutbox] digest send failed:', err?.message || err));
+            const digestOk = !!(await sendEmployeeTemplateMessage(actionKey, recipientPhone, rendered, audience === AUDIENCE.MANAGERS ? 'manager' : 'employee').catch(err => {
+                console.error('[notificationOutbox] digest send failed:', err?.message || err);
+                return false;
+            }));
+            if (!digestOk) {
+                await markRows(consumedIds, OUTBOX_STATUS.FAILED, null);
+                return { sent, merged, skipped: 0 };
             }
             sent++;
         }

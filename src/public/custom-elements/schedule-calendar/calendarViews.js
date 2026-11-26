@@ -93,7 +93,7 @@ function renderToolbar(ce, cal) {
         ${renderMultiSelect(cal, 'employeeIds', 'עובדים', empOpts)}
         ${renderStateSelect(cal, 'people', 'סינון לפי הרשמה', [['', 'הרשמה: הכל'], ['withParticipants', 'עם נרשמים'], ['noParticipants', 'ללא נרשמים']])}
         ${renderStateSelect(cal, 'staff', 'סינון לפי איוש', [['', 'צוות: הכל'], ['withStaff', 'עם עובדים'], ['noStaff', 'ללא עובדים']])}
-        <button type="button" class="sc-btn sc-ms-btn ${cal.filters.showUnattached ? 'has' : ''}" data-action="cal-toggle-flag" data-flag="showUnattached" title="הצגת שיבוצים שלא משויכים לסדנה">${cal.filters.showUnattached ? '✓ ' : ''}ללא סדנה</button>
+        <button type="button" class="sc-btn sc-ms-btn ${cal.filters.showUnattached ? 'has' : ''}" data-action="cal-toggle-flag" data-flag="showUnattached" title="הצגת סדנאות בלי שעה ושיבוצים שלא שויכו לסדנה">${cal.filters.showUnattached ? '✓ ' : ''}ללא שעה</button>
         <button type="button" class="sc-btn sc-ms-btn ${cal.filters.showVacations ? 'has' : ''}" data-action="cal-toggle-flag" data-flag="showVacations" title="הצגת חופשות מאושרות של עובדים">${cal.filters.showVacations ? '✓ ' : ''}🌴 חופשות</button>
         <div class="sc-seg" role="tablist">${views.map(([v, l]) => `<button type="button" class="${cal.view === v ? 'active' : ''}" data-action="cal-view" data-view="${v}">${l}</button>`).join('')}</div>
         <button type="button" class="sc-icon-btn" data-action="cal-refresh" title="רענון" aria-label="רענון" style="font-size:16px">⟳</button>
@@ -244,7 +244,7 @@ function renderTimeGrid(cal, view) {
     const now = ilParts(new Date());
 
     const allDayCells = keys.map(k => [
-        ...events.filter(e => e.allDay && e.dateKey === k).map(ev => {
+        ...(cal.filters.showUnattached ? events.filter(e => e.allDay && e.dateKey === k) : []).map(ev => {
             return `<button type="button" class="sc-chip sc-chip-ev" style="${evStyle(cal, ev)}" data-action="cal-open-event" data-date="${k}" data-type="${esc(ev.typeId)}" data-start="">${esc(ev.name)}</button>`;
         }),
         ...manualShiftChips(cal, k, byId),
@@ -270,7 +270,7 @@ function renderTimeGrid(cal, view) {
     }).join('');
 
     return {
-        events,
+        events: cal.filters.showUnattached ? events : events.filter(e => !e.allDay),
         html: `<div class="sc-scroll" data-sc-scroll="1">
             <div class="sc-wk ${view === 'day' ? 'day' : ''}" style="--sc-cols:${keys.length};--sc-hours:${height}px">
                 <div class="sc-wk-head"><span></span>${keys.map(k => renderDayHeader(cal, k, view)).join('')}</div>
@@ -300,7 +300,7 @@ function renderMonth(cal) {
     const cells = keys.map(k => {
         const p = parseKey(k);
         const f = dayFlags(cal, k);
-        const dayEvents = events.filter(e => e.dateKey === k).sort((a, b) => (a.startMin ?? -1) - (b.startMin ?? -1));
+        const dayEvents = events.filter(e => e.dateKey === k && (cal.filters.showUnattached || !e.allDay)).sort((a, b) => (a.startMin ?? -1) - (b.startMin ?? -1));
         const extraChips = [...manualShiftChips(cal, k, byId), ...vacationChips(cal, k, byId)];
         const evChips = dayEvents.map(ev => {
             const st = eventStaffState(cal, ev);
@@ -322,7 +322,7 @@ function renderMonth(cal) {
         </div>`;
     }).join('');
     return {
-        events,
+        events: cal.filters.showUnattached ? events : events.filter(e => !e.allDay),
         html: `<div class="sc-month">${DOW_LONG.map(d => `<div class="sc-mdow">${d}</div>`).join('')}${cells}</div>`,
     };
 }

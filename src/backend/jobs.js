@@ -325,3 +325,47 @@ export async function cleanupStaleConversations() {
     // if (deleted) console.log(`[jobs] cleanupStaleConversations: deleted ${deleted} stale conversation(s)`);
     return { deleted };
 }
+
+const OUTBOX_RETENTION_DAYS = 7;
+const OUTBOX_PURGE_BATCH = 1000;
+const OUTBOX_PURGE_MAX_BATCHES = 5;
+
+/**
+ * Scheduled job (daily, jobs.config). Deletes NotificationOutbox rows whose
+ * _createdDate is older than 7 days. Dedup and rate-limit only read the last
+ * 24h, so this does not drop a message the sender still needs.
+ * One run loops batches so an existing backlog clears without waiting a week.
+ */
+export async function cleanupNotificationOutbox() {
+    const cutoff = new Date(Date.now() - OUTBOX_RETENTION_DAYS * 86400000);
+    let deleted = 0;
+
+    for (let batch = 0; batch < OUTBOX_PURGE_MAX_BATCHES; batch++) {
+        const stale = await wixData.query('NotificationOutbox')
+            .lt('_createdDate', cutoff)
+            .limit(OUTBOX_PURGE_BATCH)
+            .find(SA)
+            .catch((err) => {
+                console.error('[jobs] cleanupNotificationOutbox query failed:', err?.message || err);
+                return { items: [] };
+            });
+
+        const ids = (stale.items || []).map((row) => row._id).filter(Boolean);
+        if (!ids.length) break;
+
+        const result = await wixData.bulkRemove('NotificationOutbox', ids, SA).catch((err) => {
+            console.error('[jobs] cleanupNotificationOutbox bulkRemove failed:', err?.message || err);
+            return null;
+        });
+        if (!result) break;
+
+        const removed = result.removed ?? Math.max(0, ids.length - (result.errors?.length || 0));
+        if (result.errors?.length) {
+            console.warn(`[jobs] cleanupNotificationOutbox: ${result.errors.length} row(s) failed`, JSON.stringify(result.errors.slice(0, 3)));
+        }
+        deleted += removed;
+        if (!removed || ids.length < OUTBOX_PURGE_BATCH) break;
+    }
+
+    return { deleted };
+}

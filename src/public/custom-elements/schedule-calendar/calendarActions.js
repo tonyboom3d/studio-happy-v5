@@ -9,7 +9,38 @@ import {
 } from './calendarStore.js';
 import { renderCalendarBody, esc } from './calendarViews.js';
 import { renderDrawer, groupsKey } from './calendarDrawer.js';
-import { createInitialAddCustomerState, syncAddCustomerInputs } from './calendarAddCustomer.js';
+import { createInitialAddCustomerState, syncAddCustomerInputs, renderContactListInner } from './calendarAddCustomer.js';
+
+function updateContactList(ce) {
+    const st = ce._cal?.addCustomer;
+    const el = ce.querySelector('#scAcList');
+    if (!st || !el) return;
+    el.innerHTML = renderContactListInner(st);
+    if (st.contacts.open && !st.form.contactId) el.removeAttribute('hidden');
+    else el.setAttribute('hidden', '');
+}
+
+function searchContacts(ce, st, query) {
+    const c = st.contacts;
+    c.seq += 1;
+    c.query = query;
+    c.loading = true;
+    updateContactList(ce);
+    ce._dispatch('calendarSearchContacts', { query, seq: c.seq });
+}
+
+/** Live typing in the customer-name field: debounced contact search. */
+export function handleCalendarInput(ce, input) {
+    const st = ce._cal?.addCustomer;
+    if (!st || input.dataset.action !== 'cal-ac-search') return false;
+    st.form.organizerName = input.value;
+    st.contacts.open = true;
+    clearTimeout(st._searchTimer);
+    st.contacts.loading = true;
+    updateContactList(ce);
+    st._searchTimer = setTimeout(() => searchContacts(ce, st, input.value.trim()), 250);
+    return true;
+}
 
 export { CALENDAR_STYLE };
 
@@ -306,6 +337,15 @@ export function handleCalendarResult(ce, result) {
         updateCalendarDrawer(ce);
         return true;
     }
+    if (result.type === 'calendarSearchContacts') {
+        const st = cal.addCustomer;
+        if (st && result.seq === st.contacts.seq) {
+            st.contacts.loading = false;
+            st.contacts.list = failed ? [] : (result.contacts || []);
+            updateContactList(ce);
+        }
+        return true;
+    }
     if (result.type === 'calendarManualPricing') {
         if (cal.addCustomer) {
             cal.addCustomer.loading = false;
@@ -406,6 +446,10 @@ function empName(cal, id) {
 /** Closes open filter popovers on outside clicks. Returns true when it consumed the click. */
 export function calendarOutsideClick(ce, e, target) {
     const cal = ce._cal;
+    if (cal?.addCustomer?.contacts?.open && !e.target.closest('.sc-ac-pick')) {
+        cal.addCustomer.contacts.open = false;
+        updateContactList(ce);
+    }
     if (!cal?.msOpen || e.target.closest('.sc-ms')) return false;
     cal.msOpen = null;
     if (target) return false;
@@ -696,6 +740,51 @@ export function handleCalendarClick(ce, action, target) {
             });
             return true;
         }
+        case 'cal-ac-search': {
+            const st = cal.addCustomer;
+            if (!st || st.form.contactId) return true;
+            st.contacts.open = true;
+            if (!st.contacts.list.length && !st.contacts.loading) searchContacts(ce, st, ds.q ?? String(target.value || ''));
+            else updateContactList(ce);
+            return true;
+        }
+        case 'cal-ac-pick': {
+            const st = cal.addCustomer;
+            const c = st?.contacts.list.find((x) => x.id === ds.id);
+            if (!c) return true;
+            syncAddCustomerInputs(ce, st);
+            const f = st.form;
+            f.contactId = c.id;
+            f.organizerName = c.name;
+            f.organizerPhone = c.phone || f.organizerPhone;
+            f.organizerEmail = c.email || f.organizerEmail;
+            f.locked = { phone: !!c.phone, email: !!c.email };
+            st.contacts.open = false;
+            paintDrawer(ce);
+            return true;
+        }
+        case 'cal-ac-new': {
+            const st = cal.addCustomer;
+            if (!st) return true;
+            st.contacts.open = false;
+            updateContactList(ce);
+            return true;
+        }
+        case 'cal-ac-clear': {
+            const st = cal.addCustomer;
+            if (!st) return true;
+            syncAddCustomerInputs(ce, st);
+            const f = st.form;
+            if (f.locked?.phone) f.organizerPhone = '';
+            if (f.locked?.email) f.organizerEmail = '';
+            f.contactId = '';
+            f.organizerName = '';
+            f.locked = { phone: false, email: false };
+            st.contacts.list = [];
+            paintDrawer(ce);
+            ce.querySelector('#scAcName')?.focus();
+            return true;
+        }
         case 'cal-ac-close':
             cal.addCustomer = null;
             paintDrawer(ce);
@@ -784,6 +873,7 @@ export function handleCalendarClick(ce, action, target) {
                     organizerName: f.organizerName,
                     organizerPhone: f.organizerPhone,
                     organizerEmail: f.organizerEmail,
+                    contactId: f.locked?.email ? f.contactId : '',
                     adults: f.adults,
                     children: f.children,
                     internalNotes: f.internalNotes,

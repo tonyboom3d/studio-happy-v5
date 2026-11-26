@@ -41,8 +41,25 @@ export function createInitialAddCustomerState(ev) {
             paymentMode: 'link', // 'link' | 'paid'
             sendWhatsApp: true,
             sendEmail: false,
+            contactId: '',
+            locked: { phone: false, email: false },
         },
+        contacts: { list: [], loading: false, open: false, query: '', seq: 0 },
     };
+}
+
+/** Inner HTML of the contacts dropdown. */
+export function renderContactListInner(st) {
+    const c = st?.contacts;
+    if (!c) return '';
+    const q = String(st.form.organizerName || '').trim();
+    const rows = c.list.map((x) => `<button type="button" class="sc-ac-opt" data-action="cal-ac-pick" data-id="${esc(x.id)}">
+        <b>${esc(x.name)}</b><small>${esc([x.phone, x.email].filter(Boolean).join(' · '))}</small></button>`).join('');
+    const status = c.loading
+        ? `<div class="sc-ac-empty"><span class="sc-mini-spin" style="display:inline-block;vertical-align:middle"></span> מחפש…</div>`
+        : (!c.list.length ? `<div class="sc-ac-empty">לא נמצאו לקוחות</div>` : '');
+    const newRow = `<button type="button" class="sc-ac-opt new" data-action="cal-ac-new">＋ לקוח חדש${q ? `: "${esc(q)}"` : ''}</button>`;
+    return `${rows}${status}${newRow}`;
 }
 
 /** Syncs live DOM inputs from the active add-customer form into state before step change / re-render. */
@@ -97,15 +114,18 @@ export function renderAddCustomerPanel(cal) {
                 <button type="button" class="sc-icon-btn" style="width:24px;height:24px;font-size:14px" data-action="cal-ac-close" aria-label="סגירה">✕</button>
             </div>
             ${errBanner}
-            <div class="sc-field"><label>שם מלא *</label>
-                <input type="text" id="scAcName" value="${esc(f.organizerName)}" placeholder="ישראל ישראלי" autocomplete="off">
+            <div class="sc-field sc-ac-pick"><label>שם מלא *</label>
+                ${f.contactId
+                    ? `<div class="sc-ac-chip"><b>${esc(f.organizerName)}</b><button type="button" class="sc-btn sm" data-action="cal-ac-clear">✕ החלפה</button></div>`
+                    : `<input type="text" id="scAcName" data-action="cal-ac-search" value="${esc(f.organizerName)}" placeholder="חיפוש לקוח קיים או שם חדש" autocomplete="off">`}
+                <div id="scAcList" class="sc-ac-list" ${st.contacts?.open && !f.contactId ? '' : 'hidden'}>${renderContactListInner(st)}</div>
             </div>
             <div class="sc-ac-grid2">
                 <div class="sc-field"><label>טלפון (לוואטסאפ)</label>
-                    <input type="text" id="scAcPhone" dir="ltr" value="${esc(f.organizerPhone)}" placeholder="050-0000000" autocomplete="off">
+                    <input type="text" id="scAcPhone" dir="ltr" value="${esc(f.organizerPhone)}" placeholder="050-0000000" autocomplete="off" ${f.locked?.phone ? 'readonly class="sc-ro"' : ''}>
                 </div>
                 <div class="sc-field"><label>אימייל (למייל)</label>
-                    <input type="text" id="scAcEmail" dir="ltr" value="${esc(f.organizerEmail)}" placeholder="name@example.com" autocomplete="off">
+                    <input type="text" id="scAcEmail" dir="ltr" value="${esc(f.organizerEmail)}" placeholder="name@example.com" autocomplete="off" ${f.locked?.email ? 'readonly class="sc-ro"' : ''}>
                 </div>
             </div>
             <div class="sc-ac-grid2">

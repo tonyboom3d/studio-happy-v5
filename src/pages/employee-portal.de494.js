@@ -107,6 +107,7 @@ import {
     getManualSessionPricing,
     createManualWorkshopOrder,
     cancelManualWorkshopOrder,
+    searchManualCustomers,
 } from 'backend/manualOrderService.web.js';
 
 const PORTAL_ELEMENT_ID = '#employeePortal1';
@@ -449,6 +450,14 @@ async function handleCalendarAction(portalEl, type, payload) {
                 pushActionResult(portalEl, { type, opId: p.opId, error: true, message: friendlyError(err) });
             }
             return;
+        case 'calendarSearchContacts':
+            try {
+                const contacts = await searchManualCustomers(p.query || '');
+                pushActionResult(portalEl, { type, seq: p.seq, ok: true, contacts });
+            } catch (err) {
+                pushActionResult(portalEl, { type, seq: p.seq, error: true, message: friendlyError(err) });
+            }
+            return;
         case 'calendarAddManualCustomer':
             return runCalendarMutation(portalEl, type, p, () => createManualWorkshopOrder(p.order));
         case 'calendarCancelManualOrder':
@@ -477,6 +486,7 @@ const READ_ONLY_ACTION_TYPES = new Set([
     'adminLoadWorkshopOrders',
     'calendarLoadRange',
     'calendarManualPricing',
+    'calendarSearchContacts',
 ]);
 
 async function handlePortalAction(portalEl, detail) {

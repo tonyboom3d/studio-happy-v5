@@ -5,7 +5,8 @@
  */
 
 import wixData from 'wix-data';
-import { auth, httpClient } from '@wix/essentials';
+import { auth } from '@wix/essentials';
+import { paymentLinks } from '@wix/get-paid';
 import { bookings, services, serviceOptionsAndVariants } from '@wix/bookings';
 import { availabilityCalendar } from 'wix-bookings.v2';
 import { contacts } from 'wix-crm-backend';
@@ -29,7 +30,6 @@ import { sendManualOrderPaymentLinkManyChat } from 'backend/manychatService.jsw'
 const ORDERS_COL = 'WorkshopOrders';
 const SA = { suppressAuth: true };
 const SA_NO_HOOKS = { suppressAuth: true, suppressHooks: true };
-const PAY_LINKS = 'https://www.wixapis.com/payment-links/v1/payment-links';
 
 function paymentLinkIdOf(link) {
     return link?.id || link?._id || '';
@@ -42,21 +42,14 @@ function paymentLinkUrlOf(link) {
     return '';
 }
 
-/** Payment Links REST via the site identity. Avoids the @wix/get-paid package, which the published site does not install. */
-async function paymentLinksApi(path, { method = 'GET', body } = {}) {
-    const res = await httpClient.fetchWithAuth(`${PAY_LINKS}${path}`, {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        ...(body ? { body: JSON.stringify(body) } : {}),
-    });
-    let data = {};
-    try { data = await res.json(); } catch (_) { data = {}; }
-    if (!res.ok) {
-        const msg = data?.message || data?.details?.applicationError?.description || `HTTP ${res.status}`;
-        throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
-    }
-    return data?.paymentLink || data;
-}
+/** Payment Links via @wix/get-paid, elevated to run with the site identity. */
+const plSdk = {
+    create: (link) => auth.elevate(paymentLinks.createPaymentLink)(link),
+    get: (id) => auth.elevate(paymentLinks.getPaymentLink)(id),
+    setNote: (id, text) => auth.elevate(paymentLinks.setNote)(id, { text }),
+    send: (id, recipients) => auth.elevate(paymentLinks.sendPaymentLink)(id, { recipients }),
+    deactivate: (id) => auth.elevate(paymentLinks.deactivatePaymentLink)(id),
+};
 const TZ = 'Asia/Jerusalem';
 
 /** ISO/Date -> "HH:MM" in Israel time ('' if invalid). */
@@ -514,10 +507,7 @@ export async function createManualOrder(input, actorName = 'מנהל') {
 
     let createdLink;
     try {
-        createdLink = await paymentLinksApi('', {
-            method: 'POST',
-            body: {
-                paymentLink: {
+        createdLink = await plSdk.create({
                     type: 'ECOM',
                     currency: resolved.pricing.currency || 'ILS',
                     title: linkTitle,
@@ -536,8 +526,6 @@ export async function createManualOrder(input, actorName = 'מנהל') {
                             },
                         }],
                     },
-                },
-            },
         });
     } catch (err) {
         // Roll back orphan order if Payment Link creation fails.
@@ -554,10 +542,7 @@ export async function createManualOrder(input, actorName = 'מנהל') {
 
     if (customerNotes && !createdLink?.note?.text) {
         try {
-            await paymentLinksApi(`/${paymentLinkId}/set-note`, {
-                method: 'POST',
-                body: { paymentLinkId, text: customerNotes },
-            });
+            await plSdk.setNote(paymentLinkId, customerNotes);
         } catch (err) {
             warnings.push(`שמירת הערת לקוח על קישור התשלום נכשלה: ${err?.message || err}`);
         }
@@ -574,19 +559,13 @@ export async function createManualOrder(input, actorName = 'מנהל') {
     let emailSent = false;
     if (sendEmail && organizerEmail) {
         try {
-            const contactId = await findOrCreateCrmContactId({
+            const contactId = String(input?.contactId || '').trim() || await findOrCreateCrmContactId({
                 name: organizerName,
                 email: organizerEmail,
                 phone: organizerPhone,
             });
             if (!contactId) throw new Error('לא ניתן ליצור איש קשר ב-CRM.');
-            await paymentLinksApi(`/${paymentLinkId}/send`, {
-                method: 'POST',
-                body: {
-                    paymentLinkId,
-                    recipients: [{ contactId, sendMethods: ['EMAIL_METHOD'] }],
-                },
-            });
+            await plSdk.send(paymentLinkId, [{ contactId, sendMethods: ['EMAIL_METHOD'] }]);
             emailSent = true;
         } catch (err) {
             warnings.push(`שליחת המייל נכשלה: ${err?.message || err}`);
@@ -632,10 +611,7 @@ export async function cancelManualOrder(orderId, actorName = 'מנהל') {
     let linkWarning = '';
     if (order.paymentLinkId) {
         try {
-            await paymentLinksApi(`/${order.paymentLinkId}/deactivate`, {
-                method: 'POST',
-                body: { paymentLinkId: order.paymentLinkId },
-            });
+            await plSdk.deactivate(order.paymentLinkId);
             linkDeactivated = true;
         } catch (err) {
             linkWarning = err?.message || String(err);
@@ -724,7 +700,7 @@ export async function handlePaymentLinkPaid(paymentLinkId, { ecomOrderId = null,
 export async function reconcileManualPaymentLinkOrder(order) {
     if (!order?.paymentLinkId || order.status === 'paid' || order.cancelledAt) return false;
     try {
-        const link = await paymentLinksApi(`/${order.paymentLinkId}`);
+        const link = await plSdk.get(order.paymentLinkId);
         const linkStatus = link?.status || '';
         if (linkStatus === 'PAID') {
             const out = await handlePaymentLinkPaid(order.paymentLinkId, {

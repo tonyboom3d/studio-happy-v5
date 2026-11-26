@@ -23,7 +23,7 @@
 import { ADMIN_STYLE, renderAdminTab, handleAdminClick, handleAdminChange, handleAdminDragStart, handleAdminDragEnd, handleAdminDragOver, handleAdminDrop, captureEmployeeFormDraft, captureRuleFormDraft } from './employee-portal-admin.js';
 import { RR_STYLE, renderRescheduleRequestsPanel, handleRescheduleClick, handleRescheduleChange } from './reschedule-requests-panel.js';
 import { handleNewEmployeeResult } from './employee-admin/employeeCreate.js';
-import { CALENDAR_STYLE, handleCalendarClick, handleCalendarChange, handleCalendarData, handleCalendarResult, captureCalendarState, restoreCalendarState, calendarOutsideClick, updateCalendarDrawer } from './schedule-calendar/calendarActions.js';
+import { CALENDAR_STYLE, handleCalendarClick, handleCalendarChange, handleCalendarInput, handleCalendarData, handleCalendarResult, captureCalendarState, restoreCalendarState, calendarOutsideClick, updateCalendarDrawer } from './schedule-calendar/calendarActions.js';
 
 const EMPLOYEE_SAVE_HOLD_MS = 2000;
 
@@ -759,6 +759,7 @@ class EmployeePortal extends HTMLElement {
         this.addEventListener('change', (e) => this._onChange(e));
         this.addEventListener('input', (e) => {
             const input = e.target;
+            if (input?.dataset?.action === 'cal-ac-search' && handleCalendarInput(this, input)) return;
             if (input?.classList?.contains('epa-time-input') || input?.classList?.contains('ep-time-input') || input?.classList?.contains('ep-urgent-time-input')) {
                 maskTimeInput(input);
                 if (input.classList.contains('ep-time-input')) {

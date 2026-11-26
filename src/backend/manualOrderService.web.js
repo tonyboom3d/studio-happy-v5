@@ -10,6 +10,15 @@ import {
     createManualOrder,
     cancelManualOrder,
 } from 'backend/manualOrders.js';
+import { searchContacts } from 'backend/manualCustomers.js';
+
+export const searchManualCustomers = webMethod(
+    Permissions.SiteMember,
+    async (query) => {
+        await assertEmployeeAccess('manageScheduling');
+        return searchContacts(query);
+    }
+);
 
 export const getManualSessionPricing = webMethod(
     Permissions.SiteMember,
